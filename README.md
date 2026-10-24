@@ -4,7 +4,7 @@ A small C++20 game engine with an ECS, a Qt editor and SDL3 rendering. Runs on m
 
 ## Setup
 
-Clone with submodules so EnTT, stb, Monocypher, spdlog and cgltf come along:
+Clone with submodules so EnTT, stb, Monocypher, spdlog, cgltf and Jolt come along:
 
 ```bash
 git clone --recursive https://github.com/kennynguyen216/FirstPrinciples.git
@@ -601,6 +601,7 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 | [Monocypher](https://monocypher.org) | Key exchange and encryption for network packets | Git submodule in `ThirdParty/monocypher` |
 | [spdlog](https://github.com/gabime/spdlog) | Logging to the console, files and the editor | Git submodule in `ThirdParty/spdlog` |
 | [cgltf](https://github.com/jkuhlmann/cgltf) | glTF loading for skeletal meshes and animations | Git submodule in `ThirdParty/cgltf` |
+| [Jolt Physics](https://github.com/jrouwe/JoltPhysics) 5.6 | Rigid body physics, collisions and raycasts | Git submodule in `ThirdParty/JoltPhysics`, built as the `Jolt` project |
 
 ## Known limitations
 

@@ -13,3 +13,6 @@
 [submodule "ThirdParty/cgltf"]
 	path = ThirdParty/cgltf
 	url = https://github.com/jkuhlmann/cgltf.git
+[submodule "ThirdParty/JoltPhysics"]
+	path = ThirdParty/JoltPhysics
+	url = https://github.com/jrouwe/JoltPhysics.git
