@@ -257,7 +257,7 @@ namespace FP::Editor::EditorIcons
 				p.drawLine(QPointF(5, 6), QPointF(11, 6));
 				p.drawLine(QPointF(5, 10), QPointF(11, 10));
 				break;
-			case EditorIcon::Outliner:
+			case EditorIcon::Hierarchy:
 				p.drawLine(QPointF(2, 3), QPointF(14, 3));
 				p.drawLine(QPointF(5, 8), QPointF(14, 8));
 				p.drawLine(QPointF(5, 13), QPointF(14, 13));

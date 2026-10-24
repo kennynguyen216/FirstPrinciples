@@ -39,13 +39,26 @@ namespace FP::Editor
 		layout->addStretch(1);
 	}
 
+	void DockTab::SetCompact(bool compact)
+	{
+		if (compact == m_Compact)
+			return;
+		m_Compact = compact;
+		for (QWidget* child : findChildren<QWidget*>(Qt::FindDirectChildrenOnly))
+			child->setVisible(!compact);
+		updateGeometry();
+		update();
+	}
+
 	QSize DockTab::sizeHint() const
 	{
-		return { 100, StripHeight };
+		return { 100, m_Compact ? 0 : StripHeight };
 	}
 
 	void DockTab::paintEvent(QPaintEvent*)
 	{
+		if (m_Compact)
+			return;
 		QPainter painter(this);
 		painter.setRenderHint(QPainter::Antialiasing);
 		painter.fillRect(rect(), EditorStyle::Background);
@@ -74,6 +87,7 @@ namespace FP::Editor
 		QDockWidget* dock = new QDockWidget(title, parent);
 		dock->setObjectName(title);
 		dock->setWidget(content);
+		dock->setWindowIcon(EditorIcons::Get(icon)); // shown on the tab when docks share a spot
 		dock->setTitleBarWidget(new DockTab(dock, icon));
 		return dock;
 	}

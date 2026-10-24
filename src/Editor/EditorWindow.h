@@ -27,7 +27,7 @@ namespace FP::Editor
 	class CodeEditor;
 	class ContentBrowser;
 	class InspectorPanel;
-	class OutlinerPanel;
+	class HierarchyPanel;
 	class ScriptBuilder;
 	class ViewportToolbar;
 	class ViewportWidget;
@@ -82,6 +82,13 @@ namespace FP::Editor
 		void BuildMenus();
 		void BuildDocks();
 		void BuildStatusBar();
+
+		// Shows each dock's title only when it is not sharing a tab bar.
+		void UpdateDockTitles();
+		void UpdateDockTitlesLater();
+
+		// Puts every panel back where the editor first placed it.
+		void ResetLayout();
 
 		// Runs a line typed into the status bar's console box.
 		void RunCommand(const QString& line);
@@ -147,7 +154,7 @@ namespace FP::Editor
 
 		ViewportWidget* m_Viewport = nullptr;
 		InspectorPanel* m_Inspector = nullptr;
-		OutlinerPanel* m_Outliner = nullptr;
+		HierarchyPanel* m_Hierarchy = nullptr;
 		QPlainTextEdit* m_Console = nullptr;
 		QTimer* m_Timer = nullptr;
 		QAction* m_UndoAction = nullptr;
@@ -165,6 +172,8 @@ namespace FP::Editor
 		ContentBrowser* m_ContentBrowser = nullptr;
 		QDockWidget* m_ConsoleDock = nullptr;
 		QDockWidget* m_ContentDock = nullptr;
+		bool m_DockTitlesPending = false;
+		QByteArray m_DefaultLayout;
 		QFileSystemWatcher* m_ScriptWatcher = nullptr;
 		QTimer* m_ScriptDebounce = nullptr;
 		bool m_AutoReloadScripts = true;

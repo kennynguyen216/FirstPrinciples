@@ -16,6 +16,9 @@ namespace FP::Editor
 	public:
 		DockTab(QDockWidget* dock, EditorIcon icon);
 
+		// Collapses the title when the dock shares a spot with others, since Qt's tab bar names it then.
+		void SetCompact(bool compact);
+
 		QSize sizeHint() const override;
 		QSize minimumSizeHint() const override { return sizeHint(); }
 
@@ -29,5 +32,6 @@ namespace FP::Editor
 	private:
 		QDockWidget* m_Dock;
 		EditorIcon m_Icon;
+		bool m_Compact = false;
 	};
 }

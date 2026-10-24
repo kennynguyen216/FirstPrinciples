@@ -213,9 +213,11 @@ The editor follows Unreal Engine 5's layout and dark theme, using this engine's 
   under the mouse. The icons on top filter by category.
 - **Viewport** in the middle, in a tab named after the open scene. The pills over it switch between
   Perspective and Top (2D), pick Lit, Unlit or Wireframe, and turn grid snap on with a grid size.
-- **Details** shows the selection's components in collapsible sections. Add components with the Add
+- **Details** and **Hierarchy** share the panel on the right as tabs. Details shows the selection's components in collapsible sections. Add components with the Add
   button, remove one with the x on its header, and filter fields with the search box.
-- **Outliner** lists every entity under the scene with its type, plus a search box.
+- **Hierarchy** lists every entity under the scene with its type, plus a search box.
+- Drag a panel by its title to move it, or drop it on another panel to share a spot as tabs. Pull a tab
+  out to separate it again. **Window** reopens closed panels and **Reset Layout** puts everything back.
 - **Content Browser** and **Output Log** share the bottom. The status bar has buttons for both and a
   console box: type `help` for the commands (play, stop, save, undo, redo, gc, 2d, 3d, viewmode,
   select, create).

@@ -10,14 +10,14 @@ class QTreeWidget;
 
 namespace FP::Editor
 {
-	// UE style Outliner: every entity under the scene's world row with a label and type column,
+	// Scene hierarchy: every entity under the scene's world row with a label and type column,
 	// a search box on top and a count at the bottom.
-	class OutlinerPanel : public QWidget
+	class HierarchyPanel : public QWidget
 	{
 		Q_OBJECT
 
 	public:
-		explicit OutlinerPanel(QWidget* parent = nullptr);
+		explicit HierarchyPanel(QWidget* parent = nullptr);
 
 		// Lists the world's entities again. sceneName labels the top row.
 		void Rebuild(World& world, const QString& sceneName);
