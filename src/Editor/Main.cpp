@@ -43,7 +43,7 @@ int main(int argc, char** argv)
 		FP::Editor::EditorWindow window(*device);
 		window.show();
 
-		// Smoke test flags. --scene path opens a scene relative to Content, --3d switches the view,
+		// Smoke test flags. --scene path opens a scene relative to Content, --2d or --3d picks the view,
 		// --viewmode lit, unlit or wireframe picks the shading,
 		// --select Name picks an entity, --play starts play mode and --screenshot out.png grabs the
 		// window after a second and quits.
@@ -53,6 +53,8 @@ int main(int argc, char** argv)
 			window.OpenScene(QString::fromUtf8(FP::Paths::Content(args[sceneIndex + 1].toUtf8().constData()).CStr()));
 		if (args.contains("--3d"))
 			window.Set3DView(true);
+		if (args.contains("--2d"))
+			window.Set3DView(false);
 		const int modeIndex = static_cast<int>(args.indexOf("--viewmode"));
 		if (modeIndex >= 0 && modeIndex + 1 < args.size())
 		{

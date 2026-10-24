@@ -368,8 +368,13 @@ namespace FP::Editor
 			m_ViewportToolbar->Set3D(on);
 		});
 		connect(m_ViewportToolbar, &ViewportToolbar::ProjectionChanged, m_View3DAction, &QAction::setChecked);
+		// Opens in perspective, which is what the projection pill shows before anything is picked.
+		m_View3DAction->setChecked(true);
 		connect(m_ViewportToolbar, &ViewportToolbar::ViewModeChanged, this, &EditorWindow::SetViewMode);
 		connect(m_ViewportToolbar, &ViewportToolbar::SnapChanged, this, [this](bool on, float size) { m_Viewport->SetSnap(on, size); });
+		connect(m_ViewportToolbar, &ViewportToolbar::GizmoModeChanged, m_Viewport, &ViewportWidget::SetGizmoMode);
+		connect(m_ViewportToolbar, &ViewportToolbar::GizmoSpaceChanged, m_Viewport, &ViewportWidget::SetGizmoLocal);
+		connect(m_Viewport, &ViewportWidget::GizmoModeChanged, m_ViewportToolbar, &ViewportToolbar::SetGizmoMode);
 
 		// Same keys as Unreal so muscle memory carries over.
 		const std::pair<const char*, ViewMode> modeKeys[] = { { "Alt+4", ViewMode::Lit }, { "Alt+3", ViewMode::Unlit }, { "Alt+2", ViewMode::Wireframe } };
@@ -444,7 +449,7 @@ namespace FP::Editor
 		});
 		statusBar()->addWidget(command);
 
-		QLabel* hint = new QLabel("Right drag orbits or pans, wheel zooms, left drag moves, F focuses");
+		QLabel* hint = new QLabel("Hold right mouse and WASD to fly, Alt drag orbits, W E R move rotate scale, F focuses");
 		hint->setStyleSheet("color: #7a7a7a; padding-right: 8px;");
 		statusBar()->addPermanentWidget(hint);
 	}

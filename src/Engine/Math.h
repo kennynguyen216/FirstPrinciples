@@ -120,6 +120,28 @@ namespace FP
 			return AxisAngle({ 0, 1, 0 }, degrees.Y) * AxisAngle({ 1, 0, 0 }, degrees.X) * AxisAngle({ 0, 0, 1 }, degrees.Z);
 		}
 
+		// Back to Euler degrees in the same order as FromEuler. Pitch stays within -90 to 90.
+		Vec3 ToEuler() const
+		{
+			// Entries of the rotation matrix that the yaw, pitch, roll order makes easy to read.
+			const float m12 = 2 * (Y * Z - W * X);
+			const float m02 = 2 * (X * Z + W * Y);
+			const float m22 = 1 - 2 * (X * X + Y * Y);
+			const float m10 = 2 * (X * Y + W * Z);
+			const float m11 = 1 - 2 * (X * X + Z * Z);
+			// atan2 keeps precision near straight up or down, where asin would not.
+			const float cosPitch = std::sqrt(m10 * m10 + m11 * m11);
+			const float pitch = std::atan2(-m12, cosPitch);
+			if (cosPitch < 1e-4f)
+			{
+				// Looking straight up or down, so yaw and roll turn the same way. Put it all in yaw.
+				const float m00 = 1 - 2 * (Y * Y + Z * Z);
+				const float m20 = 2 * (X * Z - W * Y);
+				return { pitch * RadToDeg, std::atan2(-m20, m00) * RadToDeg, 0 };
+			}
+			return { pitch * RadToDeg, std::atan2(m02, m22) * RadToDeg, std::atan2(m10, m11) * RadToDeg };
+		}
+
 		Quat operator*(const Quat& o) const
 		{
 			return {

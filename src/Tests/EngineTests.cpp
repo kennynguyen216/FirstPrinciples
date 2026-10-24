@@ -180,6 +180,21 @@ FP_TEST(Math_TransformAndInverse)
 	FP_EXPECT(std::fabs(farClip.Z / farClip.W - 1) < 1e-4f);
 }
 
+FP_TEST(Math_QuatToEulerRoundTrips)
+{
+	const Vec3 angles[] = { { 0, 0, 0 }, { 10, 20, 30 }, { -45, 170, -120 }, { 89, -30, 60 }, { 0, 0, 90 }, { 90, 40, 0 } };
+	for (const Vec3& euler : angles)
+	{
+		const Quat q = Quat::FromEuler(euler);
+		const Quat back = Quat::FromEuler(q.ToEuler());
+		// Same rotation, even when the angles come back as a different but equal set.
+		for (const Vec3& v : { Vec3(1, 0, 0), Vec3(0, 1, 0), Vec3(0, 0, 1) })
+			FP_EXPECT(Near(back.Rotate(v), q.Rotate(v)));
+	}
+	// Angles in range come back unchanged.
+	FP_EXPECT(Near(Quat::FromEuler({ 10, 20, 30 }).ToEuler(), { 10, 20, 30 }));
+}
+
 #include "Engine/Render/MeshData.h"
 
 FP_TEST(Mesh_PrimitivesAreWellFormed)
