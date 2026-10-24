@@ -32,9 +32,17 @@ namespace FP::Editor
 		// A field was edited. Name changes matter to the hierarchy.
 		void Modified();
 
+	public:
+		using DataFn = std::function<void*()>;
+		using ChangedFn = std::function<void()>;
+
+		// Adds a row that edits one reflected field. data is called every time because the
+		// object can move in memory. changed runs after each edit. The refresher is stored so
+		// RefreshValues keeps the row up to date.
+		void AddFieldEditor(QFormLayout* form, const FieldInfo& field, DataFn data, ChangedFn changed);
+
 	private:
 		void Rebuild();
-		void AddFieldEditor(QFormLayout* form, const ComponentInfo& info, const FieldInfo& field);
 
 		World* m_World = nullptr;
 		Entity m_Entity = NullEntity;

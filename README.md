@@ -4,7 +4,7 @@ A small C++20 game engine with an ECS, a Qt editor and SDL3 rendering. Runs on m
 
 ## Setup
 
-Clone with submodules so EnTT comes along:
+Clone with submodules so EnTT and stb come along:
 
 ```bash
 git clone --recursive https://github.com/kennynguyen216/FirstPrinciples.git
@@ -84,7 +84,8 @@ Game code lives in `Game/`. The editor and the runtime both link it.
 5. **Scenes** live in `Content/Scenes`. Build them in the editor and press Play to run your systems.
    Stop restores the scene. `Runtime` plays `Game::StartScene` or a scene passed on the command line.
 
-Sprite textures are `.bmp` files under `Content/`.
+Textures are `.png`, `.jpg`, `.tga` or `.bmp` files under `Content/`. Use the `...` button next to a texture
+field to pick one.
 
 ### Editor controls
 
@@ -106,6 +107,27 @@ Binaries/Debug/Runtime --screenshot runtime.bmp
 Binaries/Debug/Editor --play --screenshot editor.png
 ```
 
+## Rendering
+
+Rendering uses SDL_GPU. macOS runs on Metal and Windows runs on Vulkan, so Windows machines need a
+GPU driver with Vulkan support (any recent NVIDIA, AMD or Intel driver).
+
+The engine ships fixed base shaders. Games pick one per material and set its textures and values.
+Game code cannot add shaders yet.
+
+Shader sources live in `src/Engine/Shaders`. The compiled SPIR-V and MSL in `Content/Engine/Shaders` are
+committed, so only engine developers who change a shader need the tools:
+
+```bash
+brew install glslang spirv-cross
+```
+
+```bash
+Scripts/CompileShaders.sh
+```
+
+On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\CompileShaders.ps1`.
+
 ## Projects
 
 | Project | What it is |
@@ -123,10 +145,10 @@ Binaries/Debug/Editor --play --screenshot editor.png
 | [SDL3](https://libsdl.org) | Windowing, input, 2D rendering | Homebrew on macOS, `Scripts/Setup.ps1` on Windows |
 | [Qt 6](https://qt.io) | Editor UI | Homebrew on macOS, Qt installer + `QT_DIR` on Windows |
 | [EnTT](https://github.com/skypjack/entt) | ECS | Git submodule in `ThirdParty/entt` |
+| [stb_image](https://github.com/nothings/stb) | PNG, JPG and TGA loading | Git submodule in `ThirdParty/stb` |
 
 ## Known limitations
 
-- Textures load `.bmp` only. PNG needs SDL_image.
-- The editor viewport uses the software renderer, so rotated sprites can show faint seams there.
+- The editor viewport renders offscreen and copies each frame back to Qt. Fine for editing, but slower than a native view.
 - File paths go through `fopen`, so non ASCII paths on Windows are not supported yet.
 - No undo yet.

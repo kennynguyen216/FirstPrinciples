@@ -9,6 +9,11 @@ class QListWidget;
 class QPlainTextEdit;
 class QTimer;
 
+namespace FP
+{
+	class GPUDevice;
+}
+
 namespace FP::Editor
 {
 	class InspectorPanel;
@@ -19,7 +24,7 @@ namespace FP::Editor
 		Q_OBJECT
 
 	public:
-		EditorWindow();
+		explicit EditorWindow(GPUDevice& device);
 		~EditorWindow() override;
 
 		void OpenScene(const QString& path);

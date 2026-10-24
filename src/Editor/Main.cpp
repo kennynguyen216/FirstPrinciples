@@ -1,5 +1,6 @@
 #include "Editor/EditorWindow.h"
 #include "Engine/Engine.h"
+#include "Engine/Render/GPUDevice.h"
 #include "Game/Game.h"
 
 #include <SDL3/SDL.h>
@@ -10,19 +11,29 @@
 
 int main(int argc, char** argv)
 {
-	// SDL is only used for rendering into memory and timing, so no video subsystem is needed.
-	SDL_Init(0);
-
 	QApplication app(argc, argv);
+
+	// SDL_GPU needs the video subsystem even though the editor draws offscreen.
+	// Qt goes first so it owns the native application object.
+	if (!SDL_Init(SDL_INIT_VIDEO))
+	{
+		FP_LOG_ERROR("SDL_Init failed: %s", SDL_GetError());
+		return 1;
+	}
+
 	QApplication::setApplicationName("FirstPrinciples Editor");
 	QApplication::setStyle(QStyleFactory::create("Fusion"));
 
 	FP::Engine::RegisterEngineComponents();
 	Game::RegisterComponents();
 
+	FP::GPUDevice* device = FP::GPUDevice::Create();
+	if (!device)
+		return 1;
+
 	int result = 0;
 	{
-		FP::Editor::EditorWindow window;
+		FP::Editor::EditorWindow window(*device);
 		window.show();
 
 		// Smoke test flags. --select Name picks an entity, --play starts play mode and
@@ -47,6 +58,7 @@ int main(int argc, char** argv)
 	}
 
 	FP::GarbageCollector::Get().Collect();
+	delete device;
 	SDL_Quit();
 	return result;
 }

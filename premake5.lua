@@ -17,10 +17,11 @@ end
 
 local SdlDir = IsWindows and (Root .. "/ThirdParty/SDL3") or (BrewPrefix .. "/opt/sdl3")
 
--- Header only, pulled in as a git submodule.
+-- Header only libraries, pulled in as git submodules.
 local EnttInclude = Root .. "/ThirdParty/entt/src"
-if not os.isdir(EnttInclude) then
-	premake.warn("EnTT is missing. Run: git submodule update --init")
+local StbInclude = Root .. "/ThirdParty/stb"
+if not os.isdir(EnttInclude) or not os.isdir(StbInclude) then
+	premake.warn("Submodules are missing. Run: git submodule update --init")
 end
 
 local QtDir = os.getenv("QT_DIR")
@@ -58,7 +59,7 @@ local QtModules = { "Core", "Gui", "Widgets" }
 
 -- Include paths every project that touches engine headers needs.
 local function EngineIncludes()
-	externalincludedirs { SdlDir .. "/include", EnttInclude }
+	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude }
 end
 
 local function UseSDL()
@@ -186,6 +187,11 @@ project "Engine"
 		"src/CoreObject/**.h", "src/CoreObject/**.cpp",
 		"src/Engine/**.h", "src/Engine/**.cpp",
 	}
+	-- Shader sources are compiled by Scripts/CompileShaders, not by the C++ build.
+	files { "src/Engine/Shaders/**" }
+	filter "files:src/Engine/Shaders/**"
+		buildaction "None"
+	filter {}
 	EngineIncludes()
 
 -- Game: the team's code, linked into Editor and Runtime.

@@ -1,10 +1,14 @@
 #include "Editor/InspectorPanel.h"
 #include "Engine/ComponentRegistry.h"
+#include "Engine/Paths.h"
 
 #include <QApplication>
 #include <QCheckBox>
 #include <QColorDialog>
+#include <QComboBox>
+#include <QDir>
 #include <QDoubleSpinBox>
+#include <QFileDialog>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -117,8 +121,12 @@ namespace FP::Editor
 			QFormLayout* form = new QFormLayout();
 			form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
 			groupLayout->addLayout(form);
+			// Looks the component up every time because EnTT may move it when others are added.
+			auto data = [this, info]() -> void* {
+				return m_World && m_World->IsValid(m_Entity) ? info->TryGet(m_World->GetRegistry(), m_Entity) : nullptr;
+			};
 			for (const FieldInfo& field : info->Fields)
-				AddFieldEditor(form, *info, field);
+				AddFieldEditor(form, field, data, [this]() { emit Modified(); });
 
 			QPushButton* remove = new QPushButton("Remove");
 			remove->setFlat(true);
@@ -140,23 +148,46 @@ namespace FP::Editor
 		RefreshValues();
 	}
 
-	void InspectorPanel::AddFieldEditor(QFormLayout* form, const ComponentInfo& info, const FieldInfo& field)
+	namespace
 	{
-		const ComponentInfo* infoPtr = &info;
-		const FieldInfo fieldCopy = field;
+		QString ToQString(const String& text) { return QString::fromUtf8(text.CStr(), text.Length()); }
 
-		// Looks the component up every time because EnTT may move it when others are added.
-		auto data = [this, infoPtr]() -> void* {
-			return m_World && m_World->IsValid(m_Entity) ? infoPtr->TryGet(m_World->GetRegistry(), m_Entity) : nullptr;
-		};
+		String ToString(const QString& text)
+		{
+			const QByteArray utf8 = text.toUtf8();
+			return String(utf8.constData(), static_cast<int32>(utf8.size()));
+		}
+
+		// Spin boxes for Vec2 and Vec3 share this so every axis behaves the same.
+		QWidget* MakeVectorRow(int count, QDoubleSpinBox** boxes)
+		{
+			static const char* const labels[3] = { "X ", "Y ", "Z " };
+			QWidget* row = new QWidget();
+			QHBoxLayout* layout = new QHBoxLayout(row);
+			layout->setContentsMargins(0, 0, 0, 0);
+			layout->setSpacing(4);
+			for (int i = 0; i < count; ++i)
+			{
+				boxes[i] = MakeFloatBox();
+				boxes[i]->setPrefix(labels[i]);
+				boxes[i]->setMinimumWidth(56);
+				layout->addWidget(boxes[i]);
+			}
+			return row;
+		}
+	}
+
+	void InspectorPanel::AddFieldEditor(QFormLayout* form, const FieldInfo& field, DataFn data, ChangedFn changed)
+	{
+		const FieldInfo fieldCopy = field;
 
 		switch (field.Type)
 		{
 			case FieldType::Bool:
 			{
 				QCheckBox* box = new QCheckBox();
-				connect(box, &QCheckBox::toggled, this, [=, this](bool value) {
-					if (void* c = data()) { fieldCopy.Get<bool>(c) = value; emit Modified(); }
+				connect(box, &QCheckBox::toggled, this, [=](bool value) {
+					if (void* c = data()) { fieldCopy.Get<bool>(c) = value; changed(); }
 				});
 				m_Refreshers.push_back([=]() {
 					if (void* c = data()) { QSignalBlocker block(box); box->setChecked(fieldCopy.Get<bool>(c)); }
@@ -169,8 +200,8 @@ namespace FP::Editor
 				QSpinBox* box = new QSpinBox();
 				box->setRange(INT32_MIN, INT32_MAX);
 				box->setKeyboardTracking(false);
-				connect(box, &QSpinBox::valueChanged, this, [=, this](int value) {
-					if (void* c = data()) { fieldCopy.Get<int32>(c) = value; emit Modified(); }
+				connect(box, &QSpinBox::valueChanged, this, [=](int value) {
+					if (void* c = data()) { fieldCopy.Get<int32>(c) = value; changed(); }
 				});
 				m_Refreshers.push_back([=]() {
 					if (void* c = data(); c && !IsEditing(box)) { QSignalBlocker block(box); box->setValue(fieldCopy.Get<int32>(c)); }
@@ -181,8 +212,8 @@ namespace FP::Editor
 			case FieldType::Float:
 			{
 				QDoubleSpinBox* box = MakeFloatBox();
-				connect(box, &QDoubleSpinBox::valueChanged, this, [=, this](double value) {
-					if (void* c = data()) { fieldCopy.Get<float>(c) = static_cast<float>(value); emit Modified(); }
+				connect(box, &QDoubleSpinBox::valueChanged, this, [=](double value) {
+					if (void* c = data()) { fieldCopy.Get<float>(c) = static_cast<float>(value); changed(); }
 				});
 				m_Refreshers.push_back([=]() {
 					if (void* c = data(); c && !IsEditing(box)) { QSignalBlocker block(box); box->setValue(fieldCopy.Get<float>(c)); }
@@ -191,29 +222,26 @@ namespace FP::Editor
 				break;
 			}
 			case FieldType::Vec2:
+			case FieldType::Vec3:
 			{
-				QWidget* row = new QWidget();
-				QHBoxLayout* layout = new QHBoxLayout(row);
-				layout->setContentsMargins(0, 0, 0, 0);
-				QDoubleSpinBox* x = MakeFloatBox();
-				QDoubleSpinBox* y = MakeFloatBox();
-				x->setPrefix("X ");
-				y->setPrefix("Y ");
-				layout->addWidget(x);
-				layout->addWidget(y);
-				connect(x, &QDoubleSpinBox::valueChanged, this, [=, this](double value) {
-					if (void* c = data()) { fieldCopy.Get<Vec2>(c).X = static_cast<float>(value); emit Modified(); }
-				});
-				connect(y, &QDoubleSpinBox::valueChanged, this, [=, this](double value) {
-					if (void* c = data()) { fieldCopy.Get<Vec2>(c).Y = static_cast<float>(value); emit Modified(); }
-				});
+				// Vec2 and Vec3 are both runs of floats so one editor handles both.
+				const int count = field.Type == FieldType::Vec2 ? 2 : 3;
+				QDoubleSpinBox* boxes[3] = {};
+				QWidget* row = MakeVectorRow(count, boxes);
+				for (int i = 0; i < count; ++i)
+				{
+					connect(boxes[i], &QDoubleSpinBox::valueChanged, this, [=](double value) {
+						if (void* c = data()) { fieldCopy.Get<float[3]>(c)[i] = static_cast<float>(value); changed(); }
+					});
+				}
 				m_Refreshers.push_back([=]() {
 					void* c = data();
 					if (!c)
 						return;
-					const Vec2 v = fieldCopy.Get<Vec2>(c);
-					if (!IsEditing(x)) { QSignalBlocker block(x); x->setValue(v.X); }
-					if (!IsEditing(y)) { QSignalBlocker block(y); y->setValue(v.Y); }
+					for (int i = 0; i < count; ++i)
+					{
+						if (!IsEditing(boxes[i])) { QSignalBlocker block(boxes[i]); boxes[i]->setValue(fieldCopy.Get<float[3]>(c)[i]); }
+					}
 				});
 				form->addRow(field.Name, row);
 				break;
@@ -235,7 +263,7 @@ namespace FP::Editor
 						fieldCopy.Get<Color>(again) = { static_cast<float>(picked.redF()), static_cast<float>(picked.greenF()),
 							static_cast<float>(picked.blueF()), static_cast<float>(picked.alphaF()) };
 						SetSwatch(button, fieldCopy.Get<Color>(again));
-						emit Modified();
+						changed();
 					}
 				});
 				m_Refreshers.push_back([=]() {
@@ -247,27 +275,93 @@ namespace FP::Editor
 			}
 			case FieldType::String:
 			{
-				QLineEdit* edit = new QLineEdit();
-				connect(edit, &QLineEdit::editingFinished, this, [=, this]() {
+				auto apply = [=](const QString& text) {
 					if (void* c = data())
 					{
-						const QByteArray utf8 = edit->text().toUtf8();
 						String& value = fieldCopy.Get<String>(c);
-						if (value != std::string_view(utf8.constData(), static_cast<usize>(utf8.size())))
+						const String next = ToString(text);
+						if (value != next.View())
 						{
-							value = std::string_view(utf8.constData(), static_cast<usize>(utf8.size()));
-							emit Modified();
+							value = next;
+							changed();
 						}
 					}
-				});
+				};
+
+				if (field.Choices && !field.ChoicesEditable)
+				{
+					QComboBox* combo = new QComboBox();
+					for (const char* choice : *field.Choices)
+						combo->addItem(choice);
+					connect(combo, &QComboBox::currentTextChanged, this, apply);
+					m_Refreshers.push_back([=]() {
+						if (void* c = data(); c && !IsEditing(combo))
+						{
+							QSignalBlocker block(combo);
+							combo->setCurrentText(ToQString(fieldCopy.Get<String>(c)));
+						}
+					});
+					form->addRow(field.Name, combo);
+					break;
+				}
+
+				QWidget* row = new QWidget();
+				QHBoxLayout* layout = new QHBoxLayout(row);
+				layout->setContentsMargins(0, 0, 0, 0);
+				layout->setSpacing(4);
+
+				QLineEdit* edit = nullptr;
+				QComboBox* combo = nullptr;
+				if (field.Choices)
+				{
+					// Editable list: pick a built in name or type a path.
+					combo = new QComboBox();
+					combo->setEditable(true);
+					combo->setInsertPolicy(QComboBox::NoInsert);
+					for (const char* choice : *field.Choices)
+						combo->addItem(choice);
+					edit = combo->lineEdit();
+					connect(combo, &QComboBox::activated, this, [=](int) { apply(combo->currentText()); });
+					layout->addWidget(combo, 1);
+				}
+				else
+				{
+					edit = new QLineEdit();
+					layout->addWidget(edit, 1);
+				}
+				connect(edit, &QLineEdit::editingFinished, this, [=]() { apply(edit->text()); });
+
+				if (field.AssetFilter)
+				{
+					QPushButton* browse = new QPushButton("...");
+					browse->setFixedWidth(28);
+					browse->setToolTip("Pick a file inside Content");
+					const QString filter = field.AssetFilter;
+					connect(browse, &QPushButton::clicked, this, [=, this]() {
+						const QDir content(ToQString(Paths::GetContentDir()));
+						const QString picked = QFileDialog::getOpenFileName(this, fieldCopy.Name, content.absolutePath(), filter);
+						if (picked.isEmpty())
+							return;
+						const QString relative = content.relativeFilePath(picked);
+						if (relative.startsWith(".."))
+						{
+							FP_LOG_WARN("Assets must live inside Content: %s", ToString(picked).CStr());
+							return;
+						}
+						edit->setText(relative);
+						apply(relative);
+					});
+					layout->addWidget(browse);
+				}
+
 				m_Refreshers.push_back([=]() {
 					if (void* c = data(); c && !IsEditing(edit))
 					{
 						QSignalBlocker block(edit);
-						edit->setText(QString::fromUtf8(fieldCopy.Get<String>(c).CStr()));
+						edit->setText(ToQString(fieldCopy.Get<String>(c)));
 					}
 				});
-				form->addRow(field.Name, edit);
+				form->addRow(field.Name, row);
 				break;
 			}
 		}

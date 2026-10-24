@@ -16,15 +16,22 @@ namespace FP
 		Int,
 		Float,
 		Vec2,
+		Vec3,
 		Color,
 		String,
 	};
 
 	struct FieldInfo
 	{
-		const char* Name;
-		FieldType Type;
-		usize Offset;
+		const char* Name = nullptr;
+		FieldType Type = FieldType::Float;
+		usize Offset = 0;
+
+		// Editor hints. AssetFilter makes a String a file picker (for example "*.png *.jpg").
+		// Choices makes a String a drop down. Editable choices also allow typing a path.
+		const char* AssetFilter = nullptr;
+		const Array<const char*>* Choices = nullptr;
+		bool ChoicesEditable = false;
 
 		template <typename T>
 		T& Get(void* component) const { return *reinterpret_cast<T*>(static_cast<uint8*>(component) + Offset); }
@@ -63,9 +70,10 @@ namespace FP
 			else if constexpr (std::is_same_v<M, int32>) return FieldType::Int;
 			else if constexpr (std::is_same_v<M, float>) return FieldType::Float;
 			else if constexpr (std::is_same_v<M, Vec2>) return FieldType::Vec2;
+			else if constexpr (std::is_same_v<M, Vec3>) return FieldType::Vec3;
 			else if constexpr (std::is_same_v<M, Color>) return FieldType::Color;
 			else if constexpr (std::is_same_v<M, String>) return FieldType::String;
-			else static_assert(sizeof(M) == 0, "Unsupported field type. Use bool, int32, float, Vec2, Color or String.");
+			else static_assert(sizeof(M) == 0, "Unsupported field type. Use bool, int32, float, Vec2, Vec3, Color or String.");
 		}
 
 		// EnTT stores no instance for empty types so hand out a shared dummy instead.
@@ -98,20 +106,74 @@ namespace FP
 		}
 	}
 
+	// Describes one member of any plain struct. Used for components and assets like materials.
+	template <typename T, typename M>
+	FieldInfo MakeField(const char* name, M T::*member)
+	{
+		// Offset of the member measured on a scratch instance.
+		alignas(T) uint8 storage[sizeof(T)];
+		T* object = reinterpret_cast<T*>(storage);
+		FieldInfo field;
+		field.Name = name;
+		field.Type = Detail::FieldTypeOf<M>();
+		field.Offset = static_cast<usize>(reinterpret_cast<uint8*>(&(object->*member)) - storage);
+		return field;
+	}
+
+	// Builds a field list with chained calls. Hints apply to the last added field.
+	template <typename T>
+	class FieldListBuilder
+	{
+	public:
+		explicit FieldListBuilder(Array<FieldInfo>& fields) : m_Fields(fields) {}
+
+		template <typename M>
+		FieldListBuilder& Field(const char* name, M T::*member)
+		{
+			m_Fields.Add(MakeField(name, member));
+			return *this;
+		}
+
+		FieldListBuilder& AssetPath(const char* filter)
+		{
+			m_Fields.Last().AssetFilter = filter;
+			return *this;
+		}
+
+		// The list must outlive the field, so pass a static.
+		FieldListBuilder& Choices(const Array<const char*>& choices, bool editable = false)
+		{
+			m_Fields.Last().Choices = &choices;
+			m_Fields.Last().ChoicesEditable = editable;
+			return *this;
+		}
+
+	private:
+		Array<FieldInfo>& m_Fields;
+	};
+
 	template <typename T>
 	class ComponentBuilder
 	{
 	public:
-		explicit ComponentBuilder(ComponentInfo& info) : m_Info(info) {}
+		explicit ComponentBuilder(ComponentInfo& info) : m_Info(info), m_Fields(info.Fields) {}
 
 		template <typename M>
 		ComponentBuilder& Field(const char* name, M T::*member)
 		{
-			// Offset of the member measured on a scratch instance.
-			alignas(T) uint8 storage[sizeof(T)];
-			T* object = reinterpret_cast<T*>(storage);
-			const usize offset = static_cast<usize>(reinterpret_cast<uint8*>(&(object->*member)) - storage);
-			m_Info.Fields.Add({ name, Detail::FieldTypeOf<M>(), offset });
+			m_Fields.Field(name, member);
+			return *this;
+		}
+
+		ComponentBuilder& AssetPath(const char* filter)
+		{
+			m_Fields.AssetPath(filter);
+			return *this;
+		}
+
+		ComponentBuilder& Choices(const Array<const char*>& choices, bool editable = false)
+		{
+			m_Fields.Choices(choices, editable);
 			return *this;
 		}
 
@@ -123,6 +185,7 @@ namespace FP
 
 	private:
 		ComponentInfo& m_Info;
+		FieldListBuilder<T> m_Fields;
 	};
 
 	// Every component the editor or scene files should see is registered here once at startup.

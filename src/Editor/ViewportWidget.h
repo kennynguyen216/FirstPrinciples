@@ -1,15 +1,13 @@
 #pragma once
 
-#include "Engine/Renderer2D.h"
+#include "Engine/Render/Renderer.h"
 
 #include <QImage>
 #include <QWidget>
 
-struct SDL_Surface;
-
 namespace FP::Editor
 {
-	// Renders the world with SDL's software renderer into a surface that Qt paints.
+	// Renders the world on the GPU into an offscreen texture and paints the pixels with Qt.
 	// Avoids embedding a native SDL window, which behaves differently on every OS.
 	//
 	// Edit mode: right or middle drag pans, wheel zooms, left click selects, left drag moves.
@@ -19,7 +17,7 @@ namespace FP::Editor
 		Q_OBJECT
 
 	public:
-		explicit ViewportWidget(QWidget* parent = nullptr);
+		ViewportWidget(GPUDevice& device, QWidget* parent = nullptr);
 		~ViewportWidget() override;
 
 		void SetWorld(World* world) { m_World = world; }
@@ -28,6 +26,8 @@ namespace FP::Editor
 
 		// Draws one frame. The editor calls this from its tick.
 		void RenderFrame();
+
+		Renderer* GetRenderer() const { return m_Renderer; }
 
 	signals:
 		void EntityPicked(FP::Entity entity);
@@ -45,19 +45,21 @@ namespace FP::Editor
 		void focusOutEvent(QFocusEvent* event) override;
 
 	private:
-		void RecreateSurface();
-		ViewParams CurrentView() const;
+		void RecreateTarget();
+		RenderView CurrentView() const;
 		Vec2 ToPixels(QPointF point) const;
+		Vec2 PixelToWorld2D(Vec2 pixel) const;
 		Entity PickEntity(Vec2 worldPoint);
+
+		GPUDevice& m_Device;
+		Renderer* m_Renderer = nullptr;
+		RefPtr<GPUTexture> m_Target;
+		QImage m_Image;
+		DebugLines m_Lines;
 
 		World* m_World = nullptr;
 		Entity m_Selected = NullEntity;
 		bool m_Playing = false;
-
-		SDL_Surface* m_Surface = nullptr;
-		SDL_Renderer* m_SDLRenderer = nullptr;
-		Renderer2D* m_Renderer = nullptr;
-		QImage m_Image;
 
 		// Editor camera.
 		Vec2 m_CameraCenter;

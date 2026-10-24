@@ -2,6 +2,7 @@
 #include "Editor/InspectorPanel.h"
 #include "Editor/ViewportWidget.h"
 #include "Engine/ComponentRegistry.h"
+#include "Engine/FieldSerializer.h"
 #include "Engine/Input.h"
 #include "Engine/Paths.h"
 #include "Engine/SceneSerializer.h"
@@ -37,11 +38,11 @@ namespace FP::Editor
 		}
 	}
 
-	EditorWindow::EditorWindow()
+	EditorWindow::EditorWindow(GPUDevice& device)
 	{
 		m_World.Reset(NewObject<World>(nullptr, "EditorWorld"));
 
-		m_Viewport = new ViewportWidget(this);
+		m_Viewport = new ViewportWidget(device, this);
 		m_Viewport->SetWorld(m_World.Get());
 		setCentralWidget(m_Viewport);
 
@@ -335,22 +336,12 @@ namespace FP::Editor
 			void* dst = info->Add(registry, copy);
 			void* src = info->TryGet(registry, source);
 			for (const FieldInfo& field : info->Fields)
-			{
-				switch (field.Type)
-				{
-					case FieldType::Bool: field.Get<bool>(dst) = field.Get<bool>(src); break;
-					case FieldType::Int: field.Get<int32>(dst) = field.Get<int32>(src); break;
-					case FieldType::Float: field.Get<float>(dst) = field.Get<float>(src); break;
-					case FieldType::Vec2: field.Get<Vec2>(dst) = field.Get<Vec2>(src); break;
-					case FieldType::Color: field.Get<Color>(dst) = field.Get<Color>(src); break;
-					case FieldType::String: field.Get<String>(dst) = field.Get<String>(src); break;
-				}
-			}
+				FieldSerializer::Copy(field, dst, src);
 		}
 		if (NameComponent* name = m_World->TryGet<NameComponent>(copy))
 			name->Name += " Copy";
 		if (TransformComponent* transform = m_World->TryGet<TransformComponent>(copy))
-			transform->Position += Vec2(0.5f, -0.5f);
+			transform->Position += Vec3(0.5f, -0.5f, 0);
 		MarkDirty();
 		RefreshHierarchy();
 		Select(copy);

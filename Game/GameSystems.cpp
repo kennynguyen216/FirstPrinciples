@@ -6,7 +6,7 @@ using namespace FP;
 
 void PlayerSystem::Update(World& world, float deltaTime)
 {
-	const Vec2 move = Input::GetMoveAxis().Normalized();
+	const Vec3 move{ Input::GetMoveAxis().Normalized(), 0 };
 	for (auto [entity, transform, player] : world.View<TransformComponent, PlayerComponent>().each())
 		transform.Position += move * player.Speed * deltaTime;
 }
@@ -14,12 +14,12 @@ void PlayerSystem::Update(World& world, float deltaTime)
 void SpinnerSystem::Update(World& world, float deltaTime)
 {
 	for (auto [entity, transform, spinner] : world.View<TransformComponent, SpinnerComponent>().each())
-		transform.Rotation = std::fmod(transform.Rotation + spinner.DegreesPerSecond * deltaTime, 360.0f);
+		transform.Rotation.Z = std::fmod(transform.Rotation.Z + spinner.DegreesPerSecond * deltaTime, 360.0f);
 }
 
 void CameraFollowSystem::Update(World& world, float deltaTime)
 {
-	Vec2 target;
+	Vec3 target;
 	bool found = false;
 	for (auto [entity, transform, player] : world.View<TransformComponent, PlayerComponent>().each())
 	{
@@ -32,7 +32,9 @@ void CameraFollowSystem::Update(World& world, float deltaTime)
 
 	for (auto [entity, transform, camera, follow] : world.View<TransformComponent, CameraComponent, CameraFollowComponent>().each())
 	{
+		// Follow in X and Y only so the camera keeps its own depth.
 		const float t = 1.0f - std::exp(-follow.Smoothing * deltaTime);
-		transform.Position += (target - transform.Position) * t;
+		const Vec3 goal{ target.X, target.Y, transform.Position.Z };
+		transform.Position += (goal - transform.Position) * t;
 	}
 }

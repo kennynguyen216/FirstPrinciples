@@ -1,3 +1,6 @@
 [submodule "ThirdParty/entt"]
 	path = ThirdParty/entt
 	url = https://github.com/skypjack/entt.git
+[submodule "ThirdParty/stb"]
+	path = ThirdParty/stb
+	url = https://github.com/nothings/stb.git

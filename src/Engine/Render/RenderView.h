@@ -1,0 +1,43 @@
+#pragma once
+
+#include "Engine/World.h"
+
+namespace FP
+{
+	struct Ray
+	{
+		Vec3 Origin;
+		Vec3 Direction;
+
+		// Where the ray meets the plane z = planeZ. False when parallel or behind.
+		bool IntersectZPlane(float planeZ, Vec3& outPoint) const;
+	};
+
+	// Everything the renderer needs to know about the camera for one frame.
+	struct RenderView
+	{
+		Mat4 View;
+		Mat4 Projection;
+		Vec3 CameraPosition;
+		Vec3 CameraForward{ 0, 0, -1 };
+		Color Background{ 0.08f, 0.08f, 0.1f, 1 };
+		bool Orthographic = true;
+		float PixelsPerUnit = 64; // orthographic only
+		uint32 Width = 1;
+		uint32 Height = 1;
+
+		Mat4 GetViewProjection() const { return Projection * View; }
+
+		// Pixel coordinates from the top left of the target.
+		Ray ScreenToRay(Vec2 pixel) const;
+		Vec2 WorldToScreen(Vec3 world) const;
+
+		// The world's primary camera, or a default 2D view when there is none.
+		static RenderView FromWorld(World& world, uint32 width, uint32 height);
+
+		static RenderView FromCamera(const TransformComponent& transform, const CameraComponent& camera, uint32 width, uint32 height);
+
+		// Top down 2D view centred on center, as used by the editor.
+		static RenderView Orthographic2D(Vec2 center, float pixelsPerUnit, uint32 width, uint32 height);
+	};
+}

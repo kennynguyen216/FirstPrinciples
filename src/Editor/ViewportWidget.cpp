@@ -42,29 +42,23 @@ namespace FP::Editor
 				default: return SDL_SCANCODE_UNKNOWN;
 			}
 		}
-
-		bool PointInRect(Vec2 point, Vec2 center, Vec2 size, float rotation)
-		{
-			const Vec2 local = (point - center).Rotated(-rotation);
-			return std::fabs(local.X) <= size.X * 0.5f && std::fabs(local.Y) <= size.Y * 0.5f;
-		}
 	}
 
-	ViewportWidget::ViewportWidget(QWidget* parent) : QWidget(parent)
+	ViewportWidget::ViewportWidget(GPUDevice& device, QWidget* parent) : QWidget(parent), m_Device(device)
 	{
 		setFocusPolicy(Qt::StrongFocus);
 		setMouseTracking(true);
 		setMinimumSize(320, 240);
 		setAttribute(Qt::WA_OpaquePaintEvent);
+
+		// RGBA sRGB is a valid render target everywhere and matches QImage::Format_RGBA8888.
+		m_Renderer = new Renderer(device, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB);
 	}
 
 	ViewportWidget::~ViewportWidget()
 	{
+		m_Target.Reset();
 		delete m_Renderer;
-		if (m_SDLRenderer)
-			SDL_DestroyRenderer(m_SDLRenderer);
-		if (m_Surface)
-			SDL_DestroySurface(m_Surface);
 	}
 
 	void ViewportWidget::SetPlaying(bool playing)
@@ -76,48 +70,27 @@ namespace FP::Editor
 			setFocus();
 	}
 
-	void ViewportWidget::RecreateSurface()
+	void ViewportWidget::RecreateTarget()
 	{
 		const qreal dpr = devicePixelRatioF();
-		const int width = std::max(1, static_cast<int>(std::lround(this->width() * dpr)));
-		const int height = std::max(1, static_cast<int>(std::lround(this->height() * dpr)));
-		if (m_Surface && m_Surface->w == width && m_Surface->h == height)
+		const uint32 width = static_cast<uint32>(std::max(1L, std::lround(this->width() * dpr)));
+		const uint32 height = static_cast<uint32>(std::max(1L, std::lround(this->height() * dpr)));
+		if (m_Target && m_Target->GetWidth() == width && m_Target->GetHeight() == height)
 			return;
 
-		// Textures belong to the old renderer so the whole renderer is rebuilt with the surface.
-		delete m_Renderer;
-		m_Renderer = nullptr;
-		if (m_SDLRenderer)
-			SDL_DestroyRenderer(m_SDLRenderer);
-		if (m_Surface)
-			SDL_DestroySurface(m_Surface);
-
-		m_Surface = SDL_CreateSurface(width, height, SDL_PIXELFORMAT_XRGB8888);
-		m_SDLRenderer = m_Surface ? SDL_CreateSoftwareRenderer(m_Surface) : nullptr;
-		if (!m_SDLRenderer)
-		{
-			FP_LOG_ERROR("Viewport could not create a software renderer: %s", SDL_GetError());
-			return;
-		}
-		m_Renderer = new Renderer2D(m_SDLRenderer);
-
-		// Shares the pixels with SDL so painting needs no copy.
-		m_Image = QImage(static_cast<uchar*>(m_Surface->pixels), width, height, m_Surface->pitch, QImage::Format_RGB32);
+		m_Target = m_Device.CreateRenderTarget(SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB, width, height, false);
+		m_Image = QImage(static_cast<int>(width), static_cast<int>(height), QImage::Format_RGBA8888);
 		m_Image.setDevicePixelRatio(dpr);
 	}
 
-	ViewParams ViewportWidget::CurrentView() const
+	RenderView ViewportWidget::CurrentView() const
 	{
-		const int32 width = m_Surface ? m_Surface->w : 1;
-		const int32 height = m_Surface ? m_Surface->h : 1;
+		const uint32 width = m_Target ? m_Target->GetWidth() : 1;
+		const uint32 height = m_Target ? m_Target->GetHeight() : 1;
 		if (m_Playing && m_World)
-			return Renderer2D::GetCameraView(*m_World, width, height);
+			return RenderView::FromWorld(*m_World, width, height);
 
-		ViewParams view;
-		view.Width = width;
-		view.Height = height;
-		view.Center = m_CameraCenter;
-		view.PixelsPerUnit = m_PixelsPerUnit * static_cast<float>(devicePixelRatioF());
+		RenderView view = RenderView::Orthographic2D(m_CameraCenter, m_PixelsPerUnit * static_cast<float>(devicePixelRatioF()), width, height);
 		view.Background = { 0.12f, 0.12f, 0.14f, 1 };
 		return view;
 	}
@@ -128,25 +101,47 @@ namespace FP::Editor
 		return { static_cast<float>(point.x()) * dpr, static_cast<float>(point.y()) * dpr };
 	}
 
+	Vec2 ViewportWidget::PixelToWorld2D(Vec2 pixel) const
+	{
+		Vec3 point;
+		const Ray ray = CurrentView().ScreenToRay(pixel);
+		if (!ray.IntersectZPlane(0, point))
+			point = ray.Origin;
+		return point.XY();
+	}
+
 	void ViewportWidget::RenderFrame()
 	{
-		RecreateSurface();
-		if (!m_Renderer || !m_World)
+		RecreateTarget();
+		if (!m_Renderer->IsValid() || !m_World || !m_Target)
 			return;
 
-		const ViewParams view = CurrentView();
-		m_Renderer->Render(*m_World, view, !m_Playing);
+		const RenderView view = CurrentView();
+		m_Lines.Clear();
 		if (!m_Playing)
 		{
+			m_Lines.AddGrid2D(view);
 			if (m_World->IsValid(m_Selected) && m_World->Has<TransformComponent>(m_Selected))
 			{
 				const TransformComponent& transform = m_World->Get<TransformComponent>(m_Selected);
 				const SpriteComponent* sprite = m_World->TryGet<SpriteComponent>(m_Selected);
-				const Vec2 size = (sprite ? sprite->Size : Vec2(1, 1)) * transform.Scale;
-				m_Renderer->DrawRectOutline(transform.Position, size, transform.Rotation, { 1, 0.85f, 0.1f, 1 }, view, 3);
+				const Vec2 size = sprite ? sprite->Size : Vec2(1, 1);
+				// Three rings a pixel apart, just outside the sprite, so the outline reads at any zoom.
+				const Mat4 model = transform.GetMatrix();
+				for (int ring = 1; ring <= 3; ++ring)
+				{
+					const float grow = static_cast<float>(ring) * 2.0f / view.PixelsPerUnit;
+					const Vec2 scale{ std::fabs(transform.Scale.X), std::fabs(transform.Scale.Y) };
+					const Vec2 pad{ scale.X > 1e-4f ? grow / scale.X : 0, scale.Y > 1e-4f ? grow / scale.Y : 0 };
+					m_Lines.AddRect(model, size + pad, { 1, 0.85f, 0.1f, 1 });
+				}
 			}
 		}
-		SDL_RenderPresent(m_SDLRenderer);
+
+		SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(m_Device.GetHandle());
+		m_Renderer->Render(cmd, m_Target->GetHandle(), m_Target->GetWidth(), m_Target->GetHeight(), *m_World, view, &m_Lines);
+		SDL_SubmitGPUCommandBuffer(cmd);
+		m_Device.ReadPixels(m_Target->GetHandle(), m_Target->GetWidth(), m_Target->GetHeight(), m_Image.bits());
 		update();
 	}
 
@@ -171,7 +166,9 @@ namespace FP::Editor
 		int32 bestLayer = INT32_MIN;
 		for (auto [entity, transform, sprite] : m_World->View<TransformComponent, SpriteComponent>().each())
 		{
-			if (sprite.Layer >= bestLayer && PointInRect(worldPoint, transform.Position, sprite.Size * transform.Scale, transform.Rotation))
+			const Mat4 toLocal = (transform.GetMatrix() * Mat4::Scale({ sprite.Size, 1 })).Inverse();
+			const Vec3 local = toLocal.TransformPoint({ worldPoint, transform.Position.Z });
+			if (std::fabs(local.X) <= 0.5f && std::fabs(local.Y) <= 0.5f && sprite.Layer >= bestLayer)
 			{
 				best = entity;
 				bestLayer = sprite.Layer;
@@ -200,14 +197,14 @@ namespace FP::Editor
 		}
 		else if (event->button() == Qt::LeftButton)
 		{
-			const Vec2 worldPoint = CurrentView().ScreenToWorld(ToPixels(event->position()));
+			const Vec2 worldPoint = PixelToWorld2D(ToPixels(event->position()));
 			const Entity picked = PickEntity(worldPoint);
 			m_Selected = picked;
 			emit EntityPicked(picked);
 			if (picked != NullEntity)
 			{
 				m_Dragging = true;
-				m_DragOffset = m_World->Get<TransformComponent>(picked).Position - worldPoint;
+				m_DragOffset = m_World->Get<TransformComponent>(picked).Position.XY() - worldPoint;
 			}
 		}
 	}
@@ -241,11 +238,12 @@ namespace FP::Editor
 		}
 		else if (m_Dragging && m_World && m_World->IsValid(m_Selected))
 		{
-			Vec2 target = CurrentView().ScreenToWorld(ToPixels(position)) + m_DragOffset;
+			Vec2 target = PixelToWorld2D(ToPixels(position)) + m_DragOffset;
 			// Hold shift to snap to a quarter unit grid.
 			if (event->modifiers() & Qt::ShiftModifier)
 				target = { std::round(target.X * 4) / 4, std::round(target.Y * 4) / 4 };
-			m_World->Get<TransformComponent>(m_Selected).Position = target;
+			Vec3& position3 = m_World->Get<TransformComponent>(m_Selected).Position;
+			position3 = { target, position3.Z };
 			emit EntityMoved(m_Selected);
 		}
 		m_LastMouse = position;
@@ -257,10 +255,10 @@ namespace FP::Editor
 			return;
 		// Zoom around the cursor so the point under it stays put.
 		const Vec2 pixel = ToPixels(event->position());
-		const Vec2 before = CurrentView().ScreenToWorld(pixel);
+		const Vec2 before = PixelToWorld2D(pixel);
 		const float factor = std::pow(1.0015f, static_cast<float>(event->angleDelta().y()));
 		m_PixelsPerUnit = std::clamp(m_PixelsPerUnit * factor, 4.0f, 1024.0f);
-		const Vec2 after = CurrentView().ScreenToWorld(pixel);
+		const Vec2 after = PixelToWorld2D(pixel);
 		m_CameraCenter += before - after;
 	}
 

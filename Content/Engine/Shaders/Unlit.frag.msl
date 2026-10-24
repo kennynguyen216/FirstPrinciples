@@ -1,0 +1,46 @@
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+struct MaterialData
+{
+    float4 BaseColor;
+    float4 Emissive;
+    float4 Subsurface;
+    float4 Params;
+    float4 Params2;
+};
+
+struct ObjectData
+{
+    float4x4 ViewProjection;
+    float4x4 Model;
+    float4x4 NormalMatrix;
+    float4 UVTransform;
+    float4 Tint;
+};
+
+struct main0_out
+{
+    float4 OutColor [[color(0)]];
+};
+
+struct main0_in
+{
+    float2 InUV [[user(locn1)]];
+    float4 InTint [[user(locn4)]];
+};
+
+fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Material [[buffer(0)]], texture2d<float> BaseColorMap [[texture(0)]], sampler BaseColorMapSmplr [[sampler(0)]])
+{
+    main0_out out = {};
+    float4 color = (BaseColorMap.sample(BaseColorMapSmplr, in.InUV) * Material.BaseColor) * in.InTint;
+    if (color.w < Material.Params2.y)
+    {
+        discard_fragment();
+    }
+    out.OutColor = float4(color.xyz + Material.Emissive.xyz, color.w);
+    return out;
+}
+

@@ -2,6 +2,8 @@
 
 namespace FP::Engine
 {
+	const char* const ImageFilter = "Images (*.png *.jpg *.jpeg *.tga *.bmp)";
+
 	void RegisterEngineComponents()
 	{
 		ComponentRegistry& registry = ComponentRegistry::Get();
@@ -21,11 +23,15 @@ namespace FP::Engine
 		registry.Register<SpriteComponent>("Sprite")
 			.Field("Tint", &SpriteComponent::Tint)
 			.Field("Size", &SpriteComponent::Size)
-			.Field("Texture", &SpriteComponent::Texture)
+			.Field("Texture", &SpriteComponent::Texture).AssetPath(ImageFilter)
 			.Field("Layer", &SpriteComponent::Layer);
 
 		registry.Register<CameraComponent>("Camera")
+			.Field("Perspective", &CameraComponent::Perspective)
 			.Field("Zoom", &CameraComponent::Zoom)
+			.Field("FieldOfView", &CameraComponent::FieldOfView)
+			.Field("NearClip", &CameraComponent::NearClip)
+			.Field("FarClip", &CameraComponent::FarClip)
 			.Field("Primary", &CameraComponent::Primary)
 			.Field("Background", &CameraComponent::Background);
 	}

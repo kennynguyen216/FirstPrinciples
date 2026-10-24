@@ -3,7 +3,7 @@
 // --screenshot saves a frame after half a second and quits, handy as a smoke test.
 
 #include "Engine/Engine.h"
-#include "Engine/Renderer2D.h"
+#include "Engine/Render/Renderer.h"
 #include "Engine/SceneSerializer.h"
 #include "Game/Game.h"
 
@@ -12,6 +12,29 @@
 
 using namespace FP;
 
+namespace
+{
+	// Renders one frame offscreen and writes it as a BMP.
+	void SaveScreenshot(GPUDevice& device, Renderer& renderer, SDL_GPUTextureFormat format, World& world, uint32 width, uint32 height, const char* path)
+	{
+		RefPtr<GPUTexture> target = device.CreateRenderTarget(format, width, height, false);
+		SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device.GetHandle());
+		renderer.Render(cmd, target->GetHandle(), width, height, world, RenderView::FromWorld(world, width, height));
+		SDL_SubmitGPUCommandBuffer(cmd);
+
+		Array<uint8> pixels;
+		pixels.Resize(static_cast<int32>(width * height * 4));
+		if (!device.ReadPixels(target->GetHandle(), width, height, pixels.Data()))
+			return;
+		const bool bgra = format == SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM || format == SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM_SRGB;
+		SDL_Surface* surface = SDL_CreateSurfaceFrom(static_cast<int>(width), static_cast<int>(height),
+			bgra ? SDL_PIXELFORMAT_ARGB8888 : SDL_PIXELFORMAT_ABGR8888, pixels.Data(), static_cast<int>(width * 4));
+		SDL_SaveBMP(surface, path);
+		SDL_DestroySurface(surface);
+		FP_LOG("Saved screenshot %s", path);
+	}
+}
+
 int main(int argc, char** argv)
 {
 	if (!SDL_Init(SDL_INIT_VIDEO))
@@ -19,18 +42,6 @@ int main(int argc, char** argv)
 		FP_LOG_ERROR("SDL_Init failed: %s", SDL_GetError());
 		return 1;
 	}
-
-	SDL_Window* window = SDL_CreateWindow("FirstPrinciples", 1280, 720, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
-	SDL_Renderer* sdlRenderer = window ? SDL_CreateRenderer(window, nullptr) : nullptr;
-	if (!sdlRenderer)
-	{
-		FP_LOG_ERROR("Could not create window: %s", SDL_GetError());
-		return 1;
-	}
-	SDL_SetRenderVSync(sdlRenderer, 1);
-
-	Engine::RegisterEngineComponents();
-	Game::RegisterComponents();
 
 	const char* scene = Game::StartScene;
 	const char* screenshotPath = nullptr;
@@ -42,6 +53,24 @@ int main(int argc, char** argv)
 			scene = argv[i];
 	}
 
+	GPUDevice* device = GPUDevice::Create();
+	SDL_Window* window = device ? SDL_CreateWindow("FirstPrinciples", 1280, 720, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY) : nullptr;
+	if (!window || !SDL_ClaimWindowForGPUDevice(device->GetHandle(), window))
+	{
+		FP_LOG_ERROR("Could not create a GPU window: %s", SDL_GetError());
+		return 1;
+	}
+
+	// Linear swapchain so the GPU applies sRGB encoding for us.
+	if (SDL_WindowSupportsGPUSwapchainComposition(device->GetHandle(), window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR_LINEAR))
+		SDL_SetGPUSwapchainParameters(device->GetHandle(), window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR_LINEAR, SDL_GPU_PRESENTMODE_VSYNC);
+	else
+		FP_LOG_WARN("sRGB swapchain not supported. Colors will look dark.");
+	const SDL_GPUTextureFormat swapchainFormat = SDL_GetGPUSwapchainTextureFormat(device->GetHandle(), window);
+
+	Engine::RegisterEngineComponents();
+	Game::RegisterComponents();
+
 	StrongObjectPtr<World> world(NewObject<World>(nullptr, "GameWorld"));
 	const String scenePath = Paths::Content(scene);
 	if (!SceneSerializer::LoadFromFile(*world.Get(), scenePath.CStr()))
@@ -51,10 +80,10 @@ int main(int argc, char** argv)
 	world->BeginPlay();
 
 	{
-		Renderer2D renderer(sdlRenderer);
+		Renderer renderer(*device, swapchainFormat);
 		uint64 lastTicks = SDL_GetTicksNS();
 		int32 frame = 0;
-		bool running = true;
+		bool running = renderer.IsValid();
 		while (running)
 		{
 			SDL_Event event;
@@ -74,22 +103,19 @@ int main(int argc, char** argv)
 			world->Update(deltaTime);
 			Input::EndFrame();
 
-			int width = 0;
-			int height = 0;
-			SDL_GetCurrentRenderOutputSize(sdlRenderer, &width, &height);
-			renderer.Render(*world.Get(), Renderer2D::GetCameraView(*world.Get(), width, height));
+			SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device->GetHandle());
+			SDL_GPUTexture* swapchain = nullptr;
+			uint32 width = 0;
+			uint32 height = 0;
+			if (SDL_WaitAndAcquireGPUSwapchainTexture(cmd, window, &swapchain, &width, &height) && swapchain)
+				renderer.Render(cmd, swapchain, width, height, *world.Get(), RenderView::FromWorld(*world.Get(), width, height));
+			SDL_SubmitGPUCommandBuffer(cmd);
 
-			if (screenshotPath && world->GetTime() > 0.5)
+			if (screenshotPath && world->GetTime() > 0.5 && width > 0)
 			{
-				if (SDL_Surface* shot = SDL_RenderReadPixels(sdlRenderer, nullptr))
-				{
-					SDL_SaveBMP(shot, screenshotPath);
-					SDL_DestroySurface(shot);
-					FP_LOG("Saved screenshot %s", screenshotPath);
-				}
+				SaveScreenshot(*device, renderer, swapchainFormat, *world.Get(), width, height, screenshotPath);
 				running = false;
 			}
-			SDL_RenderPresent(sdlRenderer);
 
 			// Collecting once a second keeps GC pauses rare and predictable.
 			if (++frame % 60 == 0)
@@ -100,8 +126,9 @@ int main(int argc, char** argv)
 
 	world.Reset();
 	GarbageCollector::Get().Collect();
-	SDL_DestroyRenderer(sdlRenderer);
+	SDL_ReleaseWindowFromGPUDevice(device->GetHandle(), window);
 	SDL_DestroyWindow(window);
+	delete device;
 	SDL_Quit();
 	return 0;
 }

@@ -1,0 +1,54 @@
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+struct ObjectData
+{
+    float4x4 ViewProjection;
+    float4x4 Model;
+    float4x4 NormalMatrix;
+    float4 UVTransform;
+    float4 Tint;
+};
+
+struct MaterialData
+{
+    float4 BaseColor;
+    float4 Emissive;
+    float4 Subsurface;
+    float4 Params;
+    float4 Params2;
+};
+
+struct main0_out
+{
+    float3 OutWorldPosition [[user(locn0)]];
+    float2 OutUV [[user(locn1)]];
+    float3 OutNormal [[user(locn2)]];
+    float4 OutTangent [[user(locn3)]];
+    float4 OutTint [[user(locn4)]];
+    float4 gl_Position [[position]];
+};
+
+struct main0_in
+{
+    float3 InPosition [[attribute(0)]];
+    float3 InNormal [[attribute(1)]];
+    float2 InUV [[attribute(2)]];
+    float4 InTangent [[attribute(3)]];
+};
+
+vertex main0_out main0(main0_in in [[stage_in]], constant ObjectData& Object [[buffer(0)]])
+{
+    main0_out out = {};
+    float4 world = Object.Model * float4(in.InPosition, 1.0);
+    out.OutWorldPosition = world.xyz;
+    out.OutUV = (in.InUV * Object.UVTransform.xy) + Object.UVTransform.zw;
+    out.OutNormal = fast::normalize(float3x3(Object.NormalMatrix[0].xyz, Object.NormalMatrix[1].xyz, Object.NormalMatrix[2].xyz) * in.InNormal);
+    out.OutTangent = float4(fast::normalize(float3x3(Object.Model[0].xyz, Object.Model[1].xyz, Object.Model[2].xyz) * in.InTangent.xyz), in.InTangent.w);
+    out.OutTint = Object.Tint;
+    out.gl_Position = Object.ViewProjection * world;
+    return out;
+}
+
