@@ -154,6 +154,24 @@ namespace FP::Editor
 		tabifyDockWidget(consoleDock, contentDock);
 		contentDock->raise();
 		resizeDocks({ consoleDock }, { 220 }, Qt::Vertical);
+
+		connect(m_ContentBrowser, &ContentBrowser::AssetSelected, this, &EditorWindow::ShowAsset);
+		connect(m_ContentBrowser, &ContentBrowser::AssetActivated, this, [this](const QString& path) {
+			const QString kind = ContentBrowser::AssetKind(path);
+			if (kind == "Scene")
+			{
+				if (ConfirmDiscard())
+					OpenScene(path);
+			}
+			else if (kind == "Script")
+			{
+				OpenScript(path);
+			}
+			else
+			{
+				ShowAsset(path);
+			}
+		});
 	}
 
 	void EditorWindow::BuildMenus()
@@ -263,6 +281,12 @@ namespace FP::Editor
 	void EditorWindow::SetViewMode(ViewMode mode)
 	{
 		m_ViewModeBox->setCurrentIndex(static_cast<int>(mode));
+	}
+
+	void EditorWindow::ShowAsset(const QString& path)
+	{
+		Select(NullEntity);
+		m_Inspector->SetAsset(path);
 	}
 
 	void EditorWindow::OpenScript(const QString& path)

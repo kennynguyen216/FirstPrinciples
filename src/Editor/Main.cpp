@@ -61,6 +61,11 @@ int main(int argc, char** argv)
 		if (browseIndex >= 0 && browseIndex + 1 < args.size())
 			window.GetContentBrowser()->ShowFolder(QString::fromUtf8(FP::Paths::Content(args[browseIndex + 1].toUtf8().constData()).CStr()));
 
+		// --asset path shows an asset in the inspector, relative to Content.
+		const int assetIndex = static_cast<int>(args.indexOf("--asset"));
+		if (assetIndex >= 0 && assetIndex + 1 < args.size())
+			window.ShowAsset(QString::fromUtf8(FP::Paths::Content(args[assetIndex + 1].toUtf8().constData()).CStr()));
+
 		// --open-script path opens a script tab, relative to the project.
 		const int openIndex = static_cast<int>(args.indexOf("--open-script"));
 		if (openIndex >= 0 && openIndex + 1 < args.size())

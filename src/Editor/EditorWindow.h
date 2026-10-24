@@ -52,6 +52,9 @@ namespace FP::Editor
 
 		ContentBrowser* GetContentBrowser() const { return m_ContentBrowser; }
 
+		// Shows an asset file in the inspector, clearing the entity selection. Absolute path.
+		void ShowAsset(const QString& path);
+
 	protected:
 		void closeEvent(QCloseEvent* event) override;
 		bool eventFilter(QObject* watched, QEvent* event) override;
