@@ -308,7 +308,9 @@ namespace FP
 
 	// Fingerprint of everything a script module shares with the host by layout. A module built
 	// against different engine headers or a different configuration gives a different value.
-	inline uint32 ComputeScriptAbi()
+	// Static so the module and the host each keep their own copy. A plain inline one is merged
+	// across them when the module loads, and the module would then report the host's value.
+	static inline uint32 ComputeScriptAbi()
 	{
 		const uint64 parts[] = {
 			ScriptInterfaceVersion, FP_BUILD_DEBUG, sizeof(void*), sizeof(World), sizeof(String), sizeof(Array<int32>),

@@ -28,6 +28,10 @@ namespace FP
 		bool LoadModule(const String& path);
 		void UnloadModule();
 		bool IsModuleLoaded() const { return m_Module != nullptr; }
+
+		// True when the last load was refused because the module and this program were built
+		// from different engine code. Rebuilding whichever side is older fixes it.
+		bool HadAbiMismatch() const { return m_AbiMismatch; }
 		const String& GetModulePath() const { return m_ModulePath; }
 
 		// Unloads and loads the module again. Running scripts are rebuilt with their field values.
@@ -62,6 +66,7 @@ namespace FP
 		String m_ModulePath;
 		String m_LoadedCopy;
 		int32 m_LoadCount = 0;
+		bool m_AbiMismatch = false;
 		ModuleContext m_Context;
 
 		struct ListenerEntry
