@@ -1,9 +1,9 @@
 #include "Editor/ContentBrowser.h"
 #include "Editor/EditorIcons.h"
 #include "Editor/EditorStyle.h"
-#include "Engine/Project.h"
 #include "Engine/Material.h"
 #include "Engine/Paths.h"
+#include "Engine/Project.h"
 #include "Core/Misc/Guid.h"
 
 #include <QApplication>
@@ -487,8 +487,8 @@ namespace FP::Editor
 
 	bool ContentBrowser::IsHidden(const QString& name) const
 	{
-		// Engine shaders are not something a game edits, and dot files are OS noise.
-		return name.startsWith('.') || name == "Engine";
+		// Dot files are OS noise.
+		return name.startsWith('.');
 	}
 
 	QString ContentBrowser::AssetKind(const QString& path)
@@ -582,7 +582,7 @@ namespace FP::Editor
 			while (it.hasNext())
 			{
 				const QFileInfo info(it.next());
-				if (info.fileName().contains(filter, Qt::CaseInsensitive) && !info.absoluteFilePath().contains("/Engine/"))
+				if (info.fileName().contains(filter, Qt::CaseInsensitive))
 					entries.append(info);
 			}
 		}

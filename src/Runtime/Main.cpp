@@ -2,8 +2,8 @@
 // Usage: Runtime [scene relative to Content] [--screenshot out.bmp]
 // --screenshot saves a frame after half a second and quits, handy as a smoke test.
 
-#include "Engine/Project.h"
 #include "Engine/Engine.h"
+#include "Engine/Project.h"
 #include "Core/Jobs/JobSystem.h"
 #include "Engine/Render/Renderer.h"
 #include "Engine/SceneSerializer.h"
@@ -60,7 +60,7 @@ int main(int argc, char** argv)
 	}
 
 	GPUDevice* device = GPUDevice::Create();
-	SDL_Window* window = device ? SDL_CreateWindow("FirstPrinciples", 1280, 720, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY) : nullptr;
+	SDL_Window* window = device ? SDL_CreateWindow(Paths::GetProject().Name.CStr(), 1280, 720, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY) : nullptr;
 	if (!window || !SDL_ClaimWindowForGPUDevice(device->GetHandle(), window))
 	{
 		FP_LOG_ERROR("Could not create a GPU window: %s", SDL_GetError());
