@@ -489,3 +489,30 @@ FP_TEST(Json_ReadsWhatPagesSend)
 	FP_EXPECT(Json::Parse("{\"a\":1,").IsNull() && Json::Parse("[1 2]").IsNull() && Json::Parse("").IsNull() && Json::Parse("1 2").IsNull());
 	FP_EXPECT(Json::Parse(std::string(200, '[') + std::string(200, ']')).IsNull());
 }
+
+#include "Engine/Render/RenderView.h"
+
+FP_TEST(Cameras_SwitchingCutsTheView)
+{
+	Engine::RegisterEngineComponents();
+	StrongObjectPtr<World> world(NewObject<World>(nullptr, "CameraWorld"));
+	const Entity first = world->CreateEntity("First");
+	const Entity second = world->CreateEntity("Second");
+	const Entity prop = world->CreateEntity("Prop");
+	world->Add<CameraComponent>(first);
+	world->Add<CameraComponent>(second).Primary = false;
+	world->Get<TransformComponent>(second).Position = { 5, 0, 0 };
+
+	FP_EXPECT(world->GetActiveCamera() == first);
+	FP_EXPECT(world->SetActiveCamera(second));
+	FP_EXPECT(world->GetActiveCamera() == second);
+	FP_EXPECT(!world->Get<CameraComponent>(first).Primary);
+	FP_EXPECT(RenderView::FromWorld(*world.Get(), 64, 64).Camera == second);
+
+	// Something without a camera changes nothing.
+	FP_EXPECT(!world->SetActiveCamera(prop));
+	FP_EXPECT(world->GetActiveCamera() == second);
+
+	world->Get<CameraComponent>(second).Primary = false;
+	FP_EXPECT(world->GetActiveCamera() == NullEntity);
+}

@@ -90,6 +90,25 @@ namespace FP
 		return NullEntity;
 	}
 
+	Entity World::GetActiveCamera()
+	{
+		for (auto [entity, transform, camera] : View<TransformComponent, CameraComponent>().each())
+		{
+			if (camera.Primary)
+				return entity;
+		}
+		return NullEntity;
+	}
+
+	bool World::SetActiveCamera(Entity camera)
+	{
+		if (!IsValid(camera) || !Has<TransformComponent, CameraComponent>(camera))
+			return false;
+		for (auto [entity, other] : View<CameraComponent>().each())
+			other.Primary = entity == camera;
+		return true;
+	}
+
 	Entity World::FindEntityByGuid(const Guid& id) const
 	{
 		for (auto [entity, idComp] : m_Registry.view<IdComponent>().each())

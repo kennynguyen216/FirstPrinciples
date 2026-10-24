@@ -123,6 +123,17 @@ namespace FP
 		// Null when the entity has no Animator component.
 		Animator* GetAnimator() const { return m_World->GetAnimator(m_Entity); }
 
+		// ---- Cameras ---------------------------------------------------------
+
+		// The camera the game sees through, or NullEntity.
+		Entity GetActiveCamera() const { return m_World->GetActiveCamera(); }
+
+		// Cuts to another camera, this entity's by default. False when it has no camera.
+		bool SetActiveCamera(Entity camera = NullEntity) const { return m_World->SetActiveCamera(camera == NullEntity ? m_Entity : camera); }
+		bool SetActiveCamera(std::string_view name) const { return m_World->SetActiveCamera(m_World->FindEntityByName(name)); }
+
+		bool IsActiveCamera() const { return m_World->GetActiveCamera() == m_Entity; }
+
 		// ---- Finding entities and scripts ------------------------------------
 
 		// The first entity with the name, or NullEntity.
