@@ -26,6 +26,14 @@ namespace FP
 		// entity, or NullEntity when the text is broken or an entity with its id already exists.
 		Entity LoadEntityFromString(World& world, std::string_view text);
 
+		// An entity followed by all of its descendants, for copying a whole branch.
+		String SaveEntityTreeToString(World& world, Entity root);
+
+		// Adds every entity in text as a copy with a new id. Parents inside the text are remapped
+		// so the copies keep their shape, and a parent outside it that this world lacks is dropped.
+		// Returns the new entities in text order, or nothing when the text is broken.
+		Array<Entity> LoadEntitiesAsCopies(World& world, std::string_view text);
+
 		bool SaveToFile(World& world, const char* path);
 		bool LoadFromFile(World& world, const char* path);
 	}

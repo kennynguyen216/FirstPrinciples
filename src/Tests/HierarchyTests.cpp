@@ -81,3 +81,35 @@ FP_TEST(Hierarchy_SavesAndLoadsParents)
 	FP_EXPECT(loaded->GetParent(loadedChild) == loaded->FindEntityByName("Parent"));
 	FP_EXPECT(Near(loaded->GetWorldPosition(loadedChild), { 0, 5, 0 }));
 }
+
+FP_TEST(Hierarchy_CopiesWholeBranches)
+{
+	Engine::RegisterEngineComponents();
+	StrongObjectPtr<World> world(NewObject<World>());
+	const Entity table = world->CreateEntity("Table");
+	const Entity leg = world->CreateEntity("Leg");
+	const Entity foot = world->CreateEntity("Foot");
+	world->CreateEntity("Unrelated");
+	world->SetParent(leg, table);
+	world->SetParent(foot, leg);
+
+	// Copying the table brings its leg and foot along, with new ids and the same shape.
+	const String text = SceneSerializer::SaveEntityTreeToString(*world.Get(), table);
+	FP_EXPECT(!text.Contains("Unrelated"));
+	const Array<Entity> copies = SceneSerializer::LoadEntitiesAsCopies(*world.Get(), text.View());
+	FP_EXPECT(copies.Num() == 3);
+	FP_EXPECT(world->GetEntities().Num() == 7);
+	FP_EXPECT(copies[0] != table && world->GetEntityName(copies[0]) == "Table");
+	FP_EXPECT(world->GetParent(copies[0]) == NullEntity);
+	FP_EXPECT(world->GetParent(copies[1]) == copies[0] && world->GetParent(copies[2]) == copies[1]);
+	FP_EXPECT(world->GetChildren(table).Num() == 1);
+
+	// Pasting a leg alone keeps it under the original table, and into a world without it, top level.
+	const String legText = SceneSerializer::SaveEntityTreeToString(*world.Get(), leg);
+	const Array<Entity> legCopy = SceneSerializer::LoadEntitiesAsCopies(*world.Get(), legText.View());
+	FP_EXPECT(legCopy.Num() == 2 && world->GetParent(legCopy[0]) == table);
+	StrongObjectPtr<World> other(NewObject<World>());
+	const Array<Entity> moved = SceneSerializer::LoadEntitiesAsCopies(*other.Get(), legText.View());
+	FP_EXPECT(moved.Num() == 2 && other->GetParent(moved[0]) == NullEntity && !other->Has<ParentComponent>(moved[0]));
+	FP_EXPECT(SceneSerializer::LoadEntitiesAsCopies(*other.Get(), "not a scene").IsEmpty());
+}
