@@ -35,6 +35,9 @@ namespace FP::Editor
 	signals:
 		void EntityClicked(const FP::Guid& id);
 
+		// The scene row at the top, which stands for the scene entity and its scripts.
+		void SceneClicked();
+
 		// parent is a null Guid to make child top level.
 		void ParentRequested(const FP::Guid& child, const FP::Guid& parent);
 		void CreateChildRequested(const FP::Guid& parent);

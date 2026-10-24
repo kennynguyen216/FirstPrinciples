@@ -167,6 +167,17 @@ namespace FP::Editor
 	{
 		m_Hierarchy = new HierarchyPanel();
 		connect(m_Hierarchy, &HierarchyPanel::EntityClicked, this, [this](const Guid& id) { Select(m_World->FindEntityByGuid(id)); });
+		connect(m_Hierarchy, &HierarchyPanel::SceneClicked, this, [this]() {
+			// Made on first use, so scenes without scene scripts stay as they were.
+			const bool existed = m_World->GetSceneEntity() != NullEntity;
+			const Entity scene = m_World->GetOrCreateSceneEntity();
+			if (!existed)
+			{
+				MarkDirty();
+				RefreshHierarchy();
+			}
+			Select(scene);
+		});
 		connect(m_Hierarchy, &HierarchyPanel::ParentRequested, this, [this](const Guid& child, const Guid& parent) {
 			const Entity parentEntity = parent == Guid() ? NullEntity : m_World->FindEntityByGuid(parent);
 			if (!m_World->SetParent(m_World->FindEntityByGuid(child), parentEntity))

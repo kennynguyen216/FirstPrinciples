@@ -874,13 +874,24 @@ namespace FP::Editor
 			return;
 		}
 
-		SetTitle(ToQString(m_World->GetEntityName(m_Entity)), EditorIcon::Entity);
+		const bool isScene = m_World->Has<SceneComponent>(m_Entity);
+		SetTitle(isScene ? "Scene" : ToQString(m_World->GetEntityName(m_Entity)), isScene ? EditorIcon::Level : EditorIcon::Entity);
 		entt::registry& registry = m_World->GetRegistry();
 		QMenu* addMenu = new QMenu(m_AddButton);
+		if (isScene)
+		{
+			QLabel* hint = new QLabel("Scripts here run for the whole scene, for things like game rules, spawning and score.");
+			hint->setWordWrap(true);
+			hint->setStyleSheet("color: #9a9a9a; padding: 4px;");
+			m_Layout->addWidget(hint);
+		}
 
 		for (const ComponentInfo* info : ComponentRegistry::Get().GetAll())
 		{
 			if (!info->ShowInEditor)
+				continue;
+			// The scene entity is not placed anywhere, so its transform would only confuse.
+			if (isScene && info == ComponentRegistry::Get().Find<TransformComponent>())
 				continue;
 			if (!info->TryGet(registry, m_Entity))
 			{

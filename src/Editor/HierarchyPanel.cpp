@@ -115,7 +115,9 @@ namespace FP::Editor
 
 		connect(m_Tree, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem* item) {
 			const Guid id = ItemGuid(item);
-			if (id != Guid())
+			if (item && !item->parent())
+				emit SceneClicked();
+			else if (id != Guid())
 				emit EntityClicked(id);
 			UpdateFooter();
 		});
@@ -145,14 +147,21 @@ namespace FP::Editor
 		QTreeWidgetItem* root = new QTreeWidgetItem(m_Tree);
 		root->setText(LabelColumn, sceneName);
 		root->setIcon(LabelColumn, EditorIcons::Get(EditorIcon::Level));
-		root->setText(TypeColumn, "World");
-		root->setFlags(Qt::ItemIsEnabled | Qt::ItemIsDropEnabled);
+		root->setText(TypeColumn, "Scene");
+		root->setToolTip(LabelColumn, "Click to add scene scripts, which run for the whole scene");
+		root->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
+		// The scene entity is this row, so it is not listed again below.
+		const Entity scene = world.GetSceneEntity();
+		if (scene != NullEntity)
+			root->setData(LabelColumn, GuidRole, ToQString(world.Get<IdComponent>(scene).Id.ToString()));
 
 		// Make every row first, then hang each under its parent so order in the file does not matter.
 		const Array<Entity> entities = world.GetEntities();
 		QHash<QString, QTreeWidgetItem*> items;
 		for (Entity entity : entities)
 		{
+			if (entity == scene)
+				continue;
 			const QString type = TypeName(world, entity);
 			QTreeWidgetItem* item = new QTreeWidgetItem();
 			item->setText(LabelColumn, ToQString(world.GetEntityName(entity)));
@@ -166,6 +175,8 @@ namespace FP::Editor
 		}
 		for (Entity entity : entities)
 		{
+			if (entity == scene)
+				continue;
 			QTreeWidgetItem* item = items.value(ToQString(world.Get<IdComponent>(entity).Id.ToString()));
 			const Entity parent = world.GetParent(entity);
 			QTreeWidgetItem* parentItem = parent != NullEntity ? items.value(ToQString(world.Get<IdComponent>(parent).Id.ToString())) : nullptr;
@@ -173,7 +184,7 @@ namespace FP::Editor
 		}
 		root->setExpanded(true);
 		ForEachItem(root, [this](QTreeWidgetItem* item) { item->setExpanded(!m_Collapsed.contains(item->data(LabelColumn, GuidRole).toString())); });
-		m_Count = entities.Num();
+		m_Count = entities.Num() - (scene != NullEntity ? 1 : 0);
 		ApplyFilter();
 		UpdateFooter();
 	}
@@ -186,6 +197,8 @@ namespace FP::Editor
 		const QString key = ToQString(id.ToString());
 		if (QTreeWidgetItem* root = m_Tree->topLevelItem(0))
 		{
+			if (!key.isEmpty() && root->data(LabelColumn, GuidRole).toString() == key)
+				m_Tree->setCurrentItem(root);
 			ForEachItem(root, [this, &key](QTreeWidgetItem* item) {
 				if (item->data(LabelColumn, GuidRole).toString() == key)
 				{

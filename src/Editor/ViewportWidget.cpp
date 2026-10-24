@@ -164,7 +164,8 @@ namespace FP::Editor
 
 	std::optional<TransformComponent> ViewportWidget::SelectedTransform() const
 	{
-		if (!m_World || !m_World->IsValid(m_Selected) || !m_World->Has<TransformComponent>(m_Selected))
+		// The scene entity has a transform but no place in the world, so it gets no gizmo.
+		if (!m_World || !m_World->IsValid(m_Selected) || !m_World->Has<TransformComponent>(m_Selected) || m_World->Has<SceneComponent>(m_Selected))
 			return std::nullopt;
 		return m_World->GetWorldTransform(m_Selected);
 	}
