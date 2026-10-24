@@ -370,6 +370,9 @@ namespace FP::Editor
 		connect(m_ViewportToolbar, &ViewportToolbar::ProjectionChanged, m_View3DAction, &QAction::setChecked);
 		connect(m_ViewportToolbar, &ViewportToolbar::ViewModeChanged, this, &EditorWindow::SetViewMode);
 		connect(m_ViewportToolbar, &ViewportToolbar::SnapChanged, this, [this](bool on, float size) { m_Viewport->SetSnap(on, size); });
+		connect(m_ViewportToolbar, &ViewportToolbar::GizmoModeChanged, m_Viewport, &ViewportWidget::SetGizmoMode);
+		connect(m_ViewportToolbar, &ViewportToolbar::GizmoSpaceChanged, m_Viewport, &ViewportWidget::SetGizmoLocal);
+		connect(m_Viewport, &ViewportWidget::GizmoModeChanged, m_ViewportToolbar, &ViewportToolbar::SetGizmoMode);
 
 		// Same keys as Unreal so muscle memory carries over.
 		const std::pair<const char*, ViewMode> modeKeys[] = { { "Alt+4", ViewMode::Lit }, { "Alt+3", ViewMode::Unlit }, { "Alt+2", ViewMode::Wireframe } };

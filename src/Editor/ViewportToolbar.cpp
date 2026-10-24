@@ -1,6 +1,7 @@
 #include "Editor/ViewportToolbar.h"
 #include "Editor/EditorIcons.h"
 
+#include <QButtonGroup>
 #include <QHBoxLayout>
 #include <QMenu>
 #include <QToolButton>
@@ -30,6 +31,15 @@ namespace FP::Editor
 		}
 
 		const char* ViewModeNames[] = { "Lit", "Unlit", "Wireframe" };
+
+		// Buttons that sit side by side as one pill, rounded only at the ends of the group.
+		const char* GroupStyle =
+			"QToolButton { background: rgba(21, 21, 21, 215); border: 1px solid rgba(0, 0, 0, 120); border-radius: 0;"
+			" padding: 3px 7px; color: #e0e0e0; }"
+			"QToolButton:hover { background: rgba(70, 70, 70, 230); }"
+			"QToolButton:checked { background: rgba(0, 112, 224, 220); }"
+			"QToolButton[first=\"true\"] { border-top-left-radius: 12px; border-bottom-left-radius: 12px; padding-left: 10px; }"
+			"QToolButton[last=\"true\"] { border-top-right-radius: 12px; border-bottom-right-radius: 12px; padding-right: 10px; }";
 	}
 
 	ViewportToolbar::ViewportToolbar(QWidget* parent) : QWidget(parent)
@@ -59,8 +69,44 @@ namespace FP::Editor
 		layout->addWidget(m_ViewMode);
 		layout->addStretch(1);
 
+		// Select, move, rotate and scale, like UE's transform tools.
+		QHBoxLayout* tools = new QHBoxLayout();
+		tools->setSpacing(0);
+		m_GizmoModes = new QButtonGroup(this);
+		const struct { GizmoMode Mode; EditorIcon Icon; const char* Tip; } toolInfo[] = {
+			{ GizmoMode::Select, EditorIcon::Select, "Select (Q)" },
+			{ GizmoMode::Move, EditorIcon::Move, "Move (W)" },
+			{ GizmoMode::Rotate, EditorIcon::Rotate, "Rotate (E)" },
+			{ GizmoMode::Scale, EditorIcon::Scale, "Scale (R)" },
+		};
+		for (int i = 0; i < 4; ++i)
+		{
+			QToolButton* button = MakePill(EditorIcons::Get(toolInfo[i].Icon), "", toolInfo[i].Tip);
+			button->setCheckable(true);
+			button->setProperty("first", i == 0);
+			button->setProperty("last", i == 3);
+			button->setStyleSheet(GroupStyle);
+			m_GizmoModes->addButton(button, static_cast<int>(toolInfo[i].Mode));
+			tools->addWidget(button);
+		}
+		m_GizmoModes->button(static_cast<int>(GizmoMode::Move))->setChecked(true);
+		connect(m_GizmoModes, &QButtonGroup::idClicked, this, [this](int id) { emit GizmoModeChanged(static_cast<GizmoMode>(id)); });
+		layout->addLayout(tools);
+
+		m_Space = MakePill(EditorIcons::Get(EditorIcon::World), "", "Moving and rotating along world axes. Click for the entity's own axes.");
+		connect(m_Space, &QToolButton::clicked, this, [this]() {
+			const bool local = m_Space->property("local").toBool() == false;
+			m_Space->setProperty("local", local);
+			m_Space->setIcon(EditorIcons::Get(local ? EditorIcon::Local : EditorIcon::World));
+			m_Space->setToolTip(local
+				? "Moving and rotating along the entity's own axes. Click for world axes."
+				: "Moving and rotating along world axes. Click for the entity's own axes.");
+			emit GizmoSpaceChanged(local);
+		});
+		layout->addWidget(m_Space);
+
 		// Off by default so drags move freely. Shift flips it while dragging either way.
-		m_Snap = MakePill(EditorIcons::Get(EditorIcon::Grid), "", "Snap moves to the grid (hold Shift to invert)");
+		m_Snap = MakePill(EditorIcons::Get(EditorIcon::Grid), "", "Snap moves to the grid and turns to 15 degrees (hold Shift to invert)");
 		m_Snap->setCheckable(true);
 		m_Snap->setChecked(false);
 		m_SnapSize = MakePill(QIcon(), "0.25", "Grid size");
@@ -88,5 +134,10 @@ namespace FP::Editor
 	void ViewportToolbar::SetViewMode(ViewMode mode)
 	{
 		m_ViewMode->setText(ViewModeNames[static_cast<int>(mode)]);
+	}
+
+	void ViewportToolbar::SetGizmoMode(GizmoMode mode)
+	{
+		m_GizmoModes->button(static_cast<int>(mode))->setChecked(true);
 	}
 }
