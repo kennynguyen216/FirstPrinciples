@@ -87,6 +87,50 @@ Game code lives in `Game/`. The editor and the runtime both link it.
 Textures are `.png`, `.jpg`, `.tga` or `.bmp` files under `Content/`. Use the `...` button next to a texture
 field to pick one.
 
+### C++ scripts
+
+Scripts are per entity behaviour written in C++ in `Game/Scripts`. They build into a separate
+`GameScripts` library that the editor reloads while it runs, so you can change code without
+restarting, even in the middle of play.
+
+```cpp
+#include "Engine/Scripting/Script.h"
+
+using namespace FP;
+
+class Rotator : public Script
+{
+public:
+    Vec3 DegreesPerSecond{ 0, 90, 0 };
+
+    void OnUpdate(float deltaTime) override
+    {
+        GetTransform().Rotation += DegreesPerSecond * deltaTime;
+    }
+};
+
+FP_SCRIPT(Rotator)
+{
+    fields.Field("DegreesPerSecond", &Rotator::DegreesPerSecond);
+}
+```
+
+- **Scripts > New Script...** writes a starter file and opens it in a tab next to the viewport.
+- Add a **Scripts** component to an entity, then **Add Script**. An entity can have any number.
+- Fields listed in `FP_SCRIPT` show in the inspector, save with the scene and keep their values
+  across hot reloads. Other members reset when scripts reload.
+- Saving a script rebuilds and reloads it (turn this off with **Scripts > Auto Reload**).
+  **Scripts > Reload Scripts** (Ctrl+R) forces it. Build output goes to the console, and double
+  clicking an error opens the file at that line.
+- Overrides: `OnStart`, `OnUpdate`, `OnStop` and `OnHotReload` (defaults to calling `OnStart`).
+  Helpers: `GetTransform()`, `Get<T>()`, `TryGet<T>()`, `Add<T>()`, `FindEntity(name)`, `DestroySelf()`.
+- Components still live in `Game/` and are registered in `Game::RegisterComponents`. Keep new
+  component types out of `Game/Scripts`, since data owned by the scripts library would vanish
+  when it reloads.
+
+The runtime loads the same library at startup. Building from the command line works as before,
+and the `GameScripts` project builds along with the editor.
+
 ### Materials and lighting
 
 A sprite draws unlit with its `Tint` and `Texture` until it gets a **Material** component. That points
@@ -133,6 +177,7 @@ down their local -Z axis.
 | Create sprite | Ctrl+Shift+A |
 | Duplicate / delete | Ctrl+D / Delete |
 | Play | Ctrl+P |
+| New script / reload scripts | Scripts menu / Ctrl+R |
 | Save | Ctrl+S |
 
 ### Smoke tests
@@ -143,6 +188,7 @@ Binaries/Debug/Runtime --screenshot runtime.bmp
 Binaries/Debug/Editor --play --screenshot editor.png
 Binaries/Debug/Editor --scene Scenes/Lighting2D.scene --select "Glass Pane" --screenshot lit.png
 Binaries/Debug/Editor --scene Scenes/Showcase3D.scene --3d --viewmode wireframe --screenshot 3d.png
+Binaries/Debug/Editor --build-scripts
 ```
 
 ## Rendering
@@ -174,6 +220,7 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 | Game | The game's components and systems (`Game/`) |
 | Editor | Qt editor |
 | Runtime | Standalone player for a scene |
+| GameScripts | Hot reloadable C++ scripts (`Game/Scripts`) |
 | Tests | Unit tests. Run `Binaries/Debug/Tests [filter]` |
 
 ## Third party
