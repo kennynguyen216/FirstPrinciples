@@ -44,7 +44,7 @@ namespace FP
 	};
 
 	// Owns the SDL_GPU device and the things every renderer needs from it.
-	// Shaders ship precompiled in Content/Engine/Shaders as SPIR-V (Vulkan) and MSL (Metal).
+	// Shaders ship precompiled in Engine/Content/Shaders as SPIR-V (Vulkan) and MSL (Metal).
 	class GPUDevice
 	{
 	public:
@@ -58,7 +58,7 @@ namespace FP
 		SDL_GPUDevice* GetHandle() const { return m_Device; }
 		const char* GetDriverName() const;
 
-		// Loads Content/Engine/Shaders/<name>.spv or .msl depending on the backend.
+		// Loads Engine/Content/Shaders/<name>.spv or .msl depending on the backend.
 		SDL_GPUShader* LoadShader(const char* name, uint32 numSamplers, uint32 numUniformBuffers);
 
 		// Uploads tightly packed RGBA8 pixels. Mipmaps are generated on the GPU when asked.

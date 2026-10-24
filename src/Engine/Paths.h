@@ -12,4 +12,10 @@ namespace FP::Paths
 
 	// Absolute path for a path relative to Content.
 	String Content(std::string_view relative);
+
+	// The Engine folder with content every project shares, found the same way.
+	const String& GetEngineDir();
+
+	// Absolute path for a path relative to Engine/Content, like Shaders/Lit.frag.msl.
+	String EngineContent(std::string_view relative);
 }

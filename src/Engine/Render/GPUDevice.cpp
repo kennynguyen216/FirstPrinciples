@@ -76,7 +76,7 @@ namespace FP
 	SDL_GPUShader* GPUDevice::LoadShader(const char* name, uint32 numSamplers, uint32 numUniformBuffers)
 	{
 		const bool isMsl = m_ShaderFormat == SDL_GPU_SHADERFORMAT_MSL;
-		const String path = Paths::Content(String::Format("Engine/Shaders/%s.%s", name, isMsl ? "msl" : "spv"));
+		const String path = Paths::EngineContent(String::Format("Shaders/%s.%s", name, isMsl ? "msl" : "spv"));
 
 		String code;
 		if (!File::ReadAllText(path.CStr(), code))

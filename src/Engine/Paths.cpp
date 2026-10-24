@@ -10,7 +10,8 @@ namespace FP::Paths
 	{
 		namespace fs = std::filesystem;
 
-		String FindProjectDir()
+		// First folder above the executable or the working folder that holds marker.
+		String FindDirWith(const char* marker)
 		{
 			fs::path starts[2];
 			if (const char* base = SDL_GetBasePath())
@@ -22,7 +23,7 @@ namespace FP::Paths
 			{
 				for (fs::path dir = start; !dir.empty(); dir = dir.parent_path())
 				{
-					if (fs::is_directory(dir / "Content", ec))
+					if (fs::is_directory(dir / marker, ec))
 					{
 						const std::u8string text = dir.generic_u8string();
 						return String(reinterpret_cast<const char*>(text.data()), static_cast<int32>(text.size()));
@@ -37,7 +38,7 @@ namespace FP::Paths
 
 	const String& GetProjectDir()
 	{
-		static const String dir = FindProjectDir();
+		static const String dir = FindDirWith("Content");
 		return dir;
 	}
 
@@ -50,5 +51,16 @@ namespace FP::Paths
 	String Content(std::string_view relative)
 	{
 		return GetContentDir() + "/" + relative;
+	}
+
+	const String& GetEngineDir()
+	{
+		static const String dir = FindDirWith("Engine/Content") + "/Engine";
+		return dir;
+	}
+
+	String EngineContent(std::string_view relative)
+	{
+		return GetEngineDir() + "/Content/" + relative;
 	}
 }
