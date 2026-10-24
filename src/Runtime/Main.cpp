@@ -3,6 +3,7 @@
 // --screenshot saves a frame after half a second and quits, handy as a smoke test.
 
 #include "Engine/Engine.h"
+#include "Core/Jobs/JobSystem.h"
 #include "Engine/Render/Renderer.h"
 #include "Engine/SceneSerializer.h"
 #include "Engine/Scripting/ScriptRuntime.h"
@@ -45,6 +46,8 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
+	JobSystem::Initialize();
+
 	const char* scene = Game::StartScene;
 	const char* screenshotPath = nullptr;
 	for (int i = 1; i < argc; ++i)
@@ -86,6 +89,7 @@ int main(int argc, char** argv)
 
 	{
 		Renderer renderer(*device, swapchainFormat);
+		renderer.PreloadTextures(*world.Get());
 		uint64 lastTicks = SDL_GetTicksNS();
 		int32 frame = 0;
 		bool running = renderer.IsValid();
@@ -135,6 +139,7 @@ int main(int argc, char** argv)
 	SDL_ReleaseWindowFromGPUDevice(device->GetHandle(), window);
 	SDL_DestroyWindow(window);
 	delete device;
+	JobSystem::Shutdown();
 	SDL_Quit();
 	return 0;
 }

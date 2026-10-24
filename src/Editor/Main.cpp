@@ -1,6 +1,7 @@
 #include "Editor/EditorWindow.h"
 #include "Editor/ScriptBuilder.h"
 #include "Engine/Engine.h"
+#include "Core/Jobs/JobSystem.h"
 #include "Engine/Render/GPUDevice.h"
 #include "Engine/Scripting/ScriptRuntime.h"
 #include "Game/Game.h"
@@ -29,6 +30,8 @@ int main(int argc, char** argv)
 	FP::Engine::RegisterEngineComponents();
 	Game::RegisterComponents();
 	FP::ScriptRuntime::Get().LoadModule(FP::ScriptRuntime::GetDefaultModulePath());
+
+	FP::JobSystem::Initialize();
 
 	FP::GPUDevice* device = FP::GPUDevice::Create();
 	if (!device)
@@ -96,6 +99,7 @@ int main(int argc, char** argv)
 	FP::GarbageCollector::Get().Collect();
 	FP::ScriptRuntime::Get().UnloadModule();
 	delete device;
+	FP::JobSystem::Shutdown();
 	SDL_Quit();
 	return result;
 }
