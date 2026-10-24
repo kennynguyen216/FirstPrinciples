@@ -82,7 +82,8 @@ local function UseSDL()
 	if IsWindows then
 		libdirs { SdlDir .. "/lib/x64" }
 		links { "SDL3" }
-		postbuildcommands { '{COPYFILE} "' .. SdlDir .. '/lib/x64/SDL3.dll" "%{cfg.targetdir}"' }
+		-- Scripts rebuild while the editor has SDL loaded, so only copy a newer runtime.
+		postbuildcommands { 'xcopy /D /Y "' .. path.translate(SdlDir .. '/lib/x64/SDL3.dll', '\\') .. '" "%{cfg.targetdir}"' }
 	else
 		libdirs { SdlDir .. "/lib" }
 		links { "SDL3" }

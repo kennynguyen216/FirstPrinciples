@@ -137,6 +137,9 @@ namespace FP::Editor
 
 	EditorWindow::~EditorWindow()
 	{
+		// Dock teardown can emit signals after the derived window has been destroyed.
+		for (QDockWidget* dock : findChildren<QDockWidget*>())
+			disconnect(dock, nullptr, this, nullptr);
 		m_Timer->stop();
 		m_Inspector->StopPreview();
 		m_World->EndPlay();
