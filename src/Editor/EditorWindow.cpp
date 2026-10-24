@@ -1,6 +1,8 @@
 #include "Editor/EditorWindow.h"
 #include "Editor/CodeEditor.h"
 #include "Editor/ContentBrowser.h"
+#include "Editor/DockTab.h"
+#include "Editor/EditorIcons.h"
 #include "Editor/InspectorPanel.h"
 #include "Editor/ScriptBuilder.h"
 #include "Editor/ViewportWidget.h"
@@ -135,10 +137,7 @@ namespace FP::Editor
 			if (Guid::Parse(ToString(item->data(GuidRole).toString()), id))
 				Select(m_World->FindEntityByGuid(id));
 		});
-		QDockWidget* hierarchyDock = new QDockWidget("Hierarchy", this);
-		hierarchyDock->setObjectName("Hierarchy");
-		hierarchyDock->setWidget(m_Hierarchy);
-		addDockWidget(Qt::LeftDockWidgetArea, hierarchyDock);
+		QDockWidget* outlinerDock = DockTab::Create(this, "Outliner", EditorIcon::Outliner, m_Hierarchy);
 
 		m_Inspector = new InspectorPanel();
 		connect(m_Inspector, &InspectorPanel::OpenScriptRequested, this, &EditorWindow::OpenScript);
@@ -146,31 +145,39 @@ namespace FP::Editor
 			MarkDirty();
 			RefreshHierarchy();
 		});
-		QDockWidget* inspectorDock = new QDockWidget("Inspector", this);
-		inspectorDock->setObjectName("Inspector");
-		inspectorDock->setWidget(m_Inspector);
-		inspectorDock->setMinimumWidth(400);
-		addDockWidget(Qt::RightDockWidgetArea, inspectorDock);
+		QDockWidget* detailsDock = DockTab::Create(this, "Details", EditorIcon::Details, m_Inspector);
+		detailsDock->setMinimumWidth(300);
+
+		// UE layout: Details then Outliner on the right, and the bottom panels run the full width.
+		setCorner(Qt::BottomLeftCorner, Qt::BottomDockWidgetArea);
+		setCorner(Qt::BottomRightCorner, Qt::BottomDockWidgetArea);
+		addDockWidget(Qt::RightDockWidgetArea, detailsDock);
+		splitDockWidget(detailsDock, outlinerDock, Qt::Horizontal);
+		resizeDocks({ detailsDock, outlinerDock }, { 370, 300 }, Qt::Horizontal);
 
 		m_Console = new QPlainTextEdit();
 		m_Console->setReadOnly(true);
 		m_Console->setToolTip("Double click a build error to open it");
 		m_Console->viewport()->installEventFilter(this);
 		m_Console->setMaximumBlockCount(2000);
-		QDockWidget* consoleDock = new QDockWidget("Console", this);
-		consoleDock->setObjectName("Console");
-		consoleDock->setWidget(m_Console);
-		addDockWidget(Qt::BottomDockWidgetArea, consoleDock);
+		QDockWidget* consoleDock = DockTab::Create(this, "Output Log", EditorIcon::OutputLog, m_Console);
 		m_ConsoleDock = consoleDock;
 
-		// The content browser shares the bottom area with the console as a tab.
+		// The content browser shares the bottom area with the log. Tabbed docks show Qt's tab bar,
+		// so they skip the custom title and use the tabs on top instead.
 		m_ContentBrowser = new ContentBrowser();
-		QDockWidget* contentDock = new QDockWidget("Content", this);
-		contentDock->setObjectName("Content");
-		contentDock->setWidget(m_ContentBrowser);
-		tabifyDockWidget(consoleDock, contentDock);
+		QDockWidget* contentDock = DockTab::Create(this, "Content Browser", EditorIcon::ContentBrowser, m_ContentBrowser);
+		m_ContentDock = contentDock;
+		for (QDockWidget* dock : { contentDock, consoleDock })
+		{
+			dock->setTitleBarWidget(new QWidget(dock));
+			dock->setWindowIcon(dock == contentDock ? EditorIcons::Get(EditorIcon::ContentBrowser) : EditorIcons::Get(EditorIcon::OutputLog));
+		}
+		setTabPosition(Qt::BottomDockWidgetArea, QTabWidget::North);
+		addDockWidget(Qt::BottomDockWidgetArea, contentDock);
+		tabifyDockWidget(contentDock, consoleDock);
 		contentDock->raise();
-		resizeDocks({ consoleDock }, { 220 }, Qt::Vertical);
+		resizeDocks({ contentDock }, { 280 }, Qt::Vertical);
 
 		connect(m_ContentBrowser, &ContentBrowser::AssetSelected, this, &EditorWindow::ShowAsset);
 		connect(m_ContentBrowser, &ContentBrowser::NewScriptRequested, this, [this]() {

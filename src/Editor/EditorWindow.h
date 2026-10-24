@@ -146,6 +146,7 @@ namespace FP::Editor
 		QTabWidget* m_CentralTabs = nullptr;
 		ContentBrowser* m_ContentBrowser = nullptr;
 		QDockWidget* m_ConsoleDock = nullptr;
+		QDockWidget* m_ContentDock = nullptr;
 		QFileSystemWatcher* m_ScriptWatcher = nullptr;
 		QTimer* m_ScriptDebounce = nullptr;
 		bool m_AutoReloadScripts = true;
