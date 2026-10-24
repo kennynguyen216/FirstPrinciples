@@ -181,7 +181,7 @@ every material type.
 Add a **Mesh** component to draw a `Cube`, `Sphere`, `Plane` or `Quad`, or pick an `.obj` file from
 `Content` with the `...` button. Meshes use the same materials as sprites and default to `Lit`.
 For a 3D game turn on `Perspective` on the camera and give it a position and rotation.
-Press **3D View** (Ctrl+3) in the editor to orbit around the scene. Sample's `Content/Scenes/Showcase3D.scene`
+The editor opens in 3D. Press Ctrl+3 or the Perspective pill to switch to the flat 2D view. Sample's `Content/Scenes/Showcase3D.scene`
 shows every material on meshes, including a refracting glass sphere.
 
 `Transform.Rotation` is euler degrees as pitch (X), yaw (Y) and roll (Z). Cameras and lights point
@@ -263,15 +263,19 @@ FP::JobSystem::ParallelFor(enemyCount, 32, [&](int32 i) { UpdateEnemy(i); });
 
 | Action | Control |
 |---|---|
+| Fly | Hold the right button, then WASD to move, Q and E for down and up, Shift to go faster. The wheel sets the speed while flying |
+| Look around (3D) | Right drag |
 | Pan | 2D: right or middle drag. 3D: middle drag or Shift right drag |
 | Zoom | Mouse wheel |
-| Orbit (3D) | Right drag or Alt left drag |
-| Toggle 3D view | Ctrl+3 or the Perspective pill |
+| Orbit (3D) | Alt left drag |
+| Toggle 3D view | Ctrl+3 or the Perspective pill. The editor opens in 3D |
 | View mode | Viewport pill, or Alt+4 Lit, Alt+3 Unlit, Alt+2 Wireframe |
 | Rename / delete asset | F2 / Delete in the content browser |
 | Focus selection | F |
 | Select / move | Left click / left drag along the view plane |
-| Grid snap | Grid pill over the viewport. Shift flips snapping while dragging |
+| Gizmo | Q select, W move, E rotate, R scale, or the buttons over the viewport. Drag an arrow, ring, box or plane square |
+| World or local axes | Globe button next to the gizmo buttons |
+| Grid snap | Grid pill over the viewport. Snaps moves to the grid and turns to 15 degrees. Shift flips snapping while dragging |
 | Create sprite | Ctrl+Shift+A |
 | Duplicate / delete | Ctrl+D / Delete |
 | Undo / redo | Ctrl+Z / Ctrl+Shift+Z |
