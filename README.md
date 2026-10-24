@@ -236,6 +236,21 @@ The `Lantern` in `Showcase3D.scene` has bricks, glass, gold and a neon core in o
 `Transform.Rotation` is euler degrees as pitch (X), yaw (Y) and roll (Z). Cameras and lights point
 down their local -Z axis.
 
+### Shadows
+
+The first `DirectionalLight` with `CastShadows` on casts shadows from meshes and skeletal meshes onto
+anything using the `Lit` shader. Glass sections do not cast. It is kept cheap:
+
+- One small shadow map, `ShadowResolution` pixels square (1024 by default) in 16 bit depth.
+- It covers only `ShadowDistance` world units just ahead of the camera, so nearby shadows get the
+  detail. Meshes outside that box are skipped before drawing.
+- Edges are softened by four hardware filtered taps instead of many manual ones.
+- The box snaps to whole shadow pixels so edges stay still while the camera moves.
+- Scenes with no meshes, and the Unlit and Wireframe view modes, skip the pass.
+
+Lower `ShadowResolution` for speed and softer edges, or lower `ShadowDistance` for sharper shadows
+close up. `ShadowStrength` fades them. Point lights do not cast shadows.
+
 ### Skeletal meshes and animation
 
 A **SkeletalMesh** component draws a `.gltf` or `.glb` with a skin. Its bones bend the mesh on the GPU,
