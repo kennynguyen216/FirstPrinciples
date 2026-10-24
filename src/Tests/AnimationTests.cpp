@@ -239,3 +239,29 @@ FP_TEST(Animation_AnimatorBlendsClipsIntoPoses)
 	Animator* first = world->GetAnimator(animated);
 	FP_EXPECT(first && first == world->GetAnimator(animated));
 }
+
+#include "Engine/Animation/AnimationSystem.h"
+
+FP_TEST(Animation_SystemPosesSampleCharacter)
+{
+	Engine::RegisterEngineComponents();
+	StrongObjectPtr<World> world(NewObject<World>());
+	const Entity noodle = world->CreateEntity("Noodle");
+	world->Add<SkeletalMeshComponent>(noodle).Mesh = "Characters/Noodle.gltf";
+	world->Add<AnimatorComponent>(noodle).Clip = "Walk";
+	const Entity still = world->CreateEntity("Still");
+	world->Add<SkeletalMeshComponent>(still).Mesh = "Characters/Noodle.gltf";
+
+	world->AddSystem<AnimationSystem>();
+	world->BeginPlay();
+	world->Update(0.2f);
+	const SkeletalPoseComponent* pose = world->TryGet<SkeletalPoseComponent>(noodle);
+	FP_EXPECT(pose && pose->Skin.Num() == 5);
+	// Walking moves the head away from where it was bound.
+	FP_EXPECT(pose && !Near(pose->Skin[4].TransformPoint({ 0, 1.6f, 0 }), { 0, 1.6f, 0 }));
+	// Without an Animator a skeletal mesh keeps its bind pose.
+	FP_EXPECT(!world->Has<SkeletalPoseComponent>(still));
+
+	world->EndPlay();
+	FP_EXPECT(!world->Has<SkeletalPoseComponent>(noodle));
+}
