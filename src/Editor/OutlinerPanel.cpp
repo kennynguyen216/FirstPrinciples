@@ -2,11 +2,9 @@
 #include "Editor/EditorIcons.h"
 #include "Engine/Components.h"
 
-#include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
-#include <QToolButton>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
@@ -37,20 +35,12 @@ namespace FP::Editor
 		layout->setContentsMargins(6, 6, 6, 6);
 		layout->setSpacing(6);
 
-		QHBoxLayout* bar = new QHBoxLayout();
 		m_Search = new QLineEdit();
 		m_Search->setPlaceholderText("Search...");
 		m_Search->setProperty("search", true);
 		m_Search->addAction(EditorIcons::Get(EditorIcon::Search), QLineEdit::LeadingPosition);
 		m_Search->setClearButtonEnabled(true);
-		bar->addWidget(m_Search, 1);
-		QToolButton* settings = new QToolButton();
-		settings->setIcon(EditorIcons::Get(EditorIcon::Settings));
-		settings->setAutoRaise(true);
-		settings->setToolTip("Outliner settings");
-		settings->setEnabled(false);
-		bar->addWidget(settings);
-		layout->addLayout(bar);
+		layout->addWidget(m_Search);
 
 		m_Tree = new QTreeWidget();
 		m_Tree->setColumnCount(3);
