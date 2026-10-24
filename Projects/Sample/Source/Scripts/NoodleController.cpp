@@ -57,7 +57,7 @@ public:
 	}
 };
 
-FP_SCRIPT(NoodleController)
+FP_SCRIPT_FIELDS(NoodleController)
 {
 	fields.Field("MoveSpeed", &NoodleController::MoveSpeed);
 	fields.Field("TurnSpeed", &NoodleController::TurnSpeed);

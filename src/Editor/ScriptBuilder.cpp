@@ -104,7 +104,7 @@ public:
 	}
 };
 
-FP_SCRIPT(NAME)
+FP_SCRIPT_FIELDS(NAME)
 {
 	fields.Field("Speed", &NAME::Speed);
 }

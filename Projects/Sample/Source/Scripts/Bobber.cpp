@@ -28,7 +28,7 @@ private:
 	float m_Time = 0;
 };
 
-FP_SCRIPT(Bobber)
+FP_SCRIPT_FIELDS(Bobber)
 {
 	fields.Field("Height", &Bobber::Height);
 	fields.Field("Speed", &Bobber::Speed);

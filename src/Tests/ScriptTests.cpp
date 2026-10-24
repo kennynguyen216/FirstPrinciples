@@ -38,7 +38,7 @@ namespace
 	}
 }
 
-FP_SCRIPT(TestCounter)
+FP_SCRIPT_FIELDS(TestCounter)
 {
 	fields.Field("Step", &TestCounter::Step);
 	fields.Field("Count", &TestCounter::Count);
@@ -279,7 +279,7 @@ namespace
 	};
 }
 
-FP_SCRIPT(TestAnimatorScript)
+FP_SCRIPT_FIELDS(TestAnimatorScript)
 {
 	fields.Field("Speed", &TestAnimatorScript::Speed);
 }
@@ -306,4 +306,48 @@ FP_TEST(Script_DrivesAnimator)
 	animator = static_cast<AnimatorInstance*>(world->GetAnimator(e));
 	FP_EXPECT(animator->GetMachine().GetStates().Num() == 2);
 	world->EndPlay();
+}
+
+// Written the way the header tool writes it, before the class is defined.
+class TestReflected;
+template <>
+struct FP::ScriptReflection<TestReflected>
+{
+	static constexpr const char* Description = "Counts presses.";
+	static constexpr const char* Category = "Tests";
+	static constexpr const char* Callbacks = "OnStart";
+
+	template <typename T = TestReflected>
+	static void Describe(ScriptTypeBuilder<T>& fields)
+	{
+		fields.Field("Presses", &T::Presses).Tooltip("How many times Press ran").Range(0, 10).ReadOnly();
+		fields.template Function<&T::Press>("Press", "Adds one");
+	}
+};
+
+class TestReflected : public Script
+{
+public:
+	int32 Presses = 0;
+	void OnStart() override {}
+	void Press() { ++Presses; }
+};
+
+FP_SCRIPT(TestReflected);
+
+FP_TEST(Script_UsesGeneratedReflection)
+{
+	const ScriptType* type = ScriptRuntime::Get().FindType("TestReflected");
+	FP_EXPECT(type && std::string_view(type->Description) == "Counts presses.");
+	FP_EXPECT(type && std::string_view(type->Category) == "Tests" && std::string_view(type->Callbacks) == "OnStart");
+	FP_EXPECT(type && type->Fields.Num() == 1);
+	const FieldInfo& field = type->Fields[0];
+	FP_EXPECT(std::string_view(field.Tooltip) == "How many times Press ran" && field.HasRange && field.Max == 10 && field.ReadOnly);
+
+	// Functions call straight into the instance.
+	FP_EXPECT(type && type->Functions.Num() == 1 && std::string_view(type->Functions[0].Name) == "Press");
+	Script* instance = ScriptRuntime::Get().CreateInstance(*type, nullptr, NullEntity, "Presses 2\n");
+	type->Functions[0].Call(instance);
+	FP_EXPECT(static_cast<TestReflected*>(instance)->Presses == 3);
+	ScriptRuntime::Get().DestroyInstance(*type, instance);
 }

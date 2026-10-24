@@ -41,7 +41,7 @@ private:
 	float m_Time = 0;
 };
 
-FP_SCRIPT(LightFlicker)
+FP_SCRIPT_FIELDS(LightFlicker)
 {
 	fields.Field("Amount", &LightFlicker::Amount);
 	fields.Field("Speed", &LightFlicker::Speed);

@@ -14,7 +14,7 @@ public:
 	}
 };
 
-FP_SCRIPT(Rotator)
+FP_SCRIPT_FIELDS(Rotator)
 {
 	fields.Field("DegreesPerSecond", &Rotator::DegreesPerSecond);
 }
