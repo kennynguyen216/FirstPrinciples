@@ -29,7 +29,15 @@ local SpdlogInclude = Root .. "/ThirdParty/spdlog/include"
 local JoltDir = Root .. "/ThirdParty/JoltPhysics"
 -- glTF parser for skeletal meshes and animations. One header, built once by CgltfImpl.cpp.
 local CgltfInclude = Root .. "/ThirdParty/cgltf"
-if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) or not os.isdir(SpdlogInclude) or not os.isdir(CgltfInclude) or not os.isdir(JoltDir .. "/Jolt") then
+-- Game UI in HTML, CSS and JavaScript. A binary SDK fetched by Scripts/GetUltralight, so it is
+-- optional: without it everything builds and UI components draw nothing.
+local UltralightDir = Root .. "/ThirdParty/Ultralight"
+local HasUltralight = os.isdir(UltralightDir .. "/include/Ultralight")
+if not HasUltralight then
+	premake.warn("Ultralight is missing, so game UI will not draw. Run Scripts/GetUltralight to get it.")
+end
+local ImGuiDir = Root .. "/ThirdParty/imgui"
+if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) or not os.isdir(SpdlogInclude) or not os.isdir(CgltfInclude) or not os.isfile(ImGuiDir .. "/imgui.h") or not os.isdir(JoltDir .. "/Jolt") then
 	premake.warn("Submodules are missing. Run: git submodule update --init")
 end
 
@@ -83,7 +91,32 @@ local ProjectName = io.readfile(ProjectFile):match('Name%s+"?([%w_]+)"?') or pat
 
 -- Include paths every project that touches engine headers needs.
 local function EngineIncludes()
-	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir, SpdlogInclude, CgltfInclude, JoltDir }
+	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir, SpdlogInclude, CgltfInclude, ImGuiDir, JoltDir }
+	if HasUltralight then
+		externalincludedirs { UltralightDir .. "/include" }
+		defines { "FP_WITH_ULTRALIGHT=1" }
+	end
+end
+
+-- Links Ultralight and copies its libraries and resources next to the binary that needs them.
+local function UseUltralight()
+	if not HasUltralight then return end
+	links { "Ultralight", "UltralightCore", "WebCore", "AppCore" }
+	if IsWindows then
+		libdirs { UltralightDir .. "/lib" }
+		postbuildcommands {
+			'{COPYFILE} "' .. UltralightDir .. '/bin/*.dll" "%{cfg.targetdir}"',
+			'{COPYDIR} "' .. UltralightDir .. '/resources" "%{cfg.targetdir}/UltralightResources"',
+		}
+	else
+		libdirs { UltralightDir .. "/bin" }
+		-- The libraries use @rpath, so look next to whatever binary loads them.
+		linkoptions { "-Wl,-rpath,@loader_path" }
+		postbuildcommands {
+			'cp -f "' .. UltralightDir .. '"/bin/*.dylib "%{cfg.targetdir}/"',
+			'mkdir -p "%{cfg.targetdir}/UltralightResources" && cp -Rf "' .. UltralightDir .. '/resources/." "%{cfg.targetdir}/UltralightResources/"',
+		}
+	end
 end
 
 local function UseSDL()
@@ -199,8 +232,9 @@ local function UseEngine(withGame)
 	if withGame then
 		links { "Game" }
 	end
-	links { "Engine", "Jolt" }
+	links { "Engine", "Jolt", "ImGui" }
 	UseSDL()
+	UseUltralight()
 end
 
 -- Jolt: physics. Every optional Jolt define stays off here and in the engine, since the
@@ -215,6 +249,10 @@ project "Jolt"
 	filter "configurations:Debug"
 		optimize "Speed"
 	filter {}
+
+project "ImGui"
+	kind "StaticLib"
+	files { ImGuiDir .. "/*.h", ImGuiDir .. "/*.cpp" }
 
 -- Engine: HAL, Core, CoreObject and Engine in one static lib.
 project "Engine"

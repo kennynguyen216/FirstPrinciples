@@ -3,6 +3,8 @@
 #include "Engine/Engine.h"
 #include "Engine/Animation/Animator.h"
 #include "Engine/Physics/Physics.h"
+#include "Engine/Json.h"
+#include "Engine/UI/UIDocument.h"
 #include "Engine/SceneSerializer.h"
 #include "Engine/Scripting/ScriptComponent.h"
 #include "Core/Misc/ModuleContext.h"
@@ -64,6 +66,10 @@ namespace FP
 		virtual void OnTriggerEnter(Entity other) { (void)other; }
 		virtual void OnTriggerExit(Entity other) { (void)other; }
 
+		// A page sent engine.send(name, data). Scripts on the UI's entity and on the scene
+		// entity hear it. data is whatever the page sent, parsed from JSON.
+		virtual void OnUIEvent(std::string_view name, const Json& data) { (void)name; (void)data; }
+
 		World& GetWorld() const { return *m_World; }
 		Entity GetEntity() const { return m_Entity; }
 		// Relative to the parent when there is one. Use the World functions below for world space.
@@ -108,6 +114,10 @@ namespace FP
 		{
 			return GetPhysics().Raycast(origin, direction, maxDistance, hit, m_Entity);
 		}
+
+		// The page of a UI component, this entity's by default, for setting values and sending
+		// events to it. Null when the entity has no UI component.
+		UIDocument* GetUI(Entity entity = NullEntity) const { return m_World->GetUI(entity == NullEntity ? m_Entity : entity); }
 
 		// This entity's animator, for building a state machine and setting its parameters.
 		// Null when the entity has no Animator component.
@@ -330,7 +340,7 @@ namespace FP
 	}
 
 	// Bump when the script interface changes so stale modules are refused instead of crashing.
-	constexpr uint32 ScriptInterfaceVersion = 6;
+	constexpr uint32 ScriptInterfaceVersion = 7;
 
 	// Fingerprint of everything a script module shares with the host by layout. A module built
 	// against different engine headers or a different configuration gives a different value.
@@ -340,7 +350,7 @@ namespace FP
 	{
 		const uint64 parts[] = {
 			ScriptInterfaceVersion, FP_BUILD_DEBUG, sizeof(void*), sizeof(World), sizeof(String), sizeof(Array<int32>),
-			sizeof(TransformComponent), sizeof(ScriptType), sizeof(FieldInfo), sizeof(ScriptFunction), sizeof(ModuleContext), sizeof(Script), sizeof(RaycastHit), sizeof(Collision),
+			sizeof(TransformComponent), sizeof(ScriptType), sizeof(FieldInfo), sizeof(ScriptFunction), sizeof(ModuleContext), sizeof(Script), sizeof(RaycastHit), sizeof(Collision), sizeof(Json),
 			sizeof(AudioWorld), sizeof(AudioResult), sizeof(AudioPlayResult), sizeof(VoiceHandle), sizeof(OneShotParams),
 			sizeof(AudioSourceComponent), sizeof(AudioListenerComponent),
 			sizeof(AnimState), sizeof(AnimTransition), sizeof(AnimCondition), sizeof(AnimatorComponent), sizeof(SkeletalMeshComponent),

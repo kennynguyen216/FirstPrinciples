@@ -436,3 +436,37 @@ FP_TEST(Math_GameplayHelpers)
 	}
 	FP_EXPECT(!Random::Chance(0) && Random::Chance(1));
 }
+
+FP_TEST(Input_TextAndScrollLastOneFrame)
+{
+	Input::AddTypedText("hi");
+	Input::AddTypedText(" there");
+	Input::AddScroll({ 0, 1 });
+	Input::AddScroll({ 0, 2 });
+	FP_EXPECT(Input::GetTypedText() == "hi there");
+	FP_EXPECT(Input::GetScroll().Y == 3);
+	Input::EndFrame();
+	FP_EXPECT(Input::GetTypedText().empty() && Input::GetScroll().Y == 0);
+}
+
+#include "Engine/Json.h"
+
+FP_TEST(Json_ReadsWhatPagesSend)
+{
+	const Json data = Json::Parse(R"({"volume":0.5,"muted":false,"player":{"name":"Noodle \"N\" é"},"items":[1,2,3],"nothing":null})");
+	FP_EXPECT(data.IsObject());
+	FP_EXPECT(data["volume"].AsNumber() == 0.5 && !data["muted"].AsBool(true));
+	FP_EXPECT(data["player"]["name"].AsString() == "Noodle \"N\" \xc3\xa9");
+	FP_EXPECT(data["items"].Num() == 3 && data["items"][2].AsNumber() == 3);
+	FP_EXPECT(data.Has("nothing") && data["nothing"].IsNull() && !data.Has("missing"));
+
+	// Wrong types and missing keys fall back quietly.
+	FP_EXPECT(data["missing"]["deeper"].AsNumber(7) == 7 && data["volume"].AsString("x") == "x" && data["items"][9].IsNull());
+
+	// Plain values work at the top too, the way engine.send("jump", 2) arrives.
+	FP_EXPECT(Json::Parse("2").AsNumber() == 2 && Json::Parse("\"go\"").AsString() == "go" && Json::Parse("true").AsBool());
+
+	// Broken text is null rather than half read.
+	FP_EXPECT(Json::Parse("{\"a\":1,").IsNull() && Json::Parse("[1 2]").IsNull() && Json::Parse("").IsNull() && Json::Parse("1 2").IsNull());
+	FP_EXPECT(Json::Parse(std::string(200, '[') + std::string(200, ']')).IsNull());
+}

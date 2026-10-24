@@ -14,6 +14,7 @@ namespace FP
 	class AudioWorld;
 	class Animator;
 	class Physics;
+	class UIDocument;
 
 	using Entity = entt::entity;
 	inline constexpr entt::null_t NullEntity = entt::null;
@@ -46,6 +47,9 @@ namespace FP
 
 		// Bodies, forces and raycasts. Made on first use. Virtual for the same reason as GetAudio.
 		virtual Physics& GetPhysics();
+		// The page of the entity's UI component, made on first use. Null without one.
+		// Virtual for the same reason as GetAudio.
+		virtual UIDocument* GetUI(Entity entity);
 
 		// ---- Entities ------------------------------------------------------
 

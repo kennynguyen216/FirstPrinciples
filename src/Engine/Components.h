@@ -178,6 +178,17 @@ namespace FP
 		float Intensity = 0.15f;
 	};
 
+	// An HTML page from Content drawn over the screen, written with HTML, CSS and JavaScript.
+	// On a camera it draws over that camera's view, like a Unity canvas. On any other entity it
+	// draws over every view. The page talks to the entity's scripts through the engine object.
+	struct UIComponent
+	{
+		String Page; // like "UI/HUD.html"
+		bool Visible = true;
+		bool Input = true; // gets the mouse and keyboard
+		int32 Order = 0;   // higher draws on top
+	};
+
 	// Orthographic by default for 2D. Turn on Perspective for 3D.
 	struct CameraComponent
 	{
