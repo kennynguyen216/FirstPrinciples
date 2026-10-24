@@ -8,6 +8,15 @@ component Transform
   Position 0 3.2 8.5
   Rotation -16 0 0
   Scale 1 1 1
+component UI
+  Page "UI/HUD.html"
+  Visible true
+  Input true
+  Order 0
+component Scripts
+  script "ShowcaseHUD"
+    Character "Noodle"
+    Sun "Sun"
 component Camera
   Perspective true
   Zoom 64
