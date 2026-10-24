@@ -3,6 +3,7 @@
 #include "Editor/ContentBrowser.h"
 #include "Editor/DockTab.h"
 #include "Editor/EditorIcons.h"
+#include "Editor/EditorStyle.h"
 #include "Editor/InspectorPanel.h"
 #include "Editor/OutlinerPanel.h"
 #include "Editor/PlaceEntitiesPanel.h"
@@ -33,6 +34,7 @@
 #include <QTextBlock>
 #include <QFileInfo>
 #include <QKeySequence>
+#include <QLabel>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPlainTextEdit>
@@ -41,6 +43,7 @@
 #include <QTabWidget>
 #include <QTimer>
 #include <QToolBar>
+#include <QToolButton>
 
 namespace FP::Editor
 {
@@ -221,6 +224,12 @@ namespace FP::Editor
 
 	void EditorWindow::BuildMenus()
 	{
+		// The menu sits inside the window on every OS, like UE, with the project name on the right.
+		menuBar()->setNativeMenuBar(false);
+		QLabel* project = new QLabel(QFileInfo(ToQString(Paths::GetProjectDir())).fileName());
+		project->setStyleSheet("background: #0f0f0f; color: #c0c0c0; border-radius: 4px; padding: 3px 14px; margin: 2px 6px;");
+		menuBar()->setCornerWidget(project, Qt::TopRightCorner);
+
 		QMenu* file = menuBar()->addMenu("&File");
 		file->addAction("&New Scene", QKeySequence::New, this, &EditorWindow::NewScene);
 		file->addAction("&Open Scene...", QKeySequence::Open, this, &EditorWindow::OpenSceneDialog);
@@ -271,13 +280,50 @@ namespace FP::Editor
 		connect(autoReload, &QAction::toggled, this, [this](bool on) { m_AutoReloadScripts = on; });
 		WatchScripts();
 
-		QToolBar* toolbar = addToolBar("Play");
-		toolbar->setObjectName("PlayToolbar");
-		m_PlayAction = toolbar->addAction("Play", this, &EditorWindow::Play);
-		m_PlayAction->setShortcut(QKeySequence("Ctrl+P"));
-		m_StopAction = toolbar->addAction("Stop", this, &EditorWindow::Stop);
-		m_StopAction->setEnabled(false);
+		QToolBar* toolbar = addToolBar("Main");
+		toolbar->setObjectName("MainToolbar");
+		toolbar->setMovable(false);
+		toolbar->setIconSize({ 18, 18 });
+		QAction* save = toolbar->addAction(EditorIcons::Get(EditorIcon::Save), "Save", this, &EditorWindow::SaveCurrent);
+		save->setToolTip("Save (Ctrl+S)");
 		toolbar->addSeparator();
+
+		// Quick create, the same list as the Entity menu.
+		QToolButton* create = new QToolButton();
+		create->setIcon(EditorIcons::Get(EditorIcon::Add, EditorStyle::Play));
+		create->setText("Create");
+		create->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+		create->setPopupMode(QToolButton::InstantPopup);
+		create->setMenu(entity);
+		create->setToolTip("Create an entity");
+		toolbar->addWidget(create);
+		toolbar->addSeparator();
+
+		m_PlayAction = toolbar->addAction(EditorIcons::Get(EditorIcon::Play), "Play", this, &EditorWindow::Play);
+		m_PlayAction->setShortcut(QKeySequence("Ctrl+P"));
+		m_PlayAction->setToolTip("Play (Ctrl+P)");
+		m_StopAction = toolbar->addAction(EditorIcons::Get(EditorIcon::Stop, QColor(0xe0, 0x50, 0x50)), "Stop", this, &EditorWindow::Stop);
+		m_StopAction->setEnabled(false);
+		m_StopAction->setToolTip("Stop");
+
+		QWidget* spacer = new QWidget();
+		spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+		toolbar->addWidget(spacer);
+
+		QToolButton* settings = new QToolButton();
+		settings->setIcon(EditorIcons::Get(EditorIcon::Settings));
+		settings->setText("Settings");
+		settings->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+		settings->setPopupMode(QToolButton::InstantPopup);
+		QMenu* settingsMenu = new QMenu(settings);
+		settingsMenu->addAction(autoReload);
+		settingsMenu->addAction("Collect Garbage", this, []() {
+			const GarbageCollectionStats stats = GarbageCollector::Get().Collect();
+			FP_LOG("GC freed %d objects, %d alive, %.3f ms", stats.NumFreed, stats.NumAlive, stats.Milliseconds);
+		});
+		settings->setMenu(settingsMenu);
+		toolbar->addWidget(settings);
+
 		// The projection and view mode live on the viewport toolbar. Ctrl+3 still flips the projection.
 		m_View3DAction = new QAction(this);
 		m_View3DAction->setCheckable(true);
@@ -301,11 +347,6 @@ namespace FP::Editor
 			connect(action, &QAction::triggered, this, [this, chosen]() { SetViewMode(chosen); });
 			addAction(action);
 		}
-		toolbar->addSeparator();
-		toolbar->addAction("Collect Garbage", this, []() {
-			const GarbageCollectionStats stats = GarbageCollector::Get().Collect();
-			FP_LOG("GC freed %d objects, %d alive, %.3f ms", stats.NumFreed, stats.NumAlive, stats.Milliseconds);
-		});
 
 		statusBar()->showMessage("2D: right drag pans, wheel zooms. 3D (Ctrl+3): right drag orbits, middle drag pans, wheel dollies. Left drag moves, Shift snaps, F focuses");
 	}
