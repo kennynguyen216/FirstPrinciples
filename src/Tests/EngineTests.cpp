@@ -409,3 +409,30 @@ FP_TEST(SceneHistory_UndoesMaterialEdits)
 	// Put it back so nothing in the test can write the edit to disk.
 	material->Load();
 }
+
+#include "Engine/Random.h"
+
+FP_TEST(Math_GameplayHelpers)
+{
+	FP_EXPECT(Clamp(5, 0, 2) == 2 && Clamp01(-1) == 0);
+	FP_EXPECT(Lerp(2.0f, 4.0f, 0.5f) == 3 && InverseLerp(2, 4, 3) == 0.5f && InverseLerp(1, 1, 3) == 0);
+	FP_EXPECT(Near(Lerp(Vec3(0, 0, 0), Vec3(2, 4, 6), 0.5f), { 1, 2, 3 }));
+	FP_EXPECT(MoveTowards(0, 10, 3) == 3 && MoveTowards(9, 10, 3) == 10 && MoveTowards(0, -10, 3) == -3);
+	FP_EXPECT(Near(MoveTowards(Vec3(0, 0, 0), Vec3(0, 10, 0), 4), { 0, 4, 0 }));
+	FP_EXPECT(Near(MoveTowards(Vec3(0, 0, 0), Vec3(0, 1, 0), 4), { 0, 1, 0 }));
+	// Two half steps of damping land where one full step does.
+	const float once = Damp(0, 1, 3, 1.0f);
+	FP_EXPECT(std::fabs(Damp(Damp(0, 1, 3, 0.5f), 1, 3, 0.5f) - once) < 1e-5f);
+
+	Random::Seed(7);
+	const float first = Random::Range(0.0f, 1.0f);
+	Random::Seed(7);
+	FP_EXPECT(Random::Range(0.0f, 1.0f) == first);
+	for (int i = 0; i < 200; ++i)
+	{
+		const int32 roll = Random::Range(1, 6);
+		FP_EXPECT(roll >= 1 && roll <= 6);
+		FP_EXPECT(std::fabs(Random::Direction().Length() - 1) < 1e-4f);
+	}
+	FP_EXPECT(!Random::Chance(0) && Random::Chance(1));
+}

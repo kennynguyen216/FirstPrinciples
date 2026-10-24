@@ -384,4 +384,41 @@ namespace FP
 		static constexpr Color White() { return { 1, 1, 1, 1 }; }
 		static constexpr Color Black() { return { 0, 0, 0, 1 }; }
 	};
+
+	// ---- Helpers for gameplay code ----------------------------------------
+
+	inline float Clamp(float value, float min, float max) { return value < min ? min : value > max ? max : value; }
+	inline float Clamp01(float value) { return Clamp(value, 0, 1); }
+
+	// t is 0 at a and 1 at b, and is not clamped.
+	inline float Lerp(float a, float b, float t) { return a + (b - a) * t; }
+	inline Vec2 Lerp(Vec2 a, Vec2 b, float t) { return a + (b - a) * t; }
+	inline Vec3 Lerp(Vec3 a, Vec3 b, float t) { return a + (b - a) * t; }
+	inline Color Lerp(const Color& a, const Color& b, float t)
+	{
+		return { Lerp(a.R, b.R, t), Lerp(a.G, b.G, t), Lerp(a.B, b.B, t), Lerp(a.A, b.A, t) };
+	}
+
+	// Where value sits between a and b, 0 at a and 1 at b. 0 when a equals b.
+	inline float InverseLerp(float a, float b, float value) { return a == b ? 0 : (value - a) / (b - a); }
+
+	// Steps toward target by at most maxStep without passing it. Good for steady movement:
+	// position = MoveTowards(position, goal, speed * deltaTime)
+	inline float MoveTowards(float current, float target, float maxStep)
+	{
+		const float delta = target - current;
+		return std::fabs(delta) <= maxStep ? target : current + (delta > 0 ? maxStep : -maxStep);
+	}
+
+	inline Vec3 MoveTowards(Vec3 current, Vec3 target, float maxStep)
+	{
+		const Vec3 delta = target - current;
+		const float distance = delta.Length();
+		return distance <= maxStep || distance < 1e-8f ? target : current + delta * (maxStep / distance);
+	}
+
+	// Frame rate independent smoothing: value = Damp(value, goal, 8, deltaTime) closes the same
+	// share of the gap every second however fast frames come.
+	inline float Damp(float current, float target, float speed, float deltaTime) { return Lerp(current, target, 1 - std::exp(-speed * deltaTime)); }
+	inline Vec3 Damp(Vec3 current, Vec3 target, float speed, float deltaTime) { return Lerp(current, target, 1 - std::exp(-speed * deltaTime)); }
 }
