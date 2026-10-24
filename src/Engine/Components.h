@@ -20,6 +20,12 @@ namespace FP
 		String Name;
 	};
 
+	// Marks the one entity per scene that holds scene wide scripts, like game rules or level
+	// logic. The editor shows it as the scene row at the top of the Hierarchy.
+	struct SceneComponent
+	{
+	};
+
 	struct AudioSourceComponent
 	{
 		String Clip; // WAV relative to Content

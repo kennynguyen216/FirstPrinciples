@@ -111,6 +111,23 @@ namespace FP
 		return result;
 	}
 
+	Entity World::GetSceneEntity() const
+	{
+		auto scenes = m_Registry.view<SceneComponent>();
+		return scenes.begin() != scenes.end() ? *scenes.begin() : NullEntity;
+	}
+
+	Entity World::GetOrCreateSceneEntity()
+	{
+		Entity scene = GetSceneEntity();
+		if (scene == NullEntity)
+		{
+			scene = CreateEntity("Scene");
+			m_Registry.emplace<SceneComponent>(scene);
+		}
+		return scene;
+	}
+
 	Entity World::GetParent(Entity entity) const
 	{
 		const ParentComponent* parent = IsValid(entity) ? m_Registry.try_get<ParentComponent>(entity) : nullptr;

@@ -74,6 +74,8 @@ namespace FP::Engine
 			.CustomSerializer(&WriteParentComponent, &ReadParentComponent)
 			.HideInEditor();
 
+		registry.Register<SceneComponent>("Scene").HideInEditor();
+
 		registry.Register<NameComponent>("Name")
 			.Field("Name", &NameComponent::Name);
 

@@ -113,3 +113,17 @@ FP_TEST(Hierarchy_CopiesWholeBranches)
 	FP_EXPECT(moved.Num() == 2 && other->GetParent(moved[0]) == NullEntity && !other->Has<ParentComponent>(moved[0]));
 	FP_EXPECT(SceneSerializer::LoadEntitiesAsCopies(*other.Get(), "not a scene").IsEmpty());
 }
+
+FP_TEST(Hierarchy_SceneEntityIsMadeOnce)
+{
+	Engine::RegisterEngineComponents();
+	StrongObjectPtr<World> world(NewObject<World>());
+	FP_EXPECT(world->GetSceneEntity() == NullEntity);
+	const Entity scene = world->GetOrCreateSceneEntity();
+	FP_EXPECT(scene != NullEntity && world->GetOrCreateSceneEntity() == scene && world->GetSceneEntity() == scene);
+
+	// It saves and comes back as the scene entity.
+	StrongObjectPtr<World> loaded(NewObject<World>());
+	FP_EXPECT(SceneSerializer::LoadFromString(*loaded.Get(), SceneSerializer::SaveToString(*world.Get()).View()));
+	FP_EXPECT(loaded->GetSceneEntity() != NullEntity && loaded->GetEntityName(loaded->GetSceneEntity()) == "Scene");
+}

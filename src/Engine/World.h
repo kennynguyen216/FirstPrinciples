@@ -64,6 +64,10 @@ namespace FP
 		// Every entity in creation order.
 		Array<Entity> GetEntities() const;
 
+		// The entity holding scene wide scripts, or NullEntity when the scene has none yet.
+		Entity GetSceneEntity() const;
+		Entity GetOrCreateSceneEntity();
+
 		// ---- Hierarchy -----------------------------------------------------
 
 		// NullEntity for top level entities.

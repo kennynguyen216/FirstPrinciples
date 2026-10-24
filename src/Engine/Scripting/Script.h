@@ -105,6 +105,9 @@ namespace FP
 		}
 
 		bool IsValid(Entity entity) const { return m_World->IsValid(entity); }
+
+		// The entity holding scene wide scripts. Scene scripts are on it themselves.
+		Entity GetSceneEntity() const { return m_World->GetSceneEntity(); }
 		String GetName(Entity entity) const { return m_World->GetEntityName(entity); }
 
 		// A script of type T on an entity, this one by default. Null when it has none.
