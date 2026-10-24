@@ -275,6 +275,63 @@ namespace FP::Editor
 		}
 	}
 
+	void ViewportWidget::AddColliders()
+	{
+		for (auto [entity, collider] : m_World->View<ColliderComponent>().each())
+		{
+			// Triggers are amber so they read apart from solid colliders.
+			const bool selected = entity == m_Selected;
+			const Color base = collider.Trigger ? Color{ 1, 0.7f, 0.2f, 1 } : Color{ 0.3f, 1, 0.45f, 1 };
+			const Color color{ base.R, base.G, base.B, selected ? 0.95f : 0.35f };
+
+			// Shapes follow position and rotation, and scale changes their size like physics does.
+			const TransformComponent placed = m_World->GetWorldTransform(entity);
+			const Quat rotation = m_World->GetWorldRotation(entity);
+			const Vec3 scale{ std::fabs(placed.Scale.X), std::fabs(placed.Scale.Y), std::fabs(placed.Scale.Z) };
+			const Vec3 center = placed.Position + rotation.Rotate({ collider.Offset.X * scale.X, collider.Offset.Y * scale.Y, collider.Offset.Z * scale.Z });
+			const Vec3 right = rotation.Rotate({ 1, 0, 0 });
+			const Vec3 up = rotation.Rotate({ 0, 1, 0 });
+			const Vec3 forward = rotation.Rotate({ 0, 0, 1 });
+			const Mat4 frame = Mat4::Translation(center) * Mat4::Rotation(rotation);
+
+			if (collider.Shape == "Sphere")
+			{
+				const float radius = collider.Radius * std::fmax(scale.X, std::fmax(scale.Y, scale.Z));
+				m_Lines.AddCircle(center, radius, color, 32, right, up);
+				m_Lines.AddCircle(center, radius, color, 32, right, forward);
+				m_Lines.AddCircle(center, radius, color, 32, up, forward);
+			}
+			else if (collider.Shape == "Capsule")
+			{
+				const float radius = collider.Radius * std::fmax(scale.X, scale.Z);
+				const float half = std::fmax(collider.Height * scale.Y * 0.5f - radius, 0.0f);
+				const Vec3 top = center + up * half;
+				const Vec3 bottom = center - up * half;
+				m_Lines.AddCircle(top, radius, color, 24, right, forward);
+				m_Lines.AddCircle(bottom, radius, color, 24, right, forward);
+				for (const Vec3 side : { right, right * -1.0f, forward, forward * -1.0f })
+					m_Lines.AddLine(top + side * radius, bottom + side * radius, color);
+				// Full circles at the ends stand in for the rounded caps.
+				for (const Vec3 end : { top, bottom })
+				{
+					m_Lines.AddCircle(end, radius, color, 24, right, up);
+					m_Lines.AddCircle(end, radius, color, 24, forward, up);
+				}
+			}
+			else if (collider.Shape == "Mesh")
+			{
+				// The mesh's bounds, since drawing every triangle would bury the scene.
+				if (const GPUMesh* mesh = FindMesh(entity))
+					m_Lines.AddBox(frame * Mat4::Scale(scale), mesh->BoundsMin, mesh->BoundsMax, color);
+			}
+			else
+			{
+				const Vec3 half{ collider.Size.X * scale.X * 0.5f, collider.Size.Y * scale.Y * 0.5f, collider.Size.Z * scale.Z * 0.5f };
+				m_Lines.AddBox(frame, half * -1.0f, half, color);
+			}
+		}
+	}
+
 	void ViewportWidget::AddSelection(const RenderView& view)
 	{
 		if (!m_World->IsValid(m_Selected) || !m_World->Has<TransformComponent>(m_Selected))
@@ -462,6 +519,7 @@ namespace FP::Editor
 				m_Lines.AddGrid2D(view);
 			}
 			AddGizmos(view);
+			AddColliders();
 			AddSelection(view);
 		}
 

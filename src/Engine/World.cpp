@@ -1,5 +1,6 @@
 #include "Engine/World.h"
 #include "Engine/Animation/Animator.h"
+#include "Engine/Physics/PhysicsWorld.h"
 #include "Engine/UI/UISystem.h"
 #include "Engine/Audio/AudioWorld.h"
 #include "Engine/ComponentRegistry.h"
@@ -31,6 +32,12 @@ namespace FP
 	{
 		if (!m_Audio) m_Audio = std::make_unique<AudioWorld>(*this);
 		return *m_Audio;
+	}
+
+	Physics& World::GetPhysics()
+	{
+		if (!m_Physics) m_Physics = std::make_unique<PhysicsWorld>();
+		return *m_Physics;
 	}
 
 	Animator* World::GetAnimator(Entity entity)
@@ -285,6 +292,7 @@ namespace FP
 	{
 		m_Registry.clear();
 		if (m_Audio) m_Audio->ResetScene();
+		if (m_Physics) static_cast<PhysicsWorld&>(*m_Physics).Clear();
 		m_PendingDestroy.Clear();
 		m_NextCreationIndex = 0;
 	}
@@ -296,6 +304,9 @@ namespace FP
 		if (wasPlaying) EndPlay();
 		if (m_Audio) { m_Audio->ResetScene(); m_Audio->DisconnectRegistry(); }
 		if (candidate.m_Audio) { candidate.m_Audio->ResetScene(); candidate.m_Audio->DisconnectRegistry(); }
+		// Bodies belong to the entities they were made for, so neither world keeps any.
+		if (m_Physics) static_cast<PhysicsWorld&>(*m_Physics).Clear();
+		if (candidate.m_Physics) static_cast<PhysicsWorld&>(*candidate.m_Physics).Clear();
 		m_Registry.swap(candidate.m_Registry);
 		std::swap(m_NextCreationIndex, candidate.m_NextCreationIndex);
 		m_PendingDestroy.Clear();

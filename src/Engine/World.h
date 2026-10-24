@@ -13,6 +13,7 @@ namespace FP
 	class World;
 	class AudioWorld;
 	class Animator;
+	class Physics;
 	class UIDocument;
 
 	using Entity = entt::entity;
@@ -44,6 +45,8 @@ namespace FP
 		// Virtual for the same reason as GetAudio.
 		virtual Animator* GetAnimator(Entity entity);
 
+		// Bodies, forces and raycasts. Made on first use. Virtual for the same reason as GetAudio.
+		virtual Physics& GetPhysics();
 		// The page of the entity's UI component, made on first use. Null without one.
 		// Virtual for the same reason as GetAudio.
 		virtual UIDocument* GetUI(Entity entity);
@@ -179,6 +182,7 @@ namespace FP
 		double m_Time = 0;
 		bool m_Playing = false;
 		std::unique_ptr<AudioWorld> m_Audio;
+		std::unique_ptr<Physics> m_Physics;
 		String m_PendingScene;
 	};
 }

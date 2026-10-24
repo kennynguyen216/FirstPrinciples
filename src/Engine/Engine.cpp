@@ -146,6 +146,27 @@ namespace FP::Engine
 			.Field("OnePerPeer", &NetworkComponent::OnePerPeer)
 			.Field("SendRate", &NetworkComponent::SendRate);
 
+		static const Array<const char*> colliderShapes{ "Box", "Sphere", "Capsule", "Mesh" };
+		registry.Register<ColliderComponent>("Collider")
+			.Field("Shape", &ColliderComponent::Shape).Choices(colliderShapes)
+			.Field("Size", &ColliderComponent::Size).Tooltip("Box size before the transform's scale")
+			.Field("Radius", &ColliderComponent::Radius).Tooltip("Sphere and capsule radius")
+			.Field("Height", &ColliderComponent::Height).Tooltip("Capsule height from end to end, along Y")
+			.Field("Offset", &ColliderComponent::Offset)
+			.Field("Trigger", &ColliderComponent::Trigger).Tooltip("Reports overlaps to scripts instead of blocking");
+
+		static const Array<const char*> motionTypes{ "Dynamic", "Kinematic", "Static" };
+		registry.Register<RigidBodyComponent>("RigidBody")
+			.Field("Motion", &RigidBodyComponent::Motion).Choices(motionTypes)
+			.Field("Mass", &RigidBodyComponent::Mass).Range(0.001f, 100000).Tooltip("Kilograms")
+			.Field("Friction", &RigidBodyComponent::Friction).Range(0, 1)
+			.Field("Restitution", &RigidBodyComponent::Restitution).Range(0, 1).Tooltip("Bounciness")
+			.Field("LinearDamping", &RigidBodyComponent::LinearDamping).Range(0, 1)
+			.Field("AngularDamping", &RigidBodyComponent::AngularDamping).Range(0, 1)
+			.Field("GravityScale", &RigidBodyComponent::GravityScale)
+			.Field("LockRotation", &RigidBodyComponent::LockRotation).Tooltip("Keeps it upright, for characters")
+			.Field("Continuous", &RigidBodyComponent::Continuous).Tooltip("Stops fast, small bodies passing through thin walls");
+
 		registry.Register<PointLightComponent>("PointLight")
 			.Field("Color", &PointLightComponent::Color)
 			.Field("Intensity", &PointLightComponent::Intensity)

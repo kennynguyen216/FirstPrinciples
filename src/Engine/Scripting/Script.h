@@ -2,6 +2,7 @@
 
 #include "Engine/Engine.h"
 #include "Engine/Animation/Animator.h"
+#include "Engine/Physics/Physics.h"
 #include "Engine/Json.h"
 #include "Engine/UI/UIDocument.h"
 #include "Engine/SceneSerializer.h"
@@ -57,6 +58,14 @@ namespace FP
 		// Called instead of OnStart after a hot reload while playing. Fields already hold their old values.
 		virtual void OnHotReload() { OnStart(); }
 
+		// This entity's body started or stopped touching another. Needs a Collider on both.
+		virtual void OnCollisionEnter(Entity other, const Collision& collision) { (void)other; (void)collision; }
+		virtual void OnCollisionExit(Entity other) { (void)other; }
+
+		// Something entered or left a trigger collider, this entity's or the other's.
+		virtual void OnTriggerEnter(Entity other) { (void)other; }
+		virtual void OnTriggerExit(Entity other) { (void)other; }
+
 		// A page sent engine.send(name, data). Scripts on the UI's entity and on the scene
 		// entity hear it. data is whatever the page sent, parsed from JSON.
 		virtual void OnUIEvent(std::string_view name, const Json& data) { (void)name; (void)data; }
@@ -88,6 +97,23 @@ namespace FP
 
 		template <typename T>
 		void Remove() const { m_World->Remove<T>(m_Entity); }
+
+		// ---- Physics -------------------------------------------------------------
+
+		// Forces, raycasts and gravity for the whole world.
+		Physics& GetPhysics() const { return m_World->GetPhysics(); }
+
+		// Pushes on this entity's rigid body. AddForce lasts one step, AddImpulse is a kick.
+		void AddForce(Vec3 force) const { GetPhysics().AddForce(m_Entity, force); }
+		void AddImpulse(Vec3 impulse) const { GetPhysics().AddImpulse(m_Entity, impulse); }
+		Vec3 GetVelocity() const { return GetPhysics().GetVelocity(m_Entity); }
+		void SetVelocity(Vec3 velocity) const { GetPhysics().SetVelocity(m_Entity, velocity); }
+
+		// The first body along a ray, never this entity's own.
+		bool Raycast(Vec3 origin, Vec3 direction, float maxDistance, RaycastHit& hit) const
+		{
+			return GetPhysics().Raycast(origin, direction, maxDistance, hit, m_Entity);
+		}
 
 		// The page of a UI component, this entity's by default, for setting values and sending
 		// events to it. Null when the entity has no UI component.
@@ -314,7 +340,7 @@ namespace FP
 	}
 
 	// Bump when the script interface changes so stale modules are refused instead of crashing.
-	constexpr uint32 ScriptInterfaceVersion = 6;
+	constexpr uint32 ScriptInterfaceVersion = 7;
 
 	// Fingerprint of everything a script module shares with the host by layout. A module built
 	// against different engine headers or a different configuration gives a different value.
@@ -324,7 +350,7 @@ namespace FP
 	{
 		const uint64 parts[] = {
 			ScriptInterfaceVersion, FP_BUILD_DEBUG, sizeof(void*), sizeof(World), sizeof(String), sizeof(Array<int32>),
-			sizeof(TransformComponent), sizeof(ScriptType), sizeof(FieldInfo), sizeof(ScriptFunction), sizeof(ModuleContext), sizeof(Script), sizeof(Json),
+			sizeof(TransformComponent), sizeof(ScriptType), sizeof(FieldInfo), sizeof(ScriptFunction), sizeof(ModuleContext), sizeof(Script), sizeof(RaycastHit), sizeof(Collision), sizeof(Json),
 			sizeof(AudioWorld), sizeof(AudioResult), sizeof(AudioPlayResult), sizeof(VoiceHandle), sizeof(OneShotParams),
 			sizeof(AudioSourceComponent), sizeof(AudioListenerComponent),
 			sizeof(AnimState), sizeof(AnimTransition), sizeof(AnimCondition), sizeof(AnimatorComponent), sizeof(SkeletalMeshComponent),

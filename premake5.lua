@@ -25,6 +25,8 @@ local StbInclude = Root .. "/ThirdParty/stb"
 local MonocypherDir = Root .. "/ThirdParty/monocypher/src"
 -- Logging backend, header only.
 local SpdlogInclude = Root .. "/ThirdParty/spdlog/include"
+-- Rigid body physics. Built from source as its own static library.
+local JoltDir = Root .. "/ThirdParty/JoltPhysics"
 -- glTF parser for skeletal meshes and animations. One header, built once by CgltfImpl.cpp.
 local CgltfInclude = Root .. "/ThirdParty/cgltf"
 -- Game UI in HTML, CSS and JavaScript. A binary SDK fetched by Scripts/GetUltralight, so it is
@@ -35,7 +37,7 @@ if not HasUltralight then
 	premake.warn("Ultralight is missing, so game UI will not draw. Run Scripts/GetUltralight to get it.")
 end
 local ImGuiDir = Root .. "/ThirdParty/imgui"
-if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) or not os.isdir(SpdlogInclude) or not os.isdir(CgltfInclude) or not os.isfile(ImGuiDir .. "/imgui.h") then
+if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) or not os.isdir(SpdlogInclude) or not os.isdir(CgltfInclude) or not os.isfile(ImGuiDir .. "/imgui.h") or not os.isdir(JoltDir .. "/Jolt") then
 	premake.warn("Submodules are missing. Run: git submodule update --init")
 end
 
@@ -89,7 +91,7 @@ local ProjectName = io.readfile(ProjectFile):match('Name%s+"?([%w_]+)"?') or pat
 
 -- Include paths every project that touches engine headers needs.
 local function EngineIncludes()
-	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir, SpdlogInclude, CgltfInclude, ImGuiDir }
+	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir, SpdlogInclude, CgltfInclude, ImGuiDir, JoltDir }
 	if HasUltralight then
 		externalincludedirs { UltralightDir .. "/include" }
 		defines { "FP_WITH_ULTRALIGHT=1" }
@@ -230,10 +232,23 @@ local function UseEngine(withGame)
 	if withGame then
 		links { "Game" }
 	end
-	links { "Engine", "ImGui" }
+	links { "Engine", "Jolt", "ImGui" }
 	UseSDL()
 	UseUltralight()
 end
+
+-- Jolt: physics. Every optional Jolt define stays off here and in the engine, since the
+-- library and its users must agree on them. GPU compute back ends are left out.
+project "Jolt"
+	kind "StaticLib"
+	files { JoltDir .. "/Jolt/**.h", JoltDir .. "/Jolt/**.cpp", JoltDir .. "/Jolt/**.inl" }
+	removefiles { JoltDir .. "/Jolt/Compute/CPU/**", JoltDir .. "/Jolt/Compute/DX12/**", JoltDir .. "/Jolt/Compute/MTL/**", JoltDir .. "/Jolt/Compute/VK/**", JoltDir .. "/Jolt/Shaders/**" }
+	includedirs { JoltDir }
+	warnings "Off"
+	-- Physics is slow unoptimised, so even Debug builds optimise it.
+	filter "configurations:Debug"
+		optimize "Speed"
+	filter {}
 
 project "ImGui"
 	kind "StaticLib"

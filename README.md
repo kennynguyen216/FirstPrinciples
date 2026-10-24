@@ -231,6 +231,8 @@ that `FP_SCRIPT` registers. There is nothing to list by hand.
 | Parents | `GetParent()`, `GetChildren()`, `FindChild(name, recursive)`, `SetParent(entity)`, `AddChild(entity)` |
 | World space | `GetWorldPosition()`, `SetWorldPosition(position)`, `GetWorldRotation()` |
 | Timers | `After(seconds, fn)`, `Every(seconds, fn)`, `CancelTimer(id)`, `CancelAllTimers()` |
+| Physics | `AddForce(force)`, `AddImpulse(impulse)`, `GetVelocity()`, `SetVelocity(velocity)`, `Raycast(origin, direction, distance, hit)`, `GetPhysics()` for the rest |
+| Physics events | `OnCollisionEnter(other, collision)`, `OnCollisionExit(other)`, `OnTriggerEnter(other)`, `OnTriggerExit(other)` |
 | Math | `Clamp`, `Lerp`, `InverseLerp`, `MoveTowards`, `Damp`, `Random::Range`, `Random::Chance`, `Random::Direction` |
 | Input and logs | `Input::IsKeyDown(SDL_SCANCODE_SPACE)`, `Input::GetMoveAxis()`, `FP_LOG("...")` |
 
@@ -249,6 +251,44 @@ when it reloads.
 
 The runtime loads the same library at startup. Building from the command line works as before,
 and the `GameScripts` project builds along with the editor, running the header tool first.
+
+### Physics
+
+Physics runs on [Jolt](https://github.com/jrouwe/JoltPhysics) while the game plays.
+
+- A **Collider** gives an entity a shape: `Box` (`Size`), `Sphere` (`Radius`), `Capsule` (`Radius` and
+  `Height`, standing along Y) or `Mesh` (the entity's own mesh). Sizes scale with the transform and
+  `Offset` moves the shape. On its own a collider is a solid, unmoving part of the level.
+- A **RigidBody** makes it move. `Dynamic` bodies fall, bounce and get pushed. `Kinematic` bodies
+  follow their transform, so scripts or animation move them, and they shove dynamic bodies aside.
+  `Static` never moves. `Mass` is in kilograms, `Restitution` is bounciness, `LockRotation` keeps
+  characters upright and `Continuous` stops fast, small bodies tunnelling through thin walls.
+- A collider with `Trigger` on reports overlaps instead of blocking.
+- Moving a dynamic body's transform by hand teleports it. Changing its collider or rigid body
+  rebuilds it. Dynamic mesh colliders use the mesh's convex hull, static ones use every triangle.
+- Physics steps at a fixed 60 times a second whatever the frame rate. Children of other entities
+  work too, and their bodies sit at their world position.
+- The editor outlines colliders in green, and triggers in amber.
+
+Scripts push bodies and hear about contacts:
+
+```cpp
+void OnUpdate(float) override
+{
+    if (Input::WasKeyPressed(SDL_SCANCODE_SPACE))
+        AddImpulse({ 0, 5, 0 });
+    RaycastHit hit;
+    if (Raycast(GetWorldPosition(), { 0, -1, 0 }, 1.1f, hit))
+        FP_LOG("Standing on %s", GetName(hit.Entity).CStr());
+}
+
+void OnCollisionEnter(Entity other, const Collision& collision) override { /* collision.Point, collision.Normal */ }
+void OnTriggerEnter(Entity other) override { ++Score; }
+```
+
+`GetPhysics()` also has `AddTorque`, angular velocity, `OverlapSphere(center, radius)` and gravity.
+`Content/Scenes/Physics.scene` drops balls down a ramp, through a goal that counts them, and into a
+pyramid of crates. Space kicks every ball.
 
 ### Game UI
 
@@ -605,6 +645,7 @@ FP::JobSystem::ParallelFor(enemyCount, 32, [&](int32 i) { UpdateEnemy(i); });
 Projects/Sample/Binaries/Debug/Tests
 Projects/Sample/Binaries/Debug/Runtime --screenshot runtime.bmp
 Projects/Sample/Binaries/Debug/Runtime --host 7777 --screenshot host.bmp
+Projects/Sample/Binaries/Debug/Runtime Scenes/Physics.scene --wait 5 --screenshot physics.bmp
 Projects/Sample/Binaries/Debug/Editor --play --screenshot editor.png
 Projects/Sample/Binaries/Debug/Editor --scene Scenes/Lighting2D.scene --select "Glass Pane" --screenshot lit.png
 Projects/Sample/Binaries/Debug/Editor --scene Scenes/Showcase3D.scene --3d --viewmode wireframe --screenshot 3d.png
@@ -658,6 +699,7 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 | [Monocypher](https://monocypher.org) | Key exchange and encryption for network packets | Git submodule in `ThirdParty/monocypher` |
 | [spdlog](https://github.com/gabime/spdlog) | Logging to the console, files and the editor | Git submodule in `ThirdParty/spdlog` |
 | [cgltf](https://github.com/jkuhlmann/cgltf) | glTF loading for skeletal meshes and animations | Git submodule in `ThirdParty/cgltf` |
+| [Jolt Physics](https://github.com/jrouwe/JoltPhysics) 5.6 | Rigid body physics, collisions and raycasts | Git submodule in `ThirdParty/JoltPhysics`, built as the `Jolt` project |
 | [Ultralight](https://ultralig.ht) 2.0 beta | Game UI in HTML, CSS and JavaScript | Binary SDK downloaded by `Scripts/GetUltralight.sh` or `.ps1` into `ThirdParty/Ultralight`. Optional: without it game UI draws nothing |
 | [Dear ImGui](https://github.com/ocornut/imgui/tree/docking) | Immediate mode UI with docking and multi-viewport support | Git submodule in `ThirdParty/imgui`, tracking upstream `docking` |
 
