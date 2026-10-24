@@ -4,7 +4,8 @@
 
 namespace FP
 {
-	// Undo and redo for the editor. Each step is the whole scene saved as text.
+	// Undo and redo for the editor. Each step is the whole scene saved as text,
+	// plus the text of every loaded material because the inspector edits those too.
 	// Scenes are small, so a full copy per step is simpler than recording every kind of edit
 	// and new components and fields work with no extra code.
 	class SceneHistory
@@ -35,13 +36,22 @@ namespace FP
 		bool CanRedo() const { return !m_Redo.IsEmpty(); }
 
 	private:
+		struct MaterialText
+		{
+			String Path;
+			String Text;
+		};
+
 		struct State
 		{
 			String Scene;
+			Array<MaterialText> Materials; // sorted by path
 			Guid Selection;
 		};
 
 		State Capture(const Guid& selection) const;
+		static const MaterialText* FindMaterial(const State& state, const String& path);
+		static bool SameMaterials(const State& a, const State& b);
 		void Restore(const State& state);
 
 		World& m_World;

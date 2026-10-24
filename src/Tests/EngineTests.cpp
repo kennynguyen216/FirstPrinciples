@@ -283,3 +283,27 @@ FP_TEST(SceneHistory_DropsOldestSteps)
 	FP_EXPECT(undone == SceneHistory::MaxSteps);
 	FP_EXPECT(world->Get<TransformComponent>(world->GetEntities()[0]).Position.X == 5);
 }
+
+#include "Engine/Material.h"
+
+FP_TEST(SceneHistory_UndoesMaterialEdits)
+{
+	StrongObjectPtr<World> world(NewObject<World>());
+	SceneHistory history(*world.Get());
+	history.Reset();
+	// Loaded after the reset, like opening a material in the inspector.
+	Material* material = MaterialLibrary::Get().Load("Materials/Bricks.material");
+	FP_EXPECT(material);
+	if (!material)
+		return;
+	const String original = material->SaveToString();
+	material->GetData().Roughness = 0.123f;
+	FP_EXPECT(history.Commit(Guid()));
+	FP_EXPECT(history.Undo());
+	FP_EXPECT(material->SaveToString() == original);
+	FP_EXPECT(history.Redo());
+	FP_EXPECT(material->GetData().Roughness == 0.123f);
+
+	// Put it back so nothing in the test can write the edit to disk.
+	material->Load();
+}
