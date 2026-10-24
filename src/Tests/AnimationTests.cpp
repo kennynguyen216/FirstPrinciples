@@ -109,3 +109,90 @@ FP_TEST(Animation_LoadsSkinnedGltf)
 
 	FP_EXPECT(!ParseGltf("not gltf", model));
 }
+
+#include "Engine/Animation/AnimationStateMachine.h"
+
+namespace
+{
+	// Idle and Walk loop for one second, Jump plays once over half a second.
+	float ClipLength(std::string_view clip)
+	{
+		return clip == "JumpClip" ? 0.5f : clip.empty() ? 0.0f : 1.0f;
+	}
+
+	AnimationStateMachine MakeLocomotion()
+	{
+		AnimationStateMachine machine;
+		machine.AddState("Idle", "IdleClip");
+		machine.AddState("Walk", "WalkClip");
+		machine.AddState("Jump", "JumpClip", false);
+		machine.AddTransition("Idle", "Walk", 0.25f).When("Speed", AnimCompare::Greater, 0.1f);
+		machine.AddTransition("Walk", "Idle", 0.25f).When("Speed", AnimCompare::Less, 0.1f);
+		machine.AddTransition("", "Jump", 0.1f).When("Jump", AnimCompare::Triggered);
+		machine.AddTransition("Jump", "Idle", 0.2f).AfterExitTime(1);
+		return machine;
+	}
+}
+
+FP_TEST(Animation_StateMachineFollowsParameters)
+{
+	AnimationStateMachine machine = MakeLocomotion();
+	machine.Update(0.1f, ClipLength);
+	FP_EXPECT(machine.GetCurrentState()->Name == "Idle");
+
+	// A float condition starts a blend that finishes after its blend time.
+	machine.SetFloat("Speed", 2);
+	machine.Update(0.1f, ClipLength);
+	FP_EXPECT(machine.GetCurrentState()->Name == "Walk");
+	FP_EXPECT(machine.GetPreviousState()->Name == "Idle");
+	FP_EXPECT(machine.GetBlend() == 0);
+	machine.Update(0.125f, ClipLength);
+	FP_EXPECT(std::fabs(machine.GetBlend() - 0.5f) < 1e-4f);
+	machine.Update(0.2f, ClipLength);
+	FP_EXPECT(machine.GetBlend() == 1 && !machine.GetPreviousState());
+
+	// Looping clips wrap their time.
+	machine.Update(0.9f, ClipLength);
+	FP_EXPECT(std::fabs(machine.GetCurrent().Time - 0.225f) < 1e-4f);
+
+	// A trigger is used up by the transition that takes it.
+	machine.SetTrigger("Jump");
+	machine.Update(0.01f, ClipLength);
+	FP_EXPECT(machine.GetCurrentState()->Name == "Jump");
+	FP_EXPECT(!machine.GetBool("Jump"));
+	machine.Update(0.01f, ClipLength);
+	FP_EXPECT(machine.GetCurrentState()->Name == "Jump");
+
+	// Jump holds its last frame, then leaves on exit time even though Speed is still high.
+	machine.Update(0.3f, ClipLength);
+	FP_EXPECT(machine.GetCurrentState()->Name == "Jump");
+	machine.Update(0.3f, ClipLength);
+	FP_EXPECT(machine.GetCurrentState()->Name == "Idle");
+	FP_EXPECT(machine.GetPrevious().Time == 0.5f);
+	machine.Update(0.01f, ClipLength);
+	FP_EXPECT(machine.GetCurrentState()->Name == "Walk");
+}
+
+FP_TEST(Animation_StateMachineRebuildsInPlace)
+{
+	AnimationStateMachine machine = MakeLocomotion();
+	machine.Update(0.1f, ClipLength);
+	machine.Play("Walk");
+
+	// Building again, as a hot reload does, keeps one of each and the current state.
+	AnimationStateMachine rebuilt = MakeLocomotion();
+	machine.AddState("Idle", "IdleClip");
+	machine.AddTransition("Idle", "Walk", 0.5f).When("Speed", AnimCompare::Greater, 0.1f);
+	FP_EXPECT(machine.GetStates().Num() == rebuilt.GetStates().Num());
+	FP_EXPECT(machine.GetTransitions().Num() == rebuilt.GetTransitions().Num());
+	FP_EXPECT(machine.GetTransitions()[0].BlendTime == 0.5f && machine.GetTransitions()[0].Conditions.Num() == 1);
+	FP_EXPECT(machine.GetCurrentState()->Name == "Walk");
+
+	// Unknown states are ignored and transitions without conditions or exit time never fire.
+	machine.Play("Missing");
+	FP_EXPECT(machine.GetCurrentState()->Name == "Walk");
+	machine.AddTransition("Walk", "Jump");
+	machine.SetFloat("Speed", 2);
+	machine.Update(5, ClipLength);
+	FP_EXPECT(machine.GetCurrentState()->Name == "Walk");
+}
