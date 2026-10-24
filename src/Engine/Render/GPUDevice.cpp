@@ -41,9 +41,21 @@ namespace FP
 		sampler.enable_anisotropy = false;
 		device->m_LinearClamp = SDL_CreateGPUSampler(handle, &sampler);
 
+		// Compares against depth and filters the 2x2 results, so one tap gives soft shadow edges.
+		sampler.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+		sampler.max_lod = 0;
+		sampler.enable_compare = true;
+		sampler.compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
+		device->m_ShadowCompare = SDL_CreateGPUSampler(handle, &sampler);
+
 		// D32 float works on every backend SDL_GPU supports but check anyway.
 		if (!SDL_GPUTextureSupportsFormat(handle, SDL_GPU_TEXTUREFORMAT_D32_FLOAT, SDL_GPU_TEXTURETYPE_2D, SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET))
 			device->m_DepthFormat = SDL_GPU_TEXTUREFORMAT_D24_UNORM;
+
+		// Shadow maps only need 16 bits since their depth is linear, and it halves their bandwidth.
+		const SDL_GPUTextureUsageFlags shadowUsage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+		if (!SDL_GPUTextureSupportsFormat(handle, SDL_GPU_TEXTUREFORMAT_D16_UNORM, SDL_GPU_TEXTURETYPE_2D, shadowUsage))
+			device->m_ShadowFormat = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
 
 		const uint8 white[4] = { 255, 255, 255, 255 };
 		const uint8 black[4] = { 0, 0, 0, 255 };
@@ -65,6 +77,7 @@ namespace FP
 			SDL_ReleaseGPUTransferBuffer(m_Device, m_Download);
 		SDL_ReleaseGPUSampler(m_Device, m_LinearRepeat);
 		SDL_ReleaseGPUSampler(m_Device, m_LinearClamp);
+		SDL_ReleaseGPUSampler(m_Device, m_ShadowCompare);
 		SDL_DestroyGPUDevice(m_Device);
 	}
 
@@ -151,12 +164,14 @@ namespace FP
 		return MakeRef<GPUTexture>(m_Device, texture, width, height);
 	}
 
-	RefPtr<GPUTexture> GPUDevice::CreateRenderTarget(SDL_GPUTextureFormat format, uint32 width, uint32 height, bool depth)
+	RefPtr<GPUTexture> GPUDevice::CreateRenderTarget(SDL_GPUTextureFormat format, uint32 width, uint32 height, bool depth, bool sampledDepth)
 	{
 		SDL_GPUTextureCreateInfo info = {};
 		info.type = SDL_GPU_TEXTURETYPE_2D;
 		info.format = format;
 		info.usage = depth ? SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET : (SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER);
+		if (depth && sampledDepth)
+			info.usage |= SDL_GPU_TEXTUREUSAGE_SAMPLER;
 		info.width = width;
 		info.height = height;
 		info.layer_count_or_depth = 1;

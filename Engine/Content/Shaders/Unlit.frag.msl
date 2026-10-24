@@ -23,6 +23,8 @@ struct FrameData
     int4 LightCount;
     float4 LightPosition[16];
     float4 LightColor[16];
+    float4x4 ShadowMatrix;
+    float4 ShadowParams;
 };
 
 struct main0_out

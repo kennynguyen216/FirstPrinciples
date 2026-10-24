@@ -35,7 +35,7 @@ component Name
   Name "Sun"
 component Transform
   Position 0 0 0
-  Rotation -45 35 0
+  Rotation -40 70 0
   Scale 1 1 1
 component DirectionalLight
   Color 1 0.95 0.85 1

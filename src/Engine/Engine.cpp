@@ -127,7 +127,11 @@ namespace FP::Engine
 
 		registry.Register<DirectionalLightComponent>("DirectionalLight")
 			.Field("Color", &DirectionalLightComponent::Color)
-			.Field("Intensity", &DirectionalLightComponent::Intensity);
+			.Field("Intensity", &DirectionalLightComponent::Intensity)
+			.Field("CastShadows", &DirectionalLightComponent::CastShadows)
+			.Field("ShadowResolution", &DirectionalLightComponent::ShadowResolution)
+			.Field("ShadowDistance", &DirectionalLightComponent::ShadowDistance)
+			.Field("ShadowStrength", &DirectionalLightComponent::ShadowStrength);
 
 		registry.Register<AmbientLightComponent>("AmbientLight")
 			.Field("Color", &AmbientLightComponent::Color)

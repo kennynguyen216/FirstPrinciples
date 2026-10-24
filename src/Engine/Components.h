@@ -116,10 +116,15 @@ namespace FP
 	};
 
 	// Light from far away, shining along the transform's forward (-Z) axis.
+	// The first one with CastShadows casts shadows from meshes within ShadowDistance of the camera.
 	struct DirectionalLightComponent
 	{
 		::FP::Color Color{ 1, 1, 1, 1 }; // qualified so the member can share the type name
 		float Intensity = 1;
+		bool CastShadows = true;
+		int32 ShadowResolution = 1024; // pixels per side. Lower is faster and softer.
+		float ShadowDistance = 20; // world units covered, centered ahead of the camera
+		float ShadowStrength = 1; // 0 is no shadow, 1 is only ambient light in shadow
 	};
 
 	// Flat light added everywhere so unlit sides are not pure black.

@@ -5,6 +5,30 @@
 
 using namespace metal;
 
+template <typename T>
+static inline depth2d<T> spvDepthCast(texture2d<T> t)
+{
+    return reinterpret_cast<thread const depth2d<T> &>(t);
+}
+
+template <typename T>
+static inline depth2d_array<T> spvDepthCast(texture2d_array<T> t)
+{
+    return reinterpret_cast<thread const depth2d_array<T> &>(t);
+}
+
+template <typename T>
+static inline depthcube<T> spvDepthCast(texturecube<T> t)
+{
+    return reinterpret_cast<thread const depthcube<T> &>(t);
+}
+
+template <typename T>
+static inline depthcube_array<T> spvDepthCast(texturecube_array<T> t)
+{
+    return reinterpret_cast<thread const depthcube_array<T> &>(t);
+}
+
 struct FrameData
 {
     float4 CameraPosition;
@@ -16,6 +40,8 @@ struct FrameData
     int4 LightCount;
     float4 LightPosition[16];
     float4 LightColor[16];
+    float4x4 ShadowMatrix;
+    float4 ShadowParams;
 };
 
 struct MaterialData
@@ -48,10 +74,10 @@ float3 ApplyNormalMap(thread const float3& normal, thread const float4& tangent,
     float3 t = fast::normalize(tangent.xyz - (n * dot(n, tangent.xyz)));
     float3 b = cross(n, t) * tangent.w;
     float3 local = (sampled * 2.0) - float3(1.0);
-    float3 _118 = local;
-    float2 _120 = _118.xy * strength;
-    local.x = _120.x;
-    local.y = _120.y;
+    float3 _124 = local;
+    float2 _126 = _124.xy * strength;
+    local.x = _126.x;
+    local.y = _126.y;
     return fast::normalize(((t * local.x) + (b * local.y)) + (n * local.z));
 }
 
@@ -82,6 +108,65 @@ void GetLight(thread const int& i, thread const float3& worldPosition, thread fl
     float ratio = _distance / fast::max(color.w, 9.9999997473787516355514526367188e-05);
     float window = fast::clamp(1.0 - (((ratio * ratio) * ratio) * ratio), 0.0, 1.0);
     radiance = ((color.xyz * window) * window) / float3((_distance * _distance) + 1.0);
+}
+
+static inline __attribute__((always_inline))
+float SunVisibility(thread const float3& worldPosition, thread const float3& normal, constant FrameData& Frame, texture2d<float> ShadowMap, sampler ShadowMapSmplr)
+{
+    if (Frame.ShadowParams.x <= 0.0)
+    {
+        return 1.0;
+    }
+    float3 p = worldPosition + (normal * Frame.ShadowParams.z);
+    float3 s = (Frame.ShadowMatrix * float4(p, 1.0)).xyz;
+    bool _368 = s.x <= 0.0;
+    bool _375;
+    if (!_368)
+    {
+        _375 = s.x >= 1.0;
+    }
+    else
+    {
+        _375 = _368;
+    }
+    bool _382;
+    if (!_375)
+    {
+        _382 = s.y <= 0.0;
+    }
+    else
+    {
+        _382 = _375;
+    }
+    bool _389;
+    if (!_382)
+    {
+        _389 = s.y >= 1.0;
+    }
+    else
+    {
+        _389 = _382;
+    }
+    bool _396;
+    if (!_389)
+    {
+        _396 = s.z >= 1.0;
+    }
+    else
+    {
+        _396 = _389;
+    }
+    if (_396)
+    {
+        return 1.0;
+    }
+    float t = Frame.ShadowParams.y;
+    float3 _421 = float3(s.xy + float2(-t, -t), s.z);
+    float3 _436 = float3(s.xy + float2(t, -t), s.z);
+    float3 _452 = float3(s.xy + float2(-t, t), s.z);
+    float3 _466 = float3(s.xy + float2(t), s.z);
+    float lit = ((spvDepthCast(ShadowMap).sample_compare(ShadowMapSmplr, _421.xy, _421.z) + spvDepthCast(ShadowMap).sample_compare(ShadowMapSmplr, _436.xy, _436.z)) + spvDepthCast(ShadowMap).sample_compare(ShadowMapSmplr, _452.xy, _452.z)) + spvDepthCast(ShadowMap).sample_compare(ShadowMapSmplr, _466.xy, _466.z);
+    return mix(1.0, lit * 0.25, Frame.ShadowParams.x);
 }
 
 static inline __attribute__((always_inline))
@@ -117,7 +202,7 @@ float3 EnvironmentBRDF(thread const float3& f0, thread const float& roughness, t
     return (f0 * ab.x) + float3(ab.y);
 }
 
-fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Material [[buffer(0)]], constant FrameData& Frame [[buffer(1)]], texture2d<float> BaseColorMap [[texture(0)]], texture2d<float> NormalMap [[texture(1)]], texture2d<float> AmbientOcclusionMap [[texture(2)]], texture2d<float> MetallicMap [[texture(3)]], texture2d<float> RoughnessMap [[texture(4)]], texture2d<float> SpecularMap [[texture(5)]], texture2d<float> EmissiveMap [[texture(6)]], texture2d<float> SubsurfaceMap [[texture(7)]], sampler BaseColorMapSmplr [[sampler(0)]], sampler NormalMapSmplr [[sampler(1)]], sampler AmbientOcclusionMapSmplr [[sampler(2)]], sampler MetallicMapSmplr [[sampler(3)]], sampler RoughnessMapSmplr [[sampler(4)]], sampler SpecularMapSmplr [[sampler(5)]], sampler EmissiveMapSmplr [[sampler(6)]], sampler SubsurfaceMapSmplr [[sampler(7)]])
+fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Material [[buffer(0)]], constant FrameData& Frame [[buffer(1)]], texture2d<float> BaseColorMap [[texture(0)]], texture2d<float> NormalMap [[texture(1)]], texture2d<float> AmbientOcclusionMap [[texture(2)]], texture2d<float> MetallicMap [[texture(3)]], texture2d<float> RoughnessMap [[texture(4)]], texture2d<float> SpecularMap [[texture(5)]], texture2d<float> EmissiveMap [[texture(6)]], texture2d<float> SubsurfaceMap [[texture(7)]], texture2d<float> ShadowMap [[texture(8)]], sampler BaseColorMapSmplr [[sampler(0)]], sampler NormalMapSmplr [[sampler(1)]], sampler AmbientOcclusionMapSmplr [[sampler(2)]], sampler MetallicMapSmplr [[sampler(3)]], sampler RoughnessMapSmplr [[sampler(4)]], sampler SpecularMapSmplr [[sampler(5)]], sampler EmissiveMapSmplr [[sampler(6)]], sampler SubsurfaceMapSmplr [[sampler(7)]], sampler ShadowMapSmplr [[sampler(8)]])
 {
     main0_out out = {};
     float4 base = (BaseColorMap.sample(BaseColorMapSmplr, in.InUV) * Material.BaseColor) * in.InTint;
@@ -132,9 +217,11 @@ fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Materi
     float3 n = ApplyNormalMap(param, param_1, param_2, param_3);
     float3 param_4 = in.InWorldPosition;
     float3 v = ViewDirection(param_4, Frame);
+    float3 faceNormal = fast::normalize(in.InNormal);
     if (dot(in.InNormal, v) < 0.0)
     {
         n = -n;
+        faceNormal = -faceNormal;
     }
     float metallic = fast::clamp(Material.Params.x * MetallicMap.sample(MetallicMapSmplr, in.InUV).x, 0.0, 1.0);
     float roughness = fast::clamp(Material.Params.y * RoughnessMap.sample(RoughnessMapSmplr, in.InUV).x, 0.04500000178813934326171875, 1.0);
@@ -154,19 +241,25 @@ fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Materi
         GetLight(param_5, param_6, param_7, param_8, Frame);
         float3 l = param_7;
         float3 radiance = param_8;
+        if (i == int(Frame.ShadowParams.w))
+        {
+            float3 param_9 = in.InWorldPosition;
+            float3 param_10 = faceNormal;
+            radiance *= SunVisibility(param_9, param_10, Frame, ShadowMap, ShadowMapSmplr);
+        }
         float3 h = fast::normalize(v + l);
         float nDotL = fast::max(dot(n, l), 0.0);
         float nDotH = fast::max(dot(n, h), 0.0);
-        float param_9 = fast::max(dot(h, v), 0.0);
-        float3 param_10 = f0;
-        float3 f = FresnelSchlick(param_9, param_10);
+        float param_11 = fast::max(dot(h, v), 0.0);
+        float3 param_12 = f0;
+        float3 f = FresnelSchlick(param_11, param_12);
         float3 diffuse = (float3(1.0) - f) * diffuseColor;
-        float param_11 = nDotH;
-        float param_12 = roughness;
-        float param_13 = nDotV;
-        float param_14 = nDotL;
-        float param_15 = roughness;
-        float3 spec = (f * (DistributionGGX(param_11, param_12) * VisibilitySmith(param_13, param_14, param_15))) * 3.1415927410125732421875;
+        float param_13 = nDotH;
+        float param_14 = roughness;
+        float param_15 = nDotV;
+        float param_16 = nDotL;
+        float param_17 = roughness;
+        float3 spec = (f * (DistributionGGX(param_13, param_14) * VisibilitySmith(param_15, param_16, param_17))) * 3.1415927410125732421875;
         color += (((diffuse + spec) * radiance) * nDotL);
         if (subsurface > 0.0)
         {
@@ -175,10 +268,10 @@ fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Materi
             color += ((((Material.Subsurface.xyz * diffuseColor) * radiance) * subsurface) * (fast::max(wrapped - nDotL, 0.0) + through));
         }
     }
-    float3 param_16 = f0;
-    float param_17 = roughness;
-    float param_18 = nDotV;
-    color += ((Frame.Ambient.xyz * (diffuseColor + EnvironmentBRDF(param_16, param_17, param_18))) * occlusion);
+    float3 param_18 = f0;
+    float param_19 = roughness;
+    float param_20 = nDotV;
+    color += ((Frame.Ambient.xyz * (diffuseColor + EnvironmentBRDF(param_18, param_19, param_20))) * occlusion);
     color += (EmissiveMap.sample(EmissiveMapSmplr, in.InUV).xyz * Material.Emissive.xyz);
     out.OutColor = float4(color, base.w);
     return out;
