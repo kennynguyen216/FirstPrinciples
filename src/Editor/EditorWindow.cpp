@@ -22,6 +22,7 @@
 #include <QDir>
 #include <QUrl>
 #include <QFileSystemWatcher>
+#include <QInputDialog>
 #include <QFileInfo>
 #include <QKeySequence>
 #include <QListWidget>
@@ -109,9 +110,7 @@ namespace FP::Editor
 		addDockWidget(Qt::LeftDockWidgetArea, hierarchyDock);
 
 		m_Inspector = new InspectorPanel();
-		connect(m_Inspector, &InspectorPanel::OpenScriptRequested, this, [](const QString& path) {
-			QDesktopServices::openUrl(QUrl::fromLocalFile(ScriptBuilder::ResolveSourcePath(path)));
-		});
+		connect(m_Inspector, &InspectorPanel::OpenScriptRequested, this, &EditorWindow::OpenScript);
 		connect(m_Inspector, &InspectorPanel::Modified, this, [this]() {
 			MarkDirty();
 			RefreshHierarchy();
@@ -179,6 +178,12 @@ namespace FP::Editor
 		m_ScriptBuilder = new ScriptBuilder(this);
 		connect(m_ScriptBuilder, &ScriptBuilder::Finished, this, &EditorWindow::OnScriptsBuilt);
 		QMenu* scripts = menuBar()->addMenu("&Scripts");
+		scripts->addAction("&New Script...", this, [this]() {
+			const QString name = QInputDialog::getText(this, "New Script", "Class name:");
+			if (!name.isEmpty())
+				NewScript(name.trimmed());
+		});
+		scripts->addSeparator();
 		scripts->addAction("&Reload Scripts", QKeySequence("Ctrl+R"), m_ScriptBuilder, &ScriptBuilder::Build);
 		QAction* autoReload = scripts->addAction("&Auto Reload");
 		autoReload->setCheckable(true);
@@ -233,6 +238,27 @@ namespace FP::Editor
 	void EditorWindow::SetViewMode(ViewMode mode)
 	{
 		m_ViewModeBox->setCurrentIndex(static_cast<int>(mode));
+	}
+
+	void EditorWindow::OpenScript(const QString& path)
+	{
+		QDesktopServices::openUrl(QUrl::fromLocalFile(ScriptBuilder::ResolveSourcePath(path)));
+	}
+
+	bool EditorWindow::NewScript(const QString& className)
+	{
+		QString error;
+		const QString path = ScriptBuilder::CreateScriptFile(className, error);
+		if (path.isEmpty())
+		{
+			FP_LOG_ERROR("New script failed: %s", error.toUtf8().constData());
+			QMessageBox::warning(this, "New Script", error);
+			return false;
+		}
+		FP_LOG("Created %s", path.toUtf8().constData());
+		// The watcher sees the new file and builds it. Open it so the user can start writing.
+		OpenScript(path);
+		return true;
 	}
 
 	void EditorWindow::WatchScripts()

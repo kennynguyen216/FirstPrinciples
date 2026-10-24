@@ -60,6 +60,11 @@ int main(int argc, char** argv)
 			window.Select(window.GetWorld().FindEntityByName(args[selectIndex + 1].toUtf8().constData()));
 		if (args.contains("--play"))
 			window.Play();
+		// --new-script Name writes a script from the template, then builds like --build-scripts.
+		const int newScriptIndex = static_cast<int>(args.indexOf("--new-script"));
+		if (newScriptIndex >= 0 && newScriptIndex + 1 < args.size() && !window.NewScript(args[newScriptIndex + 1]))
+			return 1;
+
 		// --build-scripts builds GameScripts and exits with 0 on success.
 		if (args.contains("--build-scripts"))
 		{

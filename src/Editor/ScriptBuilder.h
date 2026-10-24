@@ -24,6 +24,9 @@ namespace FP::Editor
 		static QStringList ListScriptFiles();
 		static QString ScriptsDirectory();
 
+		// Writes Game/Scripts/<className>.cpp from the starter template. Returns the path or empty on failure.
+		static QString CreateScriptFile(const QString& className, QString& error);
+
 		// Compilers record source paths relative to where they ran. Returns an absolute path.
 		static QString ResolveSourcePath(const QString& path);
 

@@ -7,6 +7,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QProcessEnvironment>
+#include <QRegularExpression>
 #include <QStandardPaths>
 #include <QThread>
 
@@ -57,6 +58,60 @@ namespace FP::Editor
 	QString ScriptBuilder::ScriptsDirectory()
 	{
 		return ProjectDir() + "/Game/Scripts";
+	}
+
+	QString ScriptBuilder::CreateScriptFile(const QString& className, QString& error)
+	{
+		// Class names become C++ identifiers and file names, so keep them simple.
+		static const QRegularExpression valid("^[A-Za-z_][A-Za-z0-9_]*$");
+		if (!valid.match(className).hasMatch())
+		{
+			error = "Use letters, digits and underscores, starting with a letter.";
+			return {};
+		}
+		const QString path = ScriptsDirectory() + "/" + className + ".cpp";
+		if (QFileInfo::exists(path))
+		{
+			error = className + ".cpp already exists.";
+			return {};
+		}
+
+		QString code = QString::fromUtf8(R"(#include "Engine/Scripting/Script.h"
+
+using namespace FP;
+
+class NAME : public Script
+{
+public:
+	// Fields listed in FP_SCRIPT below show in the inspector and keep their values on reload.
+	float Speed = 1;
+
+	void OnStart() override
+	{
+	}
+
+	void OnUpdate(float deltaTime) override
+	{
+		(void)deltaTime;
+	}
+};
+
+FP_SCRIPT(NAME)
+{
+	fields.Field("Speed", &NAME::Speed);
+}
+)");
+		code.replace("NAME", className);
+
+		QDir().mkpath(ScriptsDirectory());
+		QFile file(path);
+		if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+		{
+			error = "Could not write " + path;
+			return {};
+		}
+		file.write(code.toUtf8());
+		return path;
 	}
 
 	QString ScriptBuilder::ResolveSourcePath(const QString& path)

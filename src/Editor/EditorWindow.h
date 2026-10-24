@@ -40,6 +40,12 @@ namespace FP::Editor
 		void Select(Entity entity);
 		ScriptBuilder* GetScriptBuilder() const { return m_ScriptBuilder; }
 
+		// Opens a script source file for editing.
+		void OpenScript(const QString& path);
+
+		// Creates Game/Scripts/<className>.cpp and opens it. Returns false and explains why on failure.
+		bool NewScript(const QString& className);
+
 	protected:
 		void closeEvent(QCloseEvent* event) override;
 
