@@ -19,6 +19,7 @@ namespace FP
 namespace FP::Editor
 {
 	class InspectorPanel;
+	class ScriptBuilder;
 	class ViewportWidget;
 
 	class EditorWindow : public QMainWindow
@@ -36,6 +37,7 @@ namespace FP::Editor
 		void Play();
 		void Stop();
 		void Select(Entity entity);
+		ScriptBuilder* GetScriptBuilder() const { return m_ScriptBuilder; }
 
 	protected:
 		void closeEvent(QCloseEvent* event) override;
@@ -78,6 +80,7 @@ namespace FP::Editor
 		QAction* m_StopAction = nullptr;
 		QAction* m_View3DAction = nullptr;
 		QComboBox* m_ViewModeBox = nullptr;
+		ScriptBuilder* m_ScriptBuilder = nullptr;
 
 		uint64 m_LastTicks = 0;
 		int32 m_HierarchyCount = -1;

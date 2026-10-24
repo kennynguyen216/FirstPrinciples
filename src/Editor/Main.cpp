@@ -1,4 +1,5 @@
 #include "Editor/EditorWindow.h"
+#include "Editor/ScriptBuilder.h"
 #include "Engine/Engine.h"
 #include "Engine/Render/GPUDevice.h"
 #include "Engine/Scripting/ScriptRuntime.h"
@@ -59,6 +60,13 @@ int main(int argc, char** argv)
 			window.Select(window.GetWorld().FindEntityByName(args[selectIndex + 1].toUtf8().constData()));
 		if (args.contains("--play"))
 			window.Play();
+		// --build-scripts builds GameScripts and exits with 0 on success.
+		if (args.contains("--build-scripts"))
+		{
+			QObject::connect(window.GetScriptBuilder(), &FP::Editor::ScriptBuilder::Finished, &app, [](bool ok) { QApplication::exit(ok ? 0 : 1); });
+			window.GetScriptBuilder()->Build();
+		}
+
 		const int shotIndex = static_cast<int>(args.indexOf("--screenshot"));
 		if (shotIndex >= 0 && shotIndex + 1 < args.size())
 		{

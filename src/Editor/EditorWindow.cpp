@@ -1,5 +1,6 @@
 #include "Editor/EditorWindow.h"
 #include "Editor/InspectorPanel.h"
+#include "Editor/ScriptBuilder.h"
 #include "Editor/ViewportWidget.h"
 #include "Engine/ComponentRegistry.h"
 #include "Engine/FieldSerializer.h"
@@ -168,6 +169,10 @@ namespace FP::Editor
 		});
 		entity->addAction("&Duplicate", QKeySequence("Ctrl+D"), this, &EditorWindow::DuplicateSelected);
 		entity->addAction("De&lete", QKeySequence::Delete, this, &EditorWindow::DeleteSelected);
+
+		m_ScriptBuilder = new ScriptBuilder(this);
+		QMenu* scripts = menuBar()->addMenu("&Scripts");
+		scripts->addAction("&Build Scripts", QKeySequence("Ctrl+B"), m_ScriptBuilder, &ScriptBuilder::Build);
 
 		QToolBar* toolbar = addToolBar("Play");
 		toolbar->setObjectName("PlayToolbar");
