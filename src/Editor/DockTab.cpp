@@ -39,13 +39,26 @@ namespace FP::Editor
 		layout->addStretch(1);
 	}
 
+	void DockTab::SetCompact(bool compact)
+	{
+		if (compact == m_Compact)
+			return;
+		m_Compact = compact;
+		for (QWidget* child : findChildren<QWidget*>(Qt::FindDirectChildrenOnly))
+			child->setVisible(!compact);
+		updateGeometry();
+		update();
+	}
+
 	QSize DockTab::sizeHint() const
 	{
-		return { 100, StripHeight };
+		return { 100, m_Compact ? 0 : StripHeight };
 	}
 
 	void DockTab::paintEvent(QPaintEvent*)
 	{
+		if (m_Compact)
+			return;
 		QPainter painter(this);
 		painter.setRenderHint(QPainter::Antialiasing);
 		painter.fillRect(rect(), EditorStyle::Background);

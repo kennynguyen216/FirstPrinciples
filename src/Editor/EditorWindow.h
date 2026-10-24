@@ -81,6 +81,10 @@ namespace FP::Editor
 		void BuildDocks();
 		void BuildStatusBar();
 
+		// Shows each dock's title only when it is not sharing a tab bar.
+		void UpdateDockTitles();
+		void UpdateDockTitlesLater();
+
 		// Runs a line typed into the status bar's console box.
 		void RunCommand(const QString& line);
 
@@ -156,6 +160,7 @@ namespace FP::Editor
 		ContentBrowser* m_ContentBrowser = nullptr;
 		QDockWidget* m_ConsoleDock = nullptr;
 		QDockWidget* m_ContentDock = nullptr;
+		bool m_DockTitlesPending = false;
 		QFileSystemWatcher* m_ScriptWatcher = nullptr;
 		QTimer* m_ScriptDebounce = nullptr;
 		bool m_AutoReloadScripts = true;

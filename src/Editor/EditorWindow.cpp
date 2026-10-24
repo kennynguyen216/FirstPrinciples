@@ -183,9 +183,16 @@ namespace FP::Editor
 		resizeDocks({ placeDock, detailsDock }, { 250, 340 }, Qt::Horizontal);
 		resizeDocks({ contentDock }, { 280 }, Qt::Vertical);
 
-		// Tabbed docks show Qt's tab bar, so they skip the custom title and use the tabs on top instead.
-		for (QDockWidget* dock : { detailsDock, hierarchyDock, contentDock, consoleDock })
-			dock->setTitleBarWidget(new QWidget(dock));
+		// Grouped dragging lets a tab be pulled out of a shared spot and dropped anywhere,
+		// and titles follow whatever layout the user makes.
+		setDockOptions(AnimatedDocks | AllowNestedDocks | AllowTabbedDocks | GroupedDragging);
+		for (QDockWidget* dock : findChildren<QDockWidget*>())
+		{
+			connect(dock, &QDockWidget::topLevelChanged, this, &EditorWindow::UpdateDockTitlesLater);
+			connect(dock, &QDockWidget::dockLocationChanged, this, &EditorWindow::UpdateDockTitlesLater);
+			connect(dock, &QDockWidget::visibilityChanged, this, &EditorWindow::UpdateDockTitlesLater);
+		}
+		UpdateDockTitles();
 
 		connect(m_ContentBrowser, &ContentBrowser::AssetSelected, this, &EditorWindow::ShowAsset);
 		connect(m_ContentBrowser, &ContentBrowser::SaveAllRequested, this, &EditorWindow::SaveAll);
@@ -348,6 +355,26 @@ namespace FP::Editor
 		}
 
 		BuildStatusBar();
+	}
+
+	void EditorWindow::UpdateDockTitlesLater()
+	{
+		// Layout changes arrive in bursts while dragging, so update once they settle.
+		if (m_DockTitlesPending)
+			return;
+		m_DockTitlesPending = true;
+		QTimer::singleShot(0, this, &EditorWindow::UpdateDockTitles);
+	}
+
+	void EditorWindow::UpdateDockTitles()
+	{
+		m_DockTitlesPending = false;
+		for (QDockWidget* dock : findChildren<QDockWidget*>())
+		{
+			// A dock alone needs its own title to be dragged. Docks sharing a spot use the tab bar.
+			if (DockTab* tab = qobject_cast<DockTab*>(dock->titleBarWidget()))
+				tab->SetCompact(!dock->isFloating() && !tabifiedDockWidgets(dock).isEmpty());
+		}
 	}
 
 	void EditorWindow::BuildStatusBar()
