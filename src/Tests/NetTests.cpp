@@ -296,3 +296,109 @@ FP_TEST(Net_RejectsBadPackets)
 	huge.Resize(NetConnection::MaxMessageSize + 1);
 	FP_EXPECT(!connection.Send(NetChannel::Reliable, huge.Data(), huge.Num()));
 }
+
+#include "Engine/Net/NetSession.h"
+
+#include <thread>
+
+namespace
+{
+	// Runs every session until done says stop, or about two seconds pass.
+	template <typename Fn>
+	bool Pump(std::initializer_list<NetSession*> sessions, double& now, Fn done)
+	{
+		for (int i = 0; i < 2000; ++i)
+		{
+			now += 0.01;
+			for (NetSession* session : sessions)
+				session->Update(now);
+			if (done())
+				return true;
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		}
+		return false;
+	}
+
+	// Pulls events off a session, keeping only the kind asked for.
+	Array<NetEvent> Drain(NetSession& session, NetEventType type)
+	{
+		Array<NetEvent> events;
+		NetEvent event;
+		while (session.PollEvent(event))
+		{
+			if (event.Type == type)
+				events.Add(std::move(event));
+		}
+		return events;
+	}
+}
+
+FP_TEST(Net_SessionsMeshThroughIntroductions)
+{
+	NetSession a;
+	NetSession b;
+	NetSession c;
+	FP_EXPECT(a.Start(0) && b.Start(0) && c.Start(0));
+	double now = 0;
+
+	// B joins A, then C joins only B. B introduces C and A so everyone ends up connected.
+	b.Join(NetAddress::Loopback(a.GetPort()));
+	FP_EXPECT(Pump({ &a, &b, &c }, now, [&]() { return a.GetPeers().Num() == 1 && b.GetPeers().Num() == 1; }));
+	c.Join(NetAddress::Loopback(b.GetPort()));
+	FP_EXPECT(Pump({ &a, &b, &c }, now, [&]() { return a.GetPeers().Num() == 2 && b.GetPeers().Num() == 2 && c.GetPeers().Num() == 2; }));
+	FP_EXPECT(a.GetPeers().Contains(c.GetLocalId()));
+	FP_EXPECT(c.GetPeers().Contains(a.GetLocalId()));
+
+	// Everyone agrees on who has authority.
+	FP_EXPECT(a.GetAuthority() == b.GetAuthority() && b.GetAuthority() == c.GetAuthority());
+
+	Drain(a, NetEventType::Message);
+	Drain(b, NetEventType::Message);
+	Drain(c, NetEventType::Message);
+	const char text[] = "hi all";
+	a.Broadcast(NetChannel::Reliable, text, sizeof(text));
+	Array<NetEvent> gotB;
+	Array<NetEvent> gotC;
+	FP_EXPECT(Pump({ &a, &b, &c }, now, [&]() {
+		for (NetEvent& event : Drain(b, NetEventType::Message)) gotB.Add(std::move(event));
+		for (NetEvent& event : Drain(c, NetEventType::Message)) gotC.Add(std::move(event));
+		return gotB.Num() == 1 && gotC.Num() == 1;
+	}));
+	FP_EXPECT(gotB.Num() == 1 && gotB[0].Peer == a.GetLocalId() && std::memcmp(gotB[0].Data.Data(), text, sizeof(text)) == 0);
+	FP_EXPECT(gotC.Num() == 1 && gotC[0].Data.Num() == static_cast<int32>(sizeof(text)));
+
+	// Leaving says goodbye, so the others notice right away instead of after the timeout.
+	const PeerId leaving = c.GetLocalId();
+	c.Stop();
+	FP_EXPECT(Pump({ &a, &b }, now, [&]() { return a.GetPeers().Num() == 1 && b.GetPeers().Num() == 1; }));
+	FP_EXPECT(!a.GetPeers().Contains(leaving));
+	FP_EXPECT(now < 5.0);
+}
+
+FP_TEST(Net_SessionTimesOut)
+{
+	NetSession a;
+	NetSession b;
+	FP_EXPECT(a.Start(0) && b.Start(0));
+	double now = 0;
+	b.Join(NetAddress::Loopback(a.GetPort()));
+	FP_EXPECT(Pump({ &a, &b }, now, [&]() { return a.GetPeers().Num() == 1 && b.GetPeers().Num() == 1; }));
+	Drain(a, NetEventType::PeerLeft);
+
+	// B goes silent without saying goodbye. A drops it once the timeout passes.
+	now += NetSession::Timeout + 1;
+	a.Update(now);
+	const Array<NetEvent> left = Drain(a, NetEventType::PeerLeft);
+	FP_EXPECT(left.Num() == 1 && left[0].Peer == b.GetLocalId());
+	FP_EXPECT(a.GetPeers().IsEmpty());
+
+	// Joining a port nobody answers on gives up.
+	UdpSocket silent;
+	FP_EXPECT(silent.Open(0));
+	NetSession c;
+	FP_EXPECT(c.Start(0));
+	c.Join(NetAddress::Loopback(silent.GetPort()));
+	c.Update(100);
+	c.Update(111);
+	FP_EXPECT(Drain(c, NetEventType::JoinFailed).Num() == 1);
+}
