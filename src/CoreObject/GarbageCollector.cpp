@@ -1,5 +1,6 @@
 #include "CoreObject/GarbageCollector.h"
 #include "HAL/PlatformMisc.h"
+#include "Core/Misc/ModuleContext.h"
 
 namespace FP
 {
@@ -67,7 +68,7 @@ namespace FP
 	GarbageCollector& GarbageCollector::Get()
 	{
 		static GarbageCollector collector;
-		return collector;
+		return ResolveShared(&ModuleContext::GarbageCollector, collector);
 	}
 
 	Object* GarbageCollector::Allocate(const Class* cls)

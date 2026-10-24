@@ -6,7 +6,7 @@ namespace FP::FieldSerializer
 {
 	namespace
 	{
-		void WriteQuoted(String& out, const String& text)
+		void WriteQuotedImpl(String& out, const String& text)
 		{
 			out += '"';
 			for (char c : text)
@@ -61,7 +61,7 @@ namespace FP::FieldSerializer
 				out.Appendf("%.9g %.9g %.9g %.9g", c.R, c.G, c.B, c.A);
 				break;
 			}
-			case FieldType::String: WriteQuoted(out, Get<String>(field, data)); break;
+			case FieldType::String: WriteQuotedImpl(out, Get<String>(field, data)); break;
 		}
 		out += '\n';
 	}
@@ -80,6 +80,11 @@ namespace FP::FieldSerializer
 				break;
 			case FieldType::String: field.Get<String>(data) = tokens.Num() > 1 ? tokens[1] : String(); break;
 		}
+	}
+
+	void AppendQuoted(String& out, const String& text)
+	{
+		WriteQuotedImpl(out, text);
 	}
 
 	void Copy(const FieldInfo& field, void* dst, const void* src)

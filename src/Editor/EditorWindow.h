@@ -7,6 +7,8 @@
 
 class QAction;
 class QComboBox;
+class QFileSystemWatcher;
+class QTabWidget;
 class QListWidget;
 class QPlainTextEdit;
 class QTimer;
@@ -18,7 +20,9 @@ namespace FP
 
 namespace FP::Editor
 {
+	class CodeEditor;
 	class InspectorPanel;
+	class ScriptBuilder;
 	class ViewportWidget;
 
 	class EditorWindow : public QMainWindow
@@ -36,9 +40,17 @@ namespace FP::Editor
 		void Play();
 		void Stop();
 		void Select(Entity entity);
+		ScriptBuilder* GetScriptBuilder() const { return m_ScriptBuilder; }
+
+		// Opens a script source file for editing.
+		void OpenScript(const QString& path);
+
+		// Creates Game/Scripts/<className>.cpp and opens it. Returns false and explains why on failure.
+		bool NewScript(const QString& className);
 
 	protected:
 		void closeEvent(QCloseEvent* event) override;
+		bool eventFilter(QObject* watched, QEvent* event) override;
 
 	private:
 		void BuildMenus();
@@ -61,6 +73,24 @@ namespace FP::Editor
 
 		static void LogSink(LogLevel level, const char* message, void* userData);
 
+		// Watches Game/Scripts and rebuilds after edits settle when auto reload is on.
+		void WatchScripts();
+		void OnScriptsChanged();
+		void OnScriptsBuilt(bool success);
+
+		// Script tabs next to the viewport.
+		CodeEditor* FindScriptTab(const QString& path) const;
+		void UpdateScriptTabTitle(CodeEditor* editor);
+		bool CloseScriptTab(int index);
+		bool ConfirmCloseScripts();
+		void ReloadScriptTabIfClean(const QString& path);
+
+		// Opens the file and line named in a compiler message. False when the text names none.
+		bool OpenBuildMessage(const QString& line);
+
+		// Ctrl+S saves the open script when one is showing, otherwise the scene.
+		void SaveCurrent();
+
 		StrongObjectPtr<World> m_World;
 		Entity m_Selected = NullEntity;
 		Guid m_SelectedGuid;
@@ -78,6 +108,11 @@ namespace FP::Editor
 		QAction* m_StopAction = nullptr;
 		QAction* m_View3DAction = nullptr;
 		QComboBox* m_ViewModeBox = nullptr;
+		ScriptBuilder* m_ScriptBuilder = nullptr;
+		QTabWidget* m_CentralTabs = nullptr;
+		QFileSystemWatcher* m_ScriptWatcher = nullptr;
+		QTimer* m_ScriptDebounce = nullptr;
+		bool m_AutoReloadScripts = true;
 
 		uint64 m_LastTicks = 0;
 		int32 m_HierarchyCount = -1;
