@@ -231,12 +231,25 @@ project "Game"
 	removefiles { ProjectDir .. "/Source/Scripts/**" }
 	EngineIncludes()
 
+-- HeaderTool: reads FPCLASS, FPPROPERTY and FPFUNCTION out of the scripts, like Unreal's header tool.
+-- Plain standard C++ with no engine code so it builds in seconds.
+project "HeaderTool"
+	kind "ConsoleApp"
+	files { "src/Tools/HeaderTool/**.h", "src/Tools/HeaderTool/**.cpp" }
+
+local ReflectionHeader = ProjectDir .. "/Intermediate/Generated/ScriptReflection.gen.h"
+
 -- GameScripts: C++ scripts in the project's Source/Scripts, built as a shared library the editor can hot reload.
 project "GameScripts"
 	kind "SharedLib"
 	targetprefix ""
 	files { ProjectDir .. "/Source/Scripts/**.h", ProjectDir .. "/Source/Scripts/**.cpp", "src/Engine/Scripting/Module/**.cpp" }
 	UseEngine(true)
+	-- Every build regenerates the reflection first, and every script sees it without an include.
+	dependson { "HeaderTool" }
+	prebuildmessage "Reflecting scripts"
+	prebuildcommands { '"%{wks.location}/../Binaries/%{cfg.buildcfg}/HeaderTool" "' .. ProjectDir .. '/Source/Scripts" "' .. ReflectionHeader .. '"' }
+	forceincludes { ReflectionHeader }
 	filter "system:windows"
 		-- A new PDB name per build so a debugger holding the old one never blocks a rebuild.
 		linkoptions { '/PDB:"$(OutDir)GameScripts_$([System.DateTime]::Now.Ticks).pdb"' }
@@ -263,5 +276,6 @@ project "Tests"
 	kind "ConsoleApp"
 	files { "src/Tests/**.h", "src/Tests/**.cpp" }
 	files { "src/Editor/AudioImport.h", "src/Editor/AudioImport.cpp" }
+	files { "src/Tools/HeaderTool/HeaderParser.h", "src/Tools/HeaderTool/HeaderParser.cpp" }
 	UseEngine(false)
 	dependson { "GameScripts" }

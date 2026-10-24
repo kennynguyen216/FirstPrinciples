@@ -9,6 +9,7 @@
 #include "Engine/Input.h"
 #include "Engine/Math.h"
 #include "Engine/Paths.h"
+#include "Engine/Random.h"
 #include "Engine/World.h"
 #include "Engine/Audio/AudioWorld.h"
 

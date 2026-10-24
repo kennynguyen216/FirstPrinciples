@@ -42,6 +42,7 @@ namespace FP
 		namespace fs = std::filesystem;
 		UnloadModule();
 		m_ModulePath = path;
+		m_AbiMismatch = false;
 
 		std::error_code ec;
 		const fs::path source(path.CStr());
@@ -87,7 +88,9 @@ namespace FP
 		}
 		if (abi() != ComputeScriptAbi())
 		{
-			FP_LOG_ERROR("Script module was built against different engine headers. Rebuild GameScripts.");
+			FP_LOG_ERROR("Scripts and this program were built from different engine code, so the scripts were not loaded. "
+				"Rebuild the scripts, or rebuild the program if it is the older one (Scripts > Rebuild Editor and Restart).");
+			m_AbiMismatch = true;
 			m_Shutdown = nullptr;
 			UnloadModule();
 			return false;

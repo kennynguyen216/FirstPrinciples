@@ -6,7 +6,12 @@ using namespace FP;
 class Rotator : public Script
 {
 public:
-	Vec3 DegreesPerSecond{ 0, 90, 0 };
+	FPPROPERTY()
+	Vec3 DegreesPerSecond{ 0, 90, 0 }; // spin around each axis
+
+	// Spins the other way.
+	FPFUNCTION()
+	void Reverse() { DegreesPerSecond = DegreesPerSecond * -1.0f; }
 
 	void OnUpdate(float deltaTime) override
 	{
@@ -14,7 +19,4 @@ public:
 	}
 };
 
-FP_SCRIPT(Rotator)
-{
-	fields.Field("DegreesPerSecond", &Rotator::DegreesPerSecond);
-}
+FP_SCRIPT(Rotator);

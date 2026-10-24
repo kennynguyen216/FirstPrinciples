@@ -18,6 +18,10 @@ namespace FP::Editor
 
 		// Starts a build. A build requested while one runs starts again once it finishes.
 		void Build();
+
+		// Deletes the scripts library, its objects and the generated reflection, then builds
+		// everything again from scratch. For when an incremental build gets stuck.
+		void Rebuild();
 		bool IsBuilding() const { return m_Process != nullptr; }
 
 		// Generates and builds the Editor of the project in projectDir, then emits ProjectBuilt.

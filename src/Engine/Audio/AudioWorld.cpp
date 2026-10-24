@@ -249,7 +249,7 @@ namespace FP
 			FP_LOG_WARN("Multiple audio listeners/cameras: using the earliest created eligible entity");
 		m_ListenerCandidates = std::move(candidates);
 		m_ListenerEntity = m_ListenerCandidates.empty() ? Entity(NullEntity) : m_ListenerCandidates.front();
-		m_Listener = m_ListenerEntity == NullEntity ? TransformComponent{} : m_World.Get<TransformComponent>(m_ListenerEntity);
+		m_Listener = m_ListenerEntity == NullEntity ? TransformComponent{} : m_World.GetWorldTransform(m_ListenerEntity);
 	}
 
 	void AudioWorld::ApplySpatial(Voice& voice)
@@ -265,7 +265,7 @@ namespace FP
 				voice.Params.LeftGain = voice.Params.RightGain = 0;
 				return;
 			}
-			position = transform->Position;
+			position = m_World.GetWorldPosition(voice.Owner);
 		}
 		const auto gains = CalculateAudioSpatialGains(position, m_Listener, voice.MinDistance, voice.MaxDistance);
 		voice.Params.LeftGain = gains.Left; voice.Params.RightGain = gains.Right;

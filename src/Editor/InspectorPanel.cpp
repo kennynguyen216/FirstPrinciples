@@ -28,9 +28,11 @@
 #include <QDropEvent>
 #include <QLineEdit>
 #include <QMimeData>
+#include <QMap>
 #include <QMenu>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSlider>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QToolButton>
@@ -42,6 +44,25 @@ namespace FP::Editor
 {
 	namespace
 	{
+		// "FieldOfView" reads as "Field Of View". Names that already have spaces are left alone.
+		QString DisplayName(const char* name)
+		{
+			const QString text = QString::fromUtf8(name);
+			if (text.contains(' '))
+				return text;
+			QString out;
+			for (int i = 0; i < text.size(); ++i)
+			{
+				const QChar c = text[i];
+				const bool startsWord = i > 0 && c.isUpper()
+					&& (text[i - 1].isLower() || text[i - 1].isDigit() || (i + 1 < text.size() && text[i + 1].isLower() && text[i - 1].isUpper()));
+				if (startsWord)
+					out += ' ';
+				out += c;
+			}
+			return out;
+		}
+
 		QDoubleSpinBox* MakeFloatBox()
 		{
 			QDoubleSpinBox* box = new QDoubleSpinBox();
@@ -324,6 +345,20 @@ namespace FP::Editor
 
 			DetailsSection* box = new DetailsSection(ToQString(slot.Name));
 			QVBoxLayout* boxLayout = box->Body();
+
+			// What the script does and when it runs, from its comments and the header tool.
+			if (type && (type->Description || type->Callbacks))
+			{
+				QString about = type->Description ? QString::fromUtf8(type->Description) : QString();
+				if (type->Callbacks)
+					about += QString(about.isEmpty() ? "" : "\n") + "Runs: " + QString::fromUtf8(type->Callbacks);
+				QLabel* label = new QLabel(about);
+				label->setWordWrap(true);
+				label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+				label->setStyleSheet("color: #9a9a9a; padding: 2px 2px 6px 2px;");
+				boxLayout->addWidget(label);
+			}
+
 			QFormLayout* form = MakeForm(boxLayout);
 			form->setRowWrapPolicy(QFormLayout::WrapLongRows); // script field names are often long
 
@@ -349,8 +384,50 @@ namespace FP::Editor
 						current->Properties = ScriptRuntime::CaptureProperties(*type, edit);
 					emit Modified();
 				};
+				// Fields keep their order. A category heading goes in wherever the category changes.
+				std::string_view category;
 				for (const FieldInfo& field : type->Fields)
+				{
+					const std::string_view next = field.Category ? field.Category : "";
+					if (next != category && !next.empty())
+					{
+						QLabel* heading = new QLabel(QString::fromUtf8(next.data(), static_cast<int>(next.size())));
+						heading->setStyleSheet("font-weight: bold; padding-top: 4px;");
+						form->addRow(heading);
+					}
+					category = next;
 					AddFieldEditor(form, field, data, changed);
+				}
+
+				// FPFUNCTION buttons call into the running script, so they only work while playing.
+				if (!type->Functions.IsEmpty())
+				{
+					QWidget* buttons = new QWidget();
+					QHBoxLayout* row = new QHBoxLayout(buttons);
+					row->setContentsMargins(0, 4, 0, 0);
+					row->setSpacing(4);
+					for (const ScriptFunction& function : type->Functions)
+					{
+						QPushButton* button = new QPushButton(DisplayName(function.Name));
+						const QString tip = function.Tooltip ? QString::fromUtf8(function.Tooltip) : QString();
+						m_Refreshers.push_back([this, index, button, tip]() {
+							const bool playing = SlotAt(index) && SlotAt(index)->Instance;
+							button->setEnabled(playing);
+							button->setToolTip(playing ? tip : (tip.isEmpty() ? QString() : tip + "\n") + "Press Play to call it");
+						});
+						auto call = function.Call;
+						connect(button, &QPushButton::clicked, this, [this, index, call]() {
+							if (ScriptSlot* current = SlotAt(index); current && current->Instance)
+							{
+								call(current->Instance);
+								emit Modified();
+							}
+						});
+						row->addWidget(button);
+					}
+					row->addStretch(1);
+					boxLayout->addWidget(buttons);
+				}
 				if (type->Fields.IsEmpty())
 				{
 					QLabel* none = new QLabel("No exposed fields");
@@ -387,23 +464,49 @@ namespace FP::Editor
 		add->setText("Add Script");
 		add->setPopupMode(QToolButton::InstantPopup);
 		QMenu* menu = new QMenu(add);
-		for (const ScriptType* type : runtime.GetTypes())
-		{
-			const String name = type->Name;
-			menu->addAction(ToQString(name), this, [this, name]() {
-				if (ScriptComponent* scripts = m_World->TryGet<ScriptComponent>(m_Entity))
-				{
-					scripts->Scripts.Emplace(name);
-					emit Modified();
-					RebuildLater();
-				}
-			});
-		}
+		FillScriptMenu(menu);
 		add->setMenu(menu);
-		add->setEnabled(!menu->isEmpty());
-		if (menu->isEmpty())
-			add->setToolTip("No scripts are compiled. Use Scripts > New Script.");
 		layout->addWidget(add, 0, Qt::AlignLeft);
+	}
+
+	void InspectorPanel::FillScriptMenu(QMenu* menu)
+	{
+		// Categories from FPCLASS become submenus. Scripts without one sit at the top level.
+		QMap<QString, QMenu*> categories;
+		for (const ScriptType* type : ScriptRuntime::Get().GetTypes())
+		{
+			QMenu* target = menu;
+			if (type->Category)
+			{
+				const QString category = QString::fromUtf8(type->Category);
+				if (!categories.contains(category))
+					categories.insert(category, menu->addMenu(category));
+				target = categories.value(category);
+			}
+			const String name = type->Name;
+			QAction* action = target->addAction(ToQString(name), this, [this, name]() { AttachScript(name); });
+			if (type->Description)
+				action->setToolTip(QString::fromUtf8(type->Description));
+		}
+		menu->setToolTipsVisible(true);
+		if (!menu->isEmpty())
+			menu->addSeparator();
+		menu->addAction(EditorIcons::Get(EditorIcon::Script), "New Script...", this, [this]() {
+			if (m_World && m_World->IsValid(m_Entity))
+				emit NewScriptRequested(m_World->Get<IdComponent>(m_Entity).Id);
+		});
+	}
+
+	void InspectorPanel::AttachScript(const String& name)
+	{
+		if (!m_World || !m_World->IsValid(m_Entity))
+			return;
+		ScriptComponent* scripts = m_World->TryGet<ScriptComponent>(m_Entity);
+		if (!scripts)
+			scripts = &m_World->Add<ScriptComponent>(m_Entity);
+		scripts->Scripts.Emplace(name);
+		emit Modified();
+		RebuildLater();
 	}
 
 	void InspectorPanel::StopPreview()
@@ -798,13 +901,24 @@ namespace FP::Editor
 			return;
 		}
 
-		SetTitle(ToQString(m_World->GetEntityName(m_Entity)), EditorIcon::Entity);
+		const bool isScene = m_World->Has<SceneComponent>(m_Entity);
+		SetTitle(isScene ? "Scene" : ToQString(m_World->GetEntityName(m_Entity)), isScene ? EditorIcon::Level : EditorIcon::Entity);
 		entt::registry& registry = m_World->GetRegistry();
 		QMenu* addMenu = new QMenu(m_AddButton);
+		if (isScene)
+		{
+			QLabel* hint = new QLabel("Scripts here run for the whole scene, for things like game rules, spawning and score.");
+			hint->setWordWrap(true);
+			hint->setStyleSheet("color: #9a9a9a; padding: 4px;");
+			m_Layout->addWidget(hint);
+		}
 
 		for (const ComponentInfo* info : ComponentRegistry::Get().GetAll())
 		{
 			if (!info->ShowInEditor)
+				continue;
+			// The scene entity is not placed anywhere, so its transform would only confuse.
+			if (isScene && info == ComponentRegistry::Get().Find<TransformComponent>())
 				continue;
 			if (!info->TryGet(registry, m_Entity))
 			{
@@ -835,23 +949,6 @@ namespace FP::Editor
 					if (info == ComponentRegistry::Get().Find<MeshComponent>() || info == ComponentRegistry::Get().Find<SkeletalMeshComponent>())
 						RebuildLater();
 				});
-				if (info == ComponentRegistry::Get().Find<AudioSourceComponent>())
-				{
-					QWidget* editor = form->itemAt(form->rowCount() - 1, QFormLayout::FieldRole)->widget();
-					if (QDoubleSpinBox* box = qobject_cast<QDoubleSpinBox*>(editor))
-					{
-						QSignalBlocker block(box);
-						const std::string_view name(field.Name);
-						if (name == "Volume") box->setRange(0, 1);
-						else if (name == "Pitch") box->setRange(0.25, 4);
-						else if (name == "MinDistance" || name == "MaxDistance") box->setRange(0.001, 1e9);
-					}
-					if (QSpinBox* box = qobject_cast<QSpinBox*>(editor))
-					{
-						QSignalBlocker block(box);
-						box->setRange(0, 255);
-					}
-				}
 			}
 
 			if (info == ComponentRegistry::Get().Find<MaterialComponent>())
@@ -873,6 +970,10 @@ namespace FP::Editor
 				AddAudioSection();
 		}
 
+		// Scripts can be added straight from here, without adding the Scripts component first.
+		addMenu->addSeparator();
+		QMenu* scriptMenu = addMenu->addMenu(EditorIcons::Get(EditorIcon::Script), "Script");
+		FillScriptMenu(scriptMenu);
 		m_AddButton->setMenu(addMenu);
 		m_AddButton->setEnabled(!addMenu->isEmpty());
 		RefreshValues();
@@ -915,7 +1016,7 @@ namespace FP::Editor
 				m_Refreshers.push_back([=]() {
 					if (void* c = data()) { QSignalBlocker block(box); box->setChecked(fieldCopy.Get<bool>(c)); }
 				});
-				form->addRow(field.Name, box);
+				form->addRow(DisplayName(field.Name), box);
 				break;
 			}
 			case FieldType::Int:
@@ -931,7 +1032,7 @@ namespace FP::Editor
 				m_Refreshers.push_back([=]() {
 					if (void* c = data(); c && !IsEditing(box)) { QSignalBlocker block(box); box->setValue(fieldCopy.Get<int32>(c)); }
 				});
-				form->addRow(field.Name, box);
+				form->addRow(DisplayName(field.Name), box);
 				break;
 			}
 			case FieldType::Float:
@@ -943,7 +1044,39 @@ namespace FP::Editor
 				m_Refreshers.push_back([=]() {
 					if (void* c = data(); c && !IsEditing(box)) { QSignalBlocker block(box); box->setValue(fieldCopy.Get<float>(c)); }
 				});
-				form->addRow(field.Name, box);
+				// Sliders only help on short ranges. Long ones just clamp the number.
+				if (!field.HasRange || field.Max <= field.Min || field.Max - field.Min > 1000)
+				{
+					form->addRow(DisplayName(field.Name), box);
+					break;
+				}
+				// A ranged float gets a slider next to its number for quick tuning.
+				QWidget* row = new QWidget();
+				QHBoxLayout* layout = new QHBoxLayout(row);
+				layout->setContentsMargins(0, 0, 0, 0);
+				layout->setSpacing(6);
+				QSlider* slider = new QSlider(Qt::Horizontal);
+				constexpr int steps = 1000;
+				slider->setRange(0, steps);
+				const float min = field.Min;
+				const float span = field.Max - field.Min;
+				connect(slider, &QSlider::valueChanged, this, [=](int value) { box->setValue(min + span * static_cast<float>(value) / steps); });
+				connect(box, &QDoubleSpinBox::valueChanged, this, [=](double value) {
+					QSignalBlocker block(slider);
+					slider->setValue(static_cast<int>(std::lround((value - min) / span * steps)));
+				});
+				// Refreshes set the number with its signals blocked, so the slider follows here.
+				m_Refreshers.push_back([=]() {
+					if (!slider->isSliderDown())
+					{
+						QSignalBlocker block(slider);
+						slider->setValue(static_cast<int>(std::lround((box->value() - min) / span * steps)));
+					}
+				});
+				box->setMaximumWidth(80);
+				layout->addWidget(slider, 1);
+				layout->addWidget(box);
+				form->addRow(DisplayName(field.Name), row);
 				break;
 			}
 			case FieldType::Vec2:
@@ -968,7 +1101,7 @@ namespace FP::Editor
 						if (!IsEditing(boxes[i])) { QSignalBlocker block(boxes[i]); boxes[i]->setValue(fieldCopy.Get<float[3]>(c)[i]); }
 					}
 				});
-				form->addRow(field.Name, row);
+				form->addRow(DisplayName(field.Name), row);
 				break;
 			}
 			case FieldType::Color:
@@ -995,7 +1128,7 @@ namespace FP::Editor
 					if (void* c = data())
 						SetSwatch(button, fieldCopy.Get<Color>(c));
 				});
-				form->addRow(field.Name, button);
+				form->addRow(DisplayName(field.Name), button);
 				break;
 			}
 			case FieldType::String:
@@ -1026,7 +1159,7 @@ namespace FP::Editor
 							combo->setCurrentText(ToQString(fieldCopy.Get<String>(c)));
 						}
 					});
-					form->addRow(field.Name, combo);
+					form->addRow(DisplayName(field.Name), combo);
 					break;
 				}
 
@@ -1087,9 +1220,38 @@ namespace FP::Editor
 						edit->setText(ToQString(fieldCopy.Get<String>(c)));
 					}
 				});
-				form->addRow(field.Name, row);
+				form->addRow(DisplayName(field.Name), row);
 				break;
 			}
 		}
+
+		// Hints that apply to every kind of field, on the row just added.
+		const int row = form->rowCount() - 1;
+		QWidget* label = form->itemAt(row, QFormLayout::LabelRole) ? form->itemAt(row, QFormLayout::LabelRole)->widget() : nullptr;
+		QWidget* editor = form->itemAt(row, QFormLayout::FieldRole) ? form->itemAt(row, QFormLayout::FieldRole)->widget() : nullptr;
+		if (field.Tooltip)
+		{
+			if (label) label->setToolTip(QString::fromUtf8(field.Tooltip));
+			if (editor) editor->setToolTip(QString::fromUtf8(field.Tooltip));
+		}
+		if (editor && field.HasRange && field.Max > field.Min)
+		{
+			// Blocked so clamping the blank editor never writes into the data before it is shown.
+			QList<QDoubleSpinBox*> boxes = editor->findChildren<QDoubleSpinBox*>();
+			if (QDoubleSpinBox* box = qobject_cast<QDoubleSpinBox*>(editor))
+				boxes.append(box);
+			for (QDoubleSpinBox* box : boxes)
+			{
+				QSignalBlocker block(box);
+				box->setRange(field.Min, field.Max);
+			}
+			if (QSpinBox* box = qobject_cast<QSpinBox*>(editor))
+			{
+				QSignalBlocker block(box);
+				box->setRange(static_cast<int>(std::ceil(field.Min)), static_cast<int>(std::floor(field.Max)));
+			}
+		}
+		if (editor && field.ReadOnly)
+			editor->setEnabled(false);
 	}
 }

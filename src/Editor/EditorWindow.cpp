@@ -29,6 +29,8 @@
 #include <SDL3/SDL_timer.h>
 #include <SDL3/SDL_events.h>
 
+#include <QApplication>
+#include <QClipboard>
 #include <QCloseEvent>
 #include <QCheckBox>
 #include <QDialog>
@@ -165,6 +167,34 @@ namespace FP::Editor
 	{
 		m_Hierarchy = new HierarchyPanel();
 		connect(m_Hierarchy, &HierarchyPanel::EntityClicked, this, [this](const Guid& id) { Select(m_World->FindEntityByGuid(id)); });
+		connect(m_Hierarchy, &HierarchyPanel::SceneClicked, this, [this]() {
+			// Made on first use, so scenes without scene scripts stay as they were.
+			const bool existed = m_World->GetSceneEntity() != NullEntity;
+			const Entity scene = m_World->GetOrCreateSceneEntity();
+			if (!existed)
+			{
+				MarkDirty();
+				RefreshHierarchy();
+			}
+			Select(scene);
+		});
+		connect(m_Hierarchy, &HierarchyPanel::ParentRequested, this, [this](const Guid& child, const Guid& parent) {
+			const Entity parentEntity = parent == Guid() ? NullEntity : m_World->FindEntityByGuid(parent);
+			if (!m_World->SetParent(m_World->FindEntityByGuid(child), parentEntity))
+			{
+				FP_LOG_WARN("An entity cannot be parented to itself or one of its children");
+				return;
+			}
+			MarkDirty();
+			RefreshHierarchy();
+		});
+		connect(m_Hierarchy, &HierarchyPanel::CreateChildRequested, this, [this](const Guid& parent) {
+			const Entity entity = m_World->CreateEntity("Child");
+			m_World->SetParent(entity, m_World->FindEntityByGuid(parent), false);
+			MarkDirty();
+			RefreshHierarchy();
+			Select(entity);
+		});
 		PlaceEntitiesPanel* placeEntities = new PlaceEntitiesPanel();
 		connect(placeEntities, &PlaceEntitiesPanel::CreateRequested, this, [this](const QString& kind) { CreateEntity(kind); });
 		QDockWidget* placeDock = DockTab::Create(this, "Place Entities", EditorIcon::PlaceEntities, placeEntities);
@@ -173,6 +203,7 @@ namespace FP::Editor
 		m_Inspector = new InspectorPanel();
 		connect(m_Inspector, &InspectorPanel::ImportAudioRequested, this, [this]() { ImportAudio(true); });
 		connect(m_Inspector, &InspectorPanel::OpenScriptRequested, this, &EditorWindow::OpenScript);
+		connect(m_Inspector, &InspectorPanel::NewScriptRequested, this, &EditorWindow::NewScriptFor);
 		connect(m_Inspector, &InspectorPanel::Modified, this, [this]() {
 			MarkDirty();
 			RefreshHierarchy();
@@ -304,8 +335,13 @@ namespace FP::Editor
 		}
 		entity->addAction("Create &Point Light", this, [this]() { CreateEntity("Point Light"); });
 		entity->addAction("Create &Directional Light", this, [this]() { CreateEntity("Directional Light"); });
+		// Text fields take these keys first, so they still copy, paste and erase text there.
+		entity->addAction("&Copy", QKeySequence::Copy, this, &EditorWindow::CopySelected);
+		entity->addAction("&Paste", QKeySequence::Paste, this, &EditorWindow::Paste);
 		entity->addAction("&Duplicate", QKeySequence("Ctrl+D"), this, &EditorWindow::DuplicateSelected);
-		entity->addAction("De&lete", QKeySequence::Delete, this, &EditorWindow::DeleteSelected);
+		// Explicit keys, since the platform Delete sequence on macOS also holds Ctrl+D.
+		QAction* deleteAction = entity->addAction("De&lete", this, &EditorWindow::DeleteSelected);
+		deleteAction->setShortcuts({ QKeySequence(Qt::Key_Delete), QKeySequence(Qt::Key_Backspace) });
 
 		// Closed panels come back from here, and Reset Layout undoes any docking.
 		QMenu* window = menuBar()->addMenu("&Window");
@@ -331,11 +367,20 @@ namespace FP::Editor
 		});
 		scripts->addSeparator();
 		scripts->addAction("&Reload Scripts", QKeySequence("Ctrl+R"), m_ScriptBuilder, &ScriptBuilder::Build);
+		scripts->addAction("Re&build Scripts (Clean)", m_ScriptBuilder, &ScriptBuilder::Rebuild)
+			->setToolTip("Deletes everything built from the scripts and builds them again from scratch");
+		scripts->addAction("Rebuild &Editor and Restart", this, &EditorWindow::RebuildEditorAndRestart)
+			->setToolTip("Builds this editor from the current engine code, then reopens it on this scene");
+		scripts->setToolTipsVisible(true);
 		QAction* autoReload = scripts->addAction("&Auto Reload");
 		autoReload->setCheckable(true);
 		autoReload->setChecked(m_AutoReloadScripts);
 		connect(autoReload, &QAction::toggled, this, [this](bool on) { m_AutoReloadScripts = on; });
 		WatchScripts();
+		// Scripts built from other engine code were refused at startup. Building them again
+		// fixes it when they are the older side, and OnScriptsBuilt handles the other case.
+		if (ScriptRuntime::Get().HadAbiMismatch())
+			m_ScriptBuilder->Build();
 
 		QToolBar* toolbar = addToolBar("Main");
 		toolbar->setObjectName("MainToolbar");
@@ -548,6 +593,25 @@ namespace FP::Editor
 
 	void EditorWindow::DropAsset(const QString& path, Vec3 point, Entity target)
 	{
+		// Scripts live in Source/Scripts rather than Content, so they come before the check below.
+		if (ContentBrowser::AssetKind(path) == "Script")
+		{
+			if (!m_World->IsValid(target))
+			{
+				FP_LOG_WARN("Drop a script onto an entity to add it");
+				return;
+			}
+			// The class written in that file, falling back to the file name like New Script makes.
+			String script = ToString(QFileInfo(path).completeBaseName());
+			const QString dropped = QFileInfo(path).canonicalFilePath();
+			for (const ScriptType* type : ScriptRuntime::Get().GetTypes())
+			{
+				if (type->SourceFile && QFileInfo(ScriptBuilder::ResolveSourcePath(QString::fromUtf8(type->SourceFile))).canonicalFilePath() == dropped)
+					script = type->Name;
+			}
+			AttachScript(target, script);
+			return;
+		}
 		const QString relative = QDir(ToQString(Paths::GetContentDir())).relativeFilePath(path);
 		if (relative.startsWith(".."))
 		{
@@ -869,10 +933,15 @@ namespace FP::Editor
 			QMessageBox::warning(this, "Open Project", "The project did not build. The Output Log has the errors.");
 			return;
 		}
+		// Restarting this project's editor reopens the scene it was on.
+		QStringList arguments;
+		const QDir content(ToQString(Paths::GetContentDir()));
+		if (QDir(dir) == QDir(ToQString(Paths::GetProjectDir())) && !m_ScenePath.isEmpty() && !content.relativeFilePath(m_ScenePath).startsWith(".."))
+			arguments = { "--scene", content.relativeFilePath(m_ScenePath) };
 		// Closing asks about unsaved work first, and the other editor only starts once this one is gone.
 		if (!close())
 			return;
-		if (!QProcess::startDetached(ScriptBuilder::EditorPath(dir), {}, dir))
+		if (!QProcess::startDetached(ScriptBuilder::EditorPath(dir), arguments, dir))
 			FP_LOG_ERROR("Could not start %s", ScriptBuilder::EditorPath(dir).toUtf8().constData());
 	}
 
@@ -887,6 +956,64 @@ namespace FP::Editor
 		// Running scripts move to the new code with their field values.
 		if (ScriptRuntime::Get().Reload())
 			FP_LOG("Scripts reloaded%s", m_World->IsPlaying() ? " while playing" : "");
+		else if (ScriptRuntime::Get().HadAbiMismatch())
+		{
+			// The scripts were just built from the current code, so this editor is the old side.
+			FP_LOG_WARN("This editor is older than the engine code the scripts were built from. Use Scripts > Rebuild Editor and Restart.");
+			const auto answer = QMessageBox::question(this, "Editor out of date",
+				"The scripts were built from newer engine code than this editor, so they cannot load.\n\n"
+				"Rebuild the editor and restart it on this scene? This can take a few minutes.",
+				QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+			if (answer == QMessageBox::Yes)
+				RebuildEditorAndRestart();
+			return;
+		}
+		AttachPendingScripts();
+	}
+
+	void EditorWindow::RebuildEditorAndRestart()
+	{
+		if (m_World->IsPlaying())
+			Stop();
+		FP_LOG("Rebuilding the editor. It restarts on this scene when the build is done.");
+		m_ScriptBuilder->BuildProject(ToQString(Paths::GetProjectDir()));
+	}
+
+	void EditorWindow::NewScriptFor(const Guid& entity)
+	{
+		const QString name = QInputDialog::getText(this, "New Script", "Class name:").trimmed();
+		if (name.isEmpty() || !NewScript(name))
+			return;
+		// It attaches itself once it compiles, so the user can keep editing in the meantime.
+		m_PendingAttach.append({ entity, ToString(name) });
+		FP_LOG("%s will be added to the entity once it compiles", name.toUtf8().constData());
+		m_ScriptBuilder->Build();
+	}
+
+	void EditorWindow::AttachPendingScripts()
+	{
+		for (int i = m_PendingAttach.size() - 1; i >= 0; --i)
+		{
+			const PendingAttach pending = m_PendingAttach[i];
+			const Entity entity = m_World->FindEntityByGuid(pending.Entity);
+			if (!ScriptRuntime::Get().FindType(pending.Script.View()) && entity != NullEntity)
+				continue; // not built yet, try again after the next build
+			m_PendingAttach.removeAt(i);
+			if (entity != NullEntity)
+				AttachScript(entity, pending.Script);
+		}
+	}
+
+	void EditorWindow::AttachScript(Entity entity, const String& name)
+	{
+		ScriptComponent* scripts = m_World->TryGet<ScriptComponent>(entity);
+		if (!scripts)
+			scripts = &m_World->Add<ScriptComponent>(entity);
+		scripts->Scripts.Emplace(name);
+		MarkDirty();
+		if (entity == m_Selected)
+			m_Inspector->SetTarget(m_World.Get(), m_Selected);
+		FP_LOG("Added %s to %s", name.CStr(), m_World->GetEntityName(entity).CStr());
 	}
 
 	void EditorWindow::Tick()
@@ -1178,32 +1305,49 @@ namespace FP::Editor
 		return entity;
 	}
 
+	namespace
+	{
+		// First line of entities on the clipboard, so pasting ignores any other text.
+		constexpr const char* ClipboardHeader = "# FirstPrinciples entities\n";
+	}
+
+	void EditorWindow::CopySelected()
+	{
+		if (!m_World->IsValid(m_Selected))
+			return;
+		const String text = SceneSerializer::SaveEntityTreeToString(*m_World.Get(), m_Selected);
+		QApplication::clipboard()->setText(QString(ClipboardHeader) + ToQString(text));
+	}
+
+	void EditorWindow::Paste()
+	{
+		const QString text = QApplication::clipboard()->text();
+		if (!text.startsWith(ClipboardHeader))
+			return;
+		PasteEntities(ToString(text), "");
+	}
+
 	void EditorWindow::DuplicateSelected()
 	{
 		if (!m_World->IsValid(m_Selected))
 			return;
-		// Copies every registered component through its copy hook so new components work with no extra code.
-		entt::registry& registry = m_World->GetRegistry();
-		const Entity source = m_Selected;
-		const Entity copy = m_World->CreateEmptyEntity();
-		for (const ComponentInfo* info : ComponentRegistry::Get().GetAll())
-		{
-			if (info->TypeId == entt::type_hash<IdComponent>::value())
-				continue;
-			if (!info->TryGet(registry, source))
-				continue;
-			// Add can move existing storage so fetch the source after it.
-			void* dst = info->Add(registry, copy);
-			void* src = info->TryGet(registry, source);
-			info->Copy(dst, src);
-		}
-		if (NameComponent* name = m_World->TryGet<NameComponent>(copy))
-			name->Name += " Copy";
-		if (TransformComponent* transform = m_World->TryGet<TransformComponent>(copy))
+		PasteEntities(SceneSerializer::SaveEntityTreeToString(*m_World.Get(), m_Selected), " Copy");
+	}
+
+	void EditorWindow::PasteEntities(const String& text, const char* nameSuffix)
+	{
+		// Copies get new ids, keep their children and land next to the original.
+		const Array<Entity> copies = SceneSerializer::LoadEntitiesAsCopies(*m_World.Get(), text.View());
+		if (copies.IsEmpty())
+			return;
+		const Entity root = copies[0];
+		if (NameComponent* name = m_World->TryGet<NameComponent>(root))
+			name->Name += nameSuffix;
+		if (TransformComponent* transform = m_World->TryGet<TransformComponent>(root))
 			transform->Position += Vec3(0.5f, -0.5f, 0);
 		MarkDirty();
 		RefreshHierarchy();
-		Select(copy);
+		Select(root);
 	}
 
 	void EditorWindow::DeleteSelected()

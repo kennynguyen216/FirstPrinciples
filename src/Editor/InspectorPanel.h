@@ -19,6 +19,8 @@ class QLineEdit;
 class QToolButton;
 class QVBoxLayout;
 
+class QMenu;
+
 namespace FP::Editor
 {
 	// Builds editing widgets for the selected entity from the registered component fields.
@@ -49,6 +51,9 @@ namespace FP::Editor
 		// The user asked to edit a script's source file.
 		void OpenScriptRequested(const QString& path);
 
+		// The user wants a new script class made and attached to this entity once it builds.
+		void NewScriptRequested(const FP::Guid& entity);
+
 	public:
 		using DataFn = std::function<void*()>;
 		using ChangedFn = std::function<void()>;
@@ -70,6 +75,9 @@ namespace FP::Editor
 		void AddMaterialEditor(const String& contentPath, const QString& title);
 		void AddAssetView();
 		void AddScriptsSection(QVBoxLayout* layout);
+		// Every compiled script grouped by category, plus New Script at the bottom.
+		void FillScriptMenu(QMenu* menu);
+		void AttachScript(const String& name);
 		ScriptSlot* SlotAt(int32 index) const;
 
 		// Throwaway instances that hold a script's field values while editing outside play.

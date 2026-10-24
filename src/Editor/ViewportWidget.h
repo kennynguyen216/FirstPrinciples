@@ -6,6 +6,8 @@
 #include <QImage>
 #include <QWidget>
 
+#include <optional>
+
 namespace FP::Editor
 {
 	// Renders the world on the GPU into an offscreen texture and paints the pixels with Qt.
@@ -92,7 +94,8 @@ namespace FP::Editor
 		// Gizmos first, then the surface the ray hits. 2D prefers the highest sprite layer.
 		Entity Pick(Vec2 pixel) const;
 		Entity PickGizmo(Vec2 pixel) const;
-		TransformComponent* SelectedTransform() const;
+		// The selected entity's world transform, or nothing when there is none.
+		std::optional<TransformComponent> SelectedTransform() const;
 
 		// The 3D editor camera, placed behind the orbit target.
 		TransformComponent EditorCamera() const;
