@@ -196,3 +196,46 @@ FP_TEST(Animation_StateMachineRebuildsInPlace)
 	machine.Update(5, ClipLength);
 	FP_EXPECT(machine.GetCurrentState()->Name == "Walk");
 }
+
+#include "Engine/Animation/Animator.h"
+#include "Engine/Engine.h"
+
+FP_TEST(Animation_AnimatorBlendsClipsIntoPoses)
+{
+	SkeletalModel model;
+	FP_EXPECT(ParseGltf(TestGltf, model));
+
+	// Without states the fallback clip loops.
+	AnimatorInstance animator;
+	animator.Tick(model, 0.5f, "Bend");
+	FP_EXPECT(Near(animator.GetPose()[1].Rotation.ToEuler(), { 0, 0, 45 }));
+	animator.Tick(model, 1.0f, "Bend");
+	FP_EXPECT(Near(animator.GetPose()[1].Rotation.ToEuler(), { 0, 0, 45 }));
+
+	// Halfway through a blend from the rest pose to the end of Bend. Scripts see the base class.
+	Animator& script = animator;
+	script.AddState("Rest", "");
+	script.AddState("Bent", "Bend", false);
+	script.AddTransition("Rest", "Bent", 1).When("Go");
+	animator.Tick(model, 0, "");
+	FP_EXPECT(animator.IsInState("Rest"));
+	script.SetBool("Go", true);
+	animator.Tick(model, 0, "");
+	FP_EXPECT(animator.IsInState("Bent"));
+	animator.Tick(model, 0.5f, "");
+	FP_EXPECT(Near(animator.GetPose()[1].Rotation.ToEuler(), { 0, 0, 22.5f }));
+	FP_EXPECT(std::fabs(animator.GetNormalizedTime() - 0.5f) < 1e-4f);
+	FP_EXPECT(animator.GetClipLength("Bend") == 1);
+	animator.Tick(model, 1, "");
+	FP_EXPECT(Near(animator.GetPose()[1].Rotation.ToEuler(), { 0, 0, 90 }));
+
+	// Worlds hand out one animator per entity that has an Animator component.
+	Engine::RegisterEngineComponents();
+	StrongObjectPtr<World> world(NewObject<World>());
+	const Entity plain = world->CreateEntity("Plain");
+	const Entity animated = world->CreateEntity("Animated");
+	world->Add<AnimatorComponent>(animated);
+	FP_EXPECT(!world->GetAnimator(plain));
+	Animator* first = world->GetAnimator(animated);
+	FP_EXPECT(first && first == world->GetAnimator(animated));
+}

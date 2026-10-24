@@ -77,6 +77,15 @@ namespace FP
 		String Mesh;
 	};
 
+	// Plays animation clips on the entity's SkeletalMeshComponent while the game runs.
+	// Loops Clip unless a script builds a state machine with GetAnimator().
+	struct AnimatorComponent
+	{
+		String Clip;
+		float Speed = 1;
+		bool Playing = true;
+	};
+
 	// Bone matrices for a skeletal mesh this frame, written by the AnimationSystem.
 	// Not saved and not shown in the editor.
 	struct SkeletalPoseComponent

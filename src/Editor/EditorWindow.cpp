@@ -22,6 +22,7 @@
 #include "Engine/SceneSerializer.h"
 #include "Engine/Scripting/ScriptRuntime.h"
 #include "Engine/Scripting/ScriptSystem.h"
+#include "Engine/Animation/AnimationSystem.h"
 #include "Game.h"
 
 #include <SDL3/SDL_timer.h>
@@ -1214,6 +1215,7 @@ namespace FP::Editor
 		// Snapshot the scene so Stop can put everything back.
 		m_PlaySnapshot = SceneSerializer::SaveToString(*m_World.Get());
 		m_World->AddSystem<ScriptSystem>();
+		m_World->AddSystem<AnimationSystem>();
 		Game::AddSystems(*m_World.Get());
 		m_World->BeginPlay();
 		m_Viewport->SetPlaying(true);

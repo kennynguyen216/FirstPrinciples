@@ -1,4 +1,5 @@
 #include "Engine/World.h"
+#include "Engine/Animation/Animator.h"
 #include "Engine/Audio/AudioWorld.h"
 #include "Engine/ComponentRegistry.h"
 
@@ -27,6 +28,11 @@ namespace FP
 	{
 		if (!m_Audio) m_Audio = std::make_unique<AudioWorld>(*this);
 		return *m_Audio;
+	}
+
+	Animator* World::GetAnimator(Entity entity)
+	{
+		return AnimatorInstance::For(*this, entity);
 	}
 
 	Entity World::CreateEntity(String name, const Guid& id)

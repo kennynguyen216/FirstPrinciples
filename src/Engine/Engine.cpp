@@ -103,6 +103,11 @@ namespace FP::Engine
 		registry.Register<SkeletalMeshComponent>("SkeletalMesh")
 			.Field("Mesh", &SkeletalMeshComponent::Mesh).AssetPath(SkeletalMeshFilter);
 
+		registry.Register<AnimatorComponent>("Animator")
+			.Field("Clip", &AnimatorComponent::Clip)
+			.Field("Speed", &AnimatorComponent::Speed)
+			.Field("Playing", &AnimatorComponent::Playing);
+
 		registry.Register<MaterialComponent>("Material")
 			.Field("Material", &MaterialComponent::Material).AssetPath("Materials (*.material)")
 			.CustomSerializer(&WriteMaterialComponent, &ReadMaterialComponent);
