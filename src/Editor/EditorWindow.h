@@ -124,6 +124,9 @@ namespace FP::Editor
 		// Ctrl+S saves the open script when one is showing, otherwise the scene.
 		void SaveCurrent();
 
+		// Saves the scene, changed materials and every edited script tab.
+		void SaveAll();
+
 		StrongObjectPtr<World> m_World;
 		Entity m_Selected = NullEntity;
 		Guid m_SelectedGuid;

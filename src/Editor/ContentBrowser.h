@@ -10,6 +10,7 @@ class QLineEdit;
 class QListWidget;
 class QListWidgetItem;
 class QTimer;
+class QToolButton;
 class QTreeWidget;
 class QTreeWidgetItem;
 
@@ -26,6 +27,8 @@ namespace FP::Editor
 		explicit ContentBrowser(QWidget* parent = nullptr);
 
 		QString GetCurrentFolder() const { return m_CurrentFolder; }
+
+		// Shows a folder. Back and forward remember the folders shown before.
 		void ShowFolder(const QString& absolutePath);
 
 		// Rebuilds the folder tree and file list from disk, keeping the current folder.
@@ -46,6 +49,9 @@ namespace FP::Editor
 		// The user asked for a new script. The editor owns script creation.
 		void NewScriptRequested();
 
+		// The toolbar's Save All. The editor owns the scene and script tabs.
+		void SaveAllRequested();
+
 		// Files on disk were renamed and references rewritten, so open scenes may be stale.
 		void ReferencesChanged();
 
@@ -64,6 +70,11 @@ namespace FP::Editor
 		QString AskForName(const QString& title, const QString& initial);
 		void SelectPath(const QString& path);
 
+		void ImportFiles();
+		void GoBack();
+		void GoForward();
+		void RebuildCrumbs();
+
 		void RebuildTree();
 		void RebuildFiles();
 		void AddFolderItems(QTreeWidgetItem* parent, const QString& path);
@@ -75,7 +86,12 @@ namespace FP::Editor
 		QTreeWidget* m_Folders = nullptr;
 		QListWidget* m_Files = nullptr;
 		QLineEdit* m_Search = nullptr;
-		QLabel* m_Location = nullptr;
+		QWidget* m_Crumbs = nullptr;
+		QLabel* m_Count = nullptr;
+		QToolButton* m_Back = nullptr;
+		QToolButton* m_Forward = nullptr;
+		QStringList m_BackHistory;
+		QStringList m_ForwardHistory;
 		QFileSystemWatcher* m_Watcher = nullptr;
 		QTimer* m_RefreshTimer = nullptr;
 

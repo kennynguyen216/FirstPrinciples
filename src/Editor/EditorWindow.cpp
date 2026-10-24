@@ -191,6 +191,7 @@ namespace FP::Editor
 		resizeDocks({ contentDock }, { 280 }, Qt::Vertical);
 
 		connect(m_ContentBrowser, &ContentBrowser::AssetSelected, this, &EditorWindow::ShowAsset);
+		connect(m_ContentBrowser, &ContentBrowser::SaveAllRequested, this, &EditorWindow::SaveAll);
 		connect(m_ContentBrowser, &ContentBrowser::NewScriptRequested, this, [this]() {
 			const QString name = QInputDialog::getText(this, "New Script", "Class name:");
 			if (!name.isEmpty())
@@ -642,6 +643,21 @@ namespace FP::Editor
 			return;
 		}
 		SaveScene();
+	}
+
+	void EditorWindow::SaveAll()
+	{
+		for (int i = 0; i < m_CentralTabs->count(); ++i)
+		{
+			CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->widget(i));
+			if (editor && editor->IsDirty() && !editor->Save())
+				FP_LOG_ERROR("Could not save %s", editor->GetPath().toUtf8().constData());
+		}
+		// Saving the scene also writes every changed material.
+		if (m_Dirty || m_ScenePath.isEmpty())
+			SaveScene();
+		else
+			MaterialLibrary::Get().SaveDirty();
 	}
 
 	bool EditorWindow::NewScript(const QString& className)

@@ -1,4 +1,6 @@
 #include "Editor/ContentBrowser.h"
+#include "Editor/EditorIcons.h"
+#include "Editor/EditorStyle.h"
 #include "Engine/Material.h"
 #include "Engine/Paths.h"
 #include "Core/Misc/Guid.h"
@@ -8,6 +10,8 @@
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
+#include <QFileDialog>
+#include <QToolButton>
 #include <QInputDialog>
 #include <QKeyEvent>
 #include <QMenu>
@@ -67,16 +71,57 @@ namespace FP::Editor
 		layout->setContentsMargins(4, 4, 4, 4);
 		layout->setSpacing(4);
 
+		// Toolbar: create, import and save, then back, forward and the folder path.
 		QHBoxLayout* bar = new QHBoxLayout();
-		m_Location = new QLabel();
-		m_Location->setTextInteractionFlags(Qt::TextSelectableByMouse);
+		bar->setSpacing(4);
+		QToolButton* add = new QToolButton();
+		add->setIcon(EditorIcons::Get(EditorIcon::Add, EditorStyle::Play));
+		add->setText("Add");
+		add->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+		add->setPopupMode(QToolButton::InstantPopup);
+		QMenu* addMenu = new QMenu(add);
+		addMenu->addAction(EditorIcons::Get(EditorIcon::Folder), "New Folder...", this, &ContentBrowser::NewFolder);
+		addMenu->addAction(EditorIcons::Get(EditorIcon::Material), "New Material...", this, &ContentBrowser::NewMaterial);
+		addMenu->addAction(EditorIcons::Get(EditorIcon::Scene), "New Scene...", this, &ContentBrowser::NewScene);
+		addMenu->addAction(EditorIcons::Get(EditorIcon::Script), "New Script...", this, [this]() { emit NewScriptRequested(); });
+		add->setMenu(addMenu);
+		bar->addWidget(add);
+
+		auto flatButton = [](EditorIcon icon, const QString& text, const QString& tip) {
+			QToolButton* button = new QToolButton();
+			button->setIcon(EditorIcons::Get(icon));
+			button->setText(text);
+			button->setToolTip(tip);
+			button->setAutoRaise(true);
+			button->setToolButtonStyle(text.isEmpty() ? Qt::ToolButtonIconOnly : Qt::ToolButtonTextBesideIcon);
+			button->setStyleSheet("QToolButton { background: transparent; border: none; padding: 4px 6px; } QToolButton:hover { background: #383838; border-radius: 4px; }");
+			return button;
+		};
+		QToolButton* import = flatButton(EditorIcon::Import, "Import", "Copy files into this folder");
+		connect(import, &QToolButton::clicked, this, &ContentBrowser::ImportFiles);
+		bar->addWidget(import);
+		QToolButton* saveAll = flatButton(EditorIcon::SaveAll, "Save All", "Save the scene, materials and scripts");
+		connect(saveAll, &QToolButton::clicked, this, &ContentBrowser::SaveAllRequested);
+		bar->addWidget(saveAll);
+		m_Back = flatButton(EditorIcon::Back, "", "Back");
+		m_Forward = flatButton(EditorIcon::Forward, "", "Forward");
+		connect(m_Back, &QToolButton::clicked, this, &ContentBrowser::GoBack);
+		connect(m_Forward, &QToolButton::clicked, this, &ContentBrowser::GoForward);
+		bar->addWidget(m_Back);
+		bar->addWidget(m_Forward);
+
+		m_Crumbs = new QWidget();
+		QHBoxLayout* crumbs = new QHBoxLayout(m_Crumbs);
+		crumbs->setContentsMargins(0, 0, 0, 0);
+		crumbs->setSpacing(0);
+		bar->addWidget(m_Crumbs, 1);
+		layout->addLayout(bar);
+
 		m_Search = new QLineEdit();
 		m_Search->setPlaceholderText("Search");
+		m_Search->setProperty("search", true);
+		m_Search->addAction(EditorIcons::Get(EditorIcon::Search), QLineEdit::LeadingPosition);
 		m_Search->setClearButtonEnabled(true);
-		m_Search->setMaximumWidth(240);
-		bar->addWidget(m_Location, 1);
-		bar->addWidget(m_Search);
-		layout->addLayout(bar);
 
 		QSplitter* split = new QSplitter(Qt::Horizontal);
 		m_Folders = new QTreeWidget();
@@ -93,8 +138,27 @@ namespace FP::Editor
 		m_Files->setWordWrap(true);
 		m_Files->setUniformItemSizes(true);
 		m_Files->setSelectionMode(QAbstractItemView::ExtendedSelection);
-		split->addWidget(m_Folders);
-		split->addWidget(m_Files);
+		QWidget* folderPane = new QWidget();
+		QVBoxLayout* folderLayout = new QVBoxLayout(folderPane);
+		folderLayout->setContentsMargins(0, 0, 0, 0);
+		folderLayout->setSpacing(0);
+		QLabel* project = new QLabel(QDir(ProjectDir()).dirName());
+		project->setStyleSheet("background: #2f2f2f; font-weight: bold; color: #ffffff; padding: 6px 8px;");
+		folderLayout->addWidget(project);
+		folderLayout->addWidget(m_Folders, 1);
+
+		QWidget* filePane = new QWidget();
+		QVBoxLayout* fileLayout = new QVBoxLayout(filePane);
+		fileLayout->setContentsMargins(6, 0, 0, 0);
+		fileLayout->setSpacing(4);
+		fileLayout->addWidget(m_Search);
+		fileLayout->addWidget(m_Files, 1);
+		m_Count = new QLabel();
+		m_Count->setStyleSheet("padding: 2px 4px;");
+		fileLayout->addWidget(m_Count);
+
+		split->addWidget(folderPane);
+		split->addWidget(filePane);
 		split->setStretchFactor(1, 1);
 		split->setSizes({ 180, 600 });
 		layout->addWidget(split, 1);
@@ -439,7 +503,13 @@ namespace FP::Editor
 
 	void ContentBrowser::ShowFolder(const QString& absolutePath)
 	{
-		m_CurrentFolder = QDir::cleanPath(absolutePath);
+		const QString folder = QDir::cleanPath(absolutePath);
+		if (folder != m_CurrentFolder && !m_CurrentFolder.isEmpty())
+		{
+			m_BackHistory.append(m_CurrentFolder);
+			m_ForwardHistory.clear();
+		}
+		m_CurrentFolder = folder;
 		RebuildFiles();
 
 		// Keep the tree selection in step without bouncing back into this function.
@@ -495,7 +565,7 @@ namespace FP::Editor
 		m_Files->clear();
 		const QString filter = m_Search->text().trimmed();
 		const QDir project(ProjectDir());
-		m_Location->setText(project.relativeFilePath(m_CurrentFolder) + (filter.isEmpty() ? "" : QString("  (searching for \"%1\")").arg(filter)));
+		RebuildCrumbs();
 
 		QFileInfoList entries;
 		if (filter.isEmpty())
@@ -523,6 +593,93 @@ namespace FP::Editor
 			item->setToolTip(QString("%1\n%2").arg(project.relativeFilePath(info.absoluteFilePath()), info.isDir() ? "Folder" : AssetKind(info.fileName())));
 			m_Files->addItem(item);
 		}
+		m_Count->setText(QString("%1 items%2").arg(m_Files->count()).arg(filter.isEmpty() ? "" : QString(" matching \"%1\"").arg(filter)));
+	}
+
+	void ContentBrowser::RebuildCrumbs()
+	{
+		// All > Content > Materials, each one a button that jumps there.
+		QLayout* layout = m_Crumbs->layout();
+		while (QLayoutItem* item = layout->takeAt(0))
+		{
+			delete item->widget();
+			delete item;
+		}
+		auto addCrumb = [this, layout](const QString& text, const QString& path, bool folderIcon) {
+			QToolButton* crumb = new QToolButton();
+			crumb->setText(text);
+			if (folderIcon)
+			{
+				crumb->setIcon(EditorIcons::Get(EditorIcon::Folder));
+				crumb->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+			}
+			crumb->setAutoRaise(true);
+			crumb->setStyleSheet("QToolButton { background: transparent; border: none; padding: 4px 4px; font-size: 13px; } QToolButton:hover { color: #ffffff; }");
+			connect(crumb, &QToolButton::clicked, this, [this, path]() { ShowFolder(path); });
+			layout->addWidget(crumb);
+			QLabel* chevron = new QLabel();
+			chevron->setPixmap(EditorIcons::Get(EditorIcon::Chevron).pixmap(12, 12));
+			layout->addWidget(chevron);
+		};
+
+		addCrumb("All", m_ContentRoot, true);
+		const QString root = m_CurrentFolder.startsWith(m_ScriptsRoot) ? m_ScriptsRoot : m_ContentRoot;
+		addCrumb(root == m_ScriptsRoot ? "Scripts" : "Content", root, false);
+		const QString relative = QDir(root).relativeFilePath(m_CurrentFolder);
+		QString path = root;
+		for (const QString& part : relative.split('/', Qt::SkipEmptyParts))
+		{
+			if (part == ".")
+				continue;
+			path += "/" + part;
+			addCrumb(part, path, false);
+		}
+		static_cast<QHBoxLayout*>(layout)->addStretch(1);
+
+		m_Back->setEnabled(!m_BackHistory.isEmpty());
+		m_Forward->setEnabled(!m_ForwardHistory.isEmpty());
+	}
+
+	void ContentBrowser::GoBack()
+	{
+		if (m_BackHistory.isEmpty())
+			return;
+		m_ForwardHistory.append(m_CurrentFolder);
+		const QString target = m_BackHistory.takeLast();
+		m_CurrentFolder.clear(); // so ShowFolder does not record this step again
+		ShowFolder(target);
+	}
+
+	void ContentBrowser::GoForward()
+	{
+		if (m_ForwardHistory.isEmpty())
+			return;
+		const QString target = m_ForwardHistory.takeLast();
+		const QStringList forward = m_ForwardHistory;
+		ShowFolder(target);
+		m_ForwardHistory = forward; // ShowFolder clears it for new browsing, not for stepping forward
+		RebuildCrumbs();
+	}
+
+	void ContentBrowser::ImportFiles()
+	{
+		const QStringList files = QFileDialog::getOpenFileNames(this, "Import", QString(), "Assets (*.png *.jpg *.jpeg *.tga *.bmp *.obj *.material *.scene);;All files (*)");
+		QString last;
+		for (const QString& file : files)
+		{
+			const QString target = m_CurrentFolder + "/" + QFileInfo(file).fileName();
+			if (QFileInfo::exists(target))
+			{
+				FP_LOG_WARN("Skipped %s, a file with that name is already here", QFileInfo(file).fileName().toUtf8().constData());
+				continue;
+			}
+			if (QFile::copy(file, target))
+				last = target;
+			else
+				FP_LOG_ERROR("Could not import %s", file.toUtf8().constData());
+		}
+		if (!last.isEmpty())
+			SelectPath(last);
 	}
 
 	void ContentBrowser::WatchFolders()
