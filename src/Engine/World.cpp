@@ -1,4 +1,5 @@
 #include "Engine/World.h"
+#include "Engine/ComponentRegistry.h"
 
 namespace FP
 {
@@ -9,6 +10,14 @@ namespace FP
 		{
 			uint64 Index = 0;
 		};
+	}
+
+	World::World()
+	{
+		// Make every storage here in engine code so none is first created inside a script module.
+		(void)m_Registry.storage<CreationOrderComponent>();
+		for (const ComponentInfo* info : ComponentRegistry::Get().GetAll())
+			info->EnsureStorage(m_Registry);
 	}
 
 	Entity World::CreateEntity(String name, const Guid& id)

@@ -31,6 +31,8 @@ namespace FP
 		FP_OBJECT(World, Object)
 
 	public:
+		World();
+
 		// ---- Entities ------------------------------------------------------
 
 		// New entity with an id, a name and a transform.

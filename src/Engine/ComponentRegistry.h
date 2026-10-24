@@ -49,6 +49,19 @@ namespace FP
 		void* (*TryGet)(entt::registry&, entt::entity) = nullptr;
 		void* (*Add)(entt::registry&, entt::entity) = nullptr;
 		void (*Remove)(entt::registry&, entt::entity) = nullptr;
+		void (*Copy)(void* dst, const void* src) = nullptr;
+
+		// Creates the EnTT storage from engine code. Storage made inside a loaded module would
+		// keep that module's vtable and crash once the module unloads.
+		void (*EnsureStorage)(entt::registry&) = nullptr;
+
+		// Optional text format for components that are not a flat list of fields.
+		// WriteCustom appends indented lines. ReadCustom gets every line that follows the component.
+		void (*WriteCustom)(String& out, const void* component) = nullptr;
+		void (*ReadCustom)(void* component, const Array<String>& tokens, std::string_view line) = nullptr;
+
+		// The editor draws this component itself instead of listing fields.
+		bool CustomInspector = false;
 
 		const FieldInfo* FindField(std::string_view name) const
 		{
@@ -103,6 +116,18 @@ namespace FP
 		void RemoveComponent(entt::registry& registry, entt::entity entity)
 		{
 			registry.remove<T>(entity);
+		}
+
+		template <typename T>
+		void CopyComponent(void* dst, const void* src)
+		{
+			*static_cast<T*>(dst) = *static_cast<const T*>(src);
+		}
+
+		template <typename T>
+		void EnsureComponentStorage(entt::registry& registry)
+		{
+			(void)registry.storage<T>();
 		}
 	}
 
@@ -183,6 +208,19 @@ namespace FP
 			return *this;
 		}
 
+		ComponentBuilder& CustomSerializer(void (*write)(String&, const void*), void (*read)(void*, const Array<String>&, std::string_view))
+		{
+			m_Info.WriteCustom = write;
+			m_Info.ReadCustom = read;
+			return *this;
+		}
+
+		ComponentBuilder& CustomInspector()
+		{
+			m_Info.CustomInspector = true;
+			return *this;
+		}
+
 	private:
 		ComponentInfo& m_Info;
 		FieldListBuilder<T> m_Fields;
@@ -206,6 +244,8 @@ namespace FP
 			info->TryGet = &Detail::TryGetComponent<T>;
 			info->Add = &Detail::AddComponent<T>;
 			info->Remove = &Detail::RemoveComponent<T>;
+			info->Copy = &Detail::CopyComponent<T>;
+			info->EnsureStorage = &Detail::EnsureComponentStorage<T>;
 			m_Components.Add(info);
 			return ComponentBuilder<T>(*info);
 		}
