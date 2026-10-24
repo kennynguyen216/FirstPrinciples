@@ -4,7 +4,7 @@ A small C++20 game engine with an ECS, a Qt editor and SDL3 rendering. Runs on m
 
 ## Setup
 
-Clone with submodules so EnTT, stb, Monocypher, spdlog and cgltf come along:
+Clone with submodules so the third party libraries come along:
 
 ```bash
 git clone --recursive https://github.com/kennynguyen216/FirstPrinciples.git
@@ -640,6 +640,7 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 | Target | What it is |
 |---|---|
 | Engine | Static lib with `src/HAL`, `src/Core`, `src/CoreObject` and `src/Engine` |
+| ImGui | Dear ImGui core, widgets, tables, drawing and demo from the docking branch |
 | Game | The project's components and systems (`Source`) |
 | Editor | Qt editor |
 | Runtime | Standalone player for a scene |
@@ -658,6 +659,15 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 | [spdlog](https://github.com/gabime/spdlog) | Logging to the console, files and the editor | Git submodule in `ThirdParty/spdlog` |
 | [cgltf](https://github.com/jkuhlmann/cgltf) | glTF loading for skeletal meshes and animations | Git submodule in `ThirdParty/cgltf` |
 | [Ultralight](https://ultralig.ht) 2.0 beta | Game UI in HTML, CSS and JavaScript | Binary SDK downloaded by `Scripts/GetUltralight.sh` or `.ps1` into `ThirdParty/Ultralight`. Optional: without it game UI draws nothing |
+| [Dear ImGui](https://github.com/ocornut/imgui/tree/docking) | Immediate mode UI with docking and multi-viewport support | Git submodule in `ThirdParty/imgui`, tracking upstream `docking` |
+
+The ImGui submodule includes the complete upstream repository: core, demo, backends, examples,
+fonts, documentation and MIT license. Its commit is pinned by this repository. The `ImGui` static
+library builds every core source including `imgui_demo.cpp` and is linked through `UseEngine`;
+engine and game targets can include `imgui.h`. Backends and examples remain available in the
+submodule but are not compiled into the engine. Window, input and renderer integration is still
+required before displaying ImGui in an application. The editor currently uses Qt.
+Run `Projects/Sample/Binaries/Debug/Tests ImGui` for the headless docking and demo smoke test.
 
 ## Known limitations
 

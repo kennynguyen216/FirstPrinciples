@@ -34,7 +34,8 @@ local HasUltralight = os.isdir(UltralightDir .. "/include/Ultralight")
 if not HasUltralight then
 	premake.warn("Ultralight is missing, so game UI will not draw. Run Scripts/GetUltralight to get it.")
 end
-if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) or not os.isdir(SpdlogInclude) or not os.isdir(CgltfInclude) then
+local ImGuiDir = Root .. "/ThirdParty/imgui"
+if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) or not os.isdir(SpdlogInclude) or not os.isdir(CgltfInclude) or not os.isfile(ImGuiDir .. "/imgui.h") then
 	premake.warn("Submodules are missing. Run: git submodule update --init")
 end
 
@@ -88,7 +89,7 @@ local ProjectName = io.readfile(ProjectFile):match('Name%s+"?([%w_]+)"?') or pat
 
 -- Include paths every project that touches engine headers needs.
 local function EngineIncludes()
-	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir, SpdlogInclude, CgltfInclude }
+	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir, SpdlogInclude, CgltfInclude, ImGuiDir }
 	if HasUltralight then
 		externalincludedirs { UltralightDir .. "/include" }
 		defines { "FP_WITH_ULTRALIGHT=1" }
@@ -229,10 +230,14 @@ local function UseEngine(withGame)
 	if withGame then
 		links { "Game" }
 	end
-	links { "Engine" }
+	links { "Engine", "ImGui" }
 	UseSDL()
 	UseUltralight()
 end
+
+project "ImGui"
+	kind "StaticLib"
+	files { ImGuiDir .. "/*.h", ImGuiDir .. "/*.cpp" }
 
 -- Engine: HAL, Core, CoreObject and Engine in one static lib.
 project "Engine"
