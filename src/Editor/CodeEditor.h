@@ -31,6 +31,8 @@ namespace FP::Editor
 	// block indent with Tab and Shift Tab, and file load and save.
 	class CodeEditor : public QPlainTextEdit
 	{
+		Q_OBJECT
+
 	public:
 		explicit CodeEditor(QWidget* parent = nullptr);
 

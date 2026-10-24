@@ -1,4 +1,5 @@
 #include "Editor/EditorWindow.h"
+#include "Editor/CodeEditor.h"
 #include "Editor/InspectorPanel.h"
 #include "Editor/ScriptBuilder.h"
 #include "Editor/ViewportWidget.h"
@@ -18,9 +19,7 @@
 #include <QComboBox>
 #include <QDockWidget>
 #include <QFileDialog>
-#include <QDesktopServices>
 #include <QDir>
-#include <QUrl>
 #include <QFileSystemWatcher>
 #include <QInputDialog>
 #include <QFileInfo>
@@ -30,6 +29,8 @@
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QStatusBar>
+#include <QTabBar>
+#include <QTabWidget>
 #include <QTimer>
 #include <QToolBar>
 
@@ -54,7 +55,16 @@ namespace FP::Editor
 
 		m_Viewport = new ViewportWidget(device, this);
 		m_Viewport->SetWorld(m_World.Get());
-		setCentralWidget(m_Viewport);
+		// The viewport is the first tab and scripts open beside it.
+		m_CentralTabs = new QTabWidget(this);
+		m_CentralTabs->setDocumentMode(true);
+		m_CentralTabs->setTabsClosable(true);
+		m_CentralTabs->setMovable(true);
+		m_CentralTabs->addTab(m_Viewport, "Viewport");
+		m_CentralTabs->tabBar()->setTabButton(0, QTabBar::RightSide, nullptr);
+		m_CentralTabs->tabBar()->setTabButton(0, QTabBar::LeftSide, nullptr);
+		connect(m_CentralTabs, &QTabWidget::tabCloseRequested, this, [this](int index) { CloseScriptTab(index); });
+		setCentralWidget(m_CentralTabs);
 
 		BuildDocks();
 		BuildMenus();
@@ -136,7 +146,7 @@ namespace FP::Editor
 		QMenu* file = menuBar()->addMenu("&File");
 		file->addAction("&New Scene", QKeySequence::New, this, &EditorWindow::NewScene);
 		file->addAction("&Open Scene...", QKeySequence::Open, this, &EditorWindow::OpenSceneDialog);
-		file->addAction("&Save Scene", QKeySequence::Save, this, &EditorWindow::SaveScene);
+		file->addAction("&Save", QKeySequence::Save, this, &EditorWindow::SaveCurrent);
 		file->addAction("Save Scene &As...", QKeySequence::SaveAs, this, &EditorWindow::SaveSceneAs);
 		file->addSeparator();
 		file->addAction("E&xit", QKeySequence::Quit, this, &QWidget::close);
@@ -242,7 +252,106 @@ namespace FP::Editor
 
 	void EditorWindow::OpenScript(const QString& path)
 	{
-		QDesktopServices::openUrl(QUrl::fromLocalFile(ScriptBuilder::ResolveSourcePath(path)));
+		const QString resolved = ScriptBuilder::ResolveSourcePath(path);
+		if (CodeEditor* open = FindScriptTab(resolved))
+		{
+			m_CentralTabs->setCurrentWidget(open);
+			open->setFocus();
+			return;
+		}
+
+		CodeEditor* editor = new CodeEditor();
+		if (!editor->LoadFile(resolved))
+		{
+			FP_LOG_ERROR("Could not open %s", resolved.toUtf8().constData());
+			delete editor;
+			return;
+		}
+		const int index = m_CentralTabs->addTab(editor, QFileInfo(resolved).fileName());
+		m_CentralTabs->setTabToolTip(index, resolved);
+		connect(editor->document(), &QTextDocument::modificationChanged, this, [this, editor](bool) { UpdateScriptTabTitle(editor); });
+		m_CentralTabs->setCurrentIndex(index);
+		editor->setFocus();
+	}
+
+	CodeEditor* EditorWindow::FindScriptTab(const QString& path) const
+	{
+		const QString wanted = QFileInfo(path).canonicalFilePath();
+		for (int i = 0; i < m_CentralTabs->count(); ++i)
+		{
+			CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->widget(i));
+			if (editor && QFileInfo(editor->GetPath()).canonicalFilePath() == wanted)
+				return editor;
+		}
+		return nullptr;
+	}
+
+	void EditorWindow::UpdateScriptTabTitle(CodeEditor* editor)
+	{
+		const int index = m_CentralTabs->indexOf(editor);
+		if (index >= 0)
+			m_CentralTabs->setTabText(index, QFileInfo(editor->GetPath()).fileName() + (editor->IsDirty() ? "*" : ""));
+	}
+
+	bool EditorWindow::CloseScriptTab(int index)
+	{
+		CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->widget(index));
+		if (!editor)
+			return false;
+		if (editor->IsDirty())
+		{
+			m_CentralTabs->setCurrentIndex(index);
+			const auto answer = QMessageBox::question(this, "Unsaved script", QString("Save changes to %1?").arg(QFileInfo(editor->GetPath()).fileName()),
+				QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+			if (answer == QMessageBox::Cancel)
+				return false;
+			if (answer == QMessageBox::Save && !editor->Save())
+				return false;
+		}
+		m_CentralTabs->removeTab(index);
+		editor->deleteLater();
+		return true;
+	}
+
+	bool EditorWindow::ConfirmCloseScripts()
+	{
+		for (int i = m_CentralTabs->count() - 1; i >= 0; --i)
+		{
+			CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->widget(i));
+			if (editor && editor->IsDirty() && !CloseScriptTab(i))
+				return false;
+		}
+		return true;
+	}
+
+	void EditorWindow::ReloadScriptTabIfClean(const QString& path)
+	{
+		CodeEditor* editor = FindScriptTab(path);
+		if (!editor || editor->IsDirty())
+			return;
+		QFile file(path);
+		if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+			return;
+		const QString onDisk = QString::fromUtf8(file.readAll());
+		if (onDisk == editor->toPlainText())
+			return;
+		// Changed outside the editor, so take the new text and keep the cursor near where it was.
+		const int line = editor->textCursor().blockNumber() + 1;
+		editor->LoadFile(path);
+		editor->GoToLine(line);
+	}
+
+	void EditorWindow::SaveCurrent()
+	{
+		if (CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->currentWidget()))
+		{
+			if (editor->Save())
+				FP_LOG("Saved %s", QFileInfo(editor->GetPath()).fileName().toUtf8().constData());
+			else
+				FP_LOG_ERROR("Could not save %s", editor->GetPath().toUtf8().constData());
+			return;
+		}
+		SaveScene();
 	}
 
 	bool EditorWindow::NewScript(const QString& className)
@@ -272,7 +381,10 @@ namespace FP::Editor
 				m_ScriptBuilder->Build();
 		});
 		connect(m_ScriptWatcher, &QFileSystemWatcher::directoryChanged, this, &EditorWindow::OnScriptsChanged);
-		connect(m_ScriptWatcher, &QFileSystemWatcher::fileChanged, this, &EditorWindow::OnScriptsChanged);
+		connect(m_ScriptWatcher, &QFileSystemWatcher::fileChanged, this, [this](const QString& path) {
+			ReloadScriptTabIfClean(path);
+			OnScriptsChanged();
+		});
 		OnScriptsChanged();
 		m_ScriptDebounce->stop(); // watching starts quietly, nothing changed yet
 	}
@@ -330,7 +442,9 @@ namespace FP::Editor
 			m_Inspector->RefreshValues();
 		}
 
-		m_Viewport->RenderFrame();
+		// No point drawing the scene while a script tab covers it.
+		if (m_CentralTabs->currentWidget() == m_Viewport)
+			m_Viewport->RenderFrame();
 		if (++m_Frame % 120 == 0)
 			GarbageCollector::Get().Collect();
 	}
@@ -550,7 +664,7 @@ namespace FP::Editor
 	void EditorWindow::closeEvent(QCloseEvent* event)
 	{
 		Stop();
-		if (ConfirmDiscard())
+		if (ConfirmCloseScripts() && ConfirmDiscard())
 		{
 			m_Timer->stop();
 			event->accept();

@@ -8,6 +8,7 @@
 class QAction;
 class QComboBox;
 class QFileSystemWatcher;
+class QTabWidget;
 class QListWidget;
 class QPlainTextEdit;
 class QTimer;
@@ -19,6 +20,7 @@ namespace FP
 
 namespace FP::Editor
 {
+	class CodeEditor;
 	class InspectorPanel;
 	class ScriptBuilder;
 	class ViewportWidget;
@@ -75,6 +77,16 @@ namespace FP::Editor
 		void OnScriptsChanged();
 		void OnScriptsBuilt(bool success);
 
+		// Script tabs next to the viewport.
+		CodeEditor* FindScriptTab(const QString& path) const;
+		void UpdateScriptTabTitle(CodeEditor* editor);
+		bool CloseScriptTab(int index);
+		bool ConfirmCloseScripts();
+		void ReloadScriptTabIfClean(const QString& path);
+
+		// Ctrl+S saves the open script when one is showing, otherwise the scene.
+		void SaveCurrent();
+
 		StrongObjectPtr<World> m_World;
 		Entity m_Selected = NullEntity;
 		Guid m_SelectedGuid;
@@ -93,6 +105,7 @@ namespace FP::Editor
 		QAction* m_View3DAction = nullptr;
 		QComboBox* m_ViewModeBox = nullptr;
 		ScriptBuilder* m_ScriptBuilder = nullptr;
+		QTabWidget* m_CentralTabs = nullptr;
 		QFileSystemWatcher* m_ScriptWatcher = nullptr;
 		QTimer* m_ScriptDebounce = nullptr;
 		bool m_AutoReloadScripts = true;

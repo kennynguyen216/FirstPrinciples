@@ -55,6 +55,11 @@ int main(int argc, char** argv)
 			const QString mode = args[modeIndex + 1].toLower();
 			window.SetViewMode(mode == "unlit" ? FP::ViewMode::Unlit : mode == "wireframe" ? FP::ViewMode::Wireframe : FP::ViewMode::Lit);
 		}
+		// --open-script path opens a script tab, relative to the project.
+		const int openIndex = static_cast<int>(args.indexOf("--open-script"));
+		if (openIndex >= 0 && openIndex + 1 < args.size())
+			window.OpenScript(QString::fromUtf8(FP::Paths::GetProjectDir().CStr()) + "/" + args[openIndex + 1]);
+
 		const int selectIndex = static_cast<int>(args.indexOf("--select"));
 		if (selectIndex >= 0 && selectIndex + 1 < args.size())
 			window.Select(window.GetWorld().FindEntityByName(args[selectIndex + 1].toUtf8().constData()));
