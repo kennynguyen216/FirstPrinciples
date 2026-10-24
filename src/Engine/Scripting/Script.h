@@ -140,6 +140,14 @@ namespace FP
 			return GetPhysics().Raycast(view.Position, view.GetForward(), maxDistance, hit, m_Entity);
 		}
 
+		// ---- Characters ------------------------------------------------------------
+
+		// For an entity with a CharacterController. Move walks at velocity in meters per second,
+		// ignoring Y, and needs calling every frame. Jump does nothing off the ground.
+		void Move(Vec3 velocity) const { GetPhysics().MoveCharacter(m_Entity, velocity); }
+		bool Jump(float speed) const { return GetPhysics().JumpCharacter(m_Entity, speed); }
+		bool IsGrounded() const { return GetPhysics().IsGrounded(m_Entity); }
+
 		// Every entity with a body touching the sphere, triggers included.
 		Array<Entity> OverlapSphere(Vec3 center, float radius) const { return GetPhysics().OverlapSphere(center, radius); }
 
@@ -379,7 +387,7 @@ namespace FP
 	}
 
 	// Bump when the script interface changes so stale modules are refused instead of crashing.
-	constexpr uint32 ScriptInterfaceVersion = 8;
+	constexpr uint32 ScriptInterfaceVersion = 9;
 
 	// Fingerprint of everything a script module shares with the host by layout. A module built
 	// against different engine headers or a different configuration gives a different value.
