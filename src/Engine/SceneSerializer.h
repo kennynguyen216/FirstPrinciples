@@ -19,6 +19,13 @@ namespace FP
 		// Replaces the world's entities with the scene. Returns false on a hard parse error.
 		bool LoadFromString(World& world, std::string_view text);
 
+		// One entity in the same text form, for sending it somewhere or copying it.
+		String SaveEntityToString(World& world, Entity entity);
+
+		// Adds the entity in text to the world without touching the others. Returns the new
+		// entity, or NullEntity when the text is broken or an entity with its id already exists.
+		Entity LoadEntityFromString(World& world, std::string_view text);
+
 		bool SaveToFile(World& world, const char* path);
 		bool LoadFromFile(World& world, const char* path);
 	}

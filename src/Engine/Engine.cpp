@@ -1,4 +1,5 @@
 #include "Engine/Engine.h"
+#include "Engine/Net/NetworkComponent.h"
 #include "Engine/Render/MeshData.h"
 #include "Engine/Scripting/ScriptComponent.h"
 
@@ -64,6 +65,10 @@ namespace FP::Engine
 		registry.Register<ScriptComponent>("Scripts")
 			.CustomSerializer(&ScriptComponentFormat::Write, &ScriptComponentFormat::Read)
 			.CustomInspector();
+
+		registry.Register<NetworkComponent>("Network")
+			.Field("OnePerPeer", &NetworkComponent::OnePerPeer)
+			.Field("SendRate", &NetworkComponent::SendRate);
 
 		registry.Register<PointLightComponent>("PointLight")
 			.Field("Color", &PointLightComponent::Color)

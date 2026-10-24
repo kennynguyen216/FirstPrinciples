@@ -21,7 +21,9 @@ local SdlDir = IsWindows and (Root .. "/ThirdParty/SDL3") or (BrewPrefix .. "/op
 -- Header only libraries, pulled in as git submodules.
 local EnttInclude = Root .. "/ThirdParty/entt/src"
 local StbInclude = Root .. "/ThirdParty/stb"
-if not os.isdir(EnttInclude) or not os.isdir(StbInclude) then
+-- Small audited crypto library for encrypting network packets. One .c file built into Engine.
+local MonocypherDir = Root .. "/ThirdParty/monocypher/src"
+if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) then
 	premake.warn("Submodules are missing. Run: git submodule update --init")
 end
 
@@ -75,7 +77,7 @@ local ProjectName = io.readfile(ProjectFile):match('Name%s+"?([%w_]+)"?') or pat
 
 -- Include paths every project that touches engine headers needs.
 local function EngineIncludes()
-	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude }
+	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir }
 end
 
 local function UseSDL()
@@ -204,6 +206,7 @@ project "Engine"
 		"src/CoreObject/**.h", "src/CoreObject/**.cpp",
 		"src/Engine/**.h", "src/Engine/**.cpp",
 	}
+	files { MonocypherDir .. "/monocypher.c" }
 	-- Module entry points belong to the scripts library only.
 	removefiles { "src/Engine/Scripting/Module/**" }
 	-- Shader sources are compiled by Scripts/CompileShaders, not by the C++ build.

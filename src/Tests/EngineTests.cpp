@@ -123,6 +123,33 @@ FP_TEST(Scene_RoundTrip)
 	FP_EXPECT(SceneSerializer::SaveToString(*loaded.Get()) == text);
 }
 
+FP_TEST(Scene_CopiesOneEntity)
+{
+	RegisterTestComponents();
+	StrongObjectPtr<World> source(NewObject<World>());
+	const Entity original = source->CreateEntity("Hero");
+	source->Get<TransformComponent>(original).Position = { 1, 2, 3 };
+	source->Add<HealthComponent>(original).Value = 42;
+	source->CreateEntity("Other");
+
+	const String text = SceneSerializer::SaveEntityToString(*source.Get(), original);
+	FP_EXPECT(!text.Contains("Other"));
+
+	StrongObjectPtr<World> target(NewObject<World>());
+	target->CreateEntity("Already here");
+	const Entity copy = SceneSerializer::LoadEntityFromString(*target.Get(), text.View());
+	FP_EXPECT(copy != NullEntity);
+	FP_EXPECT(target->GetEntities().Num() == 2);
+	FP_EXPECT(target->GetEntityName(copy) == "Hero");
+	FP_EXPECT(target->Get<HealthComponent>(copy).Value == 42);
+	FP_EXPECT(target->Get<TransformComponent>(copy).Position.Z == 3);
+
+	// The same id twice, or broken text, adds nothing.
+	FP_EXPECT(SceneSerializer::LoadEntityFromString(*target.Get(), text.View()) == NullEntity);
+	FP_EXPECT(SceneSerializer::LoadEntityFromString(*target.Get(), "entity nope\n") == NullEntity);
+	FP_EXPECT(target->GetEntities().Num() == 2);
+}
+
 FP_TEST(Scene_SkipsUnknownData)
 {
 	RegisterTestComponents();
