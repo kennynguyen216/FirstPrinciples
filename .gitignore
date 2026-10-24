@@ -1,0 +1,18 @@
+# Generated
+Build/
+Binaries/
+Intermediate/
+
+# Downloaded by Scripts/Setup.ps1
+ThirdParty/
+
+# Tools and OS
+.claude/
+.vs/
+.vscode/
+.idea/
+*.user
+.DS_Store
+
+# Local planning notes
+docs/PLAN.md
