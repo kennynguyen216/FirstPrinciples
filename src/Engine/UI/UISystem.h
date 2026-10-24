@@ -14,6 +14,9 @@ namespace FP
 		uint32 Width = 0;
 		uint32 Height = 0;
 		float Scale = 1;
+		// Newest change time in the page's folder, so edits reload it while playing.
+		int64 FolderStamp = 0;
+		float CheckTimer = 0;
 	};
 
 	// Loads, sizes and steps the page of every UI component, and feeds input to those on screen.
