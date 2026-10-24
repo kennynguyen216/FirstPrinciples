@@ -7,6 +7,7 @@
 #include "Core/Jobs/JobSystem.h"
 #include "Engine/Render/GPUDevice.h"
 #include "Engine/Scripting/ScriptRuntime.h"
+#include "Engine/UI/UIRuntime.h"
 #include "Game.h"
 
 #include <SDL3/SDL.h>
@@ -148,6 +149,7 @@ int main(int argc, char** argv)
 	FP::GarbageCollector::Get().Collect();
 	audio.Shutdown();
 	FP::ScriptRuntime::Get().UnloadModule();
+	FP::UIRuntime::Get().Shutdown();
 	delete device;
 	FP::JobSystem::Shutdown();
 	SDL_Quit();

@@ -69,3 +69,35 @@ engine.watch("score", function (value) { document.title = "score " + value; });
 	});
 	FP_EXPECT(checked);
 }
+
+#include "Engine/Engine.h"
+#include "Engine/UI/UISystem.h"
+
+FP_TEST(UI_SystemLoadsPagesForComponents)
+{
+	Engine::RegisterEngineComponents();
+	UIRuntime::Get().SetVirtualFile("Tests/Hud.html", "<html><body><b data-bind=\"lives\">?</b></body></html>");
+	StrongObjectPtr<World> world(NewObject<World>());
+	const Entity hud = world->CreateEntity("Hud");
+	world->Add<UIComponent>(hud).Page = "Tests/Hud.html";
+	const Entity plain = world->CreateEntity("Plain");
+	world->AddSystem<UISystem>();
+	world->BeginPlay();
+	world->Update(0.016f);
+
+	UIDocumentInstance* document = UISystem::For(*world.Get(), hud);
+	FP_EXPECT(document && document->GetPage() == "Tests/Hud.html");
+	FP_EXPECT(!UISystem::For(*world.Get(), plain));
+
+	// Pages appear once the runtime has steps to load them, when Ultralight is built in.
+	if (UIRuntime::Get().IsAvailable())
+	{
+		document->Set("lives", 3);
+		FP_EXPECT(Pump([&] { world->Update(0.016f); return document->IsReady(); }));
+		FP_EXPECT(document->RunScript("document.querySelector('b').textContent") == "3");
+	}
+
+	// Stopping drops every page.
+	world->EndPlay();
+	FP_EXPECT(!world->Has<UIStateComponent>(hud));
+}

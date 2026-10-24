@@ -124,6 +124,7 @@ namespace FP::Editor
 		{
 			RenderView game = RenderView::FromWorld(*m_World, width, height);
 			game.Mode = m_ViewMode;
+			game.PixelScale = static_cast<float>(devicePixelRatioF());
 			return game;
 		}
 

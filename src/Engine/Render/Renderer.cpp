@@ -1,6 +1,7 @@
 #include "Engine/Render/Renderer.h"
 #include "Engine/Material.h"
 #include "Engine/Animation/SkeletalModel.h"
+#include "Engine/UI/UISystem.h"
 #include "HAL/PlatformMisc.h"
 
 #include <algorithm>
@@ -79,7 +80,7 @@ namespace FP
 					SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
 			}
 		}
-		for (SDL_GPUGraphicsPipeline* pipeline : { m_PresentPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1] })
+		for (SDL_GPUGraphicsPipeline* pipeline : { m_PresentPipeline, m_UIPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1] })
 		{
 			if (pipeline)
 				SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
@@ -203,6 +204,26 @@ namespace FP
 			m_PresentPipeline = SDL_CreateGPUGraphicsPipeline(gpu, &info);
 			if (!m_PresentPipeline)
 				FP_LOG_ERROR("Present pipeline failed: %s", SDL_GetError());
+
+			// UI pages over the finished frame. They come premultiplied.
+			SDL_GPUShader* uiFrag = m_Device.LoadShader("UI.frag", 1, 0);
+			if (uiFrag)
+			{
+				SDL_GPUColorTargetDescription uiTarget = colorTarget;
+				uiTarget.blend_state.enable_blend = true;
+				uiTarget.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+				uiTarget.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+				uiTarget.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+				uiTarget.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+				uiTarget.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+				uiTarget.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+				info.fragment_shader = uiFrag;
+				info.target_info.color_target_descriptions = &uiTarget;
+				m_UIPipeline = SDL_CreateGPUGraphicsPipeline(gpu, &info);
+				if (!m_UIPipeline)
+					FP_LOG_WARN("UI pipeline failed, so game UI will not draw: %s", SDL_GetError());
+				SDL_ReleaseGPUShader(gpu, uiFrag);
+			}
 		}
 
 		SDL_GPUShader* lineVert = m_Device.LoadShader("Line.vert", 0, 1);
@@ -560,6 +581,60 @@ namespace FP
 		SDL_EndGPURenderPass(pass);
 	}
 
+	Array<GPUTexture*> Renderer::PrepareUI(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view, uint32 width, uint32 height)
+	{
+		struct Page
+		{
+			int32 Order;
+			GPUTexture* Texture;
+		};
+		Array<Page> pages;
+		Array<UITexture> kept;
+		for (auto [entity, ui, state] : world.View<UIComponent, UIStateComponent>().each())
+		{
+			state.Drawn = false;
+			// A UI on a camera belongs to that camera's view. Others show on every view.
+			if (!ui.Visible || !state.Document || !m_UIPipeline || (world.Has<CameraComponent>(entity) && entity != view.Camera))
+				continue;
+			state.Drawn = true;
+			state.Width = width;
+			state.Height = height;
+			state.Scale = view.PixelScale;
+
+			UIDocumentInstance& document = *state.Document;
+			const uint32 key = static_cast<uint32>(entt::to_integral(entity));
+			const int32 found = m_UITextures.FindIf([key](const UITexture& t) { return t.Entity == key; });
+			UITexture cached = found >= 0 ? m_UITextures[found] : UITexture{ key, nullptr, 0 };
+			if (document.GetWidth() == 0 || document.GetHeight() == 0)
+				continue;
+			if (!cached.Texture || cached.Texture->GetWidth() != document.GetWidth() || cached.Texture->GetHeight() != document.GetHeight())
+			{
+				cached.Texture = m_Device.CreateDynamicTexture(SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM_SRGB, document.GetWidth(), document.GetHeight());
+				cached.Version = ~0ull;
+			}
+			if (cached.Texture && cached.Version != document.GetVersion())
+			{
+				document.ReadPixels([&](const void* pixels, uint32 pageWidth, uint32 pageHeight, uint32 rowBytes) {
+					if (pageWidth == cached.Texture->GetWidth() && pageHeight == cached.Texture->GetHeight())
+						m_Device.UploadToTexture(cmd, *cached.Texture, pixels, rowBytes);
+				});
+				cached.Version = document.GetVersion();
+			}
+			if (cached.Texture)
+			{
+				pages.Add({ ui.Order, cached.Texture.Get() });
+				kept.Add(cached);
+			}
+		}
+		// Pages no longer on screen let go of their textures.
+		m_UITextures = kept;
+		pages.Sort([](const Page& a, const Page& b) { return a.Order < b.Order; });
+		Array<GPUTexture*> textures;
+		for (const Page& page : pages)
+			textures.Add(page.Texture);
+		return textures;
+	}
+
 	void Renderer::Render(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* target, uint32 width, uint32 height,
 		World& world, const RenderView& view, const DebugLines* lines)
 	{
@@ -692,7 +767,9 @@ namespace FP
 			SDL_EndGPURenderPass(pass);
 		}
 
-		// Present pass with editor lines on top.
+		const Array<GPUTexture*> pages = PrepareUI(cmd, world, view, width, height);
+
+		// Present pass with UI pages and editor lines on top.
 		SDL_GPUColorTargetInfo output = {};
 		output.texture = target;
 		output.load_op = SDL_GPU_LOADOP_DONT_CARE;
@@ -705,6 +782,17 @@ namespace FP
 		SDL_GPUTextureSamplerBinding scene = { m_SceneColor->GetHandle(), m_Device.GetClampSampler() };
 		SDL_BindGPUFragmentSamplers(pass, 0, &scene, 1);
 		SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+
+		if (!pages.IsEmpty())
+		{
+			SDL_BindGPUGraphicsPipeline(pass, m_UIPipeline);
+			for (GPUTexture* page : pages)
+			{
+				SDL_GPUTextureSamplerBinding binding = { page->GetHandle(), m_Device.GetClampSampler() };
+				SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
+				SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+			}
+		}
 
 		if (hasLines)
 		{

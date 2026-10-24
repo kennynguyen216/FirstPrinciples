@@ -119,6 +119,8 @@ namespace FP
 		void PushBones(SDL_GPUCommandBuffer* cmd, const Array<Mat4>* skin);
 		SDL_GPUGraphicsPipeline* CreateShadowPipeline(Surface surface);
 		void RenderShadows(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view);
+		// Uploads the UI pages on screen and returns their textures in draw order.
+		Array<GPUTexture*> PrepareUI(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view, uint32 width, uint32 height);
 		GPUTexture* Texture(const String& path, bool srgb, GPUTexture* fallback);
 
 		GPUDevice& m_Device;
@@ -135,6 +137,16 @@ namespace FP
 		SDL_GPUGraphicsPipeline* m_WirePipelines[3] = {};
 		ViewMode m_Mode = ViewMode::Lit;
 		SDL_GPUGraphicsPipeline* m_PresentPipeline = nullptr;
+		SDL_GPUGraphicsPipeline* m_UIPipeline = nullptr; // optional, no UI without it
+
+		// One texture per UI page, refilled when the page's version changes.
+		struct UITexture
+		{
+			uint32 Entity = 0;
+			RefPtr<GPUTexture> Texture;
+			uint64 Version = 0;
+		};
+		Array<UITexture> m_UITextures;
 		SDL_GPUGraphicsPipeline* m_LinePipeline = nullptr;
 
 		RefPtr<GPUBuffer> m_QuadVertices;
