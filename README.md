@@ -4,7 +4,7 @@ A small C++20 game engine with an ECS, a Qt editor and SDL3 rendering. Runs on m
 
 ## Setup
 
-Clone with submodules so EnTT and stb come along:
+Clone with submodules so EnTT, stb and Monocypher come along:
 
 ```bash
 git clone --recursive https://github.com/kennynguyen216/FirstPrinciples.git
@@ -441,6 +441,7 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 | [Qt 6](https://qt.io) | Editor UI | Homebrew on macOS, Qt installer + `QT_DIR` on Windows |
 | [EnTT](https://github.com/skypjack/entt) | ECS | Git submodule in `ThirdParty/entt` |
 | [stb_image](https://github.com/nothings/stb) | PNG, JPG and TGA loading | Git submodule in `ThirdParty/stb` |
+| [Monocypher](https://monocypher.org) | Key exchange and encryption for network packets | Git submodule in `ThirdParty/monocypher` |
 
 ## Known limitations
 
