@@ -7,6 +7,8 @@
 namespace FP::Engine
 {
 	const char* const ImageFilter = "Images (*.png *.jpg *.jpeg *.tga *.bmp)";
+	const char* const MeshFilter = "Meshes (*.obj *.gltf *.glb)";
+	const char* const SkeletalMeshFilter = "Skeletal meshes (*.gltf *.glb)";
 
 	namespace
 	{
@@ -96,7 +98,15 @@ namespace FP::Engine
 			.Field("Tonemap", &CameraComponent::Tonemap);
 
 		registry.Register<MeshComponent>("Mesh")
-			.Field("Mesh", &MeshComponent::Mesh).Choices(Primitives::GetNames(), true).AssetPath("Meshes (*.obj)");
+			.Field("Mesh", &MeshComponent::Mesh).Choices(Primitives::GetNames(), true).AssetPath(MeshFilter);
+
+		registry.Register<SkeletalMeshComponent>("SkeletalMesh")
+			.Field("Mesh", &SkeletalMeshComponent::Mesh).AssetPath(SkeletalMeshFilter);
+
+		registry.Register<AnimatorComponent>("Animator")
+			.Field("Clip", &AnimatorComponent::Clip)
+			.Field("Speed", &AnimatorComponent::Speed)
+			.Field("Playing", &AnimatorComponent::Playing);
 
 		registry.Register<MaterialComponent>("Material")
 			.Field("Material", &MaterialComponent::Material).AssetPath("Materials (*.material)")

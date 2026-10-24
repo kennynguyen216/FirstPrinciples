@@ -158,6 +158,38 @@ namespace FP
 			const Vec3 t = Vec3::Cross(q, v) * 2.0f;
 			return v + t * W + Vec3::Cross(q, t);
 		}
+
+		static float Dot(const Quat& a, const Quat& b) { return a.X * b.X + a.Y * b.Y + a.Z * b.Z + a.W * b.W; }
+
+		Quat Normalized() const
+		{
+			const float length = std::sqrt(Dot(*this, *this));
+			if (length < 1e-12f)
+				return {};
+			return { X / length, Y / length, Z / length, W / length };
+		}
+
+		// Shortest path between two rotations. t is 0 at a and 1 at b.
+		static Quat Slerp(const Quat& a, Quat b, float t)
+		{
+			float cosAngle = Dot(a, b);
+			if (cosAngle < 0)
+			{
+				b = { -b.X, -b.Y, -b.Z, -b.W };
+				cosAngle = -cosAngle;
+			}
+			float wa = 1 - t;
+			float wb = t;
+			// Nearly the same rotation, where plain lerp is accurate and slerp would divide by zero.
+			if (cosAngle < 0.9995f)
+			{
+				const float angle = std::acos(cosAngle);
+				const float sinAngle = std::sin(angle);
+				wa = std::sin(wa * angle) / sinAngle;
+				wb = std::sin(wb * angle) / sinAngle;
+			}
+			return Quat{ a.X * wa + b.X * wb, a.Y * wa + b.Y * wb, a.Z * wa + b.Z * wb, a.W * wa + b.W * wb }.Normalized();
+		}
 	};
 
 	// 4x4 matrix stored column major so it uploads straight into GLSL.

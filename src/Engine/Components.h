@@ -63,11 +63,34 @@ namespace FP
 		int32 Layer = 0; // higher draws on top
 	};
 
-	// A built in shape (Cube, Sphere, Plane, Quad) or a .obj file relative to Content.
+	// A built in shape (Cube, Sphere, Plane, Quad), or an .obj, .gltf or .glb file relative to Content.
 	// Uses the entity's MaterialComponent for shading, one material per mesh section.
 	struct MeshComponent
 	{
 		String Mesh = "Cube";
+	};
+
+	// A .gltf or .glb with a skin, relative to Content. Draws in its bind pose until an
+	// Animator moves its bones. Uses the entity's MaterialComponent like MeshComponent.
+	struct SkeletalMeshComponent
+	{
+		String Mesh;
+	};
+
+	// Plays animation clips on the entity's SkeletalMeshComponent while the game runs.
+	// Loops Clip unless a script builds a state machine with GetAnimator().
+	struct AnimatorComponent
+	{
+		String Clip;
+		float Speed = 1;
+		bool Playing = true;
+	};
+
+	// Bone matrices for a skeletal mesh this frame, written by the AnimationSystem.
+	// Not saved and not shown in the editor.
+	struct SkeletalPoseComponent
+	{
+		Array<Mat4> Skin;
 	};
 
 	// Points at shared .material files. Works on sprites and meshes.

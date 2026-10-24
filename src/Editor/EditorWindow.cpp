@@ -22,6 +22,8 @@
 #include "Engine/SceneSerializer.h"
 #include "Engine/Scripting/ScriptRuntime.h"
 #include "Engine/Scripting/ScriptSystem.h"
+#include "Engine/Animation/AnimationSystem.h"
+#include "Engine/Animation/SkeletalModel.h"
 #include "Game.h"
 
 #include <SDL3/SDL_timer.h>
@@ -566,7 +568,17 @@ namespace FP::Editor
 		{
 			changed = m_World->CreateEntity(name);
 			m_World->Get<TransformComponent>(changed).Position = point;
-			m_World->Add<MeshComponent>(changed).Mesh = ToString(relative);
+			// A glTF with a skin becomes a skeletal mesh that plays its first clip.
+			const SkeletalModel* model = IsGltfPath(ToString(relative).View()) ? SkeletalModelLibrary::Get().Load(ToString(relative)) : nullptr;
+			if (model && model->IsSkinned())
+			{
+				m_World->Add<SkeletalMeshComponent>(changed).Mesh = ToString(relative);
+				m_World->Add<AnimatorComponent>(changed).Clip = model->Clips.IsEmpty() ? String() : model->Clips[0].Name;
+			}
+			else
+			{
+				m_World->Add<MeshComponent>(changed).Mesh = ToString(relative);
+			}
 		}
 		else if (kind == "Material")
 		{
@@ -1214,6 +1226,7 @@ namespace FP::Editor
 		// Snapshot the scene so Stop can put everything back.
 		m_PlaySnapshot = SceneSerializer::SaveToString(*m_World.Get());
 		m_World->AddSystem<ScriptSystem>();
+		m_World->AddSystem<AnimationSystem>();
 		Game::AddSystems(*m_World.Get());
 		m_World->BeginPlay();
 		m_Viewport->SetPlaying(true);

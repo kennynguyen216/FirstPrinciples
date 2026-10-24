@@ -2,7 +2,7 @@
 // fragment textures in set 2 and fragment uniforms in set 3.
 
 // Each stage declares only its own blocks so Vulkan never sees resources outside SDL's sets.
-// Mesh.vert defines FP_VERTEX_SHADER before including this file.
+// Mesh.vert and SkinnedMesh.vert define FP_VERTEX_SHADER before including this file.
 #ifdef FP_VERTEX_SHADER
 
 // Per draw data for Mesh.vert.
@@ -14,6 +14,15 @@ layout(set = 1, binding = 0) uniform ObjectData
 	vec4 UVTransform; // xy tiling, zw offset
 	vec4 Tint;        // linear
 } Object;
+
+#ifdef FP_SKINNED
+// Bone matrices for SkinnedMesh.vert, vertex uniform slot 1. Matches MaxSkinBones in C++.
+#define MAX_BONES 128
+layout(set = 1, binding = 1) uniform BoneData
+{
+	mat4 Matrices[MAX_BONES];
+} Bones;
+#endif
 
 #else
 

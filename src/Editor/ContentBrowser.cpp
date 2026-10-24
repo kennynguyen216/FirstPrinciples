@@ -497,7 +497,7 @@ namespace FP::Editor
 		if (suffix == "scene") return "Scene";
 		if (suffix == "material") return "Material";
 		if (QStringList{ "png", "jpg", "jpeg", "tga", "bmp" }.contains(suffix)) return "Texture";
-		if (suffix == "obj") return "Mesh";
+		if (QStringList{ "obj", "gltf", "glb" }.contains(suffix)) return "Mesh";
 		if (QStringList{ "cpp", "h", "hpp" }.contains(suffix)) return "Script";
 		return "File";
 	}
@@ -666,7 +666,7 @@ namespace FP::Editor
 
 	void ContentBrowser::ImportFiles()
 	{
-		const QStringList files = QFileDialog::getOpenFileNames(this, "Import", QString(), "Assets (*.png *.jpg *.jpeg *.tga *.bmp *.obj *.material *.scene);;All files (*)");
+		const QStringList files = QFileDialog::getOpenFileNames(this, "Import", QString(), "Assets (*.png *.jpg *.jpeg *.tga *.bmp *.obj *.gltf *.glb *.bin *.material *.scene);;All files (*)");
 		QString last;
 		for (const QString& file : files)
 		{

@@ -13,6 +13,7 @@ namespace FP
 		RefPtr<GPUBuffer> Indices;
 		uint32 IndexCount = 0;
 		Array<MeshSection> Sections; // drawn one at a time, each with its own material
+		RefPtr<GPUBuffer> Skin; // SkinVertex per vertex, only on skeletal meshes
 		Vec3 BoundsMin;
 		Vec3 BoundsMax;
 	};
@@ -27,9 +28,15 @@ namespace FP
 		// Null when the name is empty or the file fails to load (logged once).
 		GPUMesh* Get(const String& nameOrPath);
 
+		// A glTF with its skin weights. Null when it fails to load or has no skin.
+		GPUMesh* GetSkinned(const String& path);
+
 	private:
+		RefPtr<GPUMesh> Upload(const MeshData& data);
+
 		GPUDevice& m_Device;
 		HashMap<String, RefPtr<GPUMesh>> m_Meshes;
+		HashMap<String, RefPtr<GPUMesh>> m_Skinned;
 		Array<String> m_Failed;
 	};
 }

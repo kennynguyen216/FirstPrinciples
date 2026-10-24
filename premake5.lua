@@ -25,7 +25,9 @@ local StbInclude = Root .. "/ThirdParty/stb"
 local MonocypherDir = Root .. "/ThirdParty/monocypher/src"
 -- Logging backend, header only.
 local SpdlogInclude = Root .. "/ThirdParty/spdlog/include"
-if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) or not os.isdir(SpdlogInclude) then
+-- glTF parser for skeletal meshes and animations. One header, built once by CgltfImpl.cpp.
+local CgltfInclude = Root .. "/ThirdParty/cgltf"
+if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) or not os.isdir(SpdlogInclude) or not os.isdir(CgltfInclude) then
 	premake.warn("Submodules are missing. Run: git submodule update --init")
 end
 
@@ -79,7 +81,7 @@ local ProjectName = io.readfile(ProjectFile):match('Name%s+"?([%w_]+)"?') or pat
 
 -- Include paths every project that touches engine headers needs.
 local function EngineIncludes()
-	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir, SpdlogInclude }
+	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir, SpdlogInclude, CgltfInclude }
 end
 
 local function UseSDL()

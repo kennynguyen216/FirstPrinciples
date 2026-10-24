@@ -279,9 +279,8 @@ namespace FP::Editor
 		const TransformComponent& transform = m_World->Get<TransformComponent>(m_Selected);
 		const Mat4 model = transform.GetMatrix();
 
-		if (const MeshComponent* mesh = m_World->TryGet<MeshComponent>(m_Selected))
 		{
-			if (const GPUMesh* gpuMesh = m_Renderer->GetMeshes().Get(mesh->Mesh))
+			if (const GPUMesh* gpuMesh = FindMesh(m_Selected))
 			{
 				// Pad by a few pixels so the box sits just outside the surface.
 				const Vec3 pad = Vec3(1, 1, 1) * (3.0f * view.WorldPerPixel(transform.Position));
@@ -331,11 +330,19 @@ namespace FP::Editor
 		return best;
 	}
 
+	const GPUMesh* ViewportWidget::FindMesh(Entity entity) const
+	{
+		if (const MeshComponent* mesh = m_World->TryGet<MeshComponent>(entity))
+			return m_Renderer->GetMeshes().Get(mesh->Mesh);
+		if (const SkeletalMeshComponent* skeletal = m_World->TryGet<SkeletalMeshComponent>(entity))
+			return m_Renderer->GetMeshes().GetSkinned(skeletal->Mesh);
+		return nullptr;
+	}
+
 	bool ViewportWidget::HitSurface(const Ray& ray, Entity entity, float& outDistance) const
 	{
 		const TransformComponent& transform = m_World->Get<TransformComponent>(entity);
 		const SpriteComponent* sprite = m_World->TryGet<SpriteComponent>(entity);
-		const MeshComponent* mesh = m_World->TryGet<MeshComponent>(entity);
 
 		Vec3 min{ -0.5f, -0.5f, 0 };
 		Vec3 max{ 0.5f, 0.5f, 0 };
@@ -344,7 +351,7 @@ namespace FP::Editor
 		{
 			model = model * Mat4::Scale({ sprite->Size, 1 });
 		}
-		else if (const GPUMesh* gpuMesh = mesh ? m_Renderer->GetMeshes().Get(mesh->Mesh) : nullptr)
+		else if (const GPUMesh* gpuMesh = FindMesh(entity))
 		{
 			min = gpuMesh->BoundsMin;
 			max = gpuMesh->BoundsMax;
@@ -415,6 +422,8 @@ namespace FP::Editor
 		for (auto [entity, transform, sprite] : m_World->View<TransformComponent, SpriteComponent>().each())
 			consider(entity, sprite.Layer);
 		for (auto [entity, transform, mesh] : m_World->View<TransformComponent, MeshComponent>().each())
+			consider(entity, 0);
+		for (auto [entity, transform, mesh] : m_World->View<TransformComponent, SkeletalMeshComponent>().each())
 			consider(entity, 0);
 		return best;
 	}

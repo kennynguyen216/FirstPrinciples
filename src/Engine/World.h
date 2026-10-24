@@ -12,6 +12,7 @@ namespace FP
 {
 	class World;
 	class AudioWorld;
+	class Animator;
 
 	using Entity = entt::entity;
 	inline constexpr entt::null_t NullEntity = entt::null;
@@ -37,6 +38,10 @@ namespace FP
 		~World() override;
 		// Scripts dispatch into the host so audio state never retains code from a reloadable module.
 		virtual AudioWorld& GetAudio();
+
+		// The entity's animator, made on first use. Null without an AnimatorComponent.
+		// Virtual for the same reason as GetAudio.
+		virtual Animator* GetAnimator(Entity entity);
 
 		// ---- Entities ------------------------------------------------------
 

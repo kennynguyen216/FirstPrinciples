@@ -5,6 +5,7 @@
 #include "Engine/Material.h"
 #include "Engine/Paths.h"
 #include "Engine/Render/MeshData.h"
+#include "Engine/Animation/SkeletalModel.h"
 #include "Engine/Scripting/ScriptRuntime.h"
 #include "Editor/ContentBrowser.h"
 #include "Editor/EditorIcons.h"
@@ -681,8 +682,10 @@ namespace FP::Editor
 	void InspectorPanel::AddMaterialSlots(QFormLayout* form)
 	{
 		const MeshComponent* meshComponent = m_World->TryGet<MeshComponent>(m_Entity);
+		const SkeletalMeshComponent* skeletal = m_World->TryGet<SkeletalMeshComponent>(m_Entity);
 		MeshData mesh;
-		if (!meshComponent || !LoadMesh(meshComponent->Mesh.View(), mesh) || mesh.Sections.Num() < 2)
+		const bool loaded = meshComponent ? LoadMesh(meshComponent->Mesh.View(), mesh) : skeletal && LoadMesh(skeletal->Mesh.View(), mesh);
+		if (!loaded || mesh.Sections.Num() < 2)
 			return;
 
 		// One row per section. An empty slot falls back to the Material above.
@@ -708,6 +711,23 @@ namespace FP::Editor
 					edit->setPlaceholderText("Uses Material");
 			}
 		}
+	}
+
+	void InspectorPanel::AddAnimatorClips(QFormLayout* form)
+	{
+		// Lists what the skeletal mesh can play, for the Clip field and for scripts.
+		const SkeletalMeshComponent* skeletal = m_World->TryGet<SkeletalMeshComponent>(m_Entity);
+		const SkeletalModel* model = skeletal ? SkeletalModelLibrary::Get().Load(skeletal->Mesh) : nullptr;
+		QStringList names;
+		if (model)
+		{
+			for (const AnimationClip& clip : model->Clips)
+				names.append(QString("%1 (%2 s)").arg(ToQString(clip.Name)).arg(clip.Duration, 0, 'f', 2));
+		}
+		QLabel* label = new QLabel(!skeletal ? "Add a Skeletal Mesh to animate" : names.isEmpty() ? "None" : names.join("\n"));
+		label->setWordWrap(true);
+		label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+		form->addRow("Clips", label);
 	}
 
 	void InspectorPanel::AddMaterialEditor(const String& path, const QString& title)
@@ -811,8 +831,8 @@ namespace FP::Editor
 					if (info == ComponentRegistry::Get().Find<AudioSourceComponent>())
 						StopPreview();
 					emit Modified();
-					// A new mesh can have different sections, so the material slots change too.
-					if (info == ComponentRegistry::Get().Find<MeshComponent>())
+					// A new mesh can have different sections and clips, so those rows change too.
+					if (info == ComponentRegistry::Get().Find<MeshComponent>() || info == ComponentRegistry::Get().Find<SkeletalMeshComponent>())
 						RebuildLater();
 				});
 				if (info == ComponentRegistry::Get().Find<AudioSourceComponent>())
@@ -836,6 +856,8 @@ namespace FP::Editor
 
 			if (info == ComponentRegistry::Get().Find<MaterialComponent>())
 				AddMaterialSlots(form);
+			if (info == ComponentRegistry::Get().Find<AnimatorComponent>())
+				AddAnimatorClips(form);
 
 			QToolButton* remove = group->AddAction(EditorIcons::Get(EditorIcon::Close), "", "Remove component");
 			connect(remove, &QToolButton::clicked, this, [this, info]() {

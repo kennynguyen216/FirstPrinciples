@@ -21,7 +21,7 @@ namespace FP::Editor
 			if (type == "Point Light") return EditorIcon::PointLight;
 			if (type == "Directional Light") return EditorIcon::DirectionalLight;
 			if (type == "Ambient Light") return EditorIcon::AmbientLight;
-			if (type == "Mesh") return EditorIcon::Mesh;
+			if (type == "Mesh" || type == "Skeletal Mesh") return EditorIcon::Mesh;
 			if (type == "Sprite") return EditorIcon::Sprite;
 			return EditorIcon::Entity;
 		}
@@ -75,6 +75,7 @@ namespace FP::Editor
 		if (world.Has<DirectionalLightComponent>(entity)) return "Directional Light";
 		if (world.Has<AmbientLightComponent>(entity)) return "Ambient Light";
 		if (world.Has<MeshComponent>(entity)) return "Mesh";
+		if (world.Has<SkeletalMeshComponent>(entity)) return "Skeletal Mesh";
 		if (world.Has<SpriteComponent>(entity)) return "Sprite";
 		return "Entity";
 	}
