@@ -1,0 +1,28 @@
+{
+  "_status": "PLACEHOLDER. Values are from memory of the cited sources and must be checked before balancing.",
+  "_note": "Real per person per day rates. MatchConfig.SecondsPerRealDay turns them into per second rates, so the ratios between them stay true.",
+  "perPersonPerDay": {
+    "oxygenConsumedKg": {
+      "value": 0.82,
+      "source": "NASA Life Support Baseline Values and Assumptions Document (BVAD), NASA/TP-2015-218570 Rev 2, nominal crewmember",
+      "verified": false
+    },
+    "carbonDioxideProducedKg": {
+      "value": 1.04,
+      "source": "NASA BVAD, NASA/TP-2015-218570 Rev 2, nominal crewmember",
+      "verified": false
+    },
+    "potableWaterKg": {
+      "value": 2.5,
+      "source": "NASA BVAD, NASA/TP-2015-218570 Rev 2, drinking and food preparation water",
+      "verified": false
+    }
+  },
+  "recycling": {
+    "issWaterRecoveryFraction": {
+      "value": 0.98,
+      "source": "NASA, ISS Environmental Control and Life Support System reaching 98% water recovery with the Brine Processor Assembly (announced June 2023)",
+      "verified": false
+    }
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "_status": "PLACEHOLDER. Replace the events with ones fetched from DONKI before the demo. The game never calls the API while running.",
+  "_fetch": "https://api.nasa.gov/DONKI/FLR?startDate=2024-05-01&endDate=2024-05-31&api_key=DEMO_KEY",
+  "_note": "Each class is ten times the peak X-ray flux of the one below it. Surge size scales with peakFluxWm2 so an X-class flare always hits harder than an M-class.",
+  "classPeakFluxWm2": {
+    "_source": "NOAA GOES X-ray flare classification (1-8 Angstrom band)",
+    "C": 1e-6,
+    "M": 1e-5,
+    "X": 1e-4
+  },
+  "events": [
+    {
+      "id": "2017-09-06-X9.3",
+      "class": "X9.3",
+      "peakTimeUtc": "2017-09-06T12:02Z",
+      "source": "NASA DONKI FLR",
+      "verified": false
+    },
+    {
+      "id": "2017-09-10-X8.2",
+      "class": "X8.2",
+      "peakTimeUtc": "2017-09-10T16:06Z",
+      "source": "NASA DONKI FLR",
+      "verified": false
+    },
+    {
+      "id": "2024-05-14-X8.7",
+      "class": "X8.7",
+      "peakTimeUtc": "2024-05-14T16:51Z",
+      "source": "NASA DONKI FLR",
+      "verified": false
+    },
+    {
+      "id": "PLACEHOLDER-M",
+      "class": "M5.0",
+      "peakTimeUtc": "PLACEHOLDER: pick a real M-class event from DONKI",
+      "source": "NASA DONKI FLR",
+      "verified": false
+    },
+    {
+      "id": "PLACEHOLDER-C",
+      "class": "C5.0",
+      "peakTimeUtc": "PLACEHOLDER: pick a real C-class event from DONKI",
+      "source": "NASA DONKI FLR",
+      "verified": false
+    }
+  ],
+  "_scheduleNote": "When each flare hits, in seconds after GO. Both crews get the same schedule.",
+  "schedule": [
+    { "atSeconds": 60, "event": "PLACEHOLDER-C" },
+    { "atSeconds": 140, "event": "PLACEHOLDER-M" },
+    { "atSeconds": 220, "event": "2017-09-06-X9.3" }
+  ]
+}

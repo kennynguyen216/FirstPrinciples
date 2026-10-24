@@ -1,0 +1,36 @@
+{
+  "_status": "PLACEHOLDER. Values are from memory of the cited papers and must be checked before balancing.",
+  "radiation": {
+    "cruiseDoseMilliSievertPerDay": {
+      "value": 1.84,
+      "source": "Zeitlin et al. 2013, Science 340: Curiosity RAD measurements during the cruise to Mars",
+      "verified": false
+    },
+    "surfaceDoseMilliSievertPerDay": {
+      "value": 0.64,
+      "source": "Hassler et al. 2014, Science 343: Curiosity RAD measurements on the surface of Mars",
+      "verified": false
+    }
+  },
+  "marsSurface": {
+    "meanTemperatureC": {
+      "value": -63,
+      "source": "NASA Mars fact sheet; Curiosity REMS for local readings",
+      "verified": false
+    },
+    "meanPressurePa": {
+      "value": 610,
+      "source": "NASA Mars fact sheet; Curiosity REMS for local readings",
+      "verified": false
+    }
+  },
+  "dustStorms": [
+    {
+      "name": "2018 planet-encircling dust storm",
+      "start": "2018-06",
+      "end": "2018-09",
+      "source": "NASA Mars Exploration Program; the storm that ended the Opportunity rover mission",
+      "verified": false
+    }
+  ]
+}
