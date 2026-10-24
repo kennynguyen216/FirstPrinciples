@@ -3,6 +3,7 @@
 #include "HAL/PlatformMisc.h"
 #include "Core/Log.h"
 
+#include <cmath>
 #include <thread>
 
 using namespace FP;
