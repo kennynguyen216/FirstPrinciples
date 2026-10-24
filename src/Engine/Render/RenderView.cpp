@@ -38,6 +38,15 @@ namespace FP
 		return { (clip.X / w * 0.5f + 0.5f) * static_cast<float>(Width), (0.5f - clip.Y / w * 0.5f) * static_cast<float>(Height) };
 	}
 
+	float RenderView::WorldPerPixel(Vec3 world) const
+	{
+		if (Orthographic)
+			return 1.0f / PixelsPerUnit;
+		// Projection(1,1) is 1 / tan(fov / 2), so this is the visible height at that depth over the pixel height.
+		const float depth = std::fmax(Vec3::Dot(world - CameraPosition, CameraForward), 0.01f);
+		return 2.0f * depth / (Projection.At(1, 1) * static_cast<float>(Height));
+	}
+
 	RenderView RenderView::FromCamera(const TransformComponent& transform, const CameraComponent& camera, uint32 width, uint32 height)
 	{
 		RenderView view;
@@ -46,6 +55,8 @@ namespace FP
 		view.Background = camera.Background;
 		view.CameraPosition = transform.Position;
 		view.CameraForward = transform.GetForward();
+		view.CameraRight = transform.GetRight();
+		view.CameraUp = transform.GetUp();
 		view.Orthographic = !camera.Perspective;
 		view.Exposure = camera.Exposure;
 		view.Tonemap = camera.Tonemap;

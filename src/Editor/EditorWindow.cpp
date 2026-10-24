@@ -5,6 +5,7 @@
 #include "Engine/FieldSerializer.h"
 #include "Engine/Input.h"
 #include "Engine/Material.h"
+#include "Engine/Render/MeshData.h"
 #include "Engine/Paths.h"
 #include "Engine/SceneSerializer.h"
 #include "Game/Game.h"
@@ -134,6 +135,18 @@ namespace FP::Editor
 		QMenu* entity = menuBar()->addMenu("&Entity");
 		entity->addAction("Create &Empty", QKeySequence("Ctrl+Shift+N"), this, [this]() { CreateEntity(false); });
 		entity->addAction("Create &Sprite", QKeySequence("Ctrl+Shift+A"), this, [this]() { CreateEntity(true); });
+		QMenu* meshes = entity->addMenu("Create &Mesh");
+		for (const char* shape : Primitives::GetNames())
+		{
+			const QString name = shape;
+			meshes->addAction(name, this, [this, name]() {
+				Entity mesh = m_World->CreateEntity(ToString(name));
+				m_World->Add<MeshComponent>(mesh).Mesh = ToString(name);
+				MarkDirty();
+				RefreshHierarchy();
+				Select(mesh);
+			});
+		}
 		entity->addAction("Create &Point Light", this, [this]() {
 			Entity light = m_World->CreateEntity("Point Light");
 			m_World->Get<TransformComponent>(light).Position.Z = 1.5f; // above the sprites so it lights their faces
@@ -160,12 +173,22 @@ namespace FP::Editor
 		m_StopAction = toolbar->addAction("Stop", this, &EditorWindow::Stop);
 		m_StopAction->setEnabled(false);
 		toolbar->addSeparator();
+		m_View3DAction = toolbar->addAction("3D View");
+		m_View3DAction->setCheckable(true);
+		m_View3DAction->setShortcut(QKeySequence("Ctrl+3"));
+		connect(m_View3DAction, &QAction::toggled, this, [this](bool on) { m_Viewport->Set3D(on); });
+		toolbar->addSeparator();
 		toolbar->addAction("Collect Garbage", this, []() {
 			const GarbageCollectionStats stats = GarbageCollector::Get().Collect();
 			FP_LOG("GC freed %d objects, %d alive, %.3f ms", stats.NumFreed, stats.NumAlive, stats.Milliseconds);
 		});
 
-		statusBar()->showMessage("Right drag to pan, wheel to zoom, left drag to move, shift snaps");
+		statusBar()->showMessage("2D: right drag pans, wheel zooms. 3D (Ctrl+3): right drag orbits, middle drag pans, wheel dollies. Left drag moves, Shift snaps, F focuses");
+	}
+
+	void EditorWindow::Set3DView(bool enabled)
+	{
+		m_View3DAction->setChecked(enabled);
 	}
 
 	void EditorWindow::Tick()

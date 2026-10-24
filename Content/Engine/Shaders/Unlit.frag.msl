@@ -12,19 +12,12 @@ struct MaterialData
     float4 Params2;
 };
 
-struct ObjectData
-{
-    float4x4 ViewProjection;
-    float4x4 Model;
-    float4x4 NormalMatrix;
-    float4 UVTransform;
-    float4 Tint;
-};
-
 struct FrameData
 {
     float4 CameraPosition;
     float4 CameraForward;
+    float4 CameraRight;
+    float4 CameraUp;
     float4 Ambient;
     float4 ScreenSize;
     int4 LightCount;

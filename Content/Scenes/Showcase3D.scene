@@ -1,0 +1,156 @@
+# FirstPrinciples scene
+version 2
+
+entity 3d000001-0001-4001-8001-000000000001
+component Name
+  Name "Main Camera"
+component Transform
+  Position 0 3.2 8.5
+  Rotation -16 0 0
+  Scale 1 1 1
+component Camera
+  Perspective true
+  Zoom 64
+  FieldOfView 55
+  NearClip 0.100000001
+  FarClip 500
+  Primary true
+  Background 0.03 0.035 0.05 1
+  Exposure 1
+  Tonemap true
+
+entity 3d000002-0002-4002-8002-000000000002
+component Name
+  Name "Ambient"
+component Transform
+  Position 0 0 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component AmbientLight
+  Color 0.6 0.7 1 1
+  Intensity 0.3
+
+entity 3d000003-0003-4003-8003-000000000003
+component Name
+  Name "Sun"
+component Transform
+  Position 0 0 0
+  Rotation -45 35 0
+  Scale 1 1 1
+component DirectionalLight
+  Color 1 0.95 0.85 1
+  Intensity 1.6
+
+entity 3d000004-0004-4004-8004-000000000004
+component Name
+  Name "Floor"
+component Transform
+  Position 0 0 0
+  Rotation 0 0 0
+  Scale 14 1 14
+component Mesh
+  Mesh "Plane"
+component Material
+  Material "Materials/BricksFloor.material"
+
+entity 3d000005-0005-4005-8005-000000000005
+component Name
+  Name "Back Wall"
+component Transform
+  Position 0 3 -5
+  Rotation 90 0 0
+  Scale 14 1 6
+component Mesh
+  Mesh "Plane"
+component Material
+  Material "Materials/Bricks.material"
+
+entity 3d000006-0006-4006-8006-000000000006
+component Name
+  Name "Gold Sphere"
+component Transform
+  Position -3 0.75 0
+  Rotation 0 0 0
+  Scale 1.5 1.5 1.5
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Gold.material"
+
+entity 3d000007-0007-4007-8007-000000000007
+component Name
+  Name "Plastic Cube"
+component Transform
+  Position -1 0.6 1.5
+  Rotation 0 25 0
+  Scale 1.2 1.2 1.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Plastic.material"
+component Spinner
+  DegreesPerSecond 30
+  Axis 0 1 0
+
+entity 3d000008-0008-4008-8008-000000000008
+component Name
+  Name "Jelly Sphere"
+component Transform
+  Position 1.2 0.6 -1
+  Rotation 0 0 0
+  Scale 1.2 1.2 1.2
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Jelly.material"
+
+entity 3d000009-0009-4009-8009-000000000009
+component Name
+  Name "Neon Cube"
+component Transform
+  Position 3.2 0.75 0.2
+  Rotation 0 -20 0
+  Scale 1.5 1.5 1.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Neon.material"
+component Spinner
+  DegreesPerSecond -20
+  Axis 0 1 0
+
+entity 3d00000a-000a-400a-800a-00000000000a
+component Name
+  Name "Glass Sphere"
+component Transform
+  Position 0.8 1 2.2
+  Rotation 0 0 0
+  Scale 1.8 1.8 1.8
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Glass.material"
+
+entity 3d00000b-000b-400b-800b-00000000000b
+component Name
+  Name "Warm Light"
+component Transform
+  Position -2 2.5 2.5
+  Rotation 0 0 0
+  Scale 1 1 1
+component PointLight
+  Color 1 0.75 0.45 1
+  Intensity 8
+  Range 8
+
+entity 3d00000c-000c-400c-800c-00000000000c
+component Name
+  Name "Cyan Light"
+component Transform
+  Position 3 2 2
+  Rotation 0 0 0
+  Scale 1 1 1
+component PointLight
+  Color 0.3 0.9 1 1
+  Intensity 6
+  Range 7

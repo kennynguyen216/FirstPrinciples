@@ -10,7 +10,9 @@ namespace FP::Editor
 	// Renders the world on the GPU into an offscreen texture and paints the pixels with Qt.
 	// Avoids embedding a native SDL window, which behaves differently on every OS.
 	//
-	// Edit mode: right or middle drag pans, wheel zooms, left click selects, left drag moves.
+	// 2D edit mode: right or middle drag pans, wheel zooms.
+	// 3D edit mode: right drag (or Alt left drag) orbits, middle drag (or Shift right drag) pans, wheel dollies.
+	// Both: left click selects, left drag moves along the view plane, F focuses the selection.
 	// Play mode: shows the game camera and forwards keys and mouse to Input.
 	class ViewportWidget : public QWidget
 	{
@@ -23,6 +25,12 @@ namespace FP::Editor
 		void SetWorld(World* world) { m_World = world; }
 		void SetSelected(Entity entity) { m_Selected = entity; }
 		void SetPlaying(bool playing);
+
+		void Set3D(bool enabled) { m_3D = enabled; }
+		bool Is3D() const { return m_3D; }
+
+		// Centers the editor camera on the selected entity.
+		void FocusSelected();
 
 		// Draws one frame. The editor calls this from its tick.
 		void RenderFrame();
@@ -49,9 +57,14 @@ namespace FP::Editor
 		RenderView CurrentView() const;
 		Vec2 ToPixels(QPointF point) const;
 		Vec2 PixelToWorld2D(Vec2 pixel) const;
-		Entity PickEntity(Vec2 worldPoint);
+
+		// Gizmos first, then the surface the ray hits. 2D prefers the highest sprite layer.
+		Entity Pick(Vec2 pixel) const;
 		Entity PickGizmo(Vec2 pixel) const;
+		bool HitSurface(const Ray& ray, Entity entity, float& outDistance) const;
+
 		void AddGizmos(const RenderView& view);
+		void AddSelection(const RenderView& view);
 
 		GPUDevice& m_Device;
 		Renderer* m_Renderer = nullptr;
@@ -63,13 +76,25 @@ namespace FP::Editor
 		Entity m_Selected = NullEntity;
 		bool m_Playing = false;
 
-		// Editor camera.
+		// 2D editor camera.
 		Vec2 m_CameraCenter;
 		float m_PixelsPerUnit = 48;
 
+		// 3D editor camera orbits a target point.
+		bool m_3D = false;
+		Vec3 m_OrbitTarget{ 0, 0.5f, 0 };
+		float m_Yaw = 0;
+		float m_Pitch = -25;
+		float m_Distance = 10;
+
 		QPointF m_LastMouse;
 		bool m_Panning = false;
+		bool m_Orbiting = false;
 		bool m_Dragging = false;
-		Vec2 m_DragOffset;
+
+		// Dragging moves the selection along a plane facing the camera through where it was grabbed.
+		Vec3 m_DragPlanePoint;
+		Vec3 m_DragPlaneNormal;
+		Vec3 m_DragOffset;
 	};
 }

@@ -12,26 +12,6 @@ struct ObjectData
     float4 Tint;
 };
 
-struct MaterialData
-{
-    float4 BaseColor;
-    float4 Emissive;
-    float4 Subsurface;
-    float4 Params;
-    float4 Params2;
-};
-
-struct FrameData
-{
-    float4 CameraPosition;
-    float4 CameraForward;
-    float4 Ambient;
-    float4 ScreenSize;
-    int4 LightCount;
-    float4 LightPosition[16];
-    float4 LightColor[16];
-};
-
 struct main0_out
 {
     float3 OutWorldPosition [[user(locn0)]];

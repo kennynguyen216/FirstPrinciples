@@ -48,6 +48,8 @@ struct FrameData
 {
     float4 CameraPosition;
     float4 CameraForward;
+    float4 CameraRight;
+    float4 CameraUp;
     float4 Ambient;
     float4 ScreenSize;
     int4 LightCount;
@@ -64,16 +66,7 @@ struct MaterialData
     float4 Params2;
 };
 
-struct ObjectData
-{
-    float4x4 ViewProjection;
-    float4x4 Model;
-    float4x4 NormalMatrix;
-    float4 UVTransform;
-    float4 Tint;
-};
-
-constant spvUnsafeArray<float2, 8> _495 = spvUnsafeArray<float2, 8>({ float2(0.707099974155426025390625), float2(-0.707099974155426025390625, 0.707099974155426025390625), float2(0.707099974155426025390625, -0.707099974155426025390625), float2(-0.707099974155426025390625), float2(1.0, 0.0), float2(-1.0, 0.0), float2(0.0, 1.0), float2(0.0, -1.0) });
+constant spvUnsafeArray<float2, 8> _500 = spvUnsafeArray<float2, 8>({ float2(0.707099974155426025390625), float2(-0.707099974155426025390625, 0.707099974155426025390625), float2(0.707099974155426025390625, -0.707099974155426025390625), float2(-0.707099974155426025390625), float2(1.0, 0.0), float2(-1.0, 0.0), float2(0.0, 1.0), float2(0.0, -1.0) });
 
 struct main0_out
 {
@@ -195,8 +188,8 @@ fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Materi
     float ior = fast::max(Material.Params2.z, 1.0);
     float thickness = Material.Params2.w;
     float3 bent = refract(-v, n, 1.0 / ior);
-    float3 straight = refract(-v, geometryNormal, 1.0 / ior);
-    float2 offset = ((bent - straight).xy * thickness) * 0.100000001490116119384765625;
+    float3 turn = bent + v;
+    float2 offset = (float2(dot(turn, Frame.CameraRight.xyz), dot(turn, Frame.CameraUp.xyz)) * thickness) * 0.100000001490116119384765625;
     float2 screenUV = (gl_FragCoord.xy * Frame.ScreenSize.zw) + float2(offset.x, -offset.y);
     float3 behind = SceneColor.sample(SceneColorSmplr, screenUV).xyz;
     float blur = (roughness * roughness) * 0.02999999932944774627685546875;
@@ -204,7 +197,7 @@ fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Materi
     {
         for (int i = 0; i < 8; i++)
         {
-            behind += SceneColor.sample(SceneColorSmplr, (screenUV + (_495[i] * blur))).xyz;
+            behind += SceneColor.sample(SceneColorSmplr, (screenUV + (_500[i] * blur))).xyz;
         }
         behind /= float3(9.0);
     }

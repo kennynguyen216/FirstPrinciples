@@ -29,6 +29,7 @@ namespace FP::Editor
 
 		void OpenScene(const QString& path);
 		World& GetWorld() { return *m_World.Get(); }
+		void Set3DView(bool enabled);
 		void Play();
 		void Stop();
 		void Select(Entity entity);
@@ -72,6 +73,7 @@ namespace FP::Editor
 		QTimer* m_Timer = nullptr;
 		QAction* m_PlayAction = nullptr;
 		QAction* m_StopAction = nullptr;
+		QAction* m_View3DAction = nullptr;
 
 		uint64 m_LastTicks = 0;
 		int32 m_HierarchyCount = -1;

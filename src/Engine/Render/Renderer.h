@@ -2,21 +2,14 @@
 
 #include "Engine/Render/DebugLines.h"
 #include "Engine/Render/GPUDevice.h"
+#include "Engine/Render/MeshData.h"
+#include "Engine/Render/MeshLibrary.h"
 #include "Engine/Render/RenderView.h"
 #include "Engine/Render/TextureCache.h"
 
 namespace FP
 {
 	class Material;
-
-	// Vertex layout shared by sprites and meshes. Matches Mesh.vert.
-	struct MeshVertex
-	{
-		Vec3 Position;
-		Vec3 Normal;
-		Vec2 UV;
-		Vec4 Tangent; // w is the bitangent sign
-	};
 
 	// Uniform blocks. Layouts match Common.glsl (std140).
 	struct ObjectUniforms
@@ -43,6 +36,8 @@ namespace FP
 	{
 		Vec4 CameraPosition;
 		Vec4 CameraForward;
+		Vec4 CameraRight;
+		Vec4 CameraUp;
 		Vec4 Ambient;
 		Vec4 ScreenSize;
 		int32 LightCount[4] = {};
@@ -53,8 +48,9 @@ namespace FP
 	// Editors pick colors in sRGB. Shaders work in linear.
 	Vec4 ToLinear(const Color& color);
 
-	// Draws a World with SDL_GPU. Opaque and alpha blended objects go into an HDR scene buffer,
-	// glass then refracts a copy of it, and a present pass tonemaps into the target.
+	// Draws a World with SDL_GPU into an HDR scene buffer. Opaque meshes go first with depth,
+	// then sprites blend on top by layer, then glass refracts a copy of the scene, and a present
+	// pass tonemaps into the target.
 	class Renderer
 	{
 	public:
@@ -64,13 +60,14 @@ namespace FP
 		Renderer(const Renderer&) = delete;
 		Renderer& operator=(const Renderer&) = delete;
 
-		bool IsValid() const { return m_UnlitPipeline && m_LitPipeline && m_GlassPipeline && m_PresentPipeline && m_LinePipeline; }
+		bool IsValid() const;
 
 		// Records the frame into cmd. The caller submits it.
 		void Render(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* target, uint32 width, uint32 height,
 			World& world, const RenderView& view, const DebugLines* lines = nullptr);
 
 		TextureCache& GetTextures() { return m_Textures; }
+		MeshLibrary& GetMeshes() { return m_Meshes; }
 		GPUDevice& GetDevice() { return m_Device; }
 
 	private:
@@ -81,31 +78,41 @@ namespace FP
 			Glass,
 		};
 
+		// Sprites blend and sort by layer. Meshes write depth and cull back faces.
+		enum class Surface : uint8
+		{
+			Sprite,
+			Mesh,
+		};
+
 		struct Draw
 		{
 			int32 Layer;
 			float Depth;
 			Entity Value;
 			ShaderKind Kind;
+			Surface Type;
 			const Material* Mat;
+			const GPUMesh* Mesh;
 		};
 
 		void CreatePipelines();
-		SDL_GPUGraphicsPipeline* CreateMeshPipeline(const char* fragment, uint32 numSamplers, uint32 numUniforms, bool blend);
+		SDL_GPUGraphicsPipeline* CreateMeshPipeline(const char* fragment, uint32 numSamplers, uint32 numUniforms, Surface surface, bool glass);
+		SDL_GPUGraphicsPipeline* GetPipeline(const Draw& draw) const;
 		void EnsureTargets(uint32 width, uint32 height);
 		void UploadLines(SDL_GPUCommandBuffer* cmd, const DebugLines& lines);
 		void BuildFrameUniforms(World& world, const RenderView& view, uint32 width, uint32 height);
-		void DrawSprite(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, World& world, const Draw& draw, const Mat4& viewProjection);
+		void DrawObject(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, World& world, const Draw& draw, const Mat4& viewProjection);
 		GPUTexture* Texture(const String& path, bool srgb, GPUTexture* fallback);
 
 		GPUDevice& m_Device;
 		SDL_GPUTextureFormat m_TargetFormat;
 		TextureCache m_Textures;
+		MeshLibrary m_Meshes;
 		FrameUniforms m_Frame;
 
-		SDL_GPUGraphicsPipeline* m_UnlitPipeline = nullptr;
-		SDL_GPUGraphicsPipeline* m_LitPipeline = nullptr;
-		SDL_GPUGraphicsPipeline* m_GlassPipeline = nullptr;
+		// Indexed by ShaderKind then Surface.
+		SDL_GPUGraphicsPipeline* m_ScenePipelines[3][2] = {};
 		SDL_GPUGraphicsPipeline* m_PresentPipeline = nullptr;
 		SDL_GPUGraphicsPipeline* m_LinePipeline = nullptr;
 

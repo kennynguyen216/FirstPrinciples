@@ -90,7 +90,23 @@ namespace FP::Editor
 		if (m_Playing && m_World)
 			return RenderView::FromWorld(*m_World, width, height);
 
-		RenderView view = RenderView::Orthographic2D(m_CameraCenter, m_PixelsPerUnit * static_cast<float>(devicePixelRatioF()), width, height);
+		RenderView view;
+		if (m_3D)
+		{
+			TransformComponent transform;
+			transform.Rotation = { m_Pitch, m_Yaw, 0 };
+			transform.Position = m_OrbitTarget - transform.GetForward() * m_Distance;
+			CameraComponent camera;
+			camera.Perspective = true;
+			camera.FieldOfView = 60;
+			camera.NearClip = 0.05f;
+			camera.FarClip = 5000;
+			view = RenderView::FromCamera(transform, camera, width, height);
+		}
+		else
+		{
+			view = RenderView::Orthographic2D(m_CameraCenter, m_PixelsPerUnit * static_cast<float>(devicePixelRatioF()), width, height);
+		}
 		view.Background = { 0.12f, 0.12f, 0.14f, 1 };
 		return view;
 	}
@@ -110,45 +126,98 @@ namespace FP::Editor
 		return point.XY();
 	}
 
+	void ViewportWidget::FocusSelected()
+	{
+		if (!m_World || !m_World->IsValid(m_Selected) || !m_World->Has<TransformComponent>(m_Selected))
+			return;
+		const Vec3 position = m_World->Get<TransformComponent>(m_Selected).Position;
+		m_CameraCenter = position.XY();
+		m_OrbitTarget = position;
+	}
+
 	void ViewportWidget::AddGizmos(const RenderView& view)
 	{
-		// Sizes are in pixels so gizmos stay readable at any zoom.
-		const float pixel = 1.0f / view.PixelsPerUnit;
-		const float handle = 10.0f * pixel * static_cast<float>(devicePixelRatioF());
+		const float dpr = static_cast<float>(devicePixelRatioF());
 
 		for (auto [entity, transform, light] : m_World->View<TransformComponent, PointLightComponent>().each())
 		{
 			const Color color{ light.Color.R, light.Color.G, light.Color.B, 0.9f };
-			const Vec3 p{ transform.Position.XY(), 0 };
-			m_Lines.AddCircle(p, handle, color, 16);
-			m_Lines.AddLine(p - Vec3(handle, 0, 0), p + Vec3(handle, 0, 0), color);
-			m_Lines.AddLine(p - Vec3(0, handle, 0), p + Vec3(0, handle, 0), color);
+			const Vec3 p = transform.Position;
+			const float handle = 10.0f * dpr * view.WorldPerPixel(p);
+			m_Lines.AddCircle(p, handle, color, 16, view.CameraRight, view.CameraUp);
+			m_Lines.AddLine(p - view.CameraRight * handle, p + view.CameraRight * handle, color);
+			m_Lines.AddLine(p - view.CameraUp * handle, p + view.CameraUp * handle, color);
 			if (entity == m_Selected)
-				m_Lines.AddCircle(p, light.Range, { color.R, color.G, color.B, 0.35f }, 64);
+			{
+				// Range as three rings so it reads as a sphere in 3D and a circle in 2D.
+				const Color faint{ color.R, color.G, color.B, 0.35f };
+				m_Lines.AddCircle(p, light.Range, faint, 64, { 1, 0, 0 }, { 0, 1, 0 });
+				if (m_3D)
+				{
+					m_Lines.AddCircle(p, light.Range, faint, 64, { 1, 0, 0 }, { 0, 0, 1 });
+					m_Lines.AddCircle(p, light.Range, faint, 64, { 0, 1, 0 }, { 0, 0, 1 });
+				}
+			}
 		}
 
 		for (auto [entity, transform, light] : m_World->View<TransformComponent, DirectionalLightComponent>().each())
 		{
 			const Color color{ light.Color.R, light.Color.G, light.Color.B, 0.9f };
-			const Vec3 p{ transform.Position.XY(), 0 };
-			m_Lines.AddCircle(p, handle, color, 16);
-			// Arrow along the light's direction as seen from above.
-			const Vec3 direction = transform.GetForward();
-			const Vec2 flat = direction.XY().LengthSquared() > 1e-4f ? direction.XY().Normalized() : Vec2(0, -1);
-			const Vec3 tip = p + Vec3(flat, 0) * handle * 3.0f;
+			const Vec3 p = transform.Position;
+			const float handle = 10.0f * dpr * view.WorldPerPixel(p);
+			m_Lines.AddCircle(p, handle, color, 16, view.CameraRight, view.CameraUp);
+			const Vec3 forward = transform.GetForward();
+			const Vec3 tip = p + forward * handle * 4.0f;
 			m_Lines.AddLine(p, tip, color);
-			m_Lines.AddLine(tip, tip - Vec3(flat.Rotated(25), 0) * handle, color);
-			m_Lines.AddLine(tip, tip - Vec3(flat.Rotated(-25), 0) * handle, color);
+			m_Lines.AddLine(tip, tip - (forward + transform.GetRight() * 0.5f) * handle, color);
+			m_Lines.AddLine(tip, tip - (forward - transform.GetRight() * 0.5f) * handle, color);
 		}
 
 		for (auto [entity, transform, camera] : m_World->View<TransformComponent, CameraComponent>().each())
 		{
 			const Color color{ 0.8f, 0.8f, 0.8f, 0.7f };
-			const Vec3 p{ transform.Position.XY(), 0 };
-			m_Lines.AddRect(Mat4::Translation(p), { handle * 2.0f, handle * 1.4f }, color);
+			const Vec3 p = transform.Position;
+			const float handle = 10.0f * dpr * view.WorldPerPixel(p);
+			const Mat4 rotation = Mat4::Translation(p) * Mat4::Rotation(transform.GetRotation());
+			m_Lines.AddBox(rotation, Vec3(-1, -0.7f, -0.5f) * handle, Vec3(1, 0.7f, 0.5f) * handle, color);
+			m_Lines.AddLine(p, p + transform.GetForward() * handle * 3.0f, color);
 			// An orthographic camera also shows what it will see at the default 1280x720 window.
 			if (!camera.Perspective && camera.Zoom > 0.01f)
-				m_Lines.AddRect(Mat4::Translation(p), { 1280.0f / camera.Zoom, 720.0f / camera.Zoom }, { color.R, color.G, color.B, 0.25f });
+				m_Lines.AddRect(rotation, { 1280.0f / camera.Zoom, 720.0f / camera.Zoom }, { color.R, color.G, color.B, 0.25f });
+		}
+	}
+
+	void ViewportWidget::AddSelection(const RenderView& view)
+	{
+		if (!m_World->IsValid(m_Selected) || !m_World->Has<TransformComponent>(m_Selected))
+			return;
+		const Color color{ 1, 0.85f, 0.1f, 1 };
+		const TransformComponent& transform = m_World->Get<TransformComponent>(m_Selected);
+		const Mat4 model = transform.GetMatrix();
+
+		if (const MeshComponent* mesh = m_World->TryGet<MeshComponent>(m_Selected))
+		{
+			if (const GPUMesh* gpuMesh = m_Renderer->GetMeshes().Get(mesh->Mesh))
+			{
+				// Pad by a few pixels so the box sits just outside the surface.
+				const Vec3 pad = Vec3(1, 1, 1) * (3.0f * view.WorldPerPixel(transform.Position));
+				const Vec3 scale{ std::fmax(std::fabs(transform.Scale.X), 1e-4f), std::fmax(std::fabs(transform.Scale.Y), 1e-4f), std::fmax(std::fabs(transform.Scale.Z), 1e-4f) };
+				const Vec3 localPad{ pad.X / scale.X, pad.Y / scale.Y, pad.Z / scale.Z };
+				m_Lines.AddBox(model, gpuMesh->BoundsMin - localPad, gpuMesh->BoundsMax + localPad, color);
+			}
+		}
+
+		if (const SpriteComponent* sprite = m_World->TryGet<SpriteComponent>(m_Selected))
+		{
+			// Three rings a pixel apart, just outside the sprite, so the outline reads at any zoom.
+			const float pixel = view.WorldPerPixel(transform.Position);
+			for (int ring = 1; ring <= 3; ++ring)
+			{
+				const float grow = static_cast<float>(ring) * 2.0f * pixel;
+				const Vec2 scale{ std::fabs(transform.Scale.X), std::fabs(transform.Scale.Y) };
+				const Vec2 pad{ scale.X > 1e-4f ? grow / scale.X : 0, scale.Y > 1e-4f ? grow / scale.Y : 0 };
+				m_Lines.AddRect(model, sprite->Size + pad, color);
+			}
 		}
 	}
 
@@ -159,7 +228,10 @@ namespace FP::Editor
 		Entity best = NullEntity;
 		float bestDistance = radius;
 		auto consider = [&](Entity entity, const TransformComponent& transform) {
-			const float distance = (view.WorldToScreen({ transform.Position.XY(), 0 }) - pixel).Length();
+			// Skip things behind a perspective camera.
+			if (!view.Orthographic && Vec3::Dot(transform.Position - view.CameraPosition, view.CameraForward) <= 0)
+				return;
+			const float distance = (view.WorldToScreen(transform.Position) - pixel).Length();
 			if (distance < bestDistance)
 			{
 				best = entity;
@@ -175,6 +247,94 @@ namespace FP::Editor
 		return best;
 	}
 
+	bool ViewportWidget::HitSurface(const Ray& ray, Entity entity, float& outDistance) const
+	{
+		const TransformComponent& transform = m_World->Get<TransformComponent>(entity);
+		const SpriteComponent* sprite = m_World->TryGet<SpriteComponent>(entity);
+		const MeshComponent* mesh = m_World->TryGet<MeshComponent>(entity);
+
+		Vec3 min{ -0.5f, -0.5f, 0 };
+		Vec3 max{ 0.5f, 0.5f, 0 };
+		Mat4 model = transform.GetMatrix();
+		if (sprite)
+		{
+			model = model * Mat4::Scale({ sprite->Size, 1 });
+		}
+		else if (const GPUMesh* gpuMesh = mesh ? m_Renderer->GetMeshes().Get(mesh->Mesh) : nullptr)
+		{
+			min = gpuMesh->BoundsMin;
+			max = gpuMesh->BoundsMax;
+		}
+		else
+		{
+			return false;
+		}
+
+		// Slab test in the object's local space. Flat sprites get a sliver of thickness.
+		const Mat4 toLocal = model.Inverse();
+		const Vec3 origin = toLocal.TransformPoint(ray.Origin);
+		const Vec3 direction = toLocal.TransformVector(ray.Direction);
+		float tMin = -1e30f;
+		float tMax = 1e30f;
+		const float o[3] = { origin.X, origin.Y, origin.Z };
+		const float d[3] = { direction.X, direction.Y, direction.Z };
+		const float lo[3] = { min.X, min.Y, min.Z - 1e-3f };
+		const float hi[3] = { max.X, max.Y, max.Z + 1e-3f };
+		for (int axis = 0; axis < 3; ++axis)
+		{
+			if (std::fabs(d[axis]) < 1e-9f)
+			{
+				if (o[axis] < lo[axis] || o[axis] > hi[axis])
+					return false;
+				continue;
+			}
+			float t0 = (lo[axis] - o[axis]) / d[axis];
+			float t1 = (hi[axis] - o[axis]) / d[axis];
+			if (t0 > t1)
+				std::swap(t0, t1);
+			tMin = std::fmax(tMin, t0);
+			tMax = std::fmin(tMax, t1);
+			if (tMin > tMax)
+				return false;
+		}
+		if (tMax < 0)
+			return false;
+		// Back to world distance along the ray.
+		const Vec3 hit = model.TransformPoint(origin + direction * std::fmax(tMin, 0.0f));
+		outDistance = (hit - ray.Origin).Length();
+		return true;
+	}
+
+	Entity ViewportWidget::Pick(Vec2 pixel) const
+	{
+		const Entity gizmo = PickGizmo(pixel);
+		if (gizmo != NullEntity)
+			return gizmo;
+
+		const Ray ray = CurrentView().ScreenToRay(pixel);
+		Entity best = NullEntity;
+		float bestDistance = 1e30f;
+		int32 bestLayer = INT32_MIN;
+		auto consider = [&](Entity entity, int32 layer) {
+			float distance = 0;
+			if (!HitSurface(ray, entity, distance))
+				return;
+			// 2D picks what draws on top. 3D picks what is closest.
+			const bool better = m_3D ? distance < bestDistance : (layer > bestLayer || (layer == bestLayer && distance < bestDistance));
+			if (better)
+			{
+				best = entity;
+				bestDistance = distance;
+				bestLayer = layer;
+			}
+		};
+		for (auto [entity, transform, sprite] : m_World->View<TransformComponent, SpriteComponent>().each())
+			consider(entity, sprite.Layer);
+		for (auto [entity, transform, mesh] : m_World->View<TransformComponent, MeshComponent>().each())
+			consider(entity, 0);
+		return best;
+	}
+
 	void ViewportWidget::RenderFrame()
 	{
 		RecreateTarget();
@@ -185,23 +345,20 @@ namespace FP::Editor
 		m_Lines.Clear();
 		if (!m_Playing)
 		{
-			m_Lines.AddGrid2D(view);
-			AddGizmos(view);
-			if (m_World->IsValid(m_Selected) && m_World->Has<TransformComponent>(m_Selected))
+			if (m_3D)
 			{
-				const TransformComponent& transform = m_World->Get<TransformComponent>(m_Selected);
-				const SpriteComponent* sprite = m_World->TryGet<SpriteComponent>(m_Selected);
-				const Vec2 size = sprite ? sprite->Size : Vec2(1, 1);
-				// Three rings a pixel apart, just outside the sprite, so the outline reads at any zoom.
-				const Mat4 model = transform.GetMatrix();
-				for (int ring = 1; ring <= 3; ++ring)
-				{
-					const float grow = static_cast<float>(ring) * 2.0f / view.PixelsPerUnit;
-					const Vec2 scale{ std::fabs(transform.Scale.X), std::fabs(transform.Scale.Y) };
-					const Vec2 pad{ scale.X > 1e-4f ? grow / scale.X : 0, scale.Y > 1e-4f ? grow / scale.Y : 0 };
-					m_Lines.AddRect(model, size + pad, { 1, 0.85f, 0.1f, 1 });
-				}
+				// Grid step grows with distance so it never turns into a solid sheet.
+				float step = 1;
+				while (step * 40 < m_Distance)
+					step *= 2;
+				m_Lines.AddGrid3D(m_OrbitTarget, step * 40, step);
 			}
+			else
+			{
+				m_Lines.AddGrid2D(view);
+			}
+			AddGizmos(view);
+			AddSelection(view);
 		}
 
 		SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(m_Device.GetHandle());
@@ -225,24 +382,6 @@ namespace FP::Editor
 		RenderFrame();
 	}
 
-	Entity ViewportWidget::PickEntity(Vec2 worldPoint)
-	{
-		// Topmost sprite under the point wins, matching draw order.
-		Entity best = NullEntity;
-		int32 bestLayer = INT32_MIN;
-		for (auto [entity, transform, sprite] : m_World->View<TransformComponent, SpriteComponent>().each())
-		{
-			const Mat4 toLocal = (transform.GetMatrix() * Mat4::Scale({ sprite.Size, 1 })).Inverse();
-			const Vec3 local = toLocal.TransformPoint({ worldPoint, transform.Position.Z });
-			if (std::fabs(local.X) <= 0.5f && std::fabs(local.Y) <= 0.5f && sprite.Layer >= bestLayer)
-			{
-				best = entity;
-				bestLayer = sprite.Layer;
-			}
-		}
-		return best;
-	}
-
 	void ViewportWidget::mousePressEvent(QMouseEvent* event)
 	{
 		setFocus();
@@ -257,24 +396,37 @@ namespace FP::Editor
 		if (!m_World)
 			return;
 
-		if (event->button() == Qt::RightButton || event->button() == Qt::MiddleButton)
+		const bool alt = event->modifiers() & Qt::AltModifier;
+		const bool shift = event->modifiers() & Qt::ShiftModifier;
+		if (m_3D && ((event->button() == Qt::RightButton && !shift) || (event->button() == Qt::LeftButton && alt)))
+		{
+			m_Orbiting = true;
+		}
+		else if (event->button() == Qt::RightButton || event->button() == Qt::MiddleButton)
 		{
 			m_Panning = true;
 		}
 		else if (event->button() == Qt::LeftButton)
 		{
 			const Vec2 pixel = ToPixels(event->position());
-			const Vec2 worldPoint = PixelToWorld2D(pixel);
-			// Gizmos sit on top of sprites so they win when both are under the cursor.
-			Entity picked = PickGizmo(pixel);
-			if (picked == NullEntity)
-				picked = PickEntity(worldPoint);
+			const Entity picked = Pick(pixel);
 			m_Selected = picked;
 			emit EntityPicked(picked);
 			if (picked != NullEntity)
 			{
-				m_Dragging = true;
-				m_DragOffset = m_World->Get<TransformComponent>(picked).Position.XY() - worldPoint;
+				// Grab on a plane facing the camera through the object.
+				const RenderView view = CurrentView();
+				const Vec3 position = m_World->Get<TransformComponent>(picked).Position;
+				m_DragPlanePoint = position;
+				m_DragPlaneNormal = -view.CameraForward;
+				const Ray ray = view.ScreenToRay(pixel);
+				const float denom = Vec3::Dot(ray.Direction, m_DragPlaneNormal);
+				if (std::fabs(denom) > 1e-6f)
+				{
+					const float t = Vec3::Dot(m_DragPlanePoint - ray.Origin, m_DragPlaneNormal) / denom;
+					m_DragOffset = position - (ray.Origin + ray.Direction * t);
+					m_Dragging = true;
+				}
 			}
 		}
 	}
@@ -289,6 +441,7 @@ namespace FP::Editor
 			return;
 		}
 		m_Panning = false;
+		m_Orbiting = false;
 		m_Dragging = false;
 	}
 
@@ -301,20 +454,46 @@ namespace FP::Editor
 			return;
 		}
 
-		if (m_Panning)
+		const QPointF delta = position - m_LastMouse;
+		const float dx = static_cast<float>(delta.x());
+		const float dy = static_cast<float>(delta.y());
+		if (m_Orbiting)
 		{
-			const QPointF delta = position - m_LastMouse;
-			m_CameraCenter -= Vec2(static_cast<float>(delta.x()), -static_cast<float>(delta.y())) / m_PixelsPerUnit;
+			m_Yaw -= dx * 0.3f;
+			m_Pitch = std::clamp(m_Pitch - dy * 0.3f, -89.0f, 89.0f);
+		}
+		else if (m_Panning)
+		{
+			if (m_3D)
+			{
+				const RenderView view = CurrentView();
+				const float scale = view.WorldPerPixel(m_OrbitTarget) * static_cast<float>(devicePixelRatioF());
+				m_OrbitTarget += (view.CameraUp * dy - view.CameraRight * dx) * scale;
+			}
+			else
+			{
+				m_CameraCenter -= Vec2(dx, -dy) / m_PixelsPerUnit;
+			}
 		}
 		else if (m_Dragging && m_World && m_World->IsValid(m_Selected))
 		{
-			Vec2 target = PixelToWorld2D(ToPixels(position)) + m_DragOffset;
-			// Hold shift to snap to a quarter unit grid.
-			if (event->modifiers() & Qt::ShiftModifier)
-				target = { std::round(target.X * 4) / 4, std::round(target.Y * 4) / 4 };
-			Vec3& position3 = m_World->Get<TransformComponent>(m_Selected).Position;
-			position3 = { target, position3.Z };
-			emit EntityMoved(m_Selected);
+			const Ray ray = CurrentView().ScreenToRay(ToPixels(position));
+			const float denom = Vec3::Dot(ray.Direction, m_DragPlaneNormal);
+			if (std::fabs(denom) > 1e-6f)
+			{
+				const float t = Vec3::Dot(m_DragPlanePoint - ray.Origin, m_DragPlaneNormal) / denom;
+				Vec3 target = ray.Origin + ray.Direction * t + m_DragOffset;
+				// Hold shift to snap to a quarter unit grid. Axes facing the camera are left alone.
+				if (event->modifiers() & Qt::ShiftModifier)
+				{
+					auto snap = [](float value) { return std::round(value * 4) / 4; };
+					if (std::fabs(m_DragPlaneNormal.X) < 0.9f) target.X = snap(target.X);
+					if (std::fabs(m_DragPlaneNormal.Y) < 0.9f) target.Y = snap(target.Y);
+					if (std::fabs(m_DragPlaneNormal.Z) < 0.9f) target.Z = snap(target.Z);
+				}
+				m_World->Get<TransformComponent>(m_Selected).Position = target;
+				emit EntityMoved(m_Selected);
+			}
 		}
 		m_LastMouse = position;
 	}
@@ -323,11 +502,16 @@ namespace FP::Editor
 	{
 		if (m_Playing)
 			return;
+		const float steps = static_cast<float>(event->angleDelta().y());
+		if (m_3D)
+		{
+			m_Distance = std::clamp(m_Distance * std::pow(0.998f, steps), 0.5f, 2000.0f);
+			return;
+		}
 		// Zoom around the cursor so the point under it stays put.
 		const Vec2 pixel = ToPixels(event->position());
 		const Vec2 before = PixelToWorld2D(pixel);
-		const float factor = std::pow(1.0015f, static_cast<float>(event->angleDelta().y()));
-		m_PixelsPerUnit = std::clamp(m_PixelsPerUnit * factor, 4.0f, 1024.0f);
+		m_PixelsPerUnit = std::clamp(m_PixelsPerUnit * std::pow(1.0015f, steps), 4.0f, 1024.0f);
 		const Vec2 after = PixelToWorld2D(pixel);
 		m_CameraCenter += before - after;
 	}
@@ -336,6 +520,8 @@ namespace FP::Editor
 	{
 		if (m_Playing && !event->isAutoRepeat())
 			Input::SetKey(ToScancode(event->key()), true);
+		else if (!m_Playing && event->key() == Qt::Key_F)
+			FocusSelected();
 		else
 			QWidget::keyPressEvent(event);
 	}

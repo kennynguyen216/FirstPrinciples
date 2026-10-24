@@ -179,3 +179,52 @@ FP_TEST(Math_TransformAndInverse)
 	FP_EXPECT(std::fabs(nearClip.Z / nearClip.W) < 1e-4f);
 	FP_EXPECT(std::fabs(farClip.Z / farClip.W - 1) < 1e-4f);
 }
+
+#include "Engine/Render/MeshData.h"
+
+FP_TEST(Mesh_PrimitivesAreWellFormed)
+{
+	for (const char* name : Primitives::GetNames())
+	{
+		MeshData mesh;
+		FP_EXPECT(Primitives::Create(name, mesh));
+		FP_EXPECT(mesh.Indices.Num() % 3 == 0);
+		for (uint32 index : mesh.Indices)
+			FP_EXPECT(index < static_cast<uint32>(mesh.Vertices.Num()));
+		for (const MeshVertex& v : mesh.Vertices)
+		{
+			FP_EXPECT(std::fabs(v.Normal.Length() - 1) < 1e-3f);
+			FP_EXPECT(std::fabs(Vec3::Dot(v.Normal, v.Tangent.XYZ())) < 1e-3f);
+		}
+
+		// Counter clockwise from outside means each face normal agrees with its vertex normals.
+		for (int32 i = 0; i < mesh.Indices.Num(); i += 3)
+		{
+			const MeshVertex& a = mesh.Vertices[static_cast<int32>(mesh.Indices[i])];
+			const MeshVertex& b = mesh.Vertices[static_cast<int32>(mesh.Indices[i + 1])];
+			const MeshVertex& c = mesh.Vertices[static_cast<int32>(mesh.Indices[i + 2])];
+			const Vec3 face = Vec3::Cross(b.Position - a.Position, c.Position - a.Position);
+			if (face.LengthSquared() > 1e-10f)
+				FP_EXPECT(Vec3::Dot(face, a.Normal + b.Normal + c.Normal) > 0);
+		}
+	}
+	MeshData cube = Primitives::Cube();
+	FP_EXPECT(cube.BoundsMin == Vec3(-0.5f, -0.5f, -0.5f) && cube.BoundsMax == Vec3(0.5f, 0.5f, 0.5f));
+}
+
+FP_TEST(Mesh_ParsesObj)
+{
+	const char* obj =
+		"# square made of a quad and no normals\n"
+		"v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\n"
+		"vt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\n"
+		"f 1/1 2/2 3/3 4/4\n";
+	MeshData mesh;
+	FP_EXPECT(ParseObj(obj, mesh));
+	FP_EXPECT(mesh.Vertices.Num() == 4);
+	FP_EXPECT(mesh.Indices.Num() == 6);
+	FP_EXPECT(Near(mesh.Vertices[0].Normal, { 0, 0, 1 }));
+	FP_EXPECT(Near(mesh.Vertices[0].Tangent.XYZ(), { 1, 0, 0 }));
+	FP_EXPECT(mesh.Vertices[0].UV == Vec2(0, 1)); // flipped to top left origin
+	FP_EXPECT(!ParseObj("f 1 2 3\n", mesh));
+}

@@ -38,11 +38,11 @@ void main()
 	float ior = max(Material.Params2.z, 1.0);
 	float thickness = Material.Params2.w;
 
-	// Screen space refraction. Only the bend relative to the flat surface moves the image,
-	// so flat glass stays clear and normal maps ripple what is behind it.
+	// Screen space refraction. The image moves by how far the refracted ray turns away from the
+	// view ray, so glass facing the camera stays clear and curves or normal maps bend it.
 	vec3 bent = refract(-v, n, 1.0 / ior);
-	vec3 straight = refract(-v, geometryNormal, 1.0 / ior);
-	vec2 offset = (bent - straight).xy * thickness * 0.1;
+	vec3 turn = bent + v;
+	vec2 offset = vec2(dot(turn, Frame.CameraRight.xyz), dot(turn, Frame.CameraUp.xyz)) * thickness * 0.1;
 	vec2 screenUV = gl_FragCoord.xy * Frame.ScreenSize.zw + vec2(offset.x, -offset.y);
 
 	vec3 behind = texture(SceneColor, screenUV).rgb;

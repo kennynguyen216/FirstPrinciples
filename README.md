@@ -108,13 +108,27 @@ components (Entity menu has shortcuts). In 2D a point light's `Position.Z` is it
 sprites, so raise it to light their faces. Open `Content/Scenes/Lighting2D.scene` for an example of
 every material type.
 
+### 3D
+
+Add a **Mesh** component to draw a `Cube`, `Sphere`, `Plane` or `Quad`, or pick an `.obj` file from
+`Content` with the `...` button. Meshes use the same materials as sprites and default to `Lit`.
+For a 3D game turn on `Perspective` on the camera and give it a position and rotation.
+Press **3D View** (Ctrl+3) in the editor to orbit around the scene. `Content/Scenes/Showcase3D.scene`
+shows every material on meshes, including a refracting glass sphere.
+
+`Transform.Rotation` is euler degrees as pitch (X), yaw (Y) and roll (Z). Cameras and lights point
+down their local -Z axis.
+
 ### Editor controls
 
 | Action | Control |
 |---|---|
-| Pan | Right or middle drag |
+| Pan | 2D: right or middle drag. 3D: middle drag or Shift right drag |
 | Zoom | Mouse wheel |
-| Select / move | Left click / left drag (hold Shift to snap) |
+| Orbit (3D) | Right drag or Alt left drag |
+| Toggle 3D view | Ctrl+3 |
+| Focus selection | F |
+| Select / move | Left click / left drag along the view plane (hold Shift to snap) |
 | Create sprite | Ctrl+Shift+A |
 | Duplicate / delete | Ctrl+D / Delete |
 | Play | Ctrl+P |
@@ -127,6 +141,7 @@ Binaries/Debug/Tests
 Binaries/Debug/Runtime --screenshot runtime.bmp
 Binaries/Debug/Editor --play --screenshot editor.png
 Binaries/Debug/Editor --scene Scenes/Lighting2D.scene --select "Glass Pane" --screenshot lit.png
+Binaries/Debug/Editor --scene Scenes/Showcase3D.scene --3d --screenshot 3d.png
 ```
 
 ## Rendering
@@ -176,3 +191,5 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 - No undo yet.
 - Glass draws after everything else, so glass behind glass is not refracted twice.
 - No shadows yet.
+- Editor grid and gizmo lines draw on top of everything.
+- Rotations are euler angles, so very large combined rotations can gimbal lock.

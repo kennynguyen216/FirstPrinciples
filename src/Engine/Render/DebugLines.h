@@ -19,8 +19,14 @@ namespace FP
 		// Rectangle of size centered on the transform, lying in its local XY plane.
 		void AddRect(const Mat4& transform, Vec2 size, Color color);
 
-		// Circle in the XY plane.
-		void AddCircle(Vec3 center, float radius, Color color, int32 segments = 32);
+		// Circle spanned by two axes, the XY plane by default.
+		void AddCircle(Vec3 center, float radius, Color color, int32 segments = 32, Vec3 axisA = { 1, 0, 0 }, Vec3 axisB = { 0, 1, 0 });
+
+		// Box from local min to max, placed by transform.
+		void AddBox(const Mat4& transform, Vec3 min, Vec3 max, Color color);
+
+		// Grid on the y = 0 floor around center. X axis red, Z axis blue.
+		void AddGrid3D(Vec3 center, float extent, float step);
 
 		// Grid on the z = 0 plane covering what the view can see. Axes are tinted red (X) and green (Y).
 		void AddGrid2D(const RenderView& view);

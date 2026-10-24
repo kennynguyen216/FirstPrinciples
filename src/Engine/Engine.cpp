@@ -1,4 +1,5 @@
 #include "Engine/Engine.h"
+#include "Engine/Render/MeshData.h"
 
 namespace FP::Engine
 {
@@ -36,6 +37,9 @@ namespace FP::Engine
 			.Field("Background", &CameraComponent::Background)
 			.Field("Exposure", &CameraComponent::Exposure)
 			.Field("Tonemap", &CameraComponent::Tonemap);
+
+		registry.Register<MeshComponent>("Mesh")
+			.Field("Mesh", &MeshComponent::Mesh).Choices(Primitives::GetNames(), true).AssetPath("Meshes (*.obj)");
 
 		registry.Register<MaterialComponent>("Material")
 			.Field("Material", &MaterialComponent::Material).AssetPath("Materials (*.material)");

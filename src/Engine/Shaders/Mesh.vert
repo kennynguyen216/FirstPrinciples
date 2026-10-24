@@ -1,5 +1,6 @@
 #version 450
 #extension GL_GOOGLE_include_directive : require
+#define FP_VERTEX_SHADER
 #include "Common.glsl"
 
 // Used by every sprite and mesh. Sprites are unit quads scaled by their size.

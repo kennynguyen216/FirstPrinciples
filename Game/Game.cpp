@@ -15,7 +15,8 @@ namespace Game
 			.Field("Speed", &PlayerComponent::Speed);
 
 		registry.Register<SpinnerComponent>("Spinner")
-			.Field("DegreesPerSecond", &SpinnerComponent::DegreesPerSecond);
+			.Field("DegreesPerSecond", &SpinnerComponent::DegreesPerSecond)
+			.Field("Axis", &SpinnerComponent::Axis);
 
 		registry.Register<FollowPlayerComponent>("FollowPlayer")
 			.Field("Smoothing", &FollowPlayerComponent::Smoothing);

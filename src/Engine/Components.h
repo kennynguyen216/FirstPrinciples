@@ -43,7 +43,14 @@ namespace FP
 		int32 Layer = 0; // higher draws on top
 	};
 
-	// Points at a shared .material file. Works on sprites now and meshes later.
+	// A built in shape (Cube, Sphere, Plane, Quad) or a .obj file relative to Content.
+	// Uses the entity's MaterialComponent for shading.
+	struct MeshComponent
+	{
+		String Mesh = "Cube";
+	};
+
+	// Points at a shared .material file. Works on sprites and meshes.
 	// A sprite's own Texture is used as the base color map when the material has none.
 	struct MaterialComponent
 	{

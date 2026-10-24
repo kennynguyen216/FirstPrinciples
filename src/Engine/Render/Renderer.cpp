@@ -57,7 +57,7 @@ namespace FP
 	}
 
 	Renderer::Renderer(GPUDevice& device, SDL_GPUTextureFormat targetFormat)
-		: m_Device(device), m_TargetFormat(targetFormat), m_Textures(device)
+		: m_Device(device), m_TargetFormat(targetFormat), m_Textures(device), m_Meshes(device)
 	{
 		m_QuadVertices = device.CreateBuffer(SDL_GPU_BUFFERUSAGE_VERTEX, QuadVertices, sizeof(QuadVertices));
 		m_QuadIndices = device.CreateBuffer(SDL_GPU_BUFFERUSAGE_INDEX, QuadIndices, sizeof(QuadIndices));
@@ -68,14 +68,40 @@ namespace FP
 	{
 		SDL_GPUDevice* gpu = m_Device.GetHandle();
 		SDL_WaitForGPUIdle(gpu);
-		for (SDL_GPUGraphicsPipeline* pipeline : { m_UnlitPipeline, m_LitPipeline, m_GlassPipeline, m_PresentPipeline, m_LinePipeline })
+		for (auto& row : m_ScenePipelines)
+		{
+			for (SDL_GPUGraphicsPipeline* pipeline : row)
+			{
+				if (pipeline)
+					SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
+			}
+		}
+		for (SDL_GPUGraphicsPipeline* pipeline : { m_PresentPipeline, m_LinePipeline })
 		{
 			if (pipeline)
 				SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
 		}
 	}
 
-	SDL_GPUGraphicsPipeline* Renderer::CreateMeshPipeline(const char* fragment, uint32 numSamplers, uint32 numUniforms, bool blend)
+	bool Renderer::IsValid() const
+	{
+		for (const auto& row : m_ScenePipelines)
+		{
+			for (SDL_GPUGraphicsPipeline* pipeline : row)
+			{
+				if (!pipeline)
+					return false;
+			}
+		}
+		return m_PresentPipeline && m_LinePipeline;
+	}
+
+	SDL_GPUGraphicsPipeline* Renderer::GetPipeline(const Draw& draw) const
+	{
+		return m_ScenePipelines[static_cast<int>(draw.Kind)][static_cast<int>(draw.Type)];
+	}
+
+	SDL_GPUGraphicsPipeline* Renderer::CreateMeshPipeline(const char* fragment, uint32 numSamplers, uint32 numUniforms, Surface surface, bool glass)
 	{
 		SDL_GPUDevice* gpu = m_Device.GetHandle();
 		SDL_GPUShader* vert = m_Device.LoadShader("Mesh.vert", 0, 1);
@@ -83,9 +109,12 @@ namespace FP
 		SDL_GPUGraphicsPipeline* pipeline = nullptr;
 		if (vert && frag)
 		{
+			// Meshes are opaque and write depth. Sprites blend and only test depth so they
+			// sort by layer among themselves. Glass writes its final color so it never blends.
+			const bool isMesh = surface == Surface::Mesh;
 			SDL_GPUColorTargetDescription colorTarget = {};
 			colorTarget.format = SceneFormat;
-			if (blend)
+			if (!isMesh && !glass)
 				colorTarget.blend_state = AlphaBlend();
 
 			SDL_GPUVertexBufferDescription buffer = {};
@@ -108,7 +137,11 @@ namespace FP
 			info.vertex_input_state.num_vertex_attributes = 4;
 			info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
 			info.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
-			info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+			info.rasterizer_state.cull_mode = isMesh ? SDL_GPU_CULLMODE_BACK : SDL_GPU_CULLMODE_NONE;
+			info.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+			info.depth_stencil_state.enable_depth_test = true;
+			info.depth_stencil_state.enable_depth_write = isMesh && !glass;
+			info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
 			info.target_info.color_target_descriptions = &colorTarget;
 			info.target_info.num_color_targets = 1;
 			info.target_info.has_depth_stencil_target = true;
@@ -127,9 +160,13 @@ namespace FP
 	void Renderer::CreatePipelines()
 	{
 		SDL_GPUDevice* gpu = m_Device.GetHandle();
-		m_UnlitPipeline = CreateMeshPipeline("Unlit.frag", 1, 1, true);
-		m_LitPipeline = CreateMeshPipeline("Lit.frag", 8, 2, true);
-		m_GlassPipeline = CreateMeshPipeline("Glass.frag", 4, 2, false);
+		for (Surface surface : { Surface::Sprite, Surface::Mesh })
+		{
+			const int column = static_cast<int>(surface);
+			m_ScenePipelines[static_cast<int>(ShaderKind::Unlit)][column] = CreateMeshPipeline("Unlit.frag", 1, 1, surface, false);
+			m_ScenePipelines[static_cast<int>(ShaderKind::Lit)][column] = CreateMeshPipeline("Lit.frag", 8, 2, surface, false);
+			m_ScenePipelines[static_cast<int>(ShaderKind::Glass)][column] = CreateMeshPipeline("Glass.frag", 4, 2, surface, true);
+		}
 
 		SDL_GPUColorTargetDescription colorTarget = {};
 		colorTarget.format = m_TargetFormat;
@@ -215,6 +252,8 @@ namespace FP
 		m_Frame = FrameUniforms();
 		m_Frame.CameraPosition = { view.CameraPosition, view.Orthographic ? 1.0f : 0.0f };
 		m_Frame.CameraForward = { view.CameraForward, 0 };
+		m_Frame.CameraRight = { view.CameraRight, 0 };
+		m_Frame.CameraUp = { view.CameraUp, 0 };
 		m_Frame.ScreenSize = { static_cast<float>(width), static_cast<float>(height), 1.0f / static_cast<float>(width), 1.0f / static_cast<float>(height) };
 
 		Vec3 ambient;
@@ -248,26 +287,41 @@ namespace FP
 		return texture ? texture : fallback;
 	}
 
-	void Renderer::DrawSprite(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, World& world, const Draw& draw, const Mat4& viewProjection)
+	void Renderer::DrawObject(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, World& world, const Draw& draw, const Mat4& viewProjection)
 	{
 		const TransformComponent& transform = world.Get<TransformComponent>(draw.Value);
-		const SpriteComponent& sprite = world.Get<SpriteComponent>(draw.Value);
+		const SpriteComponent* sprite = draw.Type == Surface::Sprite ? &world.Get<SpriteComponent>(draw.Value) : nullptr;
 		const MaterialData defaults;
 		const MaterialData& data = draw.Mat ? draw.Mat->GetData() : defaults;
 
 		ObjectUniforms object;
 		object.ViewProjection = viewProjection;
-		object.Model = transform.GetMatrix() * Mat4::Scale({ sprite.Size, 1 });
+		object.Model = sprite ? transform.GetMatrix() * Mat4::Scale({ sprite->Size, 1 }) : transform.GetMatrix();
 		object.NormalMatrix = object.Model.Inverse().Transposed();
 		object.UVTransform = { data.Tiling.X, data.Tiling.Y, data.Offset.X, data.Offset.Y };
-		object.Tint = ToLinear(sprite.Tint);
+		object.Tint = sprite ? ToLinear(sprite->Tint) : Vec4(1, 1, 1, 1);
 		SDL_PushGPUVertexUniformData(cmd, 0, &object, sizeof(object));
 
 		const MaterialUniforms material = MakeMaterialUniforms(data);
 		SDL_PushGPUFragmentUniformData(cmd, 0, &material, sizeof(material));
 
-		// The sprite's own texture stands in when the material has no base color map.
-		const String& baseMap = data.BaseColorMap.IsEmpty() ? sprite.Texture : data.BaseColorMap;
+		if (sprite)
+		{
+			SDL_GPUBufferBinding vertexBinding = { m_QuadVertices->GetHandle(), 0 };
+			SDL_BindGPUVertexBuffers(pass, 0, &vertexBinding, 1);
+			SDL_GPUBufferBinding indexBinding = { m_QuadIndices->GetHandle(), 0 };
+			SDL_BindGPUIndexBuffer(pass, &indexBinding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
+		}
+		else
+		{
+			SDL_GPUBufferBinding vertexBinding = { draw.Mesh->Vertices->GetHandle(), 0 };
+			SDL_BindGPUVertexBuffers(pass, 0, &vertexBinding, 1);
+			SDL_GPUBufferBinding indexBinding = { draw.Mesh->Indices->GetHandle(), 0 };
+			SDL_BindGPUIndexBuffer(pass, &indexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+		}
+
+		// A sprite's own texture stands in when the material has no base color map.
+		const String& baseMap = sprite && data.BaseColorMap.IsEmpty() ? sprite->Texture : data.BaseColorMap;
 		GPUTexture* white = m_Device.GetWhiteTexture();
 		SDL_GPUSampler* sampler = m_Device.GetDefaultSampler();
 
@@ -293,7 +347,7 @@ namespace FP
 			bind(m_SceneCopy.Get(), m_Device.GetClampSampler());
 		}
 		SDL_BindGPUFragmentSamplers(pass, 0, bindings, count);
-		SDL_DrawGPUIndexedPrimitives(pass, 6, 1, 0, 0, 0);
+		SDL_DrawGPUIndexedPrimitives(pass, sprite ? 6 : draw.Mesh->IndexCount, 1, 0, 0, 0);
 	}
 
 	void Renderer::Render(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* target, uint32 width, uint32 height,
@@ -308,28 +362,42 @@ namespace FP
 		if (hasLines)
 			UploadLines(cmd, *lines);
 
-		// Sort by layer, then back to front along the view. Glass draws last so it can see everything.
+		// Collect everything visible with its shader and surface.
 		Array<Draw> draws;
 		bool hasGlass = false;
-		for (auto [entity, transform, sprite] : world.View<TransformComponent, SpriteComponent>().each())
-		{
+		auto resolve = [&](Entity entity, const TransformComponent& transform, Surface type, int32 layer, const GPUMesh* mesh) {
 			const MaterialComponent* materialComponent = world.TryGet<MaterialComponent>(entity);
 			const Material* material = materialComponent ? MaterialLibrary::Get().Load(materialComponent->Material) : nullptr;
-			ShaderKind kind = ShaderKind::Unlit;
+			// Meshes default to lit so they have shape. Sprites default to unlit so plain 2D games need no lights.
+			ShaderKind kind = type == Surface::Mesh ? ShaderKind::Lit : ShaderKind::Unlit;
 			if (material)
 			{
 				const String& shader = material->GetData().Shader;
 				kind = shader == "Glass" ? ShaderKind::Glass : shader == "Unlit" ? ShaderKind::Unlit : ShaderKind::Lit;
 			}
 			hasGlass |= kind == ShaderKind::Glass;
-			draws.Add({ sprite.Layer, Vec3::Dot(transform.Position - view.CameraPosition, view.CameraForward), entity, kind, material });
+			draws.Add({ layer, Vec3::Dot(transform.Position - view.CameraPosition, view.CameraForward), entity, kind, type, material, mesh });
+		};
+		for (auto [entity, transform, sprite] : world.View<TransformComponent, SpriteComponent>().each())
+			resolve(entity, transform, Surface::Sprite, sprite.Layer, nullptr);
+		for (auto [entity, transform, meshComponent] : world.View<TransformComponent, MeshComponent>().each())
+		{
+			if (const GPUMesh* mesh = m_Meshes.Get(meshComponent.Mesh))
+				resolve(entity, transform, Surface::Mesh, 0, mesh);
 		}
-		std::stable_sort(draws.begin(), draws.end(), [](const Draw& a, const Draw& b) {
-			const bool aGlass = a.Kind == ShaderKind::Glass;
-			const bool bGlass = b.Kind == ShaderKind::Glass;
-			if (aGlass != bGlass)
-				return bGlass;
-			return a.Layer != b.Layer ? a.Layer < b.Layer : a.Depth > b.Depth;
+
+		// Opaque meshes front to back, then sprites by layer back to front, then glass back to front.
+		auto bucket = [](const Draw& d) { return d.Kind == ShaderKind::Glass ? 2 : d.Type == Surface::Mesh ? 0 : 1; };
+		std::stable_sort(draws.begin(), draws.end(), [&](const Draw& a, const Draw& b) {
+			const int ba = bucket(a);
+			const int bb = bucket(b);
+			if (ba != bb)
+				return ba < bb;
+			if (ba == 0)
+				return a.Depth < b.Depth;
+			if (ba == 1 && a.Layer != b.Layer)
+				return a.Layer < b.Layer;
+			return a.Depth > b.Depth;
 		});
 
 		const Mat4 viewProjection = view.GetViewProjection();
@@ -350,29 +418,29 @@ namespace FP
 			depth.store_op = SDL_GPU_STOREOP_STORE;
 			depth.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
 			depth.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
-
-			SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &color, 1, &depth);
-			SDL_GPUBufferBinding vertexBinding = { m_QuadVertices->GetHandle(), 0 };
-			SDL_BindGPUVertexBuffers(pass, 0, &vertexBinding, 1);
-			SDL_GPUBufferBinding indexBinding = { m_QuadIndices->GetHandle(), 0 };
-			SDL_BindGPUIndexBuffer(pass, &indexBinding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
-			return pass;
+			return SDL_BeginGPURenderPass(cmd, &color, 1, &depth);
 		};
 
-		// Scene pass.
-		SDL_GPURenderPass* pass = beginScenePass(true);
-		SDL_GPUGraphicsPipeline* bound = nullptr;
-		int32 index = 0;
-		for (; index < draws.Num() && draws[index].Kind != ShaderKind::Glass; ++index)
-		{
-			SDL_GPUGraphicsPipeline* pipeline = draws[index].Kind == ShaderKind::Lit ? m_LitPipeline : m_UnlitPipeline;
-			if (pipeline != bound)
+		auto drawRange = [&](SDL_GPURenderPass* pass, int32 from, int32 to) {
+			SDL_GPUGraphicsPipeline* bound = nullptr;
+			for (int32 i = from; i < to; ++i)
 			{
-				SDL_BindGPUGraphicsPipeline(pass, pipeline);
-				bound = pipeline;
+				SDL_GPUGraphicsPipeline* pipeline = GetPipeline(draws[i]);
+				if (pipeline != bound)
+				{
+					SDL_BindGPUGraphicsPipeline(pass, pipeline);
+					bound = pipeline;
+				}
+				DrawObject(cmd, pass, world, draws[i], viewProjection);
 			}
-			DrawSprite(cmd, pass, world, draws[index], viewProjection);
-		}
+		};
+
+		int32 firstGlass = 0;
+		while (firstGlass < draws.Num() && draws[firstGlass].Kind != ShaderKind::Glass)
+			++firstGlass;
+
+		SDL_GPURenderPass* pass = beginScenePass(true);
+		drawRange(pass, 0, firstGlass);
 		SDL_EndGPURenderPass(pass);
 
 		// Glass pass. Each glass object sees the scene as it was before any glass was drawn.
@@ -390,9 +458,7 @@ namespace FP
 			SDL_BlitGPUTexture(cmd, &blit);
 
 			pass = beginScenePass(false);
-			SDL_BindGPUGraphicsPipeline(pass, m_GlassPipeline);
-			for (; index < draws.Num(); ++index)
-				DrawSprite(cmd, pass, world, draws[index], viewProjection);
+			drawRange(pass, firstGlass, draws.Num());
 			SDL_EndGPURenderPass(pass);
 		}
 

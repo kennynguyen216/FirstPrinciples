@@ -14,7 +14,10 @@ void PlayerSystem::Update(World& world, float deltaTime)
 void SpinnerSystem::Update(World& world, float deltaTime)
 {
 	for (auto [entity, transform, spinner] : world.View<TransformComponent, SpinnerComponent>().each())
-		transform.Rotation.Z = std::fmod(transform.Rotation.Z + spinner.DegreesPerSecond * deltaTime, 360.0f);
+	{
+		transform.Rotation += spinner.Axis * (spinner.DegreesPerSecond * deltaTime);
+		transform.Rotation = { std::fmod(transform.Rotation.X, 360.0f), std::fmod(transform.Rotation.Y, 360.0f), std::fmod(transform.Rotation.Z, 360.0f) };
+	}
 }
 
 void FollowPlayerSystem::Update(World& world, float deltaTime)

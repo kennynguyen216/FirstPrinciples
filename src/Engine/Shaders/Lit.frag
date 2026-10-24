@@ -31,7 +31,7 @@ void main()
 	vec3 n = ApplyNormalMap(InNormal, InTangent, texture(NormalMap, InUV).xyz, Material.Params.w);
 	vec3 v = ViewDirection(InWorldPosition);
 	// Two sided so sprites and planes light the same from both faces.
-	if (dot(n, v) < 0.0)
+	if (dot(InNormal, v) < 0.0)
 		n = -n;
 
 	float metallic = clamp(Material.Params.x * texture(MetallicMap, InUV).r, 0.0, 1.0);

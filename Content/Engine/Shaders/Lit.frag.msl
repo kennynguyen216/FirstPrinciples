@@ -9,6 +9,8 @@ struct FrameData
 {
     float4 CameraPosition;
     float4 CameraForward;
+    float4 CameraRight;
+    float4 CameraUp;
     float4 Ambient;
     float4 ScreenSize;
     int4 LightCount;
@@ -23,15 +25,6 @@ struct MaterialData
     float4 Subsurface;
     float4 Params;
     float4 Params2;
-};
-
-struct ObjectData
-{
-    float4x4 ViewProjection;
-    float4x4 Model;
-    float4x4 NormalMatrix;
-    float4 UVTransform;
-    float4 Tint;
 };
 
 struct main0_out
@@ -139,7 +132,7 @@ fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Materi
     float3 n = ApplyNormalMap(param, param_1, param_2, param_3);
     float3 param_4 = in.InWorldPosition;
     float3 v = ViewDirection(param_4, Frame);
-    if (dot(n, v) < 0.0)
+    if (dot(in.InNormal, v) < 0.0)
     {
         n = -n;
     }
