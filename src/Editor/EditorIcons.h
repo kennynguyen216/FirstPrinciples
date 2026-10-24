@@ -41,7 +41,7 @@ namespace FP::Editor
 		Select,
 		Move,
 		Details,
-		Outliner,
+		Hierarchy,
 		PlaceEntities,
 		ContentBrowser,
 		OutputLog,

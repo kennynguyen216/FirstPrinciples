@@ -1,4 +1,4 @@
-#include "Editor/OutlinerPanel.h"
+#include "Editor/HierarchyPanel.h"
 #include "Editor/EditorIcons.h"
 #include "Engine/Components.h"
 
@@ -29,7 +29,7 @@ namespace FP::Editor
 		QString ToQString(const String& text) { return QString::fromUtf8(text.CStr(), text.Length()); }
 	}
 
-	OutlinerPanel::OutlinerPanel(QWidget* parent) : QWidget(parent)
+	HierarchyPanel::HierarchyPanel(QWidget* parent) : QWidget(parent)
 	{
 		QVBoxLayout* layout = new QVBoxLayout(this);
 		layout->setContentsMargins(6, 6, 6, 6);
@@ -65,10 +65,10 @@ namespace FP::Editor
 				emit EntityClicked(id);
 			UpdateFooter();
 		});
-		connect(m_Search, &QLineEdit::textChanged, this, &OutlinerPanel::ApplyFilter);
+		connect(m_Search, &QLineEdit::textChanged, this, &HierarchyPanel::ApplyFilter);
 	}
 
-	QString OutlinerPanel::TypeName(World& world, Entity entity)
+	QString HierarchyPanel::TypeName(World& world, Entity entity)
 	{
 		if (world.Has<CameraComponent>(entity)) return "Camera";
 		if (world.Has<PointLightComponent>(entity)) return "Point Light";
@@ -79,7 +79,7 @@ namespace FP::Editor
 		return "Entity";
 	}
 
-	void OutlinerPanel::Rebuild(World& world, const QString& sceneName)
+	void HierarchyPanel::Rebuild(World& world, const QString& sceneName)
 	{
 		QSignalBlocker block(m_Tree);
 		m_Tree->clear();
@@ -107,7 +107,7 @@ namespace FP::Editor
 		UpdateFooter();
 	}
 
-	void OutlinerPanel::SetSelected(const Guid& id)
+	void HierarchyPanel::SetSelected(const Guid& id)
 	{
 		QSignalBlocker block(m_Tree);
 		m_Tree->setCurrentItem(nullptr);
@@ -124,7 +124,7 @@ namespace FP::Editor
 		UpdateFooter();
 	}
 
-	void OutlinerPanel::ApplyFilter()
+	void HierarchyPanel::ApplyFilter()
 	{
 		const QString filter = m_Search->text().trimmed();
 		if (QTreeWidgetItem* root = m_Tree->topLevelItem(0))
@@ -138,7 +138,7 @@ namespace FP::Editor
 		}
 	}
 
-	void OutlinerPanel::UpdateFooter()
+	void HierarchyPanel::UpdateFooter()
 	{
 		const int selected = m_Tree->currentItem() && m_Tree->currentItem()->parent() ? 1 : 0;
 		m_Footer->setText(QString("%1 entities (%2 selected)").arg(m_Count).arg(selected));

@@ -25,7 +25,7 @@ namespace FP::Editor
 	class CodeEditor;
 	class ContentBrowser;
 	class InspectorPanel;
-	class OutlinerPanel;
+	class HierarchyPanel;
 	class ScriptBuilder;
 	class ViewportToolbar;
 	class ViewportWidget;
@@ -142,7 +142,7 @@ namespace FP::Editor
 
 		ViewportWidget* m_Viewport = nullptr;
 		InspectorPanel* m_Inspector = nullptr;
-		OutlinerPanel* m_Outliner = nullptr;
+		HierarchyPanel* m_Hierarchy = nullptr;
 		QPlainTextEdit* m_Console = nullptr;
 		QTimer* m_Timer = nullptr;
 		QAction* m_UndoAction = nullptr;

@@ -5,7 +5,7 @@
 #include "Editor/EditorIcons.h"
 #include "Editor/EditorStyle.h"
 #include "Editor/InspectorPanel.h"
-#include "Editor/OutlinerPanel.h"
+#include "Editor/HierarchyPanel.h"
 #include "Editor/PlaceEntitiesPanel.h"
 #include "Editor/ScriptBuilder.h"
 #include "Editor/ViewportToolbar.h"
@@ -140,15 +140,12 @@ namespace FP::Editor
 
 	void EditorWindow::BuildDocks()
 	{
-		m_Outliner = new OutlinerPanel();
-		connect(m_Outliner, &OutlinerPanel::EntityClicked, this, [this](const Guid& id) { Select(m_World->FindEntityByGuid(id)); });
+		m_Hierarchy = new HierarchyPanel();
+		connect(m_Hierarchy, &HierarchyPanel::EntityClicked, this, [this](const Guid& id) { Select(m_World->FindEntityByGuid(id)); });
 		PlaceEntitiesPanel* placeEntities = new PlaceEntitiesPanel();
 		connect(placeEntities, &PlaceEntitiesPanel::CreateRequested, this, [this](const QString& kind) { CreateEntity(kind); });
 		QDockWidget* placeDock = DockTab::Create(this, "Place Entities", EditorIcon::PlaceEntities, placeEntities);
 		addDockWidget(Qt::LeftDockWidgetArea, placeDock);
-		resizeDocks({ placeDock }, { 250 }, Qt::Horizontal);
-
-		QDockWidget* outlinerDock = DockTab::Create(this, "Outliner", EditorIcon::Outliner, m_Outliner);
 
 		m_Inspector = new InspectorPanel();
 		connect(m_Inspector, &InspectorPanel::OpenScriptRequested, this, &EditorWindow::OpenScript);
@@ -156,15 +153,16 @@ namespace FP::Editor
 			MarkDirty();
 			RefreshHierarchy();
 		});
-		QDockWidget* detailsDock = DockTab::Create(this, "Details", EditorIcon::Details, m_Inspector);
-		detailsDock->setMinimumWidth(300);
 
-		// UE layout: Details then Outliner on the right, and the bottom panels run the full width.
+		// Details and Hierarchy share one narrow panel on the right as tabs, and the bottom panels run the full width.
+		QDockWidget* detailsDock = DockTab::Create(this, "Details", EditorIcon::Details, m_Inspector);
+		QDockWidget* hierarchyDock = DockTab::Create(this, "Hierarchy", EditorIcon::Hierarchy, m_Hierarchy);
 		setCorner(Qt::BottomLeftCorner, Qt::BottomDockWidgetArea);
 		setCorner(Qt::BottomRightCorner, Qt::BottomDockWidgetArea);
+		setTabPosition(Qt::AllDockWidgetAreas, QTabWidget::North);
 		addDockWidget(Qt::RightDockWidgetArea, detailsDock);
-		splitDockWidget(detailsDock, outlinerDock, Qt::Horizontal);
-		resizeDocks({ detailsDock, outlinerDock }, { 370, 300 }, Qt::Horizontal);
+		tabifyDockWidget(detailsDock, hierarchyDock);
+		detailsDock->raise();
 
 		m_Console = new QPlainTextEdit();
 		m_Console->setReadOnly(true);
@@ -174,21 +172,20 @@ namespace FP::Editor
 		QDockWidget* consoleDock = DockTab::Create(this, "Output Log", EditorIcon::OutputLog, m_Console);
 		m_ConsoleDock = consoleDock;
 
-		// The content browser shares the bottom area with the log. Tabbed docks show Qt's tab bar,
-		// so they skip the custom title and use the tabs on top instead.
+		// The content browser shares the bottom area with the log.
 		m_ContentBrowser = new ContentBrowser();
 		QDockWidget* contentDock = DockTab::Create(this, "Content Browser", EditorIcon::ContentBrowser, m_ContentBrowser);
 		m_ContentDock = contentDock;
-		for (QDockWidget* dock : { contentDock, consoleDock })
-		{
-			dock->setTitleBarWidget(new QWidget(dock));
-			dock->setWindowIcon(dock == contentDock ? EditorIcons::Get(EditorIcon::ContentBrowser) : EditorIcons::Get(EditorIcon::OutputLog));
-		}
-		setTabPosition(Qt::BottomDockWidgetArea, QTabWidget::North);
 		addDockWidget(Qt::BottomDockWidgetArea, contentDock);
 		tabifyDockWidget(contentDock, consoleDock);
 		contentDock->raise();
+		// Sized last because adding docks redistributes the space.
+		resizeDocks({ placeDock, detailsDock }, { 250, 340 }, Qt::Horizontal);
 		resizeDocks({ contentDock }, { 280 }, Qt::Vertical);
+
+		// Tabbed docks show Qt's tab bar, so they skip the custom title and use the tabs on top instead.
+		for (QDockWidget* dock : { detailsDock, hierarchyDock, contentDock, consoleDock })
+			dock->setTitleBarWidget(new QWidget(dock));
 
 		connect(m_ContentBrowser, &ContentBrowser::AssetSelected, this, &EditorWindow::ShowAsset);
 		connect(m_ContentBrowser, &ContentBrowser::SaveAllRequested, this, &EditorWindow::SaveAll);
@@ -771,8 +768,8 @@ namespace FP::Editor
 		if (!m_EditPending)
 			m_History->SetSelection(m_SelectedGuid);
 
-		// Keep the outliner row in sync without feeding back into Select.
-		m_Outliner->SetSelected(m_SelectedGuid);
+		// Keep the hierarchy row in sync without feeding back into Select.
+		m_Hierarchy->SetSelected(m_SelectedGuid);
 
 		if (changed)
 			m_Inspector->SetTarget(m_World.Get(), entity);
@@ -780,8 +777,8 @@ namespace FP::Editor
 
 	void EditorWindow::RefreshHierarchy()
 	{
-		m_Outliner->Rebuild(*m_World.Get(), m_ScenePath.isEmpty() ? "Untitled" : QFileInfo(m_ScenePath).completeBaseName());
-		m_Outliner->SetSelected(m_SelectedGuid);
+		m_Hierarchy->Rebuild(*m_World.Get(), m_ScenePath.isEmpty() ? "Untitled" : QFileInfo(m_ScenePath).completeBaseName());
+		m_Hierarchy->SetSelected(m_SelectedGuid);
 		m_HierarchyCount = m_World->GetEntities().Num();
 	}
 

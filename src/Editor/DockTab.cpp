@@ -74,6 +74,7 @@ namespace FP::Editor
 		QDockWidget* dock = new QDockWidget(title, parent);
 		dock->setObjectName(title);
 		dock->setWidget(content);
+		dock->setWindowIcon(EditorIcons::Get(icon)); // shown on the tab when docks share a spot
 		dock->setTitleBarWidget(new DockTab(dock, icon));
 		return dock;
 	}
