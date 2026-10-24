@@ -367,11 +367,20 @@ namespace FP::Editor
 		});
 		scripts->addSeparator();
 		scripts->addAction("&Reload Scripts", QKeySequence("Ctrl+R"), m_ScriptBuilder, &ScriptBuilder::Build);
+		scripts->addAction("Re&build Scripts (Clean)", m_ScriptBuilder, &ScriptBuilder::Rebuild)
+			->setToolTip("Deletes everything built from the scripts and builds them again from scratch");
+		scripts->addAction("Rebuild &Editor and Restart", this, &EditorWindow::RebuildEditorAndRestart)
+			->setToolTip("Builds this editor from the current engine code, then reopens it on this scene");
+		scripts->setToolTipsVisible(true);
 		QAction* autoReload = scripts->addAction("&Auto Reload");
 		autoReload->setCheckable(true);
 		autoReload->setChecked(m_AutoReloadScripts);
 		connect(autoReload, &QAction::toggled, this, [this](bool on) { m_AutoReloadScripts = on; });
 		WatchScripts();
+		// Scripts built from other engine code were refused at startup. Building them again
+		// fixes it when they are the older side, and OnScriptsBuilt handles the other case.
+		if (ScriptRuntime::Get().HadAbiMismatch())
+			m_ScriptBuilder->Build();
 
 		QToolBar* toolbar = addToolBar("Main");
 		toolbar->setObjectName("MainToolbar");
@@ -924,10 +933,15 @@ namespace FP::Editor
 			QMessageBox::warning(this, "Open Project", "The project did not build. The Output Log has the errors.");
 			return;
 		}
+		// Restarting this project's editor reopens the scene it was on.
+		QStringList arguments;
+		const QDir content(ToQString(Paths::GetContentDir()));
+		if (QDir(dir) == QDir(ToQString(Paths::GetProjectDir())) && !m_ScenePath.isEmpty() && !content.relativeFilePath(m_ScenePath).startsWith(".."))
+			arguments = { "--scene", content.relativeFilePath(m_ScenePath) };
 		// Closing asks about unsaved work first, and the other editor only starts once this one is gone.
 		if (!close())
 			return;
-		if (!QProcess::startDetached(ScriptBuilder::EditorPath(dir), {}, dir))
+		if (!QProcess::startDetached(ScriptBuilder::EditorPath(dir), arguments, dir))
 			FP_LOG_ERROR("Could not start %s", ScriptBuilder::EditorPath(dir).toUtf8().constData());
 	}
 
@@ -942,7 +956,27 @@ namespace FP::Editor
 		// Running scripts move to the new code with their field values.
 		if (ScriptRuntime::Get().Reload())
 			FP_LOG("Scripts reloaded%s", m_World->IsPlaying() ? " while playing" : "");
+		else if (ScriptRuntime::Get().HadAbiMismatch())
+		{
+			// The scripts were just built from the current code, so this editor is the old side.
+			FP_LOG_WARN("This editor is older than the engine code the scripts were built from. Use Scripts > Rebuild Editor and Restart.");
+			const auto answer = QMessageBox::question(this, "Editor out of date",
+				"The scripts were built from newer engine code than this editor, so they cannot load.\n\n"
+				"Rebuild the editor and restart it on this scene? This can take a few minutes.",
+				QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+			if (answer == QMessageBox::Yes)
+				RebuildEditorAndRestart();
+			return;
+		}
 		AttachPendingScripts();
+	}
+
+	void EditorWindow::RebuildEditorAndRestart()
+	{
+		if (m_World->IsPlaying())
+			Stop();
+		FP_LOG("Rebuilding the editor. It restarts on this scene when the build is done.");
+		m_ScriptBuilder->BuildProject(ToQString(Paths::GetProjectDir()));
 	}
 
 	void EditorWindow::NewScriptFor(const Guid& entity)

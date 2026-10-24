@@ -64,6 +64,8 @@ namespace FP::Editor
 		// Asks for a class name, makes the script and attaches it to entity once it compiles.
 		void NewScriptFor(const Guid& entity);
 		void AttachPendingScripts();
+		// Builds this project's editor and reopens it on the current scene.
+		void RebuildEditorAndRestart();
 		void AttachScript(Entity entity, const String& name);
 
 		struct PendingAttach

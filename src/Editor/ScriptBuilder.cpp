@@ -252,6 +252,22 @@ FP_SCRIPT(NAME);
 		RunNext();
 	}
 
+	void ScriptBuilder::Rebuild()
+	{
+		if (m_Process)
+		{
+			FP_LOG_WARN("Wait for the current build to finish first.");
+			return;
+		}
+		const QString config = FP_BUILD_DEBUG ? "Debug" : "Release";
+		QDir(ProjectDir() + "/Intermediate/" + config + "/GameScripts").removeRecursively();
+		QFile::remove(ProjectDir() + "/Intermediate/Generated/ScriptReflection.gen.h");
+		// Removing the stamp makes the build regenerate the projects as well.
+		QFile::remove(StampPath());
+		FP_LOG("Cleaned the scripts. Rebuilding from scratch...");
+		Build();
+	}
+
 	void ScriptBuilder::RunNext()
 	{
 		const Step step = m_Steps.takeFirst();
