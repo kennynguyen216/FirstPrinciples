@@ -14,11 +14,22 @@ namespace FP
 		Vec4 Tangent; // w is the bitangent sign
 	};
 
+	// A run of indices drawn with one material. OBJ files start one at each usemtl.
+	struct MeshSection
+	{
+		String Name;
+		uint32 FirstIndex = 0;
+		uint32 IndexCount = 0;
+	};
+
 	// Triangle list on the CPU. Front faces wind counter clockwise.
 	struct MeshData
 	{
 		Array<MeshVertex> Vertices;
 		Array<uint32> Indices;
+
+		// Cover Indices in order with no gaps. Every loaded mesh has at least one.
+		Array<MeshSection> Sections;
 
 		Vec3 BoundsMin;
 		Vec3 BoundsMax;
@@ -45,6 +56,10 @@ namespace FP
 	}
 
 	// Wavefront OBJ with positions, UVs and normals. Polygons are triangulated as fans.
-	// Missing normals are smoothed from faces. Returns false on a parse failure.
+	// Missing normals are smoothed from faces. Faces under the same usemtl name share a section,
+	// in the order the names first show up. Returns false on a parse failure.
 	bool ParseObj(std::string_view text, MeshData& out);
+
+	// A built in primitive or an .obj relative to Content. False when it cannot be loaded.
+	bool LoadMesh(std::string_view nameOrPath, MeshData& out);
 }

@@ -250,7 +250,9 @@ FP_TEST(Mesh_PrimitivesAreWellFormed)
 				FP_EXPECT(Vec3::Dot(face, a.Normal + b.Normal + c.Normal) > 0);
 		}
 	}
-	MeshData cube = Primitives::Cube();
+	MeshData cube;
+	FP_EXPECT(Primitives::Create("Cube", cube));
+	FP_EXPECT(cube.Sections.Num() == 1 && cube.Sections[0].IndexCount == static_cast<uint32>(cube.Indices.Num()));
 	FP_EXPECT(cube.BoundsMin == Vec3(-0.5f, -0.5f, -0.5f) && cube.BoundsMax == Vec3(0.5f, 0.5f, 0.5f));
 }
 
@@ -269,6 +271,26 @@ FP_TEST(Mesh_ParsesObj)
 	FP_EXPECT(Near(mesh.Vertices[0].Tangent.XYZ(), { 1, 0, 0 }));
 	FP_EXPECT(mesh.Vertices[0].UV == Vec2(0, 1)); // flipped to top left origin
 	FP_EXPECT(!ParseObj("f 1 2 3\n", mesh));
+}
+
+FP_TEST(Mesh_ObjSectionsFollowUsemtl)
+{
+	// Stone comes back after Glass, so its faces are joined into one run.
+	const char* obj =
+		"v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\n"
+		"usemtl Stone\nf 1 2 3\n"
+		"usemtl Glass\nf 1 2 3 4\n"
+		"usemtl Stone\nf 1 3 4\n";
+	MeshData mesh;
+	FP_EXPECT(ParseObj(obj, mesh));
+	FP_EXPECT(mesh.Sections.Num() == 2);
+	FP_EXPECT(mesh.Sections[0].Name == "Stone" && mesh.Sections[0].FirstIndex == 0 && mesh.Sections[0].IndexCount == 6);
+	FP_EXPECT(mesh.Sections[1].Name == "Glass" && mesh.Sections[1].FirstIndex == 6 && mesh.Sections[1].IndexCount == 6);
+	FP_EXPECT(mesh.Indices[3] == 0 && mesh.Indices[4] == 2 && mesh.Indices[5] == 3);
+
+	// Faces before any usemtl land in Default.
+	FP_EXPECT(ParseObj("v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\nusemtl Red\nf 3 2 1\n", mesh));
+	FP_EXPECT(mesh.Sections.Num() == 2 && mesh.Sections[0].Name == "Default" && mesh.Sections[1].Name == "Red");
 }
 
 #include "Engine/SceneHistory.h"
