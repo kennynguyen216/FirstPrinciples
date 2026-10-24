@@ -389,7 +389,17 @@ namespace FP::Editor
 
 	void ViewportWidget::resizeEvent(QResizeEvent*)
 	{
+		if (m_Overlay)
+			m_Overlay->setGeometry(0, 0, width(), m_Overlay->sizeHint().height());
 		RenderFrame();
+	}
+
+	void ViewportWidget::SetOverlay(QWidget* overlay)
+	{
+		m_Overlay = overlay;
+		overlay->setParent(this);
+		overlay->setGeometry(0, 0, width(), overlay->sizeHint().height());
+		overlay->show();
 	}
 
 	void ViewportWidget::mousePressEvent(QMouseEvent* event)
@@ -493,10 +503,11 @@ namespace FP::Editor
 			{
 				const float t = Vec3::Dot(m_DragPlanePoint - ray.Origin, m_DragPlaneNormal) / denom;
 				Vec3 target = ray.Origin + ray.Direction * t + m_DragOffset;
-				// Hold shift to snap to a quarter unit grid. Axes facing the camera are left alone.
-				if (event->modifiers() & Qt::ShiftModifier)
+				// Snap to the grid when snapping is on, or off with Shift held. Axes facing the camera are left alone.
+				const bool shift = event->modifiers() & Qt::ShiftModifier;
+				if (m_SnapEnabled != shift && m_SnapSize > 0)
 				{
-					auto snap = [](float value) { return std::round(value * 4) / 4; };
+					auto snap = [this](float value) { return std::round(value / m_SnapSize) * m_SnapSize; };
 					if (std::fabs(m_DragPlaneNormal.X) < 0.9f) target.X = snap(target.X);
 					if (std::fabs(m_DragPlaneNormal.Y) < 0.9f) target.Y = snap(target.Y);
 					if (std::fabs(m_DragPlaneNormal.Z) < 0.9f) target.Z = snap(target.Z);

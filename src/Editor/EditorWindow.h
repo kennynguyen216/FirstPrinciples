@@ -9,7 +9,6 @@
 #include <memory>
 
 class QAction;
-class QComboBox;
 class QFileSystemWatcher;
 class QTabWidget;
 class QDockWidget;
@@ -28,6 +27,7 @@ namespace FP::Editor
 	class InspectorPanel;
 	class OutlinerPanel;
 	class ScriptBuilder;
+	class ViewportToolbar;
 	class ViewportWidget;
 
 	class EditorWindow : public QMainWindow
@@ -143,7 +143,7 @@ namespace FP::Editor
 		QAction* m_PlayAction = nullptr;
 		QAction* m_StopAction = nullptr;
 		QAction* m_View3DAction = nullptr;
-		QComboBox* m_ViewModeBox = nullptr;
+		ViewportToolbar* m_ViewportToolbar = nullptr;
 		ScriptBuilder* m_ScriptBuilder = nullptr;
 		QTabWidget* m_CentralTabs = nullptr;
 		ContentBrowser* m_ContentBrowser = nullptr;

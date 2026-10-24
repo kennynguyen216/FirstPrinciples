@@ -7,6 +7,7 @@
 #include "Editor/OutlinerPanel.h"
 #include "Editor/PlaceEntitiesPanel.h"
 #include "Editor/ScriptBuilder.h"
+#include "Editor/ViewportToolbar.h"
 #include "Editor/ViewportWidget.h"
 #include "Engine/ComponentRegistry.h"
 #include "Engine/Input.h"
@@ -21,7 +22,6 @@
 #include <SDL3/SDL_timer.h>
 
 #include <QCloseEvent>
-#include <QComboBox>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QDir>
@@ -73,6 +73,8 @@ namespace FP::Editor
 
 		m_Viewport = new ViewportWidget(device, this);
 		m_Viewport->SetWorld(m_World.Get());
+		m_ViewportToolbar = new ViewportToolbar();
+		m_Viewport->SetOverlay(m_ViewportToolbar);
 		// The viewport is the first tab and scripts open beside it.
 		m_CentralTabs = new QTabWidget(this);
 		m_CentralTabs->setDocumentMode(true);
@@ -276,19 +278,19 @@ namespace FP::Editor
 		m_StopAction = toolbar->addAction("Stop", this, &EditorWindow::Stop);
 		m_StopAction->setEnabled(false);
 		toolbar->addSeparator();
-		m_View3DAction = toolbar->addAction("3D View");
+		// The projection and view mode live on the viewport toolbar. Ctrl+3 still flips the projection.
+		m_View3DAction = new QAction(this);
 		m_View3DAction->setCheckable(true);
 		m_View3DAction->setShortcut(QKeySequence("Ctrl+3"));
-		connect(m_View3DAction, &QAction::toggled, this, [this](bool on) { m_Viewport->Set3D(on); });
-
-		// View mode picker. The order matches ViewMode so the index converts directly.
-		m_ViewModeBox = new QComboBox();
-		m_ViewModeBox->addItems({ "Lit", "Unlit", "Wireframe" });
-		m_ViewModeBox->setToolTip("View mode (Alt+4 Lit, Alt+3 Unlit, Alt+2 Wireframe)");
-		toolbar->addWidget(m_ViewModeBox);
-		connect(m_ViewModeBox, &QComboBox::currentIndexChanged, this, [this](int index) {
-			m_Viewport->SetViewMode(static_cast<ViewMode>(index));
+		addAction(m_View3DAction);
+		connect(m_View3DAction, &QAction::toggled, this, [this](bool on) {
+			m_Viewport->Set3D(on);
+			m_ViewportToolbar->Set3D(on);
 		});
+		connect(m_ViewportToolbar, &ViewportToolbar::ProjectionChanged, m_View3DAction, &QAction::setChecked);
+		connect(m_ViewportToolbar, &ViewportToolbar::ViewModeChanged, this, &EditorWindow::SetViewMode);
+		connect(m_ViewportToolbar, &ViewportToolbar::SnapChanged, this, [this](bool on, float size) { m_Viewport->SetSnap(on, size); });
+
 		// Same keys as Unreal so muscle memory carries over.
 		const std::pair<const char*, ViewMode> modeKeys[] = { { "Alt+4", ViewMode::Lit }, { "Alt+3", ViewMode::Unlit }, { "Alt+2", ViewMode::Wireframe } };
 		for (const auto& [keys, mode] : modeKeys)
@@ -315,7 +317,8 @@ namespace FP::Editor
 
 	void EditorWindow::SetViewMode(ViewMode mode)
 	{
-		m_ViewModeBox->setCurrentIndex(static_cast<int>(mode));
+		m_Viewport->SetViewMode(mode);
+		m_ViewportToolbar->SetViewMode(mode);
 	}
 
 	void EditorWindow::DropAsset(const QString& path, Vec3 point, Entity target)
