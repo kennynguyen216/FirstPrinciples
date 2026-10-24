@@ -17,34 +17,6 @@ namespace FP
 			return out;
 		}
 
-		Quat FromRotationMatrix(const Mat4& m)
-		{
-			// Shepperd's method, picking the largest term so the square root stays accurate.
-			const float trace = m.At(0, 0) + m.At(1, 1) + m.At(2, 2);
-			Quat q;
-			if (trace > 0)
-			{
-				const float s = std::sqrt(trace + 1) * 2;
-				q = { (m.At(1, 2) - m.At(2, 1)) / s, (m.At(2, 0) - m.At(0, 2)) / s, (m.At(0, 1) - m.At(1, 0)) / s, s / 4 };
-			}
-			else if (m.At(0, 0) > m.At(1, 1) && m.At(0, 0) > m.At(2, 2))
-			{
-				const float s = std::sqrt(1 + m.At(0, 0) - m.At(1, 1) - m.At(2, 2)) * 2;
-				q = { s / 4, (m.At(1, 0) + m.At(0, 1)) / s, (m.At(2, 0) + m.At(0, 2)) / s, (m.At(1, 2) - m.At(2, 1)) / s };
-			}
-			else if (m.At(1, 1) > m.At(2, 2))
-			{
-				const float s = std::sqrt(1 + m.At(1, 1) - m.At(0, 0) - m.At(2, 2)) * 2;
-				q = { (m.At(1, 0) + m.At(0, 1)) / s, s / 4, (m.At(2, 1) + m.At(1, 2)) / s, (m.At(2, 0) - m.At(0, 2)) / s };
-			}
-			else
-			{
-				const float s = std::sqrt(1 + m.At(2, 2) - m.At(0, 0) - m.At(1, 1)) * 2;
-				q = { (m.At(2, 0) + m.At(0, 2)) / s, (m.At(2, 1) + m.At(1, 2)) / s, s / 4, (m.At(0, 1) - m.At(1, 0)) / s };
-			}
-			return q.Normalized();
-		}
-
 		BoneTransform LocalTransform(const cgltf_node* node)
 		{
 			BoneTransform out;
@@ -68,7 +40,7 @@ namespace FP
 				for (int r = 0; r < 3; ++r)
 					m.At(c, r) /= length > 0 ? length : 1;
 			}
-			out.Rotation = FromRotationMatrix(m);
+			out.Rotation = Quat::FromMatrix(m);
 			return out;
 		}
 

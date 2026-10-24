@@ -98,6 +98,8 @@ namespace FP
 		constexpr Vec3 XYZ() const { return { X, Y, Z }; }
 	};
 
+	struct Mat4;
+
 	// Unit quaternion rotation.
 	struct Quat
 	{
@@ -158,6 +160,9 @@ namespace FP
 			const Vec3 t = Vec3::Cross(q, v) * 2.0f;
 			return v + t * W + Vec3::Cross(q, t);
 		}
+
+		// The rotation part of a matrix with no scale.
+		static Quat FromMatrix(const Mat4& m);
 
 		static float Dot(const Quat& a, const Quat& b) { return a.X * b.X + a.Y * b.Y + a.Z * b.Z + a.W * b.W; }
 
@@ -307,6 +312,34 @@ namespace FP
 			return r;
 		}
 	};
+
+	inline Quat Quat::FromMatrix(const Mat4& m)
+	{
+		// Shepperd's method, picking the largest term so the square root stays accurate.
+		const float trace = m.At(0, 0) + m.At(1, 1) + m.At(2, 2);
+		Quat q;
+		if (trace > 0)
+		{
+			const float s = std::sqrt(trace + 1) * 2;
+			q = { (m.At(1, 2) - m.At(2, 1)) / s, (m.At(2, 0) - m.At(0, 2)) / s, (m.At(0, 1) - m.At(1, 0)) / s, s / 4 };
+		}
+		else if (m.At(0, 0) > m.At(1, 1) && m.At(0, 0) > m.At(2, 2))
+		{
+			const float s = std::sqrt(1 + m.At(0, 0) - m.At(1, 1) - m.At(2, 2)) * 2;
+			q = { s / 4, (m.At(1, 0) + m.At(0, 1)) / s, (m.At(2, 0) + m.At(0, 2)) / s, (m.At(1, 2) - m.At(2, 1)) / s };
+		}
+		else if (m.At(1, 1) > m.At(2, 2))
+		{
+			const float s = std::sqrt(1 + m.At(1, 1) - m.At(0, 0) - m.At(2, 2)) * 2;
+			q = { (m.At(1, 0) + m.At(0, 1)) / s, s / 4, (m.At(2, 1) + m.At(1, 2)) / s, (m.At(2, 0) - m.At(0, 2)) / s };
+		}
+		else
+		{
+			const float s = std::sqrt(1 + m.At(2, 2) - m.At(0, 0) - m.At(1, 1)) * 2;
+			q = { (m.At(2, 0) + m.At(0, 2)) / s, (m.At(2, 1) + m.At(1, 2)) / s, s / 4, (m.At(0, 1) - m.At(1, 0)) / s };
+		}
+		return q.Normalized();
+	}
 
 	inline Mat4 Mat4::Inverse() const
 	{
