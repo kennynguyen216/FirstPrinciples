@@ -45,6 +45,9 @@ namespace FP::Editor
 			box->setSingleStep(0.1);
 			box->setKeyboardTracking(false);
 			box->setMinimumWidth(70);
+			// Style sheet padding does not reach the text inside a spin box, so set it on the editor itself.
+			if (QLineEdit* text = box->findChild<QLineEdit*>())
+				text->setTextMargins(4, 0, 2, 0);
 			return box;
 		}
 
@@ -211,7 +214,7 @@ namespace FP::Editor
 			{
 				boxes[i] = MakeFloatBox();
 				boxes[i]->setMinimumWidth(56);
-				boxes[i]->setStyleSheet(QString("QDoubleSpinBox { border-left: 3px solid %1; padding-left: 5px; }").arg(axisColors[i]));
+				boxes[i]->setStyleSheet(QString("QDoubleSpinBox { border-left: 3px solid %1; border-top-left-radius: 2px; border-bottom-left-radius: 2px; }").arg(axisColors[i]));
 				layout->addWidget(boxes[i]);
 			}
 			return row;
@@ -642,6 +645,8 @@ namespace FP::Editor
 				QSpinBox* box = new QSpinBox();
 				box->setRange(INT32_MIN, INT32_MAX);
 				box->setKeyboardTracking(false);
+				if (QLineEdit* text = box->findChild<QLineEdit*>())
+					text->setTextMargins(4, 0, 2, 0);
 				connect(box, &QSpinBox::valueChanged, this, [=](int value) {
 					if (void* c = data()) { fieldCopy.Get<int32>(c) = value; changed(); }
 				});
