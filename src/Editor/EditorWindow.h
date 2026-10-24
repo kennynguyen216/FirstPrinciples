@@ -55,6 +55,10 @@ namespace FP::Editor
 		// Creates or changes entities for a file dropped onto the viewport. Absolute path.
 		void DropAsset(const QString& path, Vec3 point, Entity target);
 
+		// Forgets unsaved scene and script edits so closing never prompts or saves.
+		// Smoke test runs call this so they can never write to the project.
+		void DiscardUnsavedChanges();
+
 		// Shows an asset file in the inspector, clearing the entity selection. Absolute path.
 		void ShowAsset(const QString& path);
 

@@ -336,6 +336,16 @@ namespace FP::Editor
 		Select(changed);
 	}
 
+	void EditorWindow::DiscardUnsavedChanges()
+	{
+		m_Dirty = false;
+		for (int i = 0; i < m_CentralTabs->count(); ++i)
+		{
+			if (CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->widget(i)))
+				editor->document()->setModified(false);
+		}
+	}
+
 	void EditorWindow::ShowAsset(const QString& path)
 	{
 		Select(NullEntity);

@@ -84,7 +84,10 @@ int main(int argc, char** argv)
 		// --build-scripts builds GameScripts and exits with 0 on success.
 		if (args.contains("--build-scripts"))
 		{
-			QObject::connect(window.GetScriptBuilder(), &FP::Editor::ScriptBuilder::Finished, &app, [](bool ok) { QApplication::exit(ok ? 0 : 1); });
+			QObject::connect(window.GetScriptBuilder(), &FP::Editor::ScriptBuilder::Finished, &app, [&window](bool ok) {
+				window.DiscardUnsavedChanges();
+				QApplication::exit(ok ? 0 : 1);
+			});
 			window.GetScriptBuilder()->Build();
 		}
 
@@ -106,6 +109,8 @@ int main(int argc, char** argv)
 			QTimer::singleShot(waitMs, &window, [&window, path]() {
 				window.grab().save(path);
 				FP_LOG("Saved screenshot %s", path.toUtf8().constData());
+				// Quitting closes the window, which would offer to save. Test runs must never save.
+				window.DiscardUnsavedChanges();
 				QApplication::quit();
 			});
 		}
