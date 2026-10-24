@@ -13,7 +13,7 @@ namespace FP::Editor
 	namespace
 	{
 		constexpr int GuidRole = Qt::UserRole + 1;
-		enum Column { EyeColumn, LabelColumn, TypeColumn };
+		enum Column { LabelColumn, TypeColumn };
 
 		EditorIcon IconForType(const QString& type)
 		{
@@ -43,14 +43,11 @@ namespace FP::Editor
 		layout->addWidget(m_Search);
 
 		m_Tree = new QTreeWidget();
-		m_Tree->setColumnCount(3);
-		m_Tree->setHeaderLabels({ "", "Item Label", "Type" });
-		m_Tree->headerItem()->setIcon(EyeColumn, EditorIcons::Get(EditorIcon::Eye));
-		m_Tree->header()->setSectionResizeMode(EyeColumn, QHeaderView::Fixed);
+		m_Tree->setColumnCount(2);
+		m_Tree->setHeaderLabels({ "Item Label", "Type" });
 		m_Tree->header()->setSectionResizeMode(LabelColumn, QHeaderView::Stretch);
 		m_Tree->header()->setSectionResizeMode(TypeColumn, QHeaderView::Interactive);
 		m_Tree->header()->setStretchLastSection(false);
-		m_Tree->header()->resizeSection(EyeColumn, 28);
 		m_Tree->header()->resizeSection(TypeColumn, 110);
 		m_Tree->setRootIsDecorated(true);
 		m_Tree->setIndentation(14);
