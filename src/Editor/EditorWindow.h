@@ -61,6 +61,17 @@ namespace FP::Editor
 
 		// Creates Source/Scripts/<className>.cpp and opens it. Returns false and explains why on failure.
 		bool NewScript(const QString& className);
+		// Asks for a class name, makes the script and attaches it to entity once it compiles.
+		void NewScriptFor(const Guid& entity);
+		void AttachPendingScripts();
+		void AttachScript(Entity entity, const String& name);
+
+		struct PendingAttach
+		{
+			Guid Entity;
+			String Script;
+		};
+		QList<PendingAttach> m_PendingAttach;
 
 		ContentBrowser* GetContentBrowser() const { return m_ContentBrowser; }
 

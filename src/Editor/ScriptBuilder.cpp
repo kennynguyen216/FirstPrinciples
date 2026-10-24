@@ -88,26 +88,38 @@ namespace FP::Editor
 
 using namespace FP;
 
+// Say what NAME does here. This comment shows in the editor when the script is picked.
+FPCLASS()
 class NAME : public Script
 {
 public:
-	// Fields listed in FP_SCRIPT below show in the inspector and keep their values on reload.
-	float Speed = 1;
+	// FPPROPERTY fields show in the inspector, save with the scene and keep their value on reload.
+	FPPROPERTY(Range = "0, 10")
+	float Speed = 1; // a comment here becomes the field's tooltip
 
 	void OnStart() override
 	{
+		// Runs once when play starts. A few helpers to reach for:
+		//   FindEntity("Player"), Spawn("Bullet", position), SpawnScene("Prefabs/Enemy.scene", position)
+		//   GetParent(), GetChildren(), FindChild("Gun"), SetParent(entity), GetScript<OtherScript>(entity)
+		//   After(2.0f, [this]() { ... }), Every(1.0f, [this]() { ... }), LoadScene("Scenes/Level2.scene")
 	}
 
 	void OnUpdate(float deltaTime) override
 	{
+		// Runs every frame. GetTransform() moves this entity and Input::IsKeyDown(SDL_SCANCODE_SPACE) reads keys.
 		(void)deltaTime;
+	}
+
+	// FPFUNCTION makes a button in the inspector that calls this while playing.
+	FPFUNCTION()
+	void Test()
+	{
+		FP_LOG("NAME says hello from %s", GetName(GetEntity()).CStr());
 	}
 };
 
-FP_SCRIPT_FIELDS(NAME)
-{
-	fields.Field("Speed", &NAME::Speed);
-}
+FP_SCRIPT(NAME);
 )");
 		code.replace("NAME", className);
 

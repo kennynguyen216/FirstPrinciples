@@ -28,6 +28,7 @@
 #include <QDropEvent>
 #include <QLineEdit>
 #include <QMimeData>
+#include <QMap>
 #include <QMenu>
 #include <QPushButton>
 #include <QScrollArea>
@@ -463,23 +464,49 @@ namespace FP::Editor
 		add->setText("Add Script");
 		add->setPopupMode(QToolButton::InstantPopup);
 		QMenu* menu = new QMenu(add);
-		for (const ScriptType* type : runtime.GetTypes())
-		{
-			const String name = type->Name;
-			menu->addAction(ToQString(name), this, [this, name]() {
-				if (ScriptComponent* scripts = m_World->TryGet<ScriptComponent>(m_Entity))
-				{
-					scripts->Scripts.Emplace(name);
-					emit Modified();
-					RebuildLater();
-				}
-			});
-		}
+		FillScriptMenu(menu);
 		add->setMenu(menu);
-		add->setEnabled(!menu->isEmpty());
-		if (menu->isEmpty())
-			add->setToolTip("No scripts are compiled. Use Scripts > New Script.");
 		layout->addWidget(add, 0, Qt::AlignLeft);
+	}
+
+	void InspectorPanel::FillScriptMenu(QMenu* menu)
+	{
+		// Categories from FPCLASS become submenus. Scripts without one sit at the top level.
+		QMap<QString, QMenu*> categories;
+		for (const ScriptType* type : ScriptRuntime::Get().GetTypes())
+		{
+			QMenu* target = menu;
+			if (type->Category)
+			{
+				const QString category = QString::fromUtf8(type->Category);
+				if (!categories.contains(category))
+					categories.insert(category, menu->addMenu(category));
+				target = categories.value(category);
+			}
+			const String name = type->Name;
+			QAction* action = target->addAction(ToQString(name), this, [this, name]() { AttachScript(name); });
+			if (type->Description)
+				action->setToolTip(QString::fromUtf8(type->Description));
+		}
+		menu->setToolTipsVisible(true);
+		if (!menu->isEmpty())
+			menu->addSeparator();
+		menu->addAction(EditorIcons::Get(EditorIcon::Script), "New Script...", this, [this]() {
+			if (m_World && m_World->IsValid(m_Entity))
+				emit NewScriptRequested(m_World->Get<IdComponent>(m_Entity).Id);
+		});
+	}
+
+	void InspectorPanel::AttachScript(const String& name)
+	{
+		if (!m_World || !m_World->IsValid(m_Entity))
+			return;
+		ScriptComponent* scripts = m_World->TryGet<ScriptComponent>(m_Entity);
+		if (!scripts)
+			scripts = &m_World->Add<ScriptComponent>(m_Entity);
+		scripts->Scripts.Emplace(name);
+		emit Modified();
+		RebuildLater();
 	}
 
 	void InspectorPanel::StopPreview()
@@ -943,6 +970,10 @@ namespace FP::Editor
 				AddAudioSection();
 		}
 
+		// Scripts can be added straight from here, without adding the Scripts component first.
+		addMenu->addSeparator();
+		QMenu* scriptMenu = addMenu->addMenu(EditorIcons::Get(EditorIcon::Script), "Script");
+		FillScriptMenu(scriptMenu);
 		m_AddButton->setMenu(addMenu);
 		m_AddButton->setEnabled(!addMenu->isEmpty());
 		RefreshValues();

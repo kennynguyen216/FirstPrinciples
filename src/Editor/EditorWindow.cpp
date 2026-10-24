@@ -203,6 +203,7 @@ namespace FP::Editor
 		m_Inspector = new InspectorPanel();
 		connect(m_Inspector, &InspectorPanel::ImportAudioRequested, this, [this]() { ImportAudio(true); });
 		connect(m_Inspector, &InspectorPanel::OpenScriptRequested, this, &EditorWindow::OpenScript);
+		connect(m_Inspector, &InspectorPanel::NewScriptRequested, this, &EditorWindow::NewScriptFor);
 		connect(m_Inspector, &InspectorPanel::Modified, this, [this]() {
 			MarkDirty();
 			RefreshHierarchy();
@@ -583,6 +584,25 @@ namespace FP::Editor
 
 	void EditorWindow::DropAsset(const QString& path, Vec3 point, Entity target)
 	{
+		// Scripts live in Source/Scripts rather than Content, so they come before the check below.
+		if (ContentBrowser::AssetKind(path) == "Script")
+		{
+			if (!m_World->IsValid(target))
+			{
+				FP_LOG_WARN("Drop a script onto an entity to add it");
+				return;
+			}
+			// The class written in that file, falling back to the file name like New Script makes.
+			String script = ToString(QFileInfo(path).completeBaseName());
+			const QString dropped = QFileInfo(path).canonicalFilePath();
+			for (const ScriptType* type : ScriptRuntime::Get().GetTypes())
+			{
+				if (type->SourceFile && QFileInfo(ScriptBuilder::ResolveSourcePath(QString::fromUtf8(type->SourceFile))).canonicalFilePath() == dropped)
+					script = type->Name;
+			}
+			AttachScript(target, script);
+			return;
+		}
 		const QString relative = QDir(ToQString(Paths::GetContentDir())).relativeFilePath(path);
 		if (relative.startsWith(".."))
 		{
@@ -922,6 +942,44 @@ namespace FP::Editor
 		// Running scripts move to the new code with their field values.
 		if (ScriptRuntime::Get().Reload())
 			FP_LOG("Scripts reloaded%s", m_World->IsPlaying() ? " while playing" : "");
+		AttachPendingScripts();
+	}
+
+	void EditorWindow::NewScriptFor(const Guid& entity)
+	{
+		const QString name = QInputDialog::getText(this, "New Script", "Class name:").trimmed();
+		if (name.isEmpty() || !NewScript(name))
+			return;
+		// It attaches itself once it compiles, so the user can keep editing in the meantime.
+		m_PendingAttach.append({ entity, ToString(name) });
+		FP_LOG("%s will be added to the entity once it compiles", name.toUtf8().constData());
+		m_ScriptBuilder->Build();
+	}
+
+	void EditorWindow::AttachPendingScripts()
+	{
+		for (int i = m_PendingAttach.size() - 1; i >= 0; --i)
+		{
+			const PendingAttach pending = m_PendingAttach[i];
+			const Entity entity = m_World->FindEntityByGuid(pending.Entity);
+			if (!ScriptRuntime::Get().FindType(pending.Script.View()) && entity != NullEntity)
+				continue; // not built yet, try again after the next build
+			m_PendingAttach.removeAt(i);
+			if (entity != NullEntity)
+				AttachScript(entity, pending.Script);
+		}
+	}
+
+	void EditorWindow::AttachScript(Entity entity, const String& name)
+	{
+		ScriptComponent* scripts = m_World->TryGet<ScriptComponent>(entity);
+		if (!scripts)
+			scripts = &m_World->Add<ScriptComponent>(entity);
+		scripts->Scripts.Emplace(name);
+		MarkDirty();
+		if (entity == m_Selected)
+			m_Inspector->SetTarget(m_World.Get(), m_Selected);
+		FP_LOG("Added %s to %s", name.CStr(), m_World->GetEntityName(entity).CStr());
 	}
 
 	void EditorWindow::Tick()
