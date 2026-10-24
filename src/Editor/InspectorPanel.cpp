@@ -31,6 +31,7 @@
 #include <QMenu>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSlider>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QToolButton>
@@ -42,6 +43,25 @@ namespace FP::Editor
 {
 	namespace
 	{
+		// "FieldOfView" reads as "Field Of View". Names that already have spaces are left alone.
+		QString DisplayName(const char* name)
+		{
+			const QString text = QString::fromUtf8(name);
+			if (text.contains(' '))
+				return text;
+			QString out;
+			for (int i = 0; i < text.size(); ++i)
+			{
+				const QChar c = text[i];
+				const bool startsWord = i > 0 && c.isUpper()
+					&& (text[i - 1].isLower() || text[i - 1].isDigit() || (i + 1 < text.size() && text[i + 1].isLower() && text[i - 1].isUpper()));
+				if (startsWord)
+					out += ' ';
+				out += c;
+			}
+			return out;
+		}
+
 		QDoubleSpinBox* MakeFloatBox()
 		{
 			QDoubleSpinBox* box = new QDoubleSpinBox();
@@ -835,23 +855,6 @@ namespace FP::Editor
 					if (info == ComponentRegistry::Get().Find<MeshComponent>() || info == ComponentRegistry::Get().Find<SkeletalMeshComponent>())
 						RebuildLater();
 				});
-				if (info == ComponentRegistry::Get().Find<AudioSourceComponent>())
-				{
-					QWidget* editor = form->itemAt(form->rowCount() - 1, QFormLayout::FieldRole)->widget();
-					if (QDoubleSpinBox* box = qobject_cast<QDoubleSpinBox*>(editor))
-					{
-						QSignalBlocker block(box);
-						const std::string_view name(field.Name);
-						if (name == "Volume") box->setRange(0, 1);
-						else if (name == "Pitch") box->setRange(0.25, 4);
-						else if (name == "MinDistance" || name == "MaxDistance") box->setRange(0.001, 1e9);
-					}
-					if (QSpinBox* box = qobject_cast<QSpinBox*>(editor))
-					{
-						QSignalBlocker block(box);
-						box->setRange(0, 255);
-					}
-				}
 			}
 
 			if (info == ComponentRegistry::Get().Find<MaterialComponent>())
@@ -915,7 +918,7 @@ namespace FP::Editor
 				m_Refreshers.push_back([=]() {
 					if (void* c = data()) { QSignalBlocker block(box); box->setChecked(fieldCopy.Get<bool>(c)); }
 				});
-				form->addRow(field.Name, box);
+				form->addRow(DisplayName(field.Name), box);
 				break;
 			}
 			case FieldType::Int:
@@ -931,7 +934,7 @@ namespace FP::Editor
 				m_Refreshers.push_back([=]() {
 					if (void* c = data(); c && !IsEditing(box)) { QSignalBlocker block(box); box->setValue(fieldCopy.Get<int32>(c)); }
 				});
-				form->addRow(field.Name, box);
+				form->addRow(DisplayName(field.Name), box);
 				break;
 			}
 			case FieldType::Float:
@@ -943,7 +946,31 @@ namespace FP::Editor
 				m_Refreshers.push_back([=]() {
 					if (void* c = data(); c && !IsEditing(box)) { QSignalBlocker block(box); box->setValue(fieldCopy.Get<float>(c)); }
 				});
-				form->addRow(field.Name, box);
+				// Sliders only help on short ranges. Long ones just clamp the number.
+				if (!field.HasRange || field.Max <= field.Min || field.Max - field.Min > 1000)
+				{
+					form->addRow(DisplayName(field.Name), box);
+					break;
+				}
+				// A ranged float gets a slider next to its number for quick tuning.
+				QWidget* row = new QWidget();
+				QHBoxLayout* layout = new QHBoxLayout(row);
+				layout->setContentsMargins(0, 0, 0, 0);
+				layout->setSpacing(6);
+				QSlider* slider = new QSlider(Qt::Horizontal);
+				constexpr int steps = 1000;
+				slider->setRange(0, steps);
+				const float min = field.Min;
+				const float span = field.Max - field.Min;
+				connect(slider, &QSlider::valueChanged, this, [=](int value) { box->setValue(min + span * static_cast<float>(value) / steps); });
+				connect(box, &QDoubleSpinBox::valueChanged, this, [=](double value) {
+					QSignalBlocker block(slider);
+					slider->setValue(static_cast<int>(std::lround((value - min) / span * steps)));
+				});
+				box->setMaximumWidth(80);
+				layout->addWidget(slider, 1);
+				layout->addWidget(box);
+				form->addRow(DisplayName(field.Name), row);
 				break;
 			}
 			case FieldType::Vec2:
@@ -968,7 +995,7 @@ namespace FP::Editor
 						if (!IsEditing(boxes[i])) { QSignalBlocker block(boxes[i]); boxes[i]->setValue(fieldCopy.Get<float[3]>(c)[i]); }
 					}
 				});
-				form->addRow(field.Name, row);
+				form->addRow(DisplayName(field.Name), row);
 				break;
 			}
 			case FieldType::Color:
@@ -995,7 +1022,7 @@ namespace FP::Editor
 					if (void* c = data())
 						SetSwatch(button, fieldCopy.Get<Color>(c));
 				});
-				form->addRow(field.Name, button);
+				form->addRow(DisplayName(field.Name), button);
 				break;
 			}
 			case FieldType::String:
@@ -1026,7 +1053,7 @@ namespace FP::Editor
 							combo->setCurrentText(ToQString(fieldCopy.Get<String>(c)));
 						}
 					});
-					form->addRow(field.Name, combo);
+					form->addRow(DisplayName(field.Name), combo);
 					break;
 				}
 
@@ -1087,9 +1114,38 @@ namespace FP::Editor
 						edit->setText(ToQString(fieldCopy.Get<String>(c)));
 					}
 				});
-				form->addRow(field.Name, row);
+				form->addRow(DisplayName(field.Name), row);
 				break;
 			}
 		}
+
+		// Hints that apply to every kind of field, on the row just added.
+		const int row = form->rowCount() - 1;
+		QWidget* label = form->itemAt(row, QFormLayout::LabelRole) ? form->itemAt(row, QFormLayout::LabelRole)->widget() : nullptr;
+		QWidget* editor = form->itemAt(row, QFormLayout::FieldRole) ? form->itemAt(row, QFormLayout::FieldRole)->widget() : nullptr;
+		if (field.Tooltip)
+		{
+			if (label) label->setToolTip(QString::fromUtf8(field.Tooltip));
+			if (editor) editor->setToolTip(QString::fromUtf8(field.Tooltip));
+		}
+		if (editor && field.HasRange && field.Max > field.Min)
+		{
+			// Blocked so clamping the blank editor never writes into the data before it is shown.
+			QList<QDoubleSpinBox*> boxes = editor->findChildren<QDoubleSpinBox*>();
+			if (QDoubleSpinBox* box = qobject_cast<QDoubleSpinBox*>(editor))
+				boxes.append(box);
+			for (QDoubleSpinBox* box : boxes)
+			{
+				QSignalBlocker block(box);
+				box->setRange(field.Min, field.Max);
+			}
+			if (QSpinBox* box = qobject_cast<QSpinBox*>(editor))
+			{
+				QSignalBlocker block(box);
+				box->setRange(static_cast<int>(std::ceil(field.Min)), static_cast<int>(std::floor(field.Max)));
+			}
+		}
+		if (editor && field.ReadOnly)
+			editor->setEnabled(false);
 	}
 }
