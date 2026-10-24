@@ -76,6 +76,11 @@ component Mesh
   Mesh "Sphere"
 component Material
   Material "Materials/Gold.material"
+component Scripts
+  script "Bobber"
+    Height 0.25
+    Speed 1.5
+
 
 entity 3d000007-0007-4007-8007-000000000007
 component Name
@@ -115,9 +120,10 @@ component Mesh
   Mesh "Cube"
 component Material
   Material "Materials/Neon.material"
-component Spinner
-  DegreesPerSecond -20
-  Axis 0 1 0
+component Scripts
+  script "Rotator"
+    DegreesPerSecond 0 -20 0
+
 
 entity 3d00000a-000a-400a-800a-00000000000a
 component Name
@@ -142,6 +148,11 @@ component PointLight
   Color 1 0.75 0.45 1
   Intensity 8
   Range 8
+component Scripts
+  script "LightFlicker"
+    Amount 0.3
+    Speed 8
+
 
 entity 3d00000c-000c-400c-800c-00000000000c
 component Name
