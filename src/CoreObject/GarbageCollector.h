@@ -67,15 +67,15 @@ namespace FP
 		{
 			for (const Slot& slot : m_Slots)
 			{
-				if (slot.Object && slot.Object->IsA(cls))
-					fn(slot.Object);
+				if (slot.Ptr && slot.Ptr->IsA(cls))
+					fn(slot.Ptr);
 			}
 		}
 
 	private:
 		struct Slot
 		{
-			Object* Object = nullptr;
+			Object* Ptr = nullptr;
 			uint32 Serial = 1;
 		};
 

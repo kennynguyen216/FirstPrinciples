@@ -9,7 +9,7 @@
 namespace FP
 {
 	// FNV-1a over raw bytes. Simple and good enough for hash maps.
-	constexpr uint64 HashBytes64(const void* data, usize size, uint64 seed = 0xcbf29ce484222325ull)
+	inline uint64 HashBytes64(const void* data, usize size, uint64 seed = 0xcbf29ce484222325ull)
 	{
 		const uint8* bytes = static_cast<const uint8*>(data);
 		uint64 hash = seed;

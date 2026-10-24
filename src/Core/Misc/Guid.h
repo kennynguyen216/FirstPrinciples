@@ -3,6 +3,8 @@
 #include "Core/Hash.h"
 #include "Core/String/String.h"
 
+#include <compare>
+
 namespace FP
 {
 	// 128 bit globally unique id. Used to identify objects and assets across saves.

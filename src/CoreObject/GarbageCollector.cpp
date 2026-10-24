@@ -85,7 +85,7 @@ namespace FP
 			index = static_cast<uint32>(m_Slots.Num());
 			m_Slots.Emplace();
 		}
-		m_Slots[static_cast<int32>(index)].Object = object;
+		m_Slots[static_cast<int32>(index)].Ptr = object;
 		object->m_Index = index;
 		++m_NumObjects;
 		return object;
@@ -96,14 +96,14 @@ namespace FP
 		if (index >= static_cast<uint32>(m_Slots.Num()))
 			return nullptr;
 		const Slot& slot = m_Slots[static_cast<int32>(index)];
-		return slot.Serial == serial ? slot.Object : nullptr;
+		return slot.Serial == serial ? slot.Ptr : nullptr;
 	}
 
 	void GarbageCollector::Free(Object* object)
 	{
 		const usize size = object->GetClass()->GetSize();
 		Slot& slot = m_Slots[static_cast<int32>(object->m_Index)];
-		slot.Object = nullptr;
+		slot.Ptr = nullptr;
 		++slot.Serial;
 		m_FreeSlots.Add(object->m_Index);
 		--m_NumObjects;
@@ -121,10 +121,10 @@ namespace FP
 		ReferenceCollector collector(m_Worklist);
 		for (Slot& slot : m_Slots)
 		{
-			if (slot.Object && slot.Object->IsRooted())
+			if (slot.Ptr && slot.Ptr->IsRooted())
 			{
-				slot.Object->m_Marked = true;
-				m_Worklist.Add(slot.Object);
+				slot.Ptr->m_Marked = true;
+				m_Worklist.Add(slot.Ptr);
 			}
 		}
 		while (!m_Worklist.IsEmpty())
@@ -134,12 +134,12 @@ namespace FP
 		Array<Object*> dead;
 		for (Slot& slot : m_Slots)
 		{
-			if (!slot.Object)
+			if (!slot.Ptr)
 				continue;
-			if (slot.Object->m_Marked)
-				slot.Object->m_Marked = false;
+			if (slot.Ptr->m_Marked)
+				slot.Ptr->m_Marked = false;
 			else
-				dead.Add(slot.Object);
+				dead.Add(slot.Ptr);
 		}
 		for (Object* object : dead)
 			object->OnDestroy();

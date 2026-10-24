@@ -4,7 +4,9 @@
 #include <cstdlib>
 #include <cstring>
 
-#if FP_PLATFORM_MACOS
+#if FP_PLATFORM_WINDOWS
+	#include <malloc.h>
+#elif FP_PLATFORM_MACOS
 	#include <malloc/malloc.h>
 #endif
 
