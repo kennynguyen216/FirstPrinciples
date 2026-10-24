@@ -7,6 +7,7 @@
 
 class QAction;
 class QComboBox;
+class QFileSystemWatcher;
 class QListWidget;
 class QPlainTextEdit;
 class QTimer;
@@ -63,6 +64,11 @@ namespace FP::Editor
 
 		static void LogSink(LogLevel level, const char* message, void* userData);
 
+		// Watches Game/Scripts and rebuilds after edits settle when auto reload is on.
+		void WatchScripts();
+		void OnScriptsChanged();
+		void OnScriptsBuilt(bool success);
+
 		StrongObjectPtr<World> m_World;
 		Entity m_Selected = NullEntity;
 		Guid m_SelectedGuid;
@@ -81,6 +87,9 @@ namespace FP::Editor
 		QAction* m_View3DAction = nullptr;
 		QComboBox* m_ViewModeBox = nullptr;
 		ScriptBuilder* m_ScriptBuilder = nullptr;
+		QFileSystemWatcher* m_ScriptWatcher = nullptr;
+		QTimer* m_ScriptDebounce = nullptr;
+		bool m_AutoReloadScripts = true;
 
 		uint64 m_LastTicks = 0;
 		int32 m_HierarchyCount = -1;

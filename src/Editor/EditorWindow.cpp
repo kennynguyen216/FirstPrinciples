@@ -19,6 +19,8 @@
 #include <QComboBox>
 #include <QDockWidget>
 #include <QFileDialog>
+#include <QDir>
+#include <QFileSystemWatcher>
 #include <QFileInfo>
 #include <QKeySequence>
 #include <QListWidget>
@@ -171,8 +173,14 @@ namespace FP::Editor
 		entity->addAction("De&lete", QKeySequence::Delete, this, &EditorWindow::DeleteSelected);
 
 		m_ScriptBuilder = new ScriptBuilder(this);
+		connect(m_ScriptBuilder, &ScriptBuilder::Finished, this, &EditorWindow::OnScriptsBuilt);
 		QMenu* scripts = menuBar()->addMenu("&Scripts");
-		scripts->addAction("&Build Scripts", QKeySequence("Ctrl+B"), m_ScriptBuilder, &ScriptBuilder::Build);
+		scripts->addAction("&Reload Scripts", QKeySequence("Ctrl+R"), m_ScriptBuilder, &ScriptBuilder::Build);
+		QAction* autoReload = scripts->addAction("&Auto Reload");
+		autoReload->setCheckable(true);
+		autoReload->setChecked(m_AutoReloadScripts);
+		connect(autoReload, &QAction::toggled, this, [this](bool on) { m_AutoReloadScripts = on; });
+		WatchScripts();
 
 		QToolBar* toolbar = addToolBar("Play");
 		toolbar->setObjectName("PlayToolbar");
@@ -221,6 +229,49 @@ namespace FP::Editor
 	void EditorWindow::SetViewMode(ViewMode mode)
 	{
 		m_ViewModeBox->setCurrentIndex(static_cast<int>(mode));
+	}
+
+	void EditorWindow::WatchScripts()
+	{
+		m_ScriptWatcher = new QFileSystemWatcher(this);
+		m_ScriptDebounce = new QTimer(this);
+		m_ScriptDebounce->setSingleShot(true);
+		m_ScriptDebounce->setInterval(400);
+		connect(m_ScriptDebounce, &QTimer::timeout, this, [this]() {
+			if (m_AutoReloadScripts)
+				m_ScriptBuilder->Build();
+		});
+		connect(m_ScriptWatcher, &QFileSystemWatcher::directoryChanged, this, &EditorWindow::OnScriptsChanged);
+		connect(m_ScriptWatcher, &QFileSystemWatcher::fileChanged, this, &EditorWindow::OnScriptsChanged);
+		OnScriptsChanged();
+		m_ScriptDebounce->stop(); // watching starts quietly, nothing changed yet
+	}
+
+	void EditorWindow::OnScriptsChanged()
+	{
+		// Editors often save by replacing the file, which drops it from the watcher, so re-add every time.
+		const QString directory = ScriptBuilder::ScriptsDirectory();
+		QStringList paths = { directory };
+		const QDir project(QString::fromUtf8(Paths::GetProjectDir().CStr()));
+		for (const QString& file : ScriptBuilder::ListScriptFiles())
+			paths.append(project.absoluteFilePath(file));
+		if (!m_ScriptWatcher->files().isEmpty())
+			m_ScriptWatcher->removePaths(m_ScriptWatcher->files());
+		if (!m_ScriptWatcher->directories().isEmpty())
+			m_ScriptWatcher->removePaths(m_ScriptWatcher->directories());
+		m_ScriptWatcher->addPaths(paths);
+
+		// Saves come in bursts, so wait for them to settle before building.
+		m_ScriptDebounce->start();
+	}
+
+	void EditorWindow::OnScriptsBuilt(bool success)
+	{
+		if (!success)
+			return;
+		// Running scripts move to the new code with their field values.
+		if (ScriptRuntime::Get().Reload())
+			FP_LOG("Scripts reloaded%s", m_World->IsPlaying() ? " while playing" : "");
 	}
 
 	void EditorWindow::Tick()

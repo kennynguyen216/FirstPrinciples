@@ -71,7 +71,10 @@ int main(int argc, char** argv)
 		if (shotIndex >= 0 && shotIndex + 1 < args.size())
 		{
 			const QString path = args[shotIndex + 1];
-			QTimer::singleShot(1000, &window, [&window, path]() {
+			// --wait seconds delays the screenshot, for example to catch a hot reload.
+			const int waitIndex = static_cast<int>(args.indexOf("--wait"));
+			const int waitMs = waitIndex >= 0 && waitIndex + 1 < args.size() ? static_cast<int>(args[waitIndex + 1].toDouble() * 1000) : 1000;
+			QTimer::singleShot(waitMs, &window, [&window, path]() {
 				window.grab().save(path);
 				FP_LOG("Saved screenshot %s", path.toUtf8().constData());
 				QApplication::quit();
