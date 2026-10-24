@@ -85,6 +85,9 @@ namespace FP::Editor
 		void UpdateDockTitles();
 		void UpdateDockTitlesLater();
 
+		// Puts every panel back where the editor first placed it.
+		void ResetLayout();
+
 		// Runs a line typed into the status bar's console box.
 		void RunCommand(const QString& line);
 
@@ -161,6 +164,7 @@ namespace FP::Editor
 		QDockWidget* m_ConsoleDock = nullptr;
 		QDockWidget* m_ContentDock = nullptr;
 		bool m_DockTitlesPending = false;
+		QByteArray m_DefaultLayout;
 		QFileSystemWatcher* m_ScriptWatcher = nullptr;
 		QTimer* m_ScriptDebounce = nullptr;
 		bool m_AutoReloadScripts = true;

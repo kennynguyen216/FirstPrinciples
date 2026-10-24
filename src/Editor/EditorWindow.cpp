@@ -270,6 +270,19 @@ namespace FP::Editor
 		entity->addAction("&Duplicate", QKeySequence("Ctrl+D"), this, &EditorWindow::DuplicateSelected);
 		entity->addAction("De&lete", QKeySequence::Delete, this, &EditorWindow::DeleteSelected);
 
+		// Closed panels come back from here, and Reset Layout undoes any docking.
+		QMenu* window = menuBar()->addMenu("&Window");
+		for (QDockWidget* dock : findChildren<QDockWidget*>())
+		{
+			QAction* toggle = dock->toggleViewAction();
+			toggle->setIcon(dock->windowIcon());
+			window->addAction(toggle);
+		}
+		window->addSeparator();
+		window->addAction("&Reset Layout", this, &EditorWindow::ResetLayout);
+		// Remembered once the window has its real size so the reset matches what opened.
+		QTimer::singleShot(0, this, [this]() { m_DefaultLayout = saveState(); });
+
 		m_ScriptBuilder = new ScriptBuilder(this);
 		connect(m_ScriptBuilder, &ScriptBuilder::Finished, this, &EditorWindow::OnScriptsBuilt);
 		QMenu* scripts = menuBar()->addMenu("&Scripts");
@@ -355,6 +368,14 @@ namespace FP::Editor
 		}
 
 		BuildStatusBar();
+	}
+
+	void EditorWindow::ResetLayout()
+	{
+		for (QDockWidget* dock : findChildren<QDockWidget*>())
+			dock->setFloating(false);
+		restoreState(m_DefaultLayout);
+		UpdateDockTitles();
 	}
 
 	void EditorWindow::UpdateDockTitlesLater()
