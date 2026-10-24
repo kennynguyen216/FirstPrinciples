@@ -3,6 +3,7 @@
 #include "Engine/FieldSerializer.h"
 #include "Engine/Paths.h"
 #include "Core/Misc/File.h"
+#include "Core/Misc/ModuleContext.h"
 
 namespace FP
 {
@@ -92,7 +93,7 @@ namespace FP
 	MaterialLibrary& MaterialLibrary::Get()
 	{
 		static MaterialLibrary library;
-		return library;
+		return ResolveShared(&ModuleContext::MaterialLibrary, library);
 	}
 
 	Material* MaterialLibrary::Load(const String& path)

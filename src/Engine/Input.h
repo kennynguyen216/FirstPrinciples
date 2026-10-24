@@ -47,5 +47,8 @@ namespace FP
 
 		// Releases everything, for example when the window loses focus.
 		void Reset();
+
+		// For ModuleContext so loaded modules read the host's input.
+		void* GetSharedState();
 	}
 }

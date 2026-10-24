@@ -1,5 +1,7 @@
 #include "CoreObject/Class.h"
 
+#include <cstring>
+
 namespace FP
 {
 	namespace
@@ -20,9 +22,10 @@ namespace FP
 
 	bool Class::IsChildOf(const Class* other) const
 	{
+		// Each loaded module has its own copy of every class, so fall back to comparing names.
 		for (const Class* cls = this; cls; cls = cls->m_Super)
 		{
-			if (cls == other)
+			if (cls == other || std::strcmp(cls->m_Name, other->m_Name) == 0)
 				return true;
 		}
 		return false;

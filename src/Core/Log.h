@@ -26,6 +26,9 @@ namespace FP
 		void RemoveSink(SinkFn sink, void* userData);
 
 		void SetMinimumLevel(LogLevel level);
+
+		// For ModuleContext so loaded modules log through the host.
+		void* GetSharedState();
 	}
 }
 
