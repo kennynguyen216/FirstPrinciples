@@ -48,6 +48,8 @@ namespace FP
 		// In kilograms. Zero for bodies that do not move and entities without one.
 		virtual float GetMass(entt::entity entity) const = 0;
 
+		// Characters take these too. AddImpulse and SetVelocity knock them about, though on the
+		// ground they walk at their Move velocity again on the next step.
 		virtual Vec3 GetVelocity(entt::entity entity) const = 0;
 		virtual void SetVelocity(entt::entity entity, Vec3 velocity) = 0;
 		virtual Vec3 GetAngularVelocity(entt::entity entity) const = 0;
@@ -61,6 +63,18 @@ namespace FP
 
 		// Every entity with a body touching the sphere, triggers included.
 		virtual Array<entt::entity> OverlapSphere(Vec3 center, float radius) const = 0;
+
+		// ---- Characters, the entities with a CharacterController ----------------
+
+		// Walks at velocity in meters per second, ignoring Y. Call it every frame, since the
+		// character stops once a frame passes without it. In the air it only steers a little.
+		virtual void MoveCharacter(entt::entity entity, Vec3 velocity) = 0;
+
+		// Jumps at speed meters per second on the next step. False, and no jump, when it is not
+		// standing on the ground.
+		virtual bool JumpCharacter(entt::entity entity, float speed) = 0;
+
+		virtual bool IsGrounded(entt::entity entity) const = 0;
 
 		virtual Vec3 GetGravity() const = 0;
 		virtual void SetGravity(Vec3 gravity) = 0;

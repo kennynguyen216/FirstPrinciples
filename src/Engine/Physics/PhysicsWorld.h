@@ -49,6 +49,9 @@ namespace FP
 		bool Raycast(Vec3 origin, Vec3 direction, float maxDistance, RaycastHit& hit, entt::entity ignore) const override;
 		bool SphereCast(Vec3 origin, float radius, Vec3 direction, float maxDistance, RaycastHit& hit, entt::entity ignore) const override;
 		Array<entt::entity> OverlapSphere(Vec3 center, float radius) const override;
+		void MoveCharacter(entt::entity entity, Vec3 velocity) override;
+		bool JumpCharacter(entt::entity entity, float speed) override;
+		bool IsGrounded(entt::entity entity) const override;
 		Vec3 GetGravity() const override;
 		void SetGravity(Vec3 gravity) override;
 
@@ -63,6 +66,9 @@ namespace FP
 		// Copies dynamic bodies' positions and rotations back to their transforms.
 		void WriteBack(World& world);
 
+		// Moves character controllers' entities to where their characters walked.
+		void WriteCharacters(World& world);
+
 		// Takes the collision and trigger events of the steps so far.
 		void TakeEvents(Array<PhysicsEvent>& out);
 
@@ -70,6 +76,7 @@ namespace FP
 		void Clear();
 
 		int32 GetBodyCount() const;
+		int32 GetCharacterCount() const;
 		bool HasBody(entt::entity entity) const;
 
 	private:
