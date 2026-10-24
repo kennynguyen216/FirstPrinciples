@@ -200,6 +200,8 @@ project "Engine"
 project "Game"
 	kind "StaticLib"
 	files { "Game/**.h", "Game/**.cpp" }
+	-- Scripts build into the GameScripts library instead.
+	removefiles { "Game/Scripts/**" }
 	EngineIncludes()
 
 -- GameScripts: C++ scripts in Game/Scripts, built as a shared library the editor can hot reload.
