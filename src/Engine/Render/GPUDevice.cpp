@@ -252,19 +252,25 @@ namespace FP
 	{
 		const uint32 width = texture.GetWidth();
 		const uint32 height = texture.GetHeight();
-		const uint32 bytes = rowBytes * height;
+		// Rows are packed tightly here. Padded rows passed straight through came out sheared on Metal.
+		const uint32 packedRow = width * 4;
 		SDL_GPUTransferBufferCreateInfo transferInfo = {};
 		transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-		transferInfo.size = bytes;
+		transferInfo.size = packedRow * height;
 		SDL_GPUTransferBuffer* transfer = SDL_CreateGPUTransferBuffer(m_Device, &transferInfo);
-		std::memcpy(SDL_MapGPUTransferBuffer(m_Device, transfer, false), pixels, bytes);
+		uint8* destination8 = static_cast<uint8*>(SDL_MapGPUTransferBuffer(m_Device, transfer, false));
+		if (rowBytes == packedRow)
+			std::memcpy(destination8, pixels, static_cast<size_t>(packedRow) * height);
+		else
+		{
+			for (uint32 row = 0; row < height; ++row)
+				std::memcpy(destination8 + static_cast<size_t>(row) * packedRow, static_cast<const uint8*>(pixels) + static_cast<size_t>(row) * rowBytes, packedRow);
+		}
 		SDL_UnmapGPUTransferBuffer(m_Device, transfer);
 
 		SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(cmd);
 		SDL_GPUTextureTransferInfo source = {};
 		source.transfer_buffer = transfer;
-		source.pixels_per_row = rowBytes / 4;
-		source.rows_per_layer = height;
 		SDL_GPUTextureRegion destination = {};
 		destination.texture = texture.GetHandle();
 		destination.w = width;

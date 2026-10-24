@@ -76,7 +76,7 @@ namespace FP
 		RefPtr<GPUTexture> CreateDynamicTexture(SDL_GPUTextureFormat format, uint32 width, uint32 height);
 
 		// Copies rows of pixels into a dynamic texture with a copy pass on cmd. rowBytes may be
-		// wider than the texture when the source pads its rows.
+		// wider than the texture when the source pads its rows, and the padding is dropped.
 		void UploadToTexture(SDL_GPUCommandBuffer* cmd, GPUTexture& texture, const void* pixels, uint32 rowBytes);
 
 		// Copies a 4 byte per pixel texture to the CPU. Waits for the GPU so use it for the editor and screenshots.
