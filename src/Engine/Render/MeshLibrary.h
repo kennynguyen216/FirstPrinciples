@@ -12,6 +12,7 @@ namespace FP
 		RefPtr<GPUBuffer> Vertices;
 		RefPtr<GPUBuffer> Indices;
 		uint32 IndexCount = 0;
+		Array<MeshSection> Sections; // drawn one at a time, each with its own material
 		Vec3 BoundsMin;
 		Vec3 BoundsMax;
 	};

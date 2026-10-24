@@ -293,16 +293,21 @@ namespace FP
 		Array<TextureCache::Request> requests;
 		for (auto [entity, sprite] : world.View<SpriteComponent>().each())
 			requests.Add({ sprite.Texture, true });
-		for (auto [entity, materialComponent] : world.View<MaterialComponent>().each())
-		{
-			const Material* material = MaterialLibrary::Get().Load(materialComponent.Material);
+		auto addMaterial = [&](const String& path) {
+			const Material* material = MaterialLibrary::Get().Load(path);
 			if (!material)
-				continue;
+				return;
 			const MaterialData& data = material->GetData();
 			requests.Add({ data.BaseColorMap, true });
 			requests.Add({ data.EmissiveMap, true });
 			for (const String* map : { &data.NormalMap, &data.AmbientOcclusionMap, &data.MetallicMap, &data.RoughnessMap, &data.SpecularMap, &data.SubsurfaceMap })
 				requests.Add({ *map, false });
+		};
+		for (auto [entity, materialComponent] : world.View<MaterialComponent>().each())
+		{
+			addMaterial(materialComponent.Material);
+			for (const String& slot : materialComponent.Slots)
+				addMaterial(slot);
 		}
 
 		const double start = PlatformMisc::GetTimeSeconds();
@@ -385,7 +390,7 @@ namespace FP
 			bind(m_SceneCopy.Get(), m_Device.GetClampSampler());
 		}
 		SDL_BindGPUFragmentSamplers(pass, 0, bindings, count);
-		SDL_DrawGPUIndexedPrimitives(pass, sprite ? 6 : draw.Mesh->IndexCount, 1, 0, 0, 0);
+		SDL_DrawGPUIndexedPrimitives(pass, sprite ? 6 : draw.IndexCount, 1, sprite ? 0 : draw.FirstIndex, 0, 0);
 	}
 
 	void Renderer::Render(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* target, uint32 width, uint32 height,
@@ -404,9 +409,9 @@ namespace FP
 		// Collect everything visible with its shader and surface.
 		Array<Draw> draws;
 		bool hasGlass = false;
-		auto resolve = [&](Entity entity, const TransformComponent& transform, Surface type, int32 layer, const GPUMesh* mesh) {
+		auto resolve = [&](Entity entity, const TransformComponent& transform, Surface type, int32 layer, const GPUMesh* mesh, int32 section) {
 			const MaterialComponent* materialComponent = world.TryGet<MaterialComponent>(entity);
-			const Material* material = materialComponent ? MaterialLibrary::Get().Load(materialComponent->Material) : nullptr;
+			const Material* material = materialComponent ? MaterialLibrary::Get().Load(materialComponent->GetForSection(section)) : nullptr;
 			// Meshes default to lit so they have shape. Sprites default to unlit so plain 2D games need no lights.
 			ShaderKind kind = type == Surface::Mesh ? ShaderKind::Lit : ShaderKind::Unlit;
 			if (material)
@@ -418,14 +423,20 @@ namespace FP
 			if (m_Mode != ViewMode::Lit)
 				kind = ShaderKind::Unlit;
 			hasGlass |= kind == ShaderKind::Glass;
-			draws.Add({ layer, Vec3::Dot(transform.Position - view.CameraPosition, view.CameraForward), entity, kind, type, material, mesh });
+			const MeshSection* part = mesh ? &mesh->Sections[section] : nullptr;
+			draws.Add({ layer, Vec3::Dot(transform.Position - view.CameraPosition, view.CameraForward), entity, kind, type, material, mesh,
+				part ? part->FirstIndex : 0, part ? part->IndexCount : 6 });
 		};
 		for (auto [entity, transform, sprite] : world.View<TransformComponent, SpriteComponent>().each())
-			resolve(entity, transform, Surface::Sprite, sprite.Layer, nullptr);
+			resolve(entity, transform, Surface::Sprite, sprite.Layer, nullptr, 0);
+		// One draw per section so each can use its own material and shader.
 		for (auto [entity, transform, meshComponent] : world.View<TransformComponent, MeshComponent>().each())
 		{
 			if (const GPUMesh* mesh = m_Meshes.Get(meshComponent.Mesh))
-				resolve(entity, transform, Surface::Mesh, 0, mesh);
+			{
+				for (int32 section = 0; section < mesh->Sections.Num(); ++section)
+					resolve(entity, transform, Surface::Mesh, 0, mesh, section);
+			}
 		}
 
 		// Opaque meshes front to back, then sprites by layer back to front, then glass back to front.

@@ -24,6 +24,7 @@ namespace FP
 		mesh->Vertices = m_Device.CreateBuffer(SDL_GPU_BUFFERUSAGE_VERTEX, data.Vertices.Data(), static_cast<uint32>(data.Vertices.Num()) * sizeof(MeshVertex));
 		mesh->Indices = m_Device.CreateBuffer(SDL_GPU_BUFFERUSAGE_INDEX, data.Indices.Data(), static_cast<uint32>(data.Indices.Num()) * sizeof(uint32));
 		mesh->IndexCount = static_cast<uint32>(data.Indices.Num());
+		mesh->Sections = data.Sections;
 		mesh->BoundsMin = data.BoundsMin;
 		mesh->BoundsMax = data.BoundsMax;
 		m_Meshes.Add(nameOrPath, mesh);
