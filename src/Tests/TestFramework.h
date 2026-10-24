@@ -1,10 +1,8 @@
 #pragma once
 
-// Tiny self-registering test framework. Add a test with:
-//
-//   FP_TEST(Array_AddAndIndex) { FP_EXPECT(arr.Num() == 1); }
-//
-// and run the FPTests executable (optionally with a substring filter as the first argument).
+// Tiny self registering test framework.
+// Write FP_TEST(Name) followed by a body that uses FP_EXPECT(condition).
+// Run the Tests exe with an optional name filter as the first argument.
 
 #include "HAL/Platform.h"
 

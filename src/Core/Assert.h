@@ -9,10 +9,10 @@ namespace FP::Detail
 	[[noreturn]] void FatalError(const char* file, int line, const char* fmt, ...);
 }
 
-// FP_ASSERT: debug-only invariant check, compiled out in Release.
-// FP_VERIFY: always evaluates the expression; checks it in Debug.
-// FP_CHECK:  always on, always checked. Use for things that must never happen even in shipping builds.
-// FP_FATAL:  logs and aborts.
+// FP_ASSERT checks in Debug only and is compiled out in Release.
+// FP_VERIFY always runs the expression but only checks it in Debug.
+// FP_CHECK is always on. Use it for things that must never happen.
+// FP_FATAL logs and aborts.
 #if FP_BUILD_DEBUG
 	#define FP_ASSERT(expr, ...) \
 		do { if (!(expr)) { if (::FP::Detail::ReportAssertFailure(#expr, __FILE__, __LINE__, ##__VA_ARGS__)) FP_DEBUGBREAK(); } } while (0)
