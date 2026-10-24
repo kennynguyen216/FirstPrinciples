@@ -344,6 +344,20 @@ namespace FP::Editor
 
 			DetailsSection* box = new DetailsSection(ToQString(slot.Name));
 			QVBoxLayout* boxLayout = box->Body();
+
+			// What the script does and when it runs, from its comments and the header tool.
+			if (type && (type->Description || type->Callbacks))
+			{
+				QString about = type->Description ? QString::fromUtf8(type->Description) : QString();
+				if (type->Callbacks)
+					about += QString(about.isEmpty() ? "" : "\n") + "Runs: " + QString::fromUtf8(type->Callbacks);
+				QLabel* label = new QLabel(about);
+				label->setWordWrap(true);
+				label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+				label->setStyleSheet("color: #9a9a9a; padding: 2px 2px 6px 2px;");
+				boxLayout->addWidget(label);
+			}
+
 			QFormLayout* form = MakeForm(boxLayout);
 			form->setRowWrapPolicy(QFormLayout::WrapLongRows); // script field names are often long
 
@@ -369,8 +383,50 @@ namespace FP::Editor
 						current->Properties = ScriptRuntime::CaptureProperties(*type, edit);
 					emit Modified();
 				};
+				// Fields keep their order. A category heading goes in wherever the category changes.
+				std::string_view category;
 				for (const FieldInfo& field : type->Fields)
+				{
+					const std::string_view next = field.Category ? field.Category : "";
+					if (next != category && !next.empty())
+					{
+						QLabel* heading = new QLabel(QString::fromUtf8(next.data(), static_cast<int>(next.size())));
+						heading->setStyleSheet("font-weight: bold; padding-top: 4px;");
+						form->addRow(heading);
+					}
+					category = next;
 					AddFieldEditor(form, field, data, changed);
+				}
+
+				// FPFUNCTION buttons call into the running script, so they only work while playing.
+				if (!type->Functions.IsEmpty())
+				{
+					QWidget* buttons = new QWidget();
+					QHBoxLayout* row = new QHBoxLayout(buttons);
+					row->setContentsMargins(0, 4, 0, 0);
+					row->setSpacing(4);
+					for (const ScriptFunction& function : type->Functions)
+					{
+						QPushButton* button = new QPushButton(DisplayName(function.Name));
+						const QString tip = function.Tooltip ? QString::fromUtf8(function.Tooltip) : QString();
+						m_Refreshers.push_back([this, index, button, tip]() {
+							const bool playing = SlotAt(index) && SlotAt(index)->Instance;
+							button->setEnabled(playing);
+							button->setToolTip(playing ? tip : (tip.isEmpty() ? QString() : tip + "\n") + "Press Play to call it");
+						});
+						auto call = function.Call;
+						connect(button, &QPushButton::clicked, this, [this, index, call]() {
+							if (ScriptSlot* current = SlotAt(index); current && current->Instance)
+							{
+								call(current->Instance);
+								emit Modified();
+							}
+						});
+						row->addWidget(button);
+					}
+					row->addStretch(1);
+					boxLayout->addWidget(buttons);
+				}
 				if (type->Fields.IsEmpty())
 				{
 					QLabel* none = new QLabel("No exposed fields");
@@ -966,6 +1022,14 @@ namespace FP::Editor
 				connect(box, &QDoubleSpinBox::valueChanged, this, [=](double value) {
 					QSignalBlocker block(slider);
 					slider->setValue(static_cast<int>(std::lround((value - min) / span * steps)));
+				});
+				// Refreshes set the number with its signals blocked, so the slider follows here.
+				m_Refreshers.push_back([=]() {
+					if (!slider->isSliderDown())
+					{
+						QSignalBlocker block(slider);
+						slider->setValue(static_cast<int>(std::lround((box->value() - min) / span * steps)));
+					}
 				});
 				box->setMaximumWidth(80);
 				layout->addWidget(slider, 1);
