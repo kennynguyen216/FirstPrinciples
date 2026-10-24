@@ -72,6 +72,13 @@ namespace FP
 		// Copies data into a buffer with a copy pass on cmd. The buffer must be large enough.
 		void UploadToBuffer(SDL_GPUCommandBuffer* cmd, GPUBuffer& buffer, const void* data, uint32 size);
 
+		// A texture refilled from the CPU every so often, like a UI page. 4 bytes per pixel.
+		RefPtr<GPUTexture> CreateDynamicTexture(SDL_GPUTextureFormat format, uint32 width, uint32 height);
+
+		// Copies rows of pixels into a dynamic texture with a copy pass on cmd. rowBytes may be
+		// wider than the texture when the source pads its rows.
+		void UploadToTexture(SDL_GPUCommandBuffer* cmd, GPUTexture& texture, const void* pixels, uint32 rowBytes);
+
 		// Copies a 4 byte per pixel texture to the CPU. Waits for the GPU so use it for the editor and screenshots.
 		bool ReadPixels(SDL_GPUTexture* texture, uint32 width, uint32 height, void* outPixels);
 

@@ -229,6 +229,53 @@ namespace FP
 		SDL_ReleaseGPUTransferBuffer(m_Device, transfer);
 	}
 
+	RefPtr<GPUTexture> GPUDevice::CreateDynamicTexture(SDL_GPUTextureFormat format, uint32 width, uint32 height)
+	{
+		SDL_GPUTextureCreateInfo info = {};
+		info.type = SDL_GPU_TEXTURETYPE_2D;
+		info.format = format;
+		info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+		info.width = width;
+		info.height = height;
+		info.layer_count_or_depth = 1;
+		info.num_levels = 1;
+		SDL_GPUTexture* texture = SDL_CreateGPUTexture(m_Device, &info);
+		if (!texture)
+		{
+			FP_LOG_ERROR("Could not create texture: %s", SDL_GetError());
+			return nullptr;
+		}
+		return MakeRef<GPUTexture>(m_Device, texture, width, height);
+	}
+
+	void GPUDevice::UploadToTexture(SDL_GPUCommandBuffer* cmd, GPUTexture& texture, const void* pixels, uint32 rowBytes)
+	{
+		const uint32 width = texture.GetWidth();
+		const uint32 height = texture.GetHeight();
+		const uint32 bytes = rowBytes * height;
+		SDL_GPUTransferBufferCreateInfo transferInfo = {};
+		transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+		transferInfo.size = bytes;
+		SDL_GPUTransferBuffer* transfer = SDL_CreateGPUTransferBuffer(m_Device, &transferInfo);
+		std::memcpy(SDL_MapGPUTransferBuffer(m_Device, transfer, false), pixels, bytes);
+		SDL_UnmapGPUTransferBuffer(m_Device, transfer);
+
+		SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(cmd);
+		SDL_GPUTextureTransferInfo source = {};
+		source.transfer_buffer = transfer;
+		source.pixels_per_row = rowBytes / 4;
+		source.rows_per_layer = height;
+		SDL_GPUTextureRegion destination = {};
+		destination.texture = texture.GetHandle();
+		destination.w = width;
+		destination.h = height;
+		destination.d = 1;
+		SDL_UploadToGPUTexture(copy, &source, &destination, false);
+		SDL_EndGPUCopyPass(copy);
+		// SDL keeps it alive until the command buffer finishes.
+		SDL_ReleaseGPUTransferBuffer(m_Device, transfer);
+	}
+
 	bool GPUDevice::ReadPixels(SDL_GPUTexture* texture, uint32 width, uint32 height, void* outPixels)
 	{
 		const uint32 bytes = width * height * 4;
