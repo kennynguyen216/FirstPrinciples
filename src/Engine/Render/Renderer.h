@@ -5,6 +5,7 @@
 #include "Engine/Render/MeshData.h"
 #include "Engine/Render/MeshLibrary.h"
 #include "Engine/Render/RenderView.h"
+#include "Engine/Render/ShadowMap.h"
 #include "Engine/Render/TextureCache.h"
 
 namespace FP
@@ -43,12 +44,15 @@ namespace FP
 		int32 LightCount[4] = {};
 		Vec4 LightPosition[MaxLights];
 		Vec4 LightColor[MaxLights];
+		Mat4 ShadowMatrix; // world to shadow map UV and depth
+		Vec4 ShadowParams; // x strength (0 is off), y one texel in UV, z normal offset in world units, w light index
 	};
 
 	// Editors pick colors in sRGB. Shaders work in linear.
 	Vec4 ToLinear(const Color& color);
 
-	// Draws a World with SDL_GPU into an HDR scene buffer. Opaque meshes go first with depth,
+	// Draws a World with SDL_GPU into an HDR scene buffer. The first shadowed directional light
+	// renders a small depth map of the meshes near the camera first. Opaque meshes go first with depth,
 	// then sprites blend on top by layer, then glass refracts a copy of the scene, and a present
 	// pass tonemaps into the target.
 	class Renderer
@@ -112,6 +116,9 @@ namespace FP
 		void UploadLines(SDL_GPUCommandBuffer* cmd, const DebugLines& lines);
 		void BuildFrameUniforms(World& world, const RenderView& view, uint32 width, uint32 height);
 		void DrawObject(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, World& world, const Draw& draw, const Mat4& viewProjection);
+		void PushBones(SDL_GPUCommandBuffer* cmd, const Array<Mat4>* skin);
+		SDL_GPUGraphicsPipeline* CreateShadowPipeline(Surface surface);
+		void RenderShadows(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view);
 		GPUTexture* Texture(const String& path, bool srgb, GPUTexture* fallback);
 
 		GPUDevice& m_Device;
@@ -137,5 +144,12 @@ namespace FP
 		RefPtr<GPUTexture> m_SceneCopy;
 		RefPtr<GPUTexture> m_Depth;
 		Array<Mat4> m_BoneUpload; // always MaxSkinBones long, the size the shader reads
+
+		// Depth only pipelines for Mesh and SkinnedMesh. Missing ones just mean no shadows.
+		SDL_GPUGraphicsPipeline* m_ShadowPipelines[2] = {};
+		RefPtr<GPUTexture> m_ShadowMap;
+		bool m_ShadowMapCleared = false;
+		Entity m_ShadowCaster = NullEntity; // the light casting shadows this frame
+		int32 m_ShadowLight = -1;           // its index in FrameUniforms
 	};
 }

@@ -79,7 +79,7 @@ namespace FP
 					SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
 			}
 		}
-		for (SDL_GPUGraphicsPipeline* pipeline : { m_PresentPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2] })
+		for (SDL_GPUGraphicsPipeline* pipeline : { m_PresentPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1] })
 		{
 			if (pipeline)
 				SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
@@ -183,6 +183,8 @@ namespace FP
 		}
 		if (!m_WirePipelines[0] || !m_WirePipelines[1] || !m_WirePipelines[2])
 			FP_LOG_WARN("This GPU cannot draw wireframes. The wireframe view mode will show normal shading.");
+		m_ShadowPipelines[0] = CreateShadowPipeline(Surface::Mesh);
+		m_ShadowPipelines[1] = CreateShadowPipeline(Surface::SkinnedMesh);
 
 		SDL_GPUColorTargetDescription colorTarget = {};
 		colorTarget.format = m_TargetFormat;
@@ -278,10 +280,17 @@ namespace FP
 		m_Frame.Ambient = { ambient, 0 };
 
 		int32 count = 0;
+		m_ShadowCaster = NullEntity;
+		m_ShadowLight = -1;
 		for (auto [entity, transform, light] : world.View<TransformComponent, DirectionalLightComponent>().each())
 		{
 			if (count == MaxLights)
 				break;
+			if (m_ShadowLight < 0 && light.CastShadows && light.ShadowStrength > 0)
+			{
+				m_ShadowCaster = entity;
+				m_ShadowLight = count;
+			}
 			m_Frame.LightPosition[count] = { transform.GetForward(), 0 };
 			m_Frame.LightColor[count] = { ToLinear(light.Color).XYZ() * light.Intensity, 0 };
 			++count;
@@ -357,13 +366,7 @@ namespace FP
 		SDL_PushGPUVertexUniformData(cmd, 0, &object, sizeof(object));
 		SDL_PushGPUFragmentUniformData(cmd, 0, &material, sizeof(material));
 		if (draw.Type == Surface::SkinnedMesh)
-		{
-			// Bones past the pose stay as they were, which is fine since no vertex uses them.
-			const int32 count = draw.Skin ? (draw.Skin->Num() < MaxSkinBones ? draw.Skin->Num() : MaxSkinBones) : 0;
-			for (int32 i = 0; i < MaxSkinBones; ++i)
-				m_BoneUpload[i] = i < count ? (*draw.Skin)[i] : Mat4();
-			SDL_PushGPUVertexUniformData(cmd, 1, m_BoneUpload.Data(), static_cast<uint32>(MaxSkinBones * sizeof(Mat4)));
-		}
+			PushBones(cmd, draw.Skin);
 
 		if (sprite)
 		{
@@ -410,6 +413,149 @@ namespace FP
 		SDL_DrawGPUIndexedPrimitives(pass, sprite ? 6 : draw.IndexCount, 1, sprite ? 0 : draw.FirstIndex, 0, 0);
 	}
 
+	void Renderer::PushBones(SDL_GPUCommandBuffer* cmd, const Array<Mat4>* skin)
+	{
+		// Without a pose every bone is identity, which is the bind pose.
+		const int32 count = skin ? (skin->Num() < MaxSkinBones ? skin->Num() : MaxSkinBones) : 0;
+		for (int32 i = 0; i < MaxSkinBones; ++i)
+			m_BoneUpload[i] = i < count ? (*skin)[i] : Mat4();
+		SDL_PushGPUVertexUniformData(cmd, 1, m_BoneUpload.Data(), static_cast<uint32>(MaxSkinBones * sizeof(Mat4)));
+	}
+
+	SDL_GPUGraphicsPipeline* Renderer::CreateShadowPipeline(Surface surface)
+	{
+		SDL_GPUDevice* gpu = m_Device.GetHandle();
+		const bool skinned = surface == Surface::SkinnedMesh;
+		SDL_GPUShader* vert = skinned ? m_Device.LoadShader("SkinnedMesh.vert", 0, 2) : m_Device.LoadShader("Mesh.vert", 0, 1);
+		SDL_GPUShader* frag = m_Device.LoadShader("Shadow.frag", 0, 0);
+		SDL_GPUGraphicsPipeline* pipeline = nullptr;
+		if (vert && frag)
+		{
+			SDL_GPUVertexBufferDescription buffers[2] = {};
+			buffers[0] = { 0, sizeof(MeshVertex), SDL_GPU_VERTEXINPUTRATE_VERTEX, 0 };
+			buffers[1] = { 1, sizeof(SkinVertex), SDL_GPU_VERTEXINPUTRATE_VERTEX, 0 };
+			SDL_GPUVertexAttribute attributes[6] = {};
+			attributes[0] = { 0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(MeshVertex, Position) };
+			attributes[1] = { 1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(MeshVertex, Normal) };
+			attributes[2] = { 2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(MeshVertex, UV) };
+			attributes[3] = { 3, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(MeshVertex, Tangent) };
+			attributes[4] = { 4, 1, SDL_GPU_VERTEXELEMENTFORMAT_USHORT4, offsetof(SkinVertex, Bones) };
+			attributes[5] = { 5, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(SkinVertex, Weights) };
+
+			SDL_GPUGraphicsPipelineCreateInfo info = {};
+			info.vertex_shader = vert;
+			info.fragment_shader = frag;
+			info.vertex_input_state.vertex_buffer_descriptions = buffers;
+			info.vertex_input_state.num_vertex_buffers = skinned ? 2 : 1;
+			info.vertex_input_state.vertex_attributes = attributes;
+			info.vertex_input_state.num_vertex_attributes = skinned ? 6 : 4;
+			info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+			// Both faces cast so open meshes like planes still shadow. The slope bias keeps
+			// lit surfaces from shadowing themselves.
+			info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+			info.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+			info.rasterizer_state.enable_depth_bias = true;
+			info.rasterizer_state.depth_bias_constant_factor = 2;
+			info.rasterizer_state.depth_bias_slope_factor = 2;
+			info.depth_stencil_state.enable_depth_test = true;
+			info.depth_stencil_state.enable_depth_write = true;
+			info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
+			info.target_info.num_color_targets = 0;
+			info.target_info.has_depth_stencil_target = true;
+			info.target_info.depth_stencil_format = m_Device.GetShadowFormat();
+			pipeline = SDL_CreateGPUGraphicsPipeline(gpu, &info);
+			if (!pipeline)
+				FP_LOG_WARN("Shadow pipeline failed, so there will be no shadows: %s", SDL_GetError());
+		}
+		if (vert)
+			SDL_ReleaseGPUShader(gpu, vert);
+		if (frag)
+			SDL_ReleaseGPUShader(gpu, frag);
+		return pipeline;
+	}
+
+	void Renderer::RenderShadows(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view)
+	{
+		m_Frame.ShadowParams = {};
+		const DirectionalLightComponent* light = world.IsValid(m_ShadowCaster) ? world.TryGet<DirectionalLightComponent>(m_ShadowCaster) : nullptr;
+		const bool enabled = light && m_Mode == ViewMode::Lit && m_ShadowPipelines[0] && m_ShadowPipelines[1];
+
+		// Lit always samples the map, so keep a tiny cleared one around when shadows are off.
+		const uint32 size = enabled ? static_cast<uint32>(light->ShadowResolution < 64 ? 64 : light->ShadowResolution > 4096 ? 4096 : light->ShadowResolution) : 16;
+		if (!m_ShadowMap || m_ShadowMap->GetWidth() != size)
+		{
+			m_ShadowMap = m_Device.CreateRenderTarget(m_Device.GetShadowFormat(), size, size, true, true);
+			m_ShadowMapCleared = false;
+		}
+		if (!m_ShadowMap || (!enabled && m_ShadowMapCleared))
+			return;
+
+		SDL_GPUDepthStencilTargetInfo depth = {};
+		depth.texture = m_ShadowMap->GetHandle();
+		depth.clear_depth = 1;
+		depth.load_op = SDL_GPU_LOADOP_CLEAR;
+		depth.store_op = SDL_GPU_STOREOP_STORE;
+		depth.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
+		depth.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+		SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, nullptr, 0, &depth);
+		m_ShadowMapCleared = true;
+		if (!enabled)
+		{
+			SDL_EndGPURenderPass(pass);
+			return;
+		}
+
+		const TransformComponent& lightTransform = world.Get<TransformComponent>(m_ShadowCaster);
+		const ShadowView shadow = FitShadowView(view, lightTransform.GetRotation(), light->ShadowDistance, static_cast<int32>(size));
+		const float texel = shadow.Radius * 2 / static_cast<float>(size);
+		m_Frame.ShadowMatrix = shadow.ToTexture;
+		m_Frame.ShadowParams = { light->ShadowStrength > 1 ? 1 : light->ShadowStrength, 1.0f / static_cast<float>(size), texel * 1.5f, static_cast<float>(m_ShadowLight) };
+
+		// Every section that is not glass casts. Meshes outside the box are skipped.
+		auto cast = [&](Entity entity, const TransformComponent& transform, const GPUMesh* mesh, int32 pipeline, const Array<Mat4>* skin, float reach) {
+			const Mat4 model = transform.GetMatrix();
+			const Vec3 scale{ std::fabs(transform.Scale.X), std::fabs(transform.Scale.Y), std::fabs(transform.Scale.Z) };
+			const float largest = std::fmax(scale.X, std::fmax(scale.Y, scale.Z));
+			const Vec3 center = model.TransformPoint((mesh->BoundsMin + mesh->BoundsMax) * 0.5f);
+			if (!shadow.Touches(center, (mesh->BoundsMax - mesh->BoundsMin).Length() * 0.5f * largest * reach))
+				return;
+
+			ObjectUniforms object;
+			object.ViewProjection = shadow.ViewProjection;
+			object.Model = model;
+			SDL_BindGPUGraphicsPipeline(pass, m_ShadowPipelines[pipeline]);
+			SDL_PushGPUVertexUniformData(cmd, 0, &object, sizeof(object));
+			if (pipeline == 1)
+				PushBones(cmd, skin);
+			const SDL_GPUBufferBinding vertices[2] = { { mesh->Vertices->GetHandle(), 0 }, { mesh->Skin ? mesh->Skin->GetHandle() : nullptr, 0 } };
+			SDL_BindGPUVertexBuffers(pass, 0, vertices, pipeline == 1 ? 2 : 1);
+			const SDL_GPUBufferBinding indices = { mesh->Indices->GetHandle(), 0 };
+			SDL_BindGPUIndexBuffer(pass, &indices, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+
+			const MaterialComponent* materials = world.TryGet<MaterialComponent>(entity);
+			for (int32 i = 0; i < mesh->Sections.Num(); ++i)
+			{
+				const Material* material = materials ? MaterialLibrary::Get().Load(materials->GetForSection(i)) : nullptr;
+				if (material && material->GetData().Shader == "Glass")
+					continue;
+				SDL_DrawGPUIndexedPrimitives(pass, mesh->Sections[i].IndexCount, 1, mesh->Sections[i].FirstIndex, 0, 0);
+			}
+		};
+		for (auto [entity, transform, meshComponent] : world.View<TransformComponent, MeshComponent>().each())
+		{
+			if (const GPUMesh* mesh = m_Meshes.Get(meshComponent.Mesh))
+				cast(entity, transform, mesh, 0, nullptr, 1);
+		}
+		for (auto [entity, transform, skeletal] : world.View<TransformComponent, SkeletalMeshComponent>().each())
+		{
+			// Animation can reach past the bind pose bounds, so cull them loosely.
+			const SkeletalPoseComponent* pose = world.TryGet<SkeletalPoseComponent>(entity);
+			if (const GPUMesh* mesh = m_Meshes.GetSkinned(skeletal.Mesh))
+				cast(entity, transform, mesh, 1, pose ? &pose->Skin : nullptr, 1.5f);
+		}
+		SDL_EndGPURenderPass(pass);
+	}
+
 	void Renderer::Render(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* target, uint32 width, uint32 height,
 		World& world, const RenderView& view, const DebugLines* lines)
 	{
@@ -418,6 +564,7 @@ namespace FP
 		m_Mode = view.Mode;
 		EnsureTargets(width, height);
 		BuildFrameUniforms(world, view, width, height);
+		RenderShadows(cmd, world, view);
 
 		const bool hasLines = lines && !lines->GetVertices().IsEmpty();
 		if (hasLines)
