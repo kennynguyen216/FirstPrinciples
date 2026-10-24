@@ -351,3 +351,81 @@ FP_TEST(Script_UsesGeneratedReflection)
 	FP_EXPECT(static_cast<TestReflected*>(instance)->Presses == 3);
 	ScriptRuntime::Get().DestroyInstance(*type, instance);
 }
+
+namespace
+{
+	// Uses the script helpers the way gameplay code would.
+	class TestHelpers : public Script
+	{
+	public:
+		int32 Ticks = 0;
+		int32 Once = 0;
+		Entity Spawned = NullEntity;
+		Array<Entity> Prefab;
+
+		void OnStart() override
+		{
+			Spawned = Spawn("Bullet", { 1, 2, 3 });
+			AddChild(Spawned, false);
+			Every(0.25f, [this]() { ++Ticks; });
+			After(0.6f, [this]() { ++Once; });
+			Prefab = SpawnScene("Scenes/Main.scene", { 100, 0, 0 });
+		}
+	};
+}
+
+FP_SCRIPT_FIELDS(TestHelpers) {}
+
+FP_TEST(Script_HelpersSpawnParentAndTime)
+{
+	Engine::RegisterEngineComponents();
+	StrongObjectPtr<World> world(NewObject<World>());
+	const Entity owner = world->CreateEntity("Owner");
+	world->Get<TransformComponent>(owner).Position = { 10, 0, 0 };
+	world->Add<ScriptComponent>(owner).Scripts.Emplace("TestHelpers");
+	world->AddSystem<ScriptSystem>();
+	world->BeginPlay();
+	TestHelpers* helpers = static_cast<TestHelpers*>(world->Get<ScriptComponent>(owner).Scripts[0].Instance);
+	FP_EXPECT(helpers);
+	if (!helpers)
+		return;
+
+	// Spawned as a child, so its position is an offset from the owner.
+	FP_EXPECT(world->GetParent(helpers->Spawned) == owner);
+	FP_EXPECT((world->GetWorldPosition(helpers->Spawned) - Vec3(11, 2, 3)).Length() < 1e-4f);
+	FP_EXPECT(helpers->FindChild("Bullet") == helpers->Spawned && helpers->GetChildren().Num() == 1);
+	FP_EXPECT(helpers->GetScript<TestHelpers>() == helpers && helpers->FindScript<TestHelpers>() == helpers);
+	FP_EXPECT(!helpers->GetScript<TestCounter>());
+
+	// The prefab came in with new ids and its top level entities moved over.
+	FP_EXPECT(!helpers->Prefab.IsEmpty());
+	for (Entity entity : helpers->Prefab)
+		FP_EXPECT(world->IsValid(entity));
+	FP_EXPECT(world->GetWorldPosition(helpers->Prefab[0]).X >= 50);
+
+	// Timers fire on schedule, repeating ones keep going and one shot ones stop.
+	for (int i = 0; i < 10; ++i)
+		world->Update(0.1f);
+	FP_EXPECT(helpers->Ticks == 4 && helpers->Once == 1);
+
+	// Destroying the owner takes its child with it.
+	helpers->DestroySelf();
+	const Entity bullet = helpers->Spawned;
+	world->Update(0.1f);
+	FP_EXPECT(!world->IsValid(owner) && !world->IsValid(bullet));
+	world->EndPlay();
+}
+
+FP_TEST(Script_LoadSceneWaitsForTheFrameToEnd)
+{
+	Engine::RegisterEngineComponents();
+	StrongObjectPtr<World> world(NewObject<World>());
+	world->CreateEntity("Old");
+	world->BeginPlay();
+	world->RequestSceneLoad("Scenes/Main.scene");
+	FP_EXPECT(world->FindEntityByName("Old") != NullEntity);
+	world->Update(0.016f);
+	FP_EXPECT(world->FindEntityByName("Old") == NullEntity && !world->GetEntities().IsEmpty());
+	FP_EXPECT(world->IsPlaying());
+	world->EndPlay();
+}
