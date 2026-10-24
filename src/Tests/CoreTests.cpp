@@ -235,3 +235,60 @@ FP_TEST(Guid_NewParseRoundTrip)
 	map.Add(a, 1);
 	FP_EXPECT(map.FindRef(parsed) == 1);
 }
+
+#include "Core/Misc/File.h"
+
+#include <filesystem>
+#include <string>
+#include <vector>
+
+namespace
+{
+	struct CapturedLine
+	{
+		FP::LogLevel Level;
+		std::string Text;
+	};
+
+	void CaptureSink(FP::LogLevel level, const char* message, void* userData)
+	{
+		static_cast<std::vector<CapturedLine>*>(userData)->push_back({ level, message });
+	}
+}
+
+FP_TEST(Log_WritesToSinksAndFiles)
+{
+	namespace fs = std::filesystem;
+	std::error_code ec;
+	const fs::path folder = fs::temp_directory_path(ec) / "FPLogTest";
+	fs::remove_all(folder, ec);
+	const std::string path = (folder / "Logs" / "Test.log").generic_string();
+
+	std::vector<CapturedLine> lines;
+	FP_EXPECT(Log::OpenFile(path.c_str()));
+	Log::AddSink(&CaptureSink, &lines);
+	FP_LOG_WARN("disk %d%% full", 93);
+	// Longer than the stack buffer, so it takes the slow path and must come out whole.
+	const std::string longText(3000, 'x');
+	FP_LOG("%s|end", longText.c_str());
+	Log::RemoveSink(&CaptureSink, &lines);
+	FP_LOG("not captured");
+	Log::Flush();
+
+	FP_EXPECT(lines.size() == 2);
+	if (lines.size() == 2)
+	{
+		// Sinks get a timestamp and the level tag, but no newline.
+		FP_EXPECT(lines[0].Level == LogLevel::Warning);
+		FP_EXPECT(lines[0].Text.find("[warning] disk 93% full") != std::string::npos);
+		FP_EXPECT(lines[0].Text[0] == '[' && lines[0].Text.back() != '\n');
+		FP_EXPECT(lines[1].Text.find(longText + "|end") != std::string::npos);
+	}
+
+	// The file has every line with its level spelled out.
+	String text;
+	FP_EXPECT(File::ReadAllText(path.c_str(), text));
+	FP_EXPECT(text.Contains("[warning] disk 93% full"));
+	FP_EXPECT(text.Contains("[info] not captured"));
+	FP_EXPECT(text.Contains("|end"));
+}

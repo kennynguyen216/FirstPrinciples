@@ -4,7 +4,7 @@ A small C++20 game engine with an ECS, a Qt editor and SDL3 rendering. Runs on m
 
 ## Setup
 
-Clone with submodules so EnTT, stb and Monocypher come along:
+Clone with submodules so EnTT, stb, Monocypher and spdlog come along:
 
 ```bash
 git clone --recursive https://github.com/kennynguyen216/FirstPrinciples.git
@@ -58,6 +58,7 @@ Projects/MyGame/
   Source/            game code (Game.h, Game.cpp and your components and systems)
   Source/Scripts/    hot reloadable C++ scripts
   Build/ Binaries/ Intermediate/   generated, not committed
+  Saved/Logs/        Editor.log and Runtime.log, not committed
 ```
 
 Engine shaders live in `Engine/Content` and every project shares them.
@@ -275,6 +276,28 @@ Ctrl+Z undoes and Ctrl+Shift+Z redoes (Cmd on macOS, and Ctrl+Y also redoes on W
 - History holds the last 100 steps and starts over when a scene is opened. Play mode changes are not
   recorded since Stop puts the scene back anyway.
 
+### Logging
+
+Log with printf style formatting from anywhere, scripts included:
+
+```cpp
+FP_LOG("Loaded %d enemies", count);
+FP_LOG_VERBOSE("Path took %.2f ms", ms);
+FP_LOG_WARN("No spawn point in %s", scene);
+FP_LOG_ERROR("Could not open %s", path);
+```
+
+Logging runs on [spdlog](https://github.com/gabime/spdlog), and every line goes to four places:
+
+- The terminal, with the level in color. Warnings and errors go to stderr.
+- The project's `Saved/Logs/Editor.log` or `Runtime.log`, with the date, time and thread. Each run
+  starts a fresh file and keeps the last three runs as `.1.log`, `.2.log` and `.3.log`.
+- The editor's **Output Log**, with the time.
+- The Visual Studio Output window on Windows.
+
+`Log::SetMinimumLevel` hides lines below a level, `Log::AddSink` adds another output and `Log::Flush`
+writes out anything buffered. Only verbose lines are ever held back, so a crash never loses a warning.
+
 ### Multiplayer
 
 Games can be peer to peer over UDP. Every peer talks to every other peer directly, with no server.
@@ -453,6 +476,7 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 | [EnTT](https://github.com/skypjack/entt) | ECS | Git submodule in `ThirdParty/entt` |
 | [stb_image](https://github.com/nothings/stb) | PNG, JPG and TGA loading | Git submodule in `ThirdParty/stb` |
 | [Monocypher](https://monocypher.org) | Key exchange and encryption for network packets | Git submodule in `ThirdParty/monocypher` |
+| [spdlog](https://github.com/gabime/spdlog) | Logging to the console, files and the editor | Git submodule in `ThirdParty/spdlog` |
 
 ## Known limitations
 

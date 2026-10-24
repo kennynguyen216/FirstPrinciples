@@ -17,6 +17,8 @@
 int main(int argc, char** argv)
 {
 	QApplication app(argc, argv);
+	// First, so everything after it lands in the file too.
+	FP::Log::OpenFile((FP::Paths::GetProjectDir() + "/Saved/Logs/Editor.log").CStr());
 
 	// SDL_GPU needs the video subsystem even though the editor draws offscreen.
 	// Qt goes first so it owns the native application object.
@@ -149,5 +151,6 @@ int main(int argc, char** argv)
 	delete device;
 	FP::JobSystem::Shutdown();
 	SDL_Quit();
+	FP::Log::Flush();
 	return result;
 }

@@ -2,6 +2,7 @@
 Projects/*/Build/
 Projects/*/Binaries/
 Projects/*/Intermediate/
+Projects/*/Saved/
 
 # Older builds generated at the root
 Build/

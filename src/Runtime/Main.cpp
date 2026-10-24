@@ -47,6 +47,8 @@ namespace
 
 int main(int argc, char** argv)
 {
+	Log::OpenFile((Paths::GetProjectDir() + "/Saved/Logs/Runtime.log").CStr());
+
 	if (!SDL_Init(SDL_INIT_VIDEO))
 	{
 		FP_LOG_ERROR("SDL_Init failed: %s", SDL_GetError());
@@ -195,5 +197,6 @@ int main(int argc, char** argv)
 	delete device;
 	JobSystem::Shutdown();
 	SDL_Quit();
+	Log::Flush();
 	return 0;
 }

@@ -23,7 +23,9 @@ local EnttInclude = Root .. "/ThirdParty/entt/src"
 local StbInclude = Root .. "/ThirdParty/stb"
 -- Small audited crypto library for encrypting network packets. One .c file built into Engine.
 local MonocypherDir = Root .. "/ThirdParty/monocypher/src"
-if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) then
+-- Logging backend, header only.
+local SpdlogInclude = Root .. "/ThirdParty/spdlog/include"
+if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) or not os.isdir(SpdlogInclude) then
 	premake.warn("Submodules are missing. Run: git submodule update --init")
 end
 
@@ -77,7 +79,7 @@ local ProjectName = io.readfile(ProjectFile):match('Name%s+"?([%w_]+)"?') or pat
 
 -- Include paths every project that touches engine headers needs.
 local function EngineIncludes()
-	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir }
+	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir, SpdlogInclude }
 end
 
 local function UseSDL()
