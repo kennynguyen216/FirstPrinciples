@@ -59,7 +59,24 @@ void CrewSystem::Update(World& world, float)
 			seats.Add(Seat{ GetOwner(world, entity), entity });
 		seats.Sort([](const Seat& a, const Seat& b) { return a.Owner < b.Owner; });
 
-		int32 next = 0;
+		// Playing alone, keys 1 to 4 pick the seat so every role can be tried without four machines.
+		int32 players = 0;
+		for (int32 i = 0; i < seats.Num(); ++i)
+			players += i == 0 || seats[i].Owner != seats[i - 1].Owner ? 1 : 0;
+		if (players == 1)
+		{
+			const Key seatKeys[MaxSlots] = { SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3, SDL_SCANCODE_4 };
+			for (int32 slot = 0; slot < MaxSlots; ++slot)
+			{
+				if (Input::WasKeyPressed(seatKeys[slot]) && m_SoloSeat != slot)
+				{
+					m_SoloSeat = slot;
+					FP_LOG("Crew: playing alone as P%d, Crew %s %s", slot + 1, GetCrewName(slot / SlotsPerCrew), GetRoleName(slot % SlotsPerCrew == 0 ? CrewRole::Driver : CrewRole::Defender));
+				}
+			}
+		}
+
+		int32 next = players == 1 ? m_SoloSeat : 0;
 		uint64 previousOwner = 0;
 		for (int32 i = 0; i < seats.Num(); ++i)
 		{
@@ -95,7 +112,7 @@ void MatchSystem::OnStart(World& world)
 		return;
 	}
 	world.Add<MatchStateComponent>(match);
-	FP_LOG("Match: lobby open. Waiting for players, or press Enter to start now");
+	FP_LOG("Match: lobby open. Waiting for players, or press Enter to start now. Alone, 1 to 4 picks your seat");
 }
 
 void MatchSystem::Update(World& world, float deltaTime)
@@ -160,11 +177,17 @@ void MatchSystem::Update(World& world, float deltaTime)
 				break;
 			}
 
-			// Over once every crew with a truck has arrived.
+			// Over once every crew with a truck has arrived. With no trucks at all, such as a
+			// Defender playing alone, only the colony clock ends it.
+			bool anyTruck = false;
 			bool waiting = false;
 			for (int32 crew = 0; crew < CrewCount; ++crew)
-				waiting |= FindDriver(world, crew) != NullEntity && !state->Crews[crew].Arrived;
-			if (!waiting)
+			{
+				const bool hasTruck = FindDriver(world, crew) != NullEntity;
+				anyTruck |= hasTruck;
+				waiting |= hasTruck && !state->Crews[crew].Arrived;
+			}
+			if (anyTruck && !waiting)
 			{
 				int32 winner = -1;
 				for (int32 crew = 0; crew < CrewCount; ++crew)
@@ -210,12 +233,13 @@ void MatchSystem::PlaceLocalMember(World& world)
 
 	if (member.Role == CrewRole::Defender)
 	{
-		// Until the bay is playable (M3) the Defender waits in it and watches their truck.
+		// In the aisle in front of the tanks, facing them. The body's middle is half its height up.
 		for (auto [entity, bayTransform, bay] : world.View<TransformComponent, CargoBayComponent>().each())
 		{
 			if (bay.Crew == member.Crew)
-				transform.Position = bayTransform.Position;
+				transform.Position = bayTransform.Position + Vec3{ 0, transform.Scale.Y * 0.5f, bay.HalfLength * 0.6f };
 		}
+		transform.Rotation = {};
 		return;
 	}
 

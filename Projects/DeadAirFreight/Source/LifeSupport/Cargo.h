@@ -21,6 +21,10 @@ namespace Cargo
 	// lowest open tank first, the way a crew would use one up before opening the next.
 	float Draw(FP::World& world, FP::int32 crew, CargoKind kind, float kg);
 
+	// Puts up to kg back into the crew's tanks of one kind and returns how much fit. Fills the
+	// emptiest intact tank first, so recovered air does not go straight back out of a hole.
+	float Refill(FP::World& world, FP::int32 crew, CargoKind kind, float kg);
+
 	// Fraction of its oxygen a tank loses per second through its holes. Choked flow through an
 	// orifice gives mass flow = Cd * A * p * sqrt(k / (R T)) * (2 / (k + 1))^((k + 1) / (2 (k - 1))),
 	// and p = m R T / V, so flow / m is a constant for the tank.

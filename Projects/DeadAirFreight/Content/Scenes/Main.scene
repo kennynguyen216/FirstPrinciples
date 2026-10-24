@@ -39,6 +39,23 @@ component TankConfig
   WaterLeakKgPerSecond 0.4
   Spacing 3
   PerRow 6
+component DefenderConfig
+  MoveSpeed 6
+  LookSensitivity 0.2
+  EyeHeight 1.6
+  BodyRadius 0.4
+  FireInterval 0.15
+  LaserRange 60
+  LaserDamage 1
+  BeamSeconds 0.06
+component SiphonConfig
+  MitePoolPerCrew 24
+  MiteHealth 2
+  MiteSpeed 4
+  MiteDrainKgPerSecond 0.5
+  MiteBellyKg 4
+  MiteBiteHoleSeconds 4
+  MiteTrickleSeconds 6
 component TruckConfig
   Thrust 30
   MaxSpeed 45
@@ -190,18 +207,26 @@ component Transform
   Scale 1 1 1
 component CargoBay
   Crew 0
+  HalfWidth 10
+  HalfLength 20
 
 entity 534af3e0-f41f-424b-901b-28bd0edcad87
 component Name
   Name "Cargo Bay A Floor"
 component Transform
-  Position -3000 -501 0
+  Position -3000 -500 0
   Rotation 0 0 0
   Scale 20 1 40
 component Mesh
   Mesh "Plane"
 component Material
   Material "Materials/Rock.material"
+component Collider
+  Shape "Box"
+  HalfExtents 0.5 0.01 0.5
+  Radius 0.5
+  HalfHeight 0.5
+  Layer "Static"
 
 entity 8211627f-b35c-42e9-83e0-f5e627f8f39a
 component Name
@@ -212,18 +237,26 @@ component Transform
   Scale 1 1 1
 component CargoBay
   Crew 1
+  HalfWidth 10
+  HalfLength 20
 
 entity d39f6e37-b33b-47ff-b198-5c75f7ea79c9
 component Name
   Name "Cargo Bay B Floor"
 component Transform
-  Position 3000 -501 0
+  Position 3000 -500 0
   Rotation 0 0 0
   Scale 20 1 40
 component Mesh
   Mesh "Plane"
 component Material
   Material "Materials/Rock.material"
+component Collider
+  Shape "Box"
+  HalfExtents 0.5 0.01 0.5
+  Radius 0.5
+  HalfHeight 0.5
+  Layer "Static"
 
 entity bc95f82f-5c3e-474f-9dba-573c8591aa56
 component Name
@@ -564,3 +597,171 @@ component LifeSupportData
   IssWaterRecovery 0.98
   OxygenGasConstant 259.8
   OxygenHeatCapacityRatio 1.4
+
+entity 3f84c030-329b-41e4-8a90-a769647d9492
+component Name
+  Name "Cargo Bay A Wall Left"
+component Transform
+  Position -3010.25 -497 0
+  Rotation 0 0 0
+  Scale 0.5 6 41
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/BayWall.material"
+component Collider
+  Shape "Box"
+  HalfExtents 0.5 0.5 0.5
+  Radius 0.5
+  HalfHeight 0.5
+  Layer "Static"
+
+entity 88825ea6-6150-4437-b8e4-4a1eee676611
+component Name
+  Name "Cargo Bay A Wall Right"
+component Transform
+  Position -2989.75 -497 0
+  Rotation 0 0 0
+  Scale 0.5 6 41
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/BayWall.material"
+component Collider
+  Shape "Box"
+  HalfExtents 0.5 0.5 0.5
+  Radius 0.5
+  HalfHeight 0.5
+  Layer "Static"
+
+entity 0fbd390e-9183-4851-a0b9-771db9993de1
+component Name
+  Name "Cargo Bay A Wall Front"
+component Transform
+  Position -3000 -497 -20.25
+  Rotation 0 0 0
+  Scale 21 6 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/BayWall.material"
+component Collider
+  Shape "Box"
+  HalfExtents 0.5 0.5 0.5
+  Radius 0.5
+  HalfHeight 0.5
+  Layer "Static"
+
+entity ea45ff27-f931-45fd-8f95-7dfc2f46e033
+component Name
+  Name "Cargo Bay A Wall Back"
+component Transform
+  Position -3000 -497 20.25
+  Rotation 0 0 0
+  Scale 21 6 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/BayWall.material"
+component Collider
+  Shape "Box"
+  HalfExtents 0.5 0.5 0.5
+  Radius 0.5
+  HalfHeight 0.5
+  Layer "Static"
+
+entity 4e86e7da-4ece-440a-9c26-23739f2581eb
+component Name
+  Name "Cargo Bay A Light"
+component Transform
+  Position -3000 -494 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component PointLight
+  Color 1 0.92 0.8 1
+  Intensity 3
+  Range 40
+
+entity 48ff0b67-dd9a-4155-a5c2-54180c48ad42
+component Name
+  Name "Cargo Bay B Wall Left"
+component Transform
+  Position 2989.75 -497 0
+  Rotation 0 0 0
+  Scale 0.5 6 41
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/BayWall.material"
+component Collider
+  Shape "Box"
+  HalfExtents 0.5 0.5 0.5
+  Radius 0.5
+  HalfHeight 0.5
+  Layer "Static"
+
+entity 081572cd-a997-43c6-9f4c-a7283aeb9160
+component Name
+  Name "Cargo Bay B Wall Right"
+component Transform
+  Position 3010.25 -497 0
+  Rotation 0 0 0
+  Scale 0.5 6 41
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/BayWall.material"
+component Collider
+  Shape "Box"
+  HalfExtents 0.5 0.5 0.5
+  Radius 0.5
+  HalfHeight 0.5
+  Layer "Static"
+
+entity 82e0e07d-1691-4262-bff7-321d472921bf
+component Name
+  Name "Cargo Bay B Wall Front"
+component Transform
+  Position 3000 -497 -20.25
+  Rotation 0 0 0
+  Scale 21 6 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/BayWall.material"
+component Collider
+  Shape "Box"
+  HalfExtents 0.5 0.5 0.5
+  Radius 0.5
+  HalfHeight 0.5
+  Layer "Static"
+
+entity e40259b0-7910-4b73-b52e-b439d74a90b1
+component Name
+  Name "Cargo Bay B Wall Back"
+component Transform
+  Position 3000 -497 20.25
+  Rotation 0 0 0
+  Scale 21 6 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/BayWall.material"
+component Collider
+  Shape "Box"
+  HalfExtents 0.5 0.5 0.5
+  Radius 0.5
+  HalfHeight 0.5
+  Layer "Static"
+
+entity acbf90e2-1142-4661-a9e9-605658b75080
+component Name
+  Name "Cargo Bay B Light"
+component Transform
+  Position 3000 -494 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component PointLight
+  Color 1 0.92 0.8 1
+  Intensity 3
+  Range 40

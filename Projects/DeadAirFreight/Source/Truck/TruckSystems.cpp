@@ -87,13 +87,17 @@ void TruckSystem::Update(World& world, float deltaTime)
 
 void ChaseCameraSystem::Update(World& world, float deltaTime)
 {
-	// The truck to follow: our own, or our crew's when we are its Defender.
+	// The truck to follow is our own. A Defender's camera belongs to DefenderSystem once the
+	// match is under way; in the lobby it watches the crew's truck.
 	Entity target = FindLocalMember(world);
 	if (target != NullEntity)
 	{
 		const CrewMemberComponent& member = world.Get<CrewMemberComponent>(target);
 		if (member.Slot >= 0 && member.Role == CrewRole::Defender)
 		{
+			const MatchStateComponent* state = GetState(world);
+			if (state && state->Phase != MatchPhase::Lobby)
+				return;
 			const Entity driver = FindDriver(world, member.Crew);
 			if (driver != NullEntity)
 				target = driver;

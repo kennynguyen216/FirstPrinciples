@@ -61,6 +61,30 @@ namespace Cargo
 		return drawn;
 	}
 
+	float Refill(World& world, int32 crew, CargoKind kind, float kg)
+	{
+		float stored = 0;
+		while (stored < kg)
+		{
+			CargoTankComponent* emptiest = nullptr;
+			for (auto [entity, tank] : world.View<CargoTankComponent>().each())
+			{
+				if (tank.Crew != crew || tank.Kind != kind || tank.AmountKg >= tank.CapacityKg)
+					continue;
+				// Intact tanks first, then the emptiest.
+				if (!emptiest || (tank.Holes == 0) > (emptiest->Holes == 0) ||
+					((tank.Holes == 0) == (emptiest->Holes == 0) && tank.AmountKg < emptiest->AmountKg))
+					emptiest = &tank;
+			}
+			if (!emptiest)
+				break;
+			const float put = std::min(emptiest->CapacityKg - emptiest->AmountKg, kg - stored);
+			emptiest->AmountKg += put;
+			stored += put;
+		}
+		return stored;
+	}
+
 	float OxygenLeakRate(const TankConfigComponent& tanks, const LifeSupportDataComponent& data, int32 holes)
 	{
 		if (holes <= 0 || tanks.TankVolumeM3 <= 0)

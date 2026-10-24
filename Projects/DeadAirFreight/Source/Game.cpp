@@ -1,4 +1,6 @@
 #include "Game.h"
+#include "Bay/DefenderSystem.h"
+#include "Enemies/SiphonSystems.h"
 #include "LifeSupport/LifeSupportSystems.h"
 #include "Match/MatchSystems.h"
 #include "Physics/PhysicsComponents.h"
@@ -87,7 +89,28 @@ namespace Game
 			.Field("ArrivalRadius", &ColonyComponent::ArrivalRadius);
 
 		registry.Register<CargoBayComponent>("CargoBay")
-			.Field("Crew", &CargoBayComponent::Crew);
+			.Field("Crew", &CargoBayComponent::Crew)
+			.Field("HalfWidth", &CargoBayComponent::HalfWidth)
+			.Field("HalfLength", &CargoBayComponent::HalfLength);
+
+		registry.Register<DefenderConfigComponent>("DefenderConfig")
+			.Field("MoveSpeed", &DefenderConfigComponent::MoveSpeed)
+			.Field("LookSensitivity", &DefenderConfigComponent::LookSensitivity)
+			.Field("EyeHeight", &DefenderConfigComponent::EyeHeight)
+			.Field("BodyRadius", &DefenderConfigComponent::BodyRadius)
+			.Field("FireInterval", &DefenderConfigComponent::FireInterval)
+			.Field("LaserRange", &DefenderConfigComponent::LaserRange)
+			.Field("LaserDamage", &DefenderConfigComponent::LaserDamage)
+			.Field("BeamSeconds", &DefenderConfigComponent::BeamSeconds);
+
+		registry.Register<SiphonConfigComponent>("SiphonConfig")
+			.Field("MitePoolPerCrew", &SiphonConfigComponent::MitePoolPerCrew)
+			.Field("MiteHealth", &SiphonConfigComponent::MiteHealth)
+			.Field("MiteSpeed", &SiphonConfigComponent::MiteSpeed)
+			.Field("MiteDrainKgPerSecond", &SiphonConfigComponent::MiteDrainKgPerSecond)
+			.Field("MiteBellyKg", &SiphonConfigComponent::MiteBellyKg)
+			.Field("MiteBiteHoleSeconds", &SiphonConfigComponent::MiteBiteHoleSeconds)
+			.Field("MiteTrickleSeconds", &SiphonConfigComponent::MiteTrickleSeconds);
 
 		registry.Register<ChaseCameraComponent>("ChaseCamera")
 			.Field("Distance", &ChaseCameraComponent::Distance)
@@ -103,7 +126,10 @@ namespace Game
 		world.AddSystem<ColonyClockSystem>();
 		world.AddSystem<LifeSupportSystem>();
 		world.AddSystem<CargoTankSystem>();
+		world.AddSystem<SiphonSpawnerSystem>();
+		world.AddSystem<SiphonSystem>();
 		world.AddSystem<TruckSystem>();
+		world.AddSystem<DefenderSystem>();
 		world.AddSystem<ChaseCameraSystem>();
 		world.AddSystem<LifeSupportReadoutSystem>();
 	}

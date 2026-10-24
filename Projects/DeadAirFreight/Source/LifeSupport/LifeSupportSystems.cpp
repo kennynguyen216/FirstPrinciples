@@ -1,5 +1,6 @@
 #include "LifeSupport/LifeSupportSystems.h"
 #include "LifeSupport/Cargo.h"
+#include "Enemies/SiphonSystems.h"
 #include "Match/MatchQueries.h"
 #include "Physics/PhysicsComponents.h"
 
@@ -234,10 +235,11 @@ void LifeSupportReadoutSystem::Update(World& world, float deltaTime)
 	for (auto [entity, resources] : world.View<TruckResourcesComponent>().each())
 	{
 		const Cargo::Totals cargo = Cargo::Sum(world, resources.Crew);
-		FP_LOG("  Crew %s%s | cab O2 %.1f kg H2O %.1f kg CO2 %.2f kg | cargo O2 %.0f/%.0f kg H2O %.0f/%.0f kg | %d leaking | power %.0f%%",
+		FP_LOG("  Crew %s%s | cab O2 %.1f kg H2O %.1f kg CO2 %.2f kg | cargo O2 %.0f/%.0f kg H2O %.0f/%.0f kg | %d leaking | power %.0f%% | %d mites, %d killed, %.1f kg eaten, %.1f kg recovered",
 			GetCrewName(resources.Crew), resources.Crew == localCrew ? " (you)" : "",
 			resources.CabOxygenKg, resources.CabWaterKg, resources.CabCarbonDioxideKg,
 			cargo.OxygenKg, cargo.OxygenCapacityKg, cargo.WaterKg, cargo.WaterCapacityKg,
-			cargo.LeakingTanks, resources.Power * 100);
+			cargo.LeakingTanks, resources.Power * 100, Siphons::CountActive(world, resources.Crew), resources.SiphonsKilled,
+			resources.OxygenEatenKg, resources.OxygenRecoveredKg);
 	}
 }

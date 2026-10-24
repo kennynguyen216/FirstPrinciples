@@ -101,8 +101,12 @@ struct TruckResourcesComponent
 	float OxygenTappedKg = 0;
 	float OxygenBoostedKg = 0;
 	float OxygenLeakedKg = 0;
+	float OxygenEatenKg = 0; // by Siphons
+	float OxygenRecoveredKg = 0; // from Siphons that died
 	float WaterUsedKg = 0;
 	float WaterRecycledKg = 0;
+	FP::int32 SiphonsKilled = 0;
+	FP::int32 TanksShot = 0; // missed shots that punctured cargo
 };
 
 // The colony's oxygen, added to the Colony entity when play starts. Its countdown is how long

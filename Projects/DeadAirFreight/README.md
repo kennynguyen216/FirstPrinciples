@@ -17,7 +17,8 @@ Projects\DeadAirFreight\Binaries\Debug\Runtime --join <host ip>:7777
 ```
 
 The countdown starts once `MatchConfig.PlayersRequired` players are in. Press Enter to start early
-when testing with fewer.
+when testing with fewer. Playing alone, press 1 to 4 in the lobby to pick your seat, so every role
+can be tried on one machine.
 
 | Seat | Crew | Role |
 |---|---|---|
@@ -28,6 +29,10 @@ when testing with fewer.
 
 Seats are ordered by each peer's random network id, not by join order, so every peer works out the
 same seating without sending anything. They lock when the countdown starts.
+
+Defender: WASD walk, hold the right mouse button to look, left button fires the laser at the speck in
+the middle of the screen. Two hits kill a Mite and put the oxygen it ate back in the tanks. A shot
+that hits a tank instead punctures it.
 
 Driver: W/S thrust, A/D turn, Shift boost (vents cargo oxygen). Reaching the colony docks the truck
 and hands its cargo over. The match ends when every truck has docked, or when the colony's oxygen
@@ -46,6 +51,9 @@ the log every few seconds, and Tab prints one on demand.
   health fields are where repairs (M4) and solar flares (M6) will plug in.
 - The colony clock is the colony's oxygen divided by its crew's use. Deliveries extend it.
 - Score is kilograms delivered plus a bonus per second under par.
+- Mites get into both bays at the same moments and spots, fly to the nearest oxygen tank, latch on and
+  drain it into their bellies, swelling as they feed. One latched for `MiteBiteHoleSeconds` chews a hole.
+  They come from a fixed pool per crew, so nothing is created or destroyed mid match.
 
 ## Physics
 
@@ -61,6 +69,8 @@ move the fields over and delete ours.
 | `Source/Match` | Match config and state, crew seating, Lobby -> Countdown -> Racing -> Results, delivery and score |
 | `Source/LifeSupport` | Cargo tanks, crew resources, the colony clock and the log readout |
 | `Source/Truck` | Truck handling, boost and the chase camera |
+| `Source/Bay` | The Defender: movement, look, laser |
+| `Source/Enemies` | The Siphon pool, spawning (`Siphons::Spawn` is what solar flare surges will call) and Mite behavior |
 | `Source/Physics` | Colliders, bodies and the queries Jolt will answer |
 | `Content/Scenes/Main.scene` | Depot, colony, asteroids, cargo bay spots and the networked crew template. Tuning lives on its `Match` entity, real constants on `Real Data` |
 | `Content/Data` | Real world data with sources. Every value is a placeholder marked `"verified": false` until checked |
@@ -70,3 +80,5 @@ move the fields over and delete ours.
 - [x] M1: four players join, crews and roles assigned, trucks fly an open map, reaching the colony ends the match
 - [x] M2: oxygen, water, CO2 and power, cab reserve and cargo, cargo tanks, colony clock, boost costs oxygen.
   Runs on each machine on its own until crew state is shared over the network.
+- [x] M3: the Defender moves and shoots in the bay, Mites seek and drain tanks, kills return oxygen,
+  missed shots puncture tanks

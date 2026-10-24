@@ -10,6 +10,9 @@ class CrewSystem : public FP::System
 public:
 	const char* GetName() const override { return "Crew"; }
 	void Update(FP::World& world, float deltaTime) override;
+
+private:
+	FP::int32 m_SoloSeat = 0;
 };
 
 // Lobby -> Countdown -> Racing -> Results. Places the local player at the start when the
