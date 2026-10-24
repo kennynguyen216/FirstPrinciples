@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Engine/Engine.h"
+#include "Engine/Animation/Animator.h"
 #include "Core/Misc/ModuleContext.h"
 
 #include <type_traits>
@@ -45,6 +46,10 @@ namespace FP
 
 		Entity FindEntity(std::string_view name) const { return m_World->FindEntityByName(name); }
 
+		// This entity's animator, for building a state machine and setting its parameters.
+		// Null when the entity has no Animator component.
+		Animator* GetAnimator() const { return m_World->GetAnimator(m_Entity); }
+
 		// Removes this script's entity at the end of the frame.
 		void DestroySelf() const { m_World->DestroyEntity(m_Entity); }
 
@@ -72,7 +77,7 @@ namespace FP
 	}
 
 	// Bump when the script interface changes so stale modules are refused instead of crashing.
-	constexpr uint32 ScriptInterfaceVersion = 2;
+	constexpr uint32 ScriptInterfaceVersion = 3;
 
 	// Fingerprint of everything a script module shares with the host by layout. A module built
 	// against different engine headers or a different configuration gives a different value.
@@ -83,6 +88,7 @@ namespace FP
 			sizeof(TransformComponent), sizeof(ScriptType), sizeof(FieldInfo), sizeof(ModuleContext),
 			sizeof(AudioWorld), sizeof(AudioResult), sizeof(AudioPlayResult), sizeof(VoiceHandle), sizeof(OneShotParams),
 			sizeof(AudioSourceComponent), sizeof(AudioListenerComponent),
+			sizeof(AnimState), sizeof(AnimTransition), sizeof(AnimCondition), sizeof(AnimatorComponent), sizeof(SkeletalMeshComponent),
 		};
 		return HashBytes(parts, sizeof(parts));
 	}

@@ -251,3 +251,59 @@ FP_TEST(Script_LoadsGameScriptsModule)
 	runtime.UnloadModule();
 	FP_EXPECT(runtime.FindType("Rotator") == nullptr);
 }
+
+namespace
+{
+	// Builds a small state machine, the way game scripts drive their animators.
+	class TestAnimatorScript : public Script
+	{
+	public:
+		float Speed = 3;
+
+		void OnStart() override
+		{
+			Animator* animator = GetAnimator();
+			if (!animator)
+				return;
+			animator->AddState("Idle", "IdleClip");
+			animator->AddState("Run", "RunClip");
+			animator->AddTransition("Idle", "Run").When("Speed", AnimCompare::Greater, 0.5f);
+			animator->AddTransition("Run", "Idle").When("Speed", AnimCompare::Less, 0.5f);
+		}
+
+		void OnUpdate(float) override
+		{
+			if (Animator* animator = GetAnimator())
+				animator->SetFloat("Speed", Speed);
+		}
+	};
+}
+
+FP_SCRIPT(TestAnimatorScript)
+{
+	fields.Field("Speed", &TestAnimatorScript::Speed);
+}
+
+FP_TEST(Script_DrivesAnimator)
+{
+	Engine::RegisterEngineComponents();
+	StrongObjectPtr<World> world(NewObject<World>());
+	const Entity e = world->CreateEntity("Runner");
+	world->Add<AnimatorComponent>(e);
+	world->Add<ScriptComponent>(e).Scripts.Emplace("TestAnimatorScript");
+	world->AddSystem<ScriptSystem>();
+	world->BeginPlay();
+	world->Update(0.016f);
+
+	const AnimatorInstance* animator = static_cast<AnimatorInstance*>(world->GetAnimator(e));
+	FP_EXPECT(animator && animator->GetMachine().GetStates().Num() == 2);
+	FP_EXPECT(animator->GetMachine().GetTransitions().Num() == 2);
+	FP_EXPECT(animator->GetFloat("Speed") == 3);
+
+	// Starting again, as after a hot reload, keeps the same machine.
+	world->EndPlay();
+	world->BeginPlay();
+	animator = static_cast<AnimatorInstance*>(world->GetAnimator(e));
+	FP_EXPECT(animator->GetMachine().GetStates().Num() == 2);
+	world->EndPlay();
+}
