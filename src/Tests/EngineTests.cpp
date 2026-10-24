@@ -228,3 +228,58 @@ FP_TEST(Mesh_ParsesObj)
 	FP_EXPECT(mesh.Vertices[0].UV == Vec2(0, 1)); // flipped to top left origin
 	FP_EXPECT(!ParseObj("f 1 2 3\n", mesh));
 }
+
+#include "Engine/SceneHistory.h"
+
+FP_TEST(SceneHistory_UndoRedo)
+{
+	RegisterTestComponents();
+	StrongObjectPtr<World> world(NewObject<World>());
+	Entity e = world->CreateEntity("Mover");
+	const Guid id = world->Get<IdComponent>(e).Id;
+	SceneHistory history(*world.Get());
+	history.Reset(id);
+	FP_EXPECT(!history.CanUndo());
+	FP_EXPECT(!history.Commit(id)); // nothing changed
+
+	world->Get<TransformComponent>(e).Position.X = 5;
+	FP_EXPECT(history.Commit(id));
+	world->CreateEntity("Second");
+	FP_EXPECT(history.Commit(Guid()));
+
+	FP_EXPECT(history.Undo());
+	FP_EXPECT(world->GetEntities().Num() == 1);
+	FP_EXPECT(history.GetSelection() == id);
+	FP_EXPECT(history.Undo());
+	FP_EXPECT(world->Get<TransformComponent>(world->FindEntityByGuid(id)).Position.X == 0);
+	FP_EXPECT(!history.Undo());
+
+	FP_EXPECT(history.Redo());
+	FP_EXPECT(world->Get<TransformComponent>(world->FindEntityByGuid(id)).Position.X == 5);
+
+	// A new edit after undo drops the steps that were undone.
+	world->Get<TransformComponent>(world->FindEntityByGuid(id)).Position.Y = 2;
+	FP_EXPECT(history.Commit(id));
+	FP_EXPECT(!history.CanRedo());
+	FP_EXPECT(history.Undo());
+	FP_EXPECT(world->GetEntities().Num() == 1);
+	FP_EXPECT(world->Get<TransformComponent>(world->FindEntityByGuid(id)).Position.Y == 0);
+}
+
+FP_TEST(SceneHistory_DropsOldestSteps)
+{
+	StrongObjectPtr<World> world(NewObject<World>());
+	Entity e = world->CreateEntity("Counter");
+	SceneHistory history(*world.Get());
+	history.Reset();
+	for (int32 i = 1; i <= SceneHistory::MaxSteps + 5; ++i)
+	{
+		world->Get<TransformComponent>(e).Position.X = static_cast<float>(i);
+		history.Commit(Guid());
+	}
+	int32 undone = 0;
+	while (history.Undo())
+		++undone;
+	FP_EXPECT(undone == SceneHistory::MaxSteps);
+	FP_EXPECT(world->Get<TransformComponent>(world->GetEntities()[0]).Position.X == 5);
+}
