@@ -32,6 +32,10 @@ namespace FP::Editor
 		void SetSelected(Entity entity) { m_Selected = entity; }
 		void SetPlaying(bool playing);
 
+		// Hides, holds and re-centers the mouse as the game's cursor mode asks, and turns its
+		// movement into mouse delta. Call every tick before the world updates.
+		void UpdateCursor();
+
 		void Set3D(bool enabled) { m_3D = enabled; m_Gizmo.Set3D(enabled); }
 		bool Is3D() const { return m_3D; }
 
@@ -120,6 +124,9 @@ namespace FP::Editor
 		World* m_World = nullptr;
 		Entity m_Selected = NullEntity;
 		bool m_Playing = false;
+		bool m_CursorFreed = false;  // Escape gave the mouse back until the next click
+		bool m_CursorHidden = false;
+		bool m_CursorLocked = false;
 		ViewMode m_ViewMode = ViewMode::Lit;
 
 		// 2D editor camera.

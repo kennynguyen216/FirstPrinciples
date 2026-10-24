@@ -11,6 +11,7 @@
 #include <Jolt/Physics/Collision/CollideShape.h>
 #include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
 #include <Jolt/Physics/Collision/RayCast.h>
+#include <Jolt/Physics/Collision/ShapeCast.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
@@ -325,6 +326,21 @@ namespace FP
 		}
 	};
 
+	namespace
+	{
+		// Skips triggers and the body asked to be ignored, like the one casting the ray.
+		class SolidFilter final : public JPH::BodyFilter
+		{
+		public:
+			explicit SolidFilter(JPH::BodyID ignore) : m_Ignore(ignore) {}
+			bool ShouldCollide(const JPH::BodyID& id) const override { return id != m_Ignore; }
+			bool ShouldCollideLocked(const JPH::Body& body) const override { return !body.IsSensor(); }
+
+		private:
+			JPH::BodyID m_Ignore;
+		};
+	}
+
 	PhysicsWorld::PhysicsWorld() : m_Impl(std::make_unique<Impl>())
 	{
 		StartJolt();
@@ -508,6 +524,50 @@ namespace FP
 			m_Impl->System->GetBodyInterface().AddTorque(id, ToJolt(torque));
 	}
 
+	void PhysicsWorld::AddForceAtPoint(entt::entity entity, Vec3 force, Vec3 point)
+	{
+		const JPH::BodyID id = m_Impl->Find(entity);
+		if (!id.IsInvalid())
+			m_Impl->System->GetBodyInterface().AddForce(id, ToJolt(force), JPH::RVec3(point.X, point.Y, point.Z));
+	}
+
+	void PhysicsWorld::AddImpulseAtPoint(entt::entity entity, Vec3 impulse, Vec3 point)
+	{
+		const JPH::BodyID id = m_Impl->Find(entity);
+		if (!id.IsInvalid())
+			m_Impl->System->GetBodyInterface().AddImpulse(id, ToJolt(impulse), JPH::RVec3(point.X, point.Y, point.Z));
+	}
+
+	void PhysicsWorld::AddExplosion(Vec3 center, float radius, float impulse)
+	{
+		JPH::BodyInterface& bodies = m_Impl->System->GetBodyInterface();
+		for (entt::entity entity : OverlapSphere(center, radius))
+		{
+			const JPH::BodyID id = m_Impl->Find(entity);
+			if (id.IsInvalid() || bodies.GetMotionType(id) != JPH::EMotionType::Dynamic)
+				continue;
+			const JPH::RVec3 middle = bodies.GetCenterOfMassPosition(id);
+			Vec3 away = Vec3(static_cast<float>(middle.GetX()), static_cast<float>(middle.GetY()), static_cast<float>(middle.GetZ())) - center;
+			const float distance = away.Length();
+			// A body right on the center goes straight up.
+			away = distance > 1e-4f ? away / distance : Vec3(0, 1, 0);
+			const float falloff = std::max(0.0f, 1.0f - distance / radius);
+			bodies.AddImpulse(id, ToJolt(away * (impulse * falloff)));
+		}
+	}
+
+	float PhysicsWorld::GetMass(entt::entity entity) const
+	{
+		const JPH::BodyID id = m_Impl->Find(entity);
+		if (id.IsInvalid())
+			return 0;
+		JPH::BodyLockRead lock(m_Impl->System->GetBodyLockInterface(), id);
+		if (!lock.Succeeded() || !lock.GetBody().IsDynamic())
+			return 0;
+		const float inverse = lock.GetBody().GetMotionProperties()->GetInverseMass();
+		return inverse > 0 ? 1.0f / inverse : 0;
+	}
+
 	Vec3 PhysicsWorld::GetVelocity(entt::entity entity) const
 	{
 		const JPH::BodyID id = m_Impl->Find(entity);
@@ -541,18 +601,7 @@ namespace FP
 			return false;
 		const Vec3 unit = direction / length;
 
-		// Skips triggers and the body asked to be ignored, like the one casting the ray.
-		class Filter final : public JPH::BodyFilter
-		{
-		public:
-			explicit Filter(JPH::BodyID ignore) : m_Ignore(ignore) {}
-			bool ShouldCollide(const JPH::BodyID& id) const override { return id != m_Ignore; }
-			bool ShouldCollideLocked(const JPH::Body& body) const override { return !body.IsSensor(); }
-
-		private:
-			JPH::BodyID m_Ignore;
-		};
-		const Filter filter(m_Impl->Find(ignore));
+		const SolidFilter filter(m_Impl->Find(ignore));
 
 		const JPH::RRayCast ray{ JPH::RVec3(origin.X, origin.Y, origin.Z), ToJolt(unit * maxDistance) };
 		JPH::RayCastResult result;
@@ -564,6 +613,35 @@ namespace FP
 		hit.Point = origin + unit * hit.Distance;
 		JPH::BodyLockRead lock(m_Impl->System->GetBodyLockInterface(), result.mBodyID);
 		hit.Normal = lock.Succeeded() ? FromJolt(lock.GetBody().GetWorldSpaceSurfaceNormal(result.mSubShapeID2, ray.GetPointOnRay(result.mFraction))) : -unit;
+		return true;
+	}
+
+	bool PhysicsWorld::SphereCast(Vec3 origin, float radius, Vec3 direction, float maxDistance, RaycastHit& hit, entt::entity ignore) const
+	{
+		const float length = direction.Length();
+		if (radius <= 0)
+			return Raycast(origin, direction, maxDistance, hit, ignore);
+		if (length < 1e-8f || maxDistance <= 0)
+			return false;
+		const Vec3 unit = direction / length;
+
+		const JPH::SphereShape sphere(radius);
+		const JPH::RShapeCast cast(&sphere, JPH::Vec3::sOne(), JPH::RMat44::sTranslation(JPH::RVec3(origin.X, origin.Y, origin.Z)), ToJolt(unit * maxDistance));
+		JPH::ShapeCastSettings settings;
+		// Starting inside something counts as a hit right away.
+		settings.mReturnDeepestPoint = true;
+		JPH::ClosestHitCollisionCollector<JPH::CastShapeCollector> collector;
+		const SolidFilter filter(m_Impl->Find(ignore));
+		m_Impl->System->GetNarrowPhaseQuery().CastShape(cast, settings, JPH::RVec3::sZero(), collector, {}, {}, filter);
+		if (!collector.HadHit())
+			return false;
+
+		const JPH::ShapeCastResult& result = collector.mHit;
+		hit.Entity = m_Impl->EntityOf(result.mBodyID2);
+		hit.Distance = result.mFraction * maxDistance;
+		hit.Point = FromJolt(result.mContactPointOn2);
+		const JPH::Vec3 axis = result.mPenetrationAxis;
+		hit.Normal = axis.LengthSq() > 1e-12f ? -FromJolt(axis.Normalized()) : -unit;
 		return true;
 	}
 

@@ -4,6 +4,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <QCursor>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QKeyEvent>
@@ -13,6 +14,10 @@
 #include <QWheelEvent>
 
 #include <cmath>
+
+#ifdef __APPLE__
+#include <CoreGraphics/CoreGraphics.h>
+#endif
 
 namespace FP::Editor
 {
@@ -45,6 +50,20 @@ namespace FP::Editor
 				case Qt::Key_Alt: return SDL_SCANCODE_LALT;
 				default: return SDL_SCANCODE_UNKNOWN;
 			}
+		}
+
+		// Moves the pointer without making a mouse event.
+		void WarpCursor(QPoint global)
+		{
+#ifdef __APPLE__
+			// Qt posts a fake event for this, which macOS can block. A plain warp works, and
+			// unhooking the mouse around it skips the short freeze macOS adds after one.
+			CGAssociateMouseAndMouseCursorPosition(false);
+			CGWarpMouseCursorPosition(CGPointMake(global.x(), global.y()));
+			CGAssociateMouseAndMouseCursorPosition(true);
+#else
+			QCursor::setPos(global);
+#endif
 		}
 
 		// Bits in m_FlyKeys for the keys that fly the camera.
@@ -98,9 +117,49 @@ namespace FP::Editor
 		m_Flying = false;
 		m_FlyKeys = 0;
 		m_Gizmo.EndDrag();
+		m_CursorFreed = false;
 		Input::Reset();
 		if (playing)
 			setFocus();
+		UpdateCursor();
+	}
+
+	void ViewportWidget::UpdateCursor()
+	{
+		const CursorMode mode = Input::GetCursorMode();
+		const bool active = m_Playing && hasFocus() && isActiveWindow() && !m_CursorFreed;
+		const bool hide = active && mode != CursorMode::Visible;
+		const bool lock = active && mode == CursorMode::Locked;
+
+		if (hide != m_CursorHidden)
+		{
+			if (hide)
+				setCursor(Qt::BlankCursor);
+			else
+				unsetCursor();
+			m_CursorHidden = hide;
+		}
+		if (lock != m_CursorLocked)
+		{
+			// Every click goes to the game while locked, even if the pointer slips off the viewport.
+			if (lock)
+				grabMouse();
+			else
+				releaseMouse();
+		}
+		if (lock)
+		{
+			const QPoint center = rect().center();
+			const QPoint global = mapToGlobal(center);
+			if (m_CursorLocked)
+			{
+				const QPoint moved = QCursor::pos() - global;
+				Input::AddMouseDelta(Vec2(static_cast<float>(moved.x()), static_cast<float>(moved.y())) * static_cast<float>(devicePixelRatioF()));
+			}
+			WarpCursor(global);
+			Input::SetMousePosition(ToPixels(QPointF(center)));
+		}
+		m_CursorLocked = lock;
 	}
 
 	void ViewportWidget::RecreateTarget()
@@ -566,6 +625,13 @@ namespace FP::Editor
 		m_LastMouse = event->position();
 		if (m_Playing)
 		{
+			// The click that takes the mouse back is not a game click.
+			if (m_CursorFreed && Input::GetCursorMode() != CursorMode::Visible)
+			{
+				m_CursorFreed = false;
+				UpdateCursor();
+				return;
+			}
 			if (event->button() == Qt::LeftButton) Input::SetMouseButton(MouseButton::Left, true);
 			if (event->button() == Qt::RightButton) Input::SetMouseButton(MouseButton::Right, true);
 			if (event->button() == Qt::MiddleButton) Input::SetMouseButton(MouseButton::Middle, true);
@@ -657,7 +723,9 @@ namespace FP::Editor
 		const QPointF position = event->position();
 		if (m_Playing)
 		{
-			Input::SetMousePosition(ToPixels(position));
+			// UpdateCursor keeps a locked mouse at the center.
+			if (!m_CursorLocked)
+				Input::SetMousePosition(ToPixels(position));
 			return;
 		}
 
@@ -771,6 +839,12 @@ namespace FP::Editor
 	{
 		if (m_Playing)
 		{
+			// Escape frees the mouse so the editor can be used. The game still sees the key.
+			if (event->key() == Qt::Key_Escape)
+			{
+				m_CursorFreed = true;
+				UpdateCursor();
+			}
 			if (!event->isAutoRepeat())
 				Input::SetKey(ToScancode(event->key()), true);
 			// Printable text goes to UI text boxes. Control characters arrive as key presses instead.
@@ -868,6 +942,7 @@ namespace FP::Editor
 	{
 		Input::Reset();
 		m_FlyKeys = 0;
+		UpdateCursor();
 		QWidget::focusOutEvent(event);
 	}
 }

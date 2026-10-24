@@ -205,3 +205,38 @@ FP_TEST(Physics_ScriptsHearContactsAndTriggers)
 	FP_EXPECT(contacts->Leaves == 2);
 	world->EndPlay();
 }
+
+FP_TEST(Physics_InteractionsPushAndFindBodies)
+{
+	Engine::RegisterEngineComponents();
+	StrongObjectPtr<World> world(NewObject<World>());
+	MakeFloor(*world.Get());
+	const Entity near = MakeBox(*world.Get(), { 1, 0.5f, 0 });
+	const Entity far = MakeBox(*world.Get(), { 8, 0.5f, 0 });
+	const Entity spun = MakeBox(*world.Get(), { 0, 0.5f, 6 });
+	world->AddSystem<PhysicsSystem>();
+	world->BeginPlay();
+	Run(*world.Get(), 0.2f);
+	Physics& physics = world->GetPhysics();
+	FP_EXPECT(physics.GetMass(near) > 0);
+
+	// An explosion moves only what is in range, away from the center.
+	physics.AddExplosion({ 0, 0.5f, 0 }, 4, 20);
+	Run(*world.Get(), PhysicsWorld::FixedStep);
+	FP_EXPECT(physics.GetVelocity(near).X > 1);
+	FP_EXPECT(physics.GetVelocity(far).Length() < 0.1f);
+
+	// A kick on the edge spins as well as moves.
+	physics.AddImpulseAtPoint(spun, { 0, 0, -5 }, { 0.5f, 0.5f, 6 });
+	Run(*world.Get(), PhysicsWorld::FixedStep);
+	FP_EXPECT(physics.GetAngularVelocity(spun).Length() > 0.5f);
+
+	// A ball swept down the far box's column finds it, the floor if it misses.
+	RaycastHit hit;
+	FP_EXPECT(physics.SphereCast({ 8.3f, 5, 0 }, 0.4f, { 0, -1, 0 }, 10, hit));
+	FP_EXPECT(hit.Entity == far && hit.Normal.Y > 0.9f);
+	FP_EXPECT(std::fabs(hit.Point.Y - 1) < 0.05f);
+	FP_EXPECT(physics.SphereCast({ 8.3f, 5, 0 }, 0.4f, { 0, -1, 0 }, 10, hit, far));
+	FP_EXPECT(hit.Entity != far && std::fabs(hit.Point.Y) < 0.05f);
+	world->EndPlay();
+}

@@ -1,4 +1,5 @@
 #include "Engine/World.h"
+#include "Engine/Input.h"
 #include "Engine/Animation/Animator.h"
 #include "Engine/Physics/PhysicsWorld.h"
 #include "Engine/UI/UISystem.h"
@@ -87,6 +88,25 @@ namespace FP
 				return entity;
 		}
 		return NullEntity;
+	}
+
+	Entity World::GetActiveCamera()
+	{
+		for (auto [entity, transform, camera] : View<TransformComponent, CameraComponent>().each())
+		{
+			if (camera.Primary)
+				return entity;
+		}
+		return NullEntity;
+	}
+
+	bool World::SetActiveCamera(Entity camera)
+	{
+		if (!IsValid(camera) || !Has<TransformComponent, CameraComponent>(camera))
+			return false;
+		for (auto [entity, other] : View<CameraComponent>().each())
+			other.Primary = entity == camera;
+		return true;
 	}
 
 	Entity World::FindEntityByGuid(const Guid& id) const
@@ -331,6 +351,8 @@ namespace FP
 			return;
 		m_Playing = true;
 		m_Time = 0;
+		// Scripts that want a pointer ask for one in OnStart.
+		Input::SetCursorMode(CursorMode::Locked);
 		GetAudio().BeginPlay();
 		for (int32 i = 0; i < m_Systems.Num(); ++i)
 			m_Systems[i]->OnStart(*this);

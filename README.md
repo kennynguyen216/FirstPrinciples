@@ -231,10 +231,22 @@ that `FP_SCRIPT` registers. There is nothing to list by hand.
 | Parents | `GetParent()`, `GetChildren()`, `FindChild(name, recursive)`, `SetParent(entity)`, `AddChild(entity)` |
 | World space | `GetWorldPosition()`, `SetWorldPosition(position)`, `GetWorldRotation()` |
 | Timers | `After(seconds, fn)`, `Every(seconds, fn)`, `CancelTimer(id)`, `CancelAllTimers()` |
-| Physics | `AddForce(force)`, `AddImpulse(impulse)`, `GetVelocity()`, `SetVelocity(velocity)`, `Raycast(origin, direction, distance, hit)`, `GetPhysics()` for the rest |
+| Physics | `AddForce(force)`, `AddImpulse(impulse)`, `AddForceAtPoint`, `AddImpulseAtPoint`, `GetVelocity()`, `SetVelocity(velocity)`, `GetMass()`, `GetPhysics()` for the rest |
+| Physics queries | `Raycast(origin, direction, distance, hit)`, `SphereCast(origin, radius, direction, distance, hit)`, `RaycastFromCamera(distance, hit)`, `OverlapSphere(center, radius)`, `AddExplosion(center, radius, impulse)` |
+| Cameras | `SetActiveCamera(entity or name)` (this entity by default), `GetActiveCamera()`, `IsActiveCamera()` |
 | Physics events | `OnCollisionEnter(other, collision)`, `OnCollisionExit(other)`, `OnTriggerEnter(other)`, `OnTriggerExit(other)` |
 | Math | `Clamp`, `Lerp`, `InverseLerp`, `MoveTowards`, `Damp`, `Random::Range`, `Random::Chance`, `Random::Direction` |
-| Input and logs | `Input::IsKeyDown(SDL_SCANCODE_SPACE)`, `Input::GetMoveAxis()`, `FP_LOG("...")` |
+| Input and logs | `Input::IsKeyDown(SDL_SCANCODE_SPACE)`, `Input::GetMoveAxis()`, `Input::GetMouseDelta()`, `Input::SetCursorMode(mode)`, `FP_LOG("...")` |
+
+**Mouse and cameras**
+
+While the game plays the mouse is hidden and held in place, so `Input::GetMouseDelta()` drives
+mouse look. Call `Input::SetCursorMode(CursorMode::Visible)` in `OnStart` for menus and HUDs with
+buttons, or `Hidden` to draw your own pointer. In the editor Esc frees the mouse and a click on
+the viewport takes it back.
+
+The game sees through the first camera with `Primary` on. `SetActiveCamera` cuts to another one
+by turning `Primary` off everywhere else.
 
 `SpawnScene` copies every entity in a scene file with new ids, so any scene works as a prefab and
 can be spawned many times. Timers stop when the script stops or reloads.
@@ -286,9 +298,11 @@ void OnCollisionEnter(Entity other, const Collision& collision) override { /* co
 void OnTriggerEnter(Entity other) override { ++Score; }
 ```
 
-`GetPhysics()` also has `AddTorque`, angular velocity, `OverlapSphere(center, radius)` and gravity.
+`GetPhysics()` also has `AddTorque`, angular velocity and gravity, and takes any entity, like
+`GetPhysics().AddImpulseAtPoint(hit.Entity, push, hit.Point)` to shove what a ray hit.
 `Content/Scenes/Physics.scene` drops balls down a ramp, through a goal that counts them, and into a
-pyramid of crates. Space kicks every ball.
+pyramid of crates. Space kicks every ball. C switches to a first person camera where the mouse
+looks, WASD flies, left click pushes, F picks things up and right click blows them up.
 
 ### Game UI
 
