@@ -1,8 +1,10 @@
 // Standalone player. Opens a window and runs a scene with the game's systems.
 // Usage: Runtime [scene relative to Content] [--screenshot out.bmp] [--host [port]] [--join address:port]
+//                [--password text]
 // --screenshot saves a frame after half a second and quits, handy as a smoke test.
 // --host starts a peer to peer session on a port (7777 by default) that others can join.
 // --join connects to a peer already in a session, for example --join 192.168.1.20:7777.
+// --password lets in only peers started with the same one. Traffic is encrypted either way.
 
 #include "Engine/Engine.h"
 #include "Engine/Net/NetworkSystem.h"
@@ -58,6 +60,7 @@ int main(int argc, char** argv)
 	bool host = false;
 	uint16 hostPort = 7777;
 	const char* joinAddress = nullptr;
+	const char* password = "";
 	for (int i = 1; i < argc; ++i)
 	{
 		const String arg = argv[i];
@@ -75,6 +78,8 @@ int main(int argc, char** argv)
 		}
 		else if (arg == "--join" && i + 1 < argc)
 			joinAddress = argv[++i];
+		else if (arg == "--password" && i + 1 < argc)
+			password = argv[++i];
 		else
 			scene = argv[i];
 	}
@@ -111,6 +116,7 @@ int main(int argc, char** argv)
 	if (host || joinAddress)
 	{
 		NetSession& session = world->AddSystem<NetworkSystem>()->GetSession();
+		session.SetPassword(password);
 		// Joiners listen too, on any free port, since every peer talks to every other one.
 		if (!session.Start(host ? hostPort : 0))
 			return 1;
