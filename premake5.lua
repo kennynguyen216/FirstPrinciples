@@ -27,7 +27,8 @@ local MonocypherDir = Root .. "/ThirdParty/monocypher/src"
 local SpdlogInclude = Root .. "/ThirdParty/spdlog/include"
 -- glTF parser for skeletal meshes and animations. One header, built once by CgltfImpl.cpp.
 local CgltfInclude = Root .. "/ThirdParty/cgltf"
-if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) or not os.isdir(SpdlogInclude) or not os.isdir(CgltfInclude) then
+local ImGuiDir = Root .. "/ThirdParty/imgui"
+if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) or not os.isdir(SpdlogInclude) or not os.isdir(CgltfInclude) or not os.isfile(ImGuiDir .. "/imgui.h") then
 	premake.warn("Submodules are missing. Run: git submodule update --init")
 end
 
@@ -81,7 +82,7 @@ local ProjectName = io.readfile(ProjectFile):match('Name%s+"?([%w_]+)"?') or pat
 
 -- Include paths every project that touches engine headers needs.
 local function EngineIncludes()
-	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir, SpdlogInclude, CgltfInclude }
+	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir, SpdlogInclude, CgltfInclude, ImGuiDir }
 end
 
 local function UseSDL()
@@ -197,9 +198,13 @@ local function UseEngine(withGame)
 	if withGame then
 		links { "Game" }
 	end
-	links { "Engine" }
+	links { "Engine", "ImGui" }
 	UseSDL()
 end
+
+project "ImGui"
+	kind "StaticLib"
+	files { ImGuiDir .. "/*.h", ImGuiDir .. "/*.cpp" }
 
 -- Engine: HAL, Core, CoreObject and Engine in one static lib.
 project "Engine"
