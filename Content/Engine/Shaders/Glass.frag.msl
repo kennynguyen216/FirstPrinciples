@@ -1,0 +1,240 @@
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+    
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+    
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+    
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+    
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+struct FrameData
+{
+    float4 CameraPosition;
+    float4 CameraForward;
+    float4 Ambient;
+    float4 ScreenSize;
+    int4 LightCount;
+    float4 LightPosition[16];
+    float4 LightColor[16];
+};
+
+struct MaterialData
+{
+    float4 BaseColor;
+    float4 Emissive;
+    float4 Subsurface;
+    float4 Params;
+    float4 Params2;
+};
+
+struct ObjectData
+{
+    float4x4 ViewProjection;
+    float4x4 Model;
+    float4x4 NormalMatrix;
+    float4 UVTransform;
+    float4 Tint;
+};
+
+constant spvUnsafeArray<float2, 8> _495 = spvUnsafeArray<float2, 8>({ float2(0.707099974155426025390625), float2(-0.707099974155426025390625, 0.707099974155426025390625), float2(0.707099974155426025390625, -0.707099974155426025390625), float2(-0.707099974155426025390625), float2(1.0, 0.0), float2(-1.0, 0.0), float2(0.0, 1.0), float2(0.0, -1.0) });
+
+struct main0_out
+{
+    float4 OutColor [[color(0)]];
+};
+
+struct main0_in
+{
+    float3 InWorldPosition [[user(locn0)]];
+    float2 InUV [[user(locn1)]];
+    float3 InNormal [[user(locn2)]];
+    float4 InTangent [[user(locn3)]];
+    float4 InTint [[user(locn4)]];
+};
+
+static inline __attribute__((always_inline))
+float3 ApplyNormalMap(thread const float3& normal, thread const float4& tangent, thread const float3& sampled, thread const float& strength)
+{
+    float3 n = fast::normalize(normal);
+    float3 t = fast::normalize(tangent.xyz - (n * dot(n, tangent.xyz)));
+    float3 b = cross(n, t) * tangent.w;
+    float3 local = (sampled * 2.0) - float3(1.0);
+    float3 _121 = local;
+    float2 _123 = _121.xy * strength;
+    local.x = _123.x;
+    local.y = _123.y;
+    return fast::normalize(((t * local.x) + (b * local.y)) + (n * local.z));
+}
+
+static inline __attribute__((always_inline))
+float3 ViewDirection(thread const float3& worldPosition, constant FrameData& Frame)
+{
+    if (Frame.CameraPosition.w > 0.5)
+    {
+        return -fast::normalize(Frame.CameraForward.xyz);
+    }
+    return fast::normalize(Frame.CameraPosition.xyz - worldPosition);
+}
+
+static inline __attribute__((always_inline))
+float3 FresnelSchlick(thread const float& cosTheta, thread const float3& f0)
+{
+    return f0 + ((float3(1.0) - f0) * powr(1.0 - cosTheta, 5.0));
+}
+
+static inline __attribute__((always_inline))
+void GetLight(thread const int& i, thread const float3& worldPosition, thread float3& toLight, thread float3& radiance, constant FrameData& Frame)
+{
+    float4 position = Frame.LightPosition[i];
+    float4 color = Frame.LightColor[i];
+    if (position.w < 0.5)
+    {
+        toLight = -fast::normalize(position.xyz);
+        radiance = color.xyz;
+        return;
+    }
+    float3 delta = position.xyz - worldPosition;
+    float _distance = length(delta);
+    toLight = delta / float3(fast::max(_distance, 9.9999997473787516355514526367188e-05));
+    float ratio = _distance / fast::max(color.w, 9.9999997473787516355514526367188e-05);
+    float window = fast::clamp(1.0 - (((ratio * ratio) * ratio) * ratio), 0.0, 1.0);
+    radiance = ((color.xyz * window) * window) / float3((_distance * _distance) + 1.0);
+}
+
+static inline __attribute__((always_inline))
+float DistributionGGX(thread const float& nDotH, thread const float& roughness)
+{
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float d = ((nDotH * nDotH) * (a2 - 1.0)) + 1.0;
+    return a2 / ((3.1415927410125732421875 * d) * d);
+}
+
+static inline __attribute__((always_inline))
+float VisibilitySmith(thread const float& nDotV, thread const float& nDotL, thread const float& roughness)
+{
+    float k = ((roughness + 1.0) * (roughness + 1.0)) / 8.0;
+    float gv = nDotV / ((nDotV * (1.0 - k)) + k);
+    float gl = nDotL / ((nDotL * (1.0 - k)) + k);
+    return (gv * gl) / fast::max((4.0 * nDotV) * nDotL, 9.9999997473787516355514526367188e-05);
+}
+
+static inline __attribute__((always_inline))
+float3 SpecularOnly(thread const float3& n, thread const float3& v, thread const float3& l, thread const float3& radiance, thread const float& roughness, thread const float3& f0)
+{
+    float3 h = fast::normalize(v + l);
+    float nDotL = fast::max(dot(n, l), 0.0);
+    float nDotV = fast::max(dot(n, v), 9.9999997473787516355514526367188e-05);
+    float nDotH = fast::max(dot(n, h), 0.0);
+    float param = fast::max(dot(h, v), 0.0);
+    float3 param_1 = f0;
+    float3 f = FresnelSchlick(param, param_1);
+    float param_2 = nDotH;
+    float param_3 = roughness;
+    float param_4 = nDotV;
+    float param_5 = nDotL;
+    float param_6 = roughness;
+    return (((f * (DistributionGGX(param_2, param_3) * VisibilitySmith(param_4, param_5, param_6))) * radiance) * nDotL) * 3.1415927410125732421875;
+}
+
+fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Material [[buffer(0)]], constant FrameData& Frame [[buffer(1)]], texture2d<float> BaseColorMap [[texture(0)]], texture2d<float> NormalMap [[texture(1)]], texture2d<float> RoughnessMap [[texture(2)]], texture2d<float> SceneColor [[texture(3)]], sampler BaseColorMapSmplr [[sampler(0)]], sampler NormalMapSmplr [[sampler(1)]], sampler RoughnessMapSmplr [[sampler(2)]], sampler SceneColorSmplr [[sampler(3)]], float4 gl_FragCoord [[position]])
+{
+    main0_out out = {};
+    float4 tint = (BaseColorMap.sample(BaseColorMapSmplr, in.InUV) * Material.BaseColor) * in.InTint;
+    float3 geometryNormal = fast::normalize(in.InNormal);
+    float3 param = in.InNormal;
+    float4 param_1 = in.InTangent;
+    float3 param_2 = NormalMap.sample(NormalMapSmplr, in.InUV).xyz;
+    float param_3 = Material.Params.w;
+    float3 n = ApplyNormalMap(param, param_1, param_2, param_3);
+    float3 param_4 = in.InWorldPosition;
+    float3 v = ViewDirection(param_4, Frame);
+    if (dot(geometryNormal, v) < 0.0)
+    {
+        geometryNormal = -geometryNormal;
+        n = -n;
+    }
+    float roughness = fast::clamp(Material.Params.y * RoughnessMap.sample(RoughnessMapSmplr, in.InUV).x, 0.04500000178813934326171875, 1.0);
+    float ior = fast::max(Material.Params2.z, 1.0);
+    float thickness = Material.Params2.w;
+    float3 bent = refract(-v, n, 1.0 / ior);
+    float3 straight = refract(-v, geometryNormal, 1.0 / ior);
+    float2 offset = ((bent - straight).xy * thickness) * 0.100000001490116119384765625;
+    float2 screenUV = (gl_FragCoord.xy * Frame.ScreenSize.zw) + float2(offset.x, -offset.y);
+    float3 behind = SceneColor.sample(SceneColorSmplr, screenUV).xyz;
+    float blur = (roughness * roughness) * 0.02999999932944774627685546875;
+    if (blur > 0.0005000000237487256526947021484375)
+    {
+        for (int i = 0; i < 8; i++)
+        {
+            behind += SceneColor.sample(SceneColorSmplr, (screenUV + (_495[i] * blur))).xyz;
+        }
+        behind /= float3(9.0);
+    }
+    float3 transmittance = mix(float3(1.0), tint.xyz, float3(tint.w));
+    float f0Scalar = powr((ior - 1.0) / (ior + 1.0), 2.0);
+    float3 f0 = float3(f0Scalar);
+    float param_5 = fast::max(dot(n, v), 0.0);
+    float3 param_6 = f0;
+    float3 fresnel = FresnelSchlick(param_5, param_6);
+    float3 color = (behind * transmittance) * (float3(1.0) - fresnel);
+    color += ((fresnel * Frame.Ambient.xyz) * 4.0);
+    float3 param_9;
+    float3 param_10;
+    for (int i_1 = 0; i_1 < Frame.LightCount.x; i_1++)
+    {
+        int param_7 = i_1;
+        float3 param_8 = in.InWorldPosition;
+        GetLight(param_7, param_8, param_9, param_10, Frame);
+        float3 l = param_9;
+        float3 radiance = param_10;
+        float3 param_11 = n;
+        float3 param_12 = v;
+        float3 param_13 = l;
+        float3 param_14 = radiance;
+        float param_15 = roughness;
+        float3 param_16 = f0;
+        color += SpecularOnly(param_11, param_12, param_13, param_14, param_15, param_16);
+    }
+    color += Material.Emissive.xyz;
+    out.OutColor = float4(color, 1.0);
+    return out;
+}
+

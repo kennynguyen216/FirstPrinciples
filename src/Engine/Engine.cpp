@@ -33,6 +33,24 @@ namespace FP::Engine
 			.Field("NearClip", &CameraComponent::NearClip)
 			.Field("FarClip", &CameraComponent::FarClip)
 			.Field("Primary", &CameraComponent::Primary)
-			.Field("Background", &CameraComponent::Background);
+			.Field("Background", &CameraComponent::Background)
+			.Field("Exposure", &CameraComponent::Exposure)
+			.Field("Tonemap", &CameraComponent::Tonemap);
+
+		registry.Register<MaterialComponent>("Material")
+			.Field("Material", &MaterialComponent::Material).AssetPath("Materials (*.material)");
+
+		registry.Register<PointLightComponent>("PointLight")
+			.Field("Color", &PointLightComponent::Color)
+			.Field("Intensity", &PointLightComponent::Intensity)
+			.Field("Range", &PointLightComponent::Range);
+
+		registry.Register<DirectionalLightComponent>("DirectionalLight")
+			.Field("Color", &DirectionalLightComponent::Color)
+			.Field("Intensity", &DirectionalLightComponent::Intensity);
+
+		registry.Register<AmbientLightComponent>("AmbientLight")
+			.Field("Color", &AmbientLightComponent::Color)
+			.Field("Intensity", &AmbientLightComponent::Intensity);
 	}
 }

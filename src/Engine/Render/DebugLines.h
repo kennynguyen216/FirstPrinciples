@@ -19,6 +19,9 @@ namespace FP
 		// Rectangle of size centered on the transform, lying in its local XY plane.
 		void AddRect(const Mat4& transform, Vec2 size, Color color);
 
+		// Circle in the XY plane.
+		void AddCircle(Vec3 center, float radius, Color color, int32 segments = 32);
+
 		// Grid on the z = 0 plane covering what the view can see. Axes are tinted red (X) and green (Y).
 		void AddGrid2D(const RenderView& view);
 

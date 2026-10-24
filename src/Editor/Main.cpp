@@ -36,9 +36,12 @@ int main(int argc, char** argv)
 		FP::Editor::EditorWindow window(*device);
 		window.show();
 
-		// Smoke test flags. --select Name picks an entity, --play starts play mode and
-		// --screenshot out.png grabs the window after a second and quits.
+		// Smoke test flags. --scene path opens a scene relative to Content, --select Name picks an
+		// entity, --play starts play mode and --screenshot out.png grabs the window after a second and quits.
 		const QStringList args = QApplication::arguments();
+		const int sceneIndex = static_cast<int>(args.indexOf("--scene"));
+		if (sceneIndex >= 0 && sceneIndex + 1 < args.size())
+			window.OpenScene(QString::fromUtf8(FP::Paths::Content(args[sceneIndex + 1].toUtf8().constData()).CStr()));
 		const int selectIndex = static_cast<int>(args.indexOf("--select"));
 		if (selectIndex >= 0 && selectIndex + 1 < args.size())
 			window.Select(window.GetWorld().FindEntityByName(args[selectIndex + 1].toUtf8().constData()));

@@ -43,6 +43,7 @@ namespace FP::Editor
 
 	private:
 		void Rebuild();
+		void AddMaterialSection();
 
 		World* m_World = nullptr;
 		Entity m_Entity = NullEntity;

@@ -50,6 +50,8 @@ namespace FP::Editor
 		Vec2 ToPixels(QPointF point) const;
 		Vec2 PixelToWorld2D(Vec2 pixel) const;
 		Entity PickEntity(Vec2 worldPoint);
+		Entity PickGizmo(Vec2 pixel) const;
+		void AddGizmos(const RenderView& view);
 
 		GPUDevice& m_Device;
 		Renderer* m_Renderer = nullptr;

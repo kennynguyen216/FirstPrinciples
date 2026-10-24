@@ -21,6 +21,17 @@ struct ObjectData
     float4 Tint;
 };
 
+struct FrameData
+{
+    float4 CameraPosition;
+    float4 CameraForward;
+    float4 Ambient;
+    float4 ScreenSize;
+    int4 LightCount;
+    float4 LightPosition[16];
+    float4 LightColor[16];
+};
+
 struct main0_out
 {
     float4 OutColor [[color(0)]];

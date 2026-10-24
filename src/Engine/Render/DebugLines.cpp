@@ -21,6 +21,16 @@ namespace FP
 			AddLine(corners[i], corners[(i + 1) % 4], color);
 	}
 
+	void DebugLines::AddCircle(Vec3 center, float radius, Color color, int32 segments)
+	{
+		for (int32 i = 0; i < segments; ++i)
+		{
+			const float a0 = static_cast<float>(i) / static_cast<float>(segments) * 2.0f * Pi;
+			const float a1 = static_cast<float>(i + 1) / static_cast<float>(segments) * 2.0f * Pi;
+			AddLine(center + Vec3(std::cos(a0), std::sin(a0), 0) * radius, center + Vec3(std::cos(a1), std::sin(a1), 0) * radius, color);
+		}
+	}
+
 	void DebugLines::AddGrid2D(const RenderView& view)
 	{
 		Vec3 min;

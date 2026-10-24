@@ -1,5 +1,6 @@
 #include "Editor/InspectorPanel.h"
 #include "Engine/ComponentRegistry.h"
+#include "Engine/Material.h"
 #include "Engine/Paths.h"
 
 #include <QApplication>
@@ -51,6 +52,35 @@ namespace FP::Editor
 		}
 	}
 
+	namespace
+	{
+		QString ToQString(const String& text) { return QString::fromUtf8(text.CStr(), text.Length()); }
+
+		String ToString(const QString& text)
+		{
+			const QByteArray utf8 = text.toUtf8();
+			return String(utf8.constData(), static_cast<int32>(utf8.size()));
+		}
+
+		// Spin boxes for Vec2 and Vec3 share this so every axis behaves the same.
+		QWidget* MakeVectorRow(int count, QDoubleSpinBox** boxes)
+		{
+			static const char* const labels[3] = { "X ", "Y ", "Z " };
+			QWidget* row = new QWidget();
+			QHBoxLayout* layout = new QHBoxLayout(row);
+			layout->setContentsMargins(0, 0, 0, 0);
+			layout->setSpacing(4);
+			for (int i = 0; i < count; ++i)
+			{
+				boxes[i] = MakeFloatBox();
+				boxes[i]->setPrefix(labels[i]);
+				boxes[i]->setMinimumWidth(56);
+				layout->addWidget(boxes[i]);
+			}
+			return row;
+		}
+	}
+
 	InspectorPanel::InspectorPanel(QWidget* parent) : QWidget(parent)
 	{
 		QVBoxLayout* outer = new QVBoxLayout(this);
@@ -72,6 +102,69 @@ namespace FP::Editor
 		m_World = world;
 		m_Entity = entity;
 		Rebuild();
+	}
+
+	void InspectorPanel::AddMaterialSection()
+	{
+		const String path = m_World->Get<MaterialComponent>(m_Entity).Material;
+		Material* material = MaterialLibrary::Get().Load(path);
+
+		if (!material)
+		{
+			// No usable material yet, so offer to make one and assign it.
+			QPushButton* create = new QPushButton("Create Material...");
+			connect(create, &QPushButton::clicked, this, [this]() {
+				const QDir content(ToQString(Paths::GetContentDir()));
+				content.mkpath("Materials");
+				QString picked = QFileDialog::getSaveFileName(this, "Create Material", content.filePath("Materials/NewMaterial.material"), "Materials (*.material)");
+				if (picked.isEmpty())
+					return;
+				if (!picked.endsWith(".material"))
+					picked += ".material";
+				const QString relative = content.relativeFilePath(picked);
+				if (relative.startsWith(".."))
+				{
+					FP_LOG_WARN("Materials must live inside Content");
+					return;
+				}
+				if (MaterialLibrary::Get().Create(ToString(relative)))
+				{
+					m_World->Get<MaterialComponent>(m_Entity).Material = ToString(relative);
+					emit Modified();
+					Rebuild();
+				}
+			});
+			m_Layout->addWidget(create);
+			return;
+		}
+
+		// Edits change the shared asset, so every entity using it updates at once.
+		QGroupBox* group = new QGroupBox(QString("Material Asset: %1").arg(ToQString(path)));
+		QVBoxLayout* groupLayout = new QVBoxLayout(group);
+		QFormLayout* form = new QFormLayout();
+		form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+		groupLayout->addLayout(form);
+
+		const String materialPath = path;
+		auto data = [materialPath]() -> void* {
+			Material* m = MaterialLibrary::Get().Load(materialPath);
+			return m ? &m->GetData() : nullptr;
+		};
+		auto changed = [this, materialPath]() {
+			if (Material* m = MaterialLibrary::Get().Load(materialPath))
+				m->MarkDirty();
+			emit Modified();
+		};
+		for (const FieldInfo& field : Material::GetFields())
+			AddFieldEditor(form, field, data, changed);
+
+		QPushButton* save = new QPushButton("Save Material");
+		connect(save, &QPushButton::clicked, this, [materialPath]() {
+			if (Material* m = MaterialLibrary::Get().Load(materialPath))
+				m->Save();
+		});
+		groupLayout->addWidget(save, 0, Qt::AlignRight);
+		m_Layout->addWidget(group);
 	}
 
 	void InspectorPanel::RefreshValues()
@@ -137,6 +230,9 @@ namespace FP::Editor
 			});
 			groupLayout->addWidget(remove, 0, Qt::AlignRight);
 			m_Layout->addWidget(group);
+
+			if (info == ComponentRegistry::Get().Find<MaterialComponent>())
+				AddMaterialSection();
 		}
 
 		QToolButton* add = new QToolButton();
@@ -146,35 +242,6 @@ namespace FP::Editor
 		add->setEnabled(!addMenu->isEmpty());
 		m_Layout->addWidget(add);
 		RefreshValues();
-	}
-
-	namespace
-	{
-		QString ToQString(const String& text) { return QString::fromUtf8(text.CStr(), text.Length()); }
-
-		String ToString(const QString& text)
-		{
-			const QByteArray utf8 = text.toUtf8();
-			return String(utf8.constData(), static_cast<int32>(utf8.size()));
-		}
-
-		// Spin boxes for Vec2 and Vec3 share this so every axis behaves the same.
-		QWidget* MakeVectorRow(int count, QDoubleSpinBox** boxes)
-		{
-			static const char* const labels[3] = { "X ", "Y ", "Z " };
-			QWidget* row = new QWidget();
-			QHBoxLayout* layout = new QHBoxLayout(row);
-			layout->setContentsMargins(0, 0, 0, 0);
-			layout->setSpacing(4);
-			for (int i = 0; i < count; ++i)
-			{
-				boxes[i] = MakeFloatBox();
-				boxes[i]->setPrefix(labels[i]);
-				boxes[i]->setMinimumWidth(56);
-				layout->addWidget(boxes[i]);
-			}
-			return row;
-		}
 	}
 
 	void InspectorPanel::AddFieldEditor(QFormLayout* form, const FieldInfo& field, DataFn data, ChangedFn changed)

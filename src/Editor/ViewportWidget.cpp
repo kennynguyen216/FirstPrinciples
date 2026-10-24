@@ -110,6 +110,71 @@ namespace FP::Editor
 		return point.XY();
 	}
 
+	void ViewportWidget::AddGizmos(const RenderView& view)
+	{
+		// Sizes are in pixels so gizmos stay readable at any zoom.
+		const float pixel = 1.0f / view.PixelsPerUnit;
+		const float handle = 10.0f * pixel * static_cast<float>(devicePixelRatioF());
+
+		for (auto [entity, transform, light] : m_World->View<TransformComponent, PointLightComponent>().each())
+		{
+			const Color color{ light.Color.R, light.Color.G, light.Color.B, 0.9f };
+			const Vec3 p{ transform.Position.XY(), 0 };
+			m_Lines.AddCircle(p, handle, color, 16);
+			m_Lines.AddLine(p - Vec3(handle, 0, 0), p + Vec3(handle, 0, 0), color);
+			m_Lines.AddLine(p - Vec3(0, handle, 0), p + Vec3(0, handle, 0), color);
+			if (entity == m_Selected)
+				m_Lines.AddCircle(p, light.Range, { color.R, color.G, color.B, 0.35f }, 64);
+		}
+
+		for (auto [entity, transform, light] : m_World->View<TransformComponent, DirectionalLightComponent>().each())
+		{
+			const Color color{ light.Color.R, light.Color.G, light.Color.B, 0.9f };
+			const Vec3 p{ transform.Position.XY(), 0 };
+			m_Lines.AddCircle(p, handle, color, 16);
+			// Arrow along the light's direction as seen from above.
+			const Vec3 direction = transform.GetForward();
+			const Vec2 flat = direction.XY().LengthSquared() > 1e-4f ? direction.XY().Normalized() : Vec2(0, -1);
+			const Vec3 tip = p + Vec3(flat, 0) * handle * 3.0f;
+			m_Lines.AddLine(p, tip, color);
+			m_Lines.AddLine(tip, tip - Vec3(flat.Rotated(25), 0) * handle, color);
+			m_Lines.AddLine(tip, tip - Vec3(flat.Rotated(-25), 0) * handle, color);
+		}
+
+		for (auto [entity, transform, camera] : m_World->View<TransformComponent, CameraComponent>().each())
+		{
+			const Color color{ 0.8f, 0.8f, 0.8f, 0.7f };
+			const Vec3 p{ transform.Position.XY(), 0 };
+			m_Lines.AddRect(Mat4::Translation(p), { handle * 2.0f, handle * 1.4f }, color);
+			// An orthographic camera also shows what it will see at the default 1280x720 window.
+			if (!camera.Perspective && camera.Zoom > 0.01f)
+				m_Lines.AddRect(Mat4::Translation(p), { 1280.0f / camera.Zoom, 720.0f / camera.Zoom }, { color.R, color.G, color.B, 0.25f });
+		}
+	}
+
+	Entity ViewportWidget::PickGizmo(Vec2 pixel) const
+	{
+		const RenderView view = CurrentView();
+		const float radius = 12.0f * static_cast<float>(devicePixelRatioF());
+		Entity best = NullEntity;
+		float bestDistance = radius;
+		auto consider = [&](Entity entity, const TransformComponent& transform) {
+			const float distance = (view.WorldToScreen({ transform.Position.XY(), 0 }) - pixel).Length();
+			if (distance < bestDistance)
+			{
+				best = entity;
+				bestDistance = distance;
+			}
+		};
+		for (auto [entity, transform, light] : m_World->View<TransformComponent, PointLightComponent>().each())
+			consider(entity, transform);
+		for (auto [entity, transform, light] : m_World->View<TransformComponent, DirectionalLightComponent>().each())
+			consider(entity, transform);
+		for (auto [entity, transform, camera] : m_World->View<TransformComponent, CameraComponent>().each())
+			consider(entity, transform);
+		return best;
+	}
+
 	void ViewportWidget::RenderFrame()
 	{
 		RecreateTarget();
@@ -121,6 +186,7 @@ namespace FP::Editor
 		if (!m_Playing)
 		{
 			m_Lines.AddGrid2D(view);
+			AddGizmos(view);
 			if (m_World->IsValid(m_Selected) && m_World->Has<TransformComponent>(m_Selected))
 			{
 				const TransformComponent& transform = m_World->Get<TransformComponent>(m_Selected);
@@ -197,8 +263,12 @@ namespace FP::Editor
 		}
 		else if (event->button() == Qt::LeftButton)
 		{
-			const Vec2 worldPoint = PixelToWorld2D(ToPixels(event->position()));
-			const Entity picked = PickEntity(worldPoint);
+			const Vec2 pixel = ToPixels(event->position());
+			const Vec2 worldPoint = PixelToWorld2D(pixel);
+			// Gizmos sit on top of sprites so they win when both are under the cursor.
+			Entity picked = PickGizmo(pixel);
+			if (picked == NullEntity)
+				picked = PickEntity(worldPoint);
 			m_Selected = picked;
 			emit EntityPicked(picked);
 			if (picked != NullEntity)

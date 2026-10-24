@@ -34,6 +34,13 @@ namespace FP
 		sampler.max_anisotropy = 8;
 		device->m_LinearRepeat = SDL_CreateGPUSampler(handle, &sampler);
 
+		// Screen sized textures like the scene copy must not wrap at the edges.
+		sampler.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+		sampler.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+		sampler.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+		sampler.enable_anisotropy = false;
+		device->m_LinearClamp = SDL_CreateGPUSampler(handle, &sampler);
+
 		// D32 float works on every backend SDL_GPU supports but check anyway.
 		if (!SDL_GPUTextureSupportsFormat(handle, SDL_GPU_TEXTUREFORMAT_D32_FLOAT, SDL_GPU_TEXTURETYPE_2D, SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET))
 			device->m_DepthFormat = SDL_GPU_TEXTUREFORMAT_D24_UNORM;
@@ -57,6 +64,7 @@ namespace FP
 		if (m_Download)
 			SDL_ReleaseGPUTransferBuffer(m_Device, m_Download);
 		SDL_ReleaseGPUSampler(m_Device, m_LinearRepeat);
+		SDL_ReleaseGPUSampler(m_Device, m_LinearClamp);
 		SDL_DestroyGPUDevice(m_Device);
 	}
 

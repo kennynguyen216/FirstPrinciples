@@ -23,6 +23,8 @@ namespace FP
 		Color Background{ 0.08f, 0.08f, 0.1f, 1 };
 		bool Orthographic = true;
 		float PixelsPerUnit = 64; // orthographic only
+		float Exposure = 1;
+		bool Tonemap = true;
 		uint32 Width = 1;
 		uint32 Height = 1;
 

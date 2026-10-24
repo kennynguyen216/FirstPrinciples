@@ -75,6 +75,7 @@ namespace FP
 		bool ReadPixels(SDL_GPUTexture* texture, uint32 width, uint32 height, void* outPixels);
 
 		SDL_GPUSampler* GetDefaultSampler() const { return m_LinearRepeat; }
+		SDL_GPUSampler* GetClampSampler() const { return m_LinearClamp; }
 		SDL_GPUTextureFormat GetDepthFormat() const { return m_DepthFormat; }
 
 		// 1x1 fallbacks so shaders can always sample every slot.
@@ -88,6 +89,7 @@ namespace FP
 		SDL_GPUDevice* m_Device = nullptr;
 		SDL_GPUShaderFormat m_ShaderFormat = SDL_GPU_SHADERFORMAT_INVALID;
 		SDL_GPUSampler* m_LinearRepeat = nullptr;
+		SDL_GPUSampler* m_LinearClamp = nullptr;
 		SDL_GPUTextureFormat m_DepthFormat = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
 		RefPtr<GPUTexture> m_White;
 		RefPtr<GPUTexture> m_Black;

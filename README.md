@@ -87,6 +87,27 @@ Game code lives in `Game/`. The editor and the runtime both link it.
 Textures are `.png`, `.jpg`, `.tga` or `.bmp` files under `Content/`. Use the `...` button next to a texture
 field to pick one.
 
+### Materials and lighting
+
+A sprite draws unlit with its `Tint` and `Texture` until it gets a **Material** component. That points
+at a shared `.material` file in `Content/Materials`. Select the entity and the inspector shows the
+material's values below the component, or a **Create Material...** button when it has none. Edits apply
+to every entity using that material. **Save Material** or Ctrl+S writes them.
+
+Each material picks a base shader:
+
+| Shader | What it does |
+|---|---|
+| `Lit` | PBR with base color, normal, ambient occlusion, metallic, roughness, specular, emissive and subsurface maps |
+| `Unlit` | Base color times tint plus emissive. No lights needed |
+| `Glass` | Transparent. Refracts what is behind it through the normal map, tints it, blurs it with roughness |
+
+Every map is optional and its scalar multiplies it. `Tiling` and `Offset` move all maps together.
+Colors are picked in sRGB. Light comes from `PointLight`, `DirectionalLight` and `AmbientLight`
+components (Entity menu has shortcuts). In 2D a point light's `Position.Z` is its height above the
+sprites, so raise it to light their faces. Open `Content/Scenes/Lighting2D.scene` for an example of
+every material type.
+
 ### Editor controls
 
 | Action | Control |
@@ -94,7 +115,7 @@ field to pick one.
 | Pan | Right or middle drag |
 | Zoom | Mouse wheel |
 | Select / move | Left click / left drag (hold Shift to snap) |
-| Create sprite | Ctrl+Shift+S |
+| Create sprite | Ctrl+Shift+A |
 | Duplicate / delete | Ctrl+D / Delete |
 | Play | Ctrl+P |
 | Save | Ctrl+S |
@@ -105,6 +126,7 @@ field to pick one.
 Binaries/Debug/Tests
 Binaries/Debug/Runtime --screenshot runtime.bmp
 Binaries/Debug/Editor --play --screenshot editor.png
+Binaries/Debug/Editor --scene Scenes/Lighting2D.scene --select "Glass Pane" --screenshot lit.png
 ```
 
 ## Rendering
@@ -152,3 +174,5 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 - The editor viewport renders offscreen and copies each frame back to Qt. Fine for editing, but slower than a native view.
 - File paths go through `fopen`, so non ASCII paths on Windows are not supported yet.
 - No undo yet.
+- Glass draws after everything else, so glass behind glass is not refracted twice.
+- No shadows yet.

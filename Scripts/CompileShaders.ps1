@@ -11,7 +11,7 @@ Get-ChildItem -Path $Src -Include *.vert, *.frag -File -Recurse | ForEach-Object
     $msl = Join-Path $Out ($_.Name + ".msl")
     & glslangValidator -V --quiet "-I$Src" -o $spv $_.FullName
     if ($LASTEXITCODE -ne 0) { throw "glslangValidator failed on $($_.Name)" }
-    & spirv-cross $spv --msl --msl-version 20100 --output $msl
+    & spirv-cross $spv --msl --msl-version 20100 --msl-decoration-binding --output $msl
     if ($LASTEXITCODE -ne 0) { throw "spirv-cross failed on $($_.Name)" }
     Write-Host "compiled $($_.Name)"
 }

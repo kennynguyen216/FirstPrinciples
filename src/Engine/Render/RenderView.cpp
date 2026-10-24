@@ -47,6 +47,8 @@ namespace FP
 		view.CameraPosition = transform.Position;
 		view.CameraForward = transform.GetForward();
 		view.Orthographic = !camera.Perspective;
+		view.Exposure = camera.Exposure;
+		view.Tonemap = camera.Tonemap;
 
 		// Cameras ignore scale so a scaled parent never skews the view.
 		view.View = Mat4::TRS(transform.Position, transform.GetRotation(), { 1, 1, 1 }).Inverse();

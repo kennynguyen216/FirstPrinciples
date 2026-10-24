@@ -1,0 +1,25 @@
+# FirstPrinciples material
+Shader "Glass"
+BaseColor 0.75 0.9 1 0.35
+BaseColorMap ""
+Tiling 1 1
+Offset 0 0
+NormalMap "Textures/Ripples_Normal.png"
+NormalStrength 1
+AmbientOcclusionMap ""
+AmbientOcclusionStrength 1
+MetallicMap ""
+Metallic 0
+RoughnessMap ""
+Roughness 0.05
+SpecularMap ""
+Specular 0.5
+EmissiveMap ""
+EmissiveColor 0 0 0 1
+EmissiveIntensity 1
+SubsurfaceMap ""
+SubsurfaceColor 1 0.400000006 0.300000012 1
+Subsurface 0
+IndexOfRefraction 1.5
+Thickness 1
+AlphaCutoff 0.00999999978

@@ -14,8 +14,8 @@ struct SpinnerComponent
 	float DegreesPerSecond = 90;
 };
 
-// Moves the primary camera toward the player.
-struct CameraFollowComponent
+// Moves this entity toward the player in X and Y. Works on cameras, lights or anything else.
+struct FollowPlayerComponent
 {
 	float Smoothing = 5;
 };

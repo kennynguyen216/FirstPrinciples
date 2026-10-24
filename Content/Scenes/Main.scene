@@ -16,7 +16,7 @@ component Camera
   FarClip 1000
   Primary true
   Background 0.08 0.08 0.1 1
-component CameraFollow
+component FollowPlayer
   Smoothing 5
 
 entity 8d1e2f3a-4b5c-4d6e-8f7a-9b0c1d2e3f4a

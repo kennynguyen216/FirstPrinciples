@@ -4,6 +4,7 @@
 #include "Engine/ComponentRegistry.h"
 #include "Engine/FieldSerializer.h"
 #include "Engine/Input.h"
+#include "Engine/Material.h"
 #include "Engine/Paths.h"
 #include "Engine/SceneSerializer.h"
 #include "Game/Game.h"
@@ -107,7 +108,7 @@ namespace FP::Editor
 		QDockWidget* inspectorDock = new QDockWidget("Inspector", this);
 		inspectorDock->setObjectName("Inspector");
 		inspectorDock->setWidget(m_Inspector);
-		inspectorDock->setMinimumWidth(320);
+		inspectorDock->setMinimumWidth(400);
 		addDockWidget(Qt::RightDockWidgetArea, inspectorDock);
 
 		m_Console = new QPlainTextEdit();
@@ -132,7 +133,23 @@ namespace FP::Editor
 
 		QMenu* entity = menuBar()->addMenu("&Entity");
 		entity->addAction("Create &Empty", QKeySequence("Ctrl+Shift+N"), this, [this]() { CreateEntity(false); });
-		entity->addAction("Create &Sprite", QKeySequence("Ctrl+Shift+S"), this, [this]() { CreateEntity(true); });
+		entity->addAction("Create &Sprite", QKeySequence("Ctrl+Shift+A"), this, [this]() { CreateEntity(true); });
+		entity->addAction("Create &Point Light", this, [this]() {
+			Entity light = m_World->CreateEntity("Point Light");
+			m_World->Get<TransformComponent>(light).Position.Z = 1.5f; // above the sprites so it lights their faces
+			m_World->Add<PointLightComponent>(light);
+			MarkDirty();
+			RefreshHierarchy();
+			Select(light);
+		});
+		entity->addAction("Create &Directional Light", this, [this]() {
+			Entity light = m_World->CreateEntity("Directional Light");
+			m_World->Get<TransformComponent>(light).Rotation = { -40, 30, 0 };
+			m_World->Add<DirectionalLightComponent>(light);
+			MarkDirty();
+			RefreshHierarchy();
+			Select(light);
+		});
 		entity->addAction("&Duplicate", QKeySequence("Ctrl+D"), this, &EditorWindow::DuplicateSelected);
 		entity->addAction("De&lete", QKeySequence::Delete, this, &EditorWindow::DeleteSelected);
 
@@ -291,6 +308,7 @@ namespace FP::Editor
 		Stop();
 		if (m_ScenePath.isEmpty())
 			return SaveSceneAs();
+		MaterialLibrary::Get().SaveDirty();
 		if (!SceneSerializer::SaveToFile(*m_World.Get(), ToString(m_ScenePath).CStr()))
 			return false;
 		m_Dirty = false;

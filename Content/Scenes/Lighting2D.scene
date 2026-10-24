@@ -1,0 +1,179 @@
+# FirstPrinciples scene
+version 2
+
+entity 2a000001-0001-4001-8001-000000000001
+component Name
+  Name "Main Camera"
+component Transform
+  Position 0 0 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component Camera
+  Perspective false
+  Zoom 64
+  FieldOfView 60
+  NearClip 0.100000001
+  FarClip 1000
+  Primary true
+  Background 0.02 0.02 0.03 1
+  Exposure 1
+  Tonemap true
+component FollowPlayer
+  Smoothing 4
+
+entity 2a000002-0002-4002-8002-000000000002
+component Name
+  Name "Ambient"
+component Transform
+  Position 0 0 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component AmbientLight
+  Color 0.6 0.7 1 1
+  Intensity 0.25
+
+entity 2a000003-0003-4003-8003-000000000003
+component Name
+  Name "Moonlight"
+component Transform
+  Position 0 0 0
+  Rotation -35 25 0
+  Scale 1 1 1
+component DirectionalLight
+  Color 0.6 0.7 1 1
+  Intensity 0.35
+
+entity 2a000004-0004-4004-8004-000000000004
+component Name
+  Name "Brick Wall"
+component Transform
+  Position 0 0 -0.1
+  Rotation 0 0 0
+  Scale 1 1 1
+component Sprite
+  Tint 1 1 1 1
+  Size 24 14
+  Texture ""
+  Layer -10
+component Material
+  Material "Materials/Bricks.material"
+
+entity 2a000005-0005-4005-8005-000000000005
+component Name
+  Name "Player"
+component Transform
+  Position 0 0 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component Sprite
+  Tint 1 1 1 1
+  Size 1 1
+  Texture ""
+  Layer 10
+component Material
+  Material "Materials/Plastic.material"
+component Player
+  Speed 6
+
+entity 2a000006-0006-4006-8006-000000000006
+component Name
+  Name "Player Light"
+component Transform
+  Position 0 0 2.5
+  Rotation 0 0 0
+  Scale 1 1 1
+component PointLight
+  Color 1 0.85 0.6 1
+  Intensity 4
+  Range 8
+component FollowPlayer
+  Smoothing 10
+
+entity 2a000007-0007-4007-8007-000000000007
+component Name
+  Name "Cyan Light"
+component Transform
+  Position 6 3 1.2
+  Rotation 0 0 0
+  Scale 1 1 1
+component PointLight
+  Color 0.3 0.9 1 1
+  Intensity 5
+  Range 6
+
+entity 2a000008-0008-4008-8008-000000000008
+component Name
+  Name "Gold Coin"
+component Transform
+  Position -5 2 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component Sprite
+  Tint 1 1 1 1
+  Size 1.5 1.5
+  Texture ""
+  Layer 1
+component Material
+  Material "Materials/Gold.material"
+component Spinner
+  DegreesPerSecond 60
+
+entity 2a000009-0009-4009-8009-000000000009
+component Name
+  Name "Jelly"
+component Transform
+  Position -3 -2.5 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component Sprite
+  Tint 1 1 1 1
+  Size 2 2
+  Texture ""
+  Layer 1
+component Material
+  Material "Materials/Jelly.material"
+
+entity 2a00000a-000a-400a-800a-00000000000a
+component Name
+  Name "Neon Sign"
+component Transform
+  Position 5 2.5 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component Sprite
+  Tint 1 1 1 1
+  Size 2.5 2.5
+  Texture ""
+  Layer 1
+component Material
+  Material "Materials/Neon.material"
+
+entity 2a00000b-000b-400b-800b-00000000000b
+component Name
+  Name "Glass Pane"
+component Transform
+  Position 2 -1 0.2
+  Rotation 0 0 0
+  Scale 1 1 1
+component Sprite
+  Tint 1 1 1 1
+  Size 3 4
+  Texture ""
+  Layer 20
+component Material
+  Material "Materials/Glass.material"
+
+entity 2a00000c-000c-400c-800c-00000000000c
+component Name
+  Name "Frosted Glass"
+component Transform
+  Position -1 2.5 0.2
+  Rotation 0 0 0
+  Scale 1 1 1
+component Sprite
+  Tint 1 1 1 1
+  Size 3 2
+  Texture ""
+  Layer 20
+component Material
+  Material "Materials/FrostedGlass.material"

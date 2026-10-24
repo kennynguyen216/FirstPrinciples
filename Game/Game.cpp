@@ -17,14 +17,14 @@ namespace Game
 		registry.Register<SpinnerComponent>("Spinner")
 			.Field("DegreesPerSecond", &SpinnerComponent::DegreesPerSecond);
 
-		registry.Register<CameraFollowComponent>("CameraFollow")
-			.Field("Smoothing", &CameraFollowComponent::Smoothing);
+		registry.Register<FollowPlayerComponent>("FollowPlayer")
+			.Field("Smoothing", &FollowPlayerComponent::Smoothing);
 	}
 
 	void AddSystems(World& world)
 	{
 		world.AddSystem<PlayerSystem>();
 		world.AddSystem<SpinnerSystem>();
-		world.AddSystem<CameraFollowSystem>();
+		world.AddSystem<FollowPlayerSystem>();
 	}
 }

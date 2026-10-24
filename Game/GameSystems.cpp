@@ -17,7 +17,7 @@ void SpinnerSystem::Update(World& world, float deltaTime)
 		transform.Rotation.Z = std::fmod(transform.Rotation.Z + spinner.DegreesPerSecond * deltaTime, 360.0f);
 }
 
-void CameraFollowSystem::Update(World& world, float deltaTime)
+void FollowPlayerSystem::Update(World& world, float deltaTime)
 {
 	Vec3 target;
 	bool found = false;
@@ -30,9 +30,9 @@ void CameraFollowSystem::Update(World& world, float deltaTime)
 	if (!found)
 		return;
 
-	for (auto [entity, transform, camera, follow] : world.View<TransformComponent, CameraComponent, CameraFollowComponent>().each())
+	for (auto [entity, transform, follow] : world.View<TransformComponent, FollowPlayerComponent>().each())
 	{
-		// Follow in X and Y only so the camera keeps its own depth.
+		// Follow in X and Y only so the follower keeps its own depth.
 		const float t = 1.0f - std::exp(-follow.Smoothing * deltaTime);
 		const Vec3 goal{ target.X, target.Y, transform.Position.Z };
 		transform.Position += (goal - transform.Position) * t;

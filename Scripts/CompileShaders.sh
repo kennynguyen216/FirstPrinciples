@@ -10,6 +10,6 @@ mkdir -p "$OUT"
 for file in "$SRC"/*.vert "$SRC"/*.frag; do
 	name=$(basename "$file")
 	glslangValidator -V --quiet -I"$SRC" -o "$OUT/$name.spv" "$file"
-	spirv-cross "$OUT/$name.spv" --msl --msl-version 20100 --output "$OUT/$name.msl"
+	spirv-cross "$OUT/$name.spv" --msl --msl-version 20100 --msl-decoration-binding --output "$OUT/$name.msl"
 	echo "compiled $name"
 done

@@ -43,6 +43,35 @@ namespace FP
 		int32 Layer = 0; // higher draws on top
 	};
 
+	// Points at a shared .material file. Works on sprites now and meshes later.
+	// A sprite's own Texture is used as the base color map when the material has none.
+	struct MaterialComponent
+	{
+		String Material;
+	};
+
+	// Light at the transform's position. In 2D, Position.Z is the height above the sprites.
+	struct PointLightComponent
+	{
+		::FP::Color Color{ 1, 1, 1, 1 }; // qualified so the member can share the type name
+		float Intensity = 1;
+		float Range = 6;
+	};
+
+	// Light from far away, shining along the transform's forward (-Z) axis.
+	struct DirectionalLightComponent
+	{
+		::FP::Color Color{ 1, 1, 1, 1 }; // qualified so the member can share the type name
+		float Intensity = 1;
+	};
+
+	// Flat light added everywhere so unlit sides are not pure black.
+	struct AmbientLightComponent
+	{
+		::FP::Color Color{ 1, 1, 1, 1 }; // qualified so the member can share the type name
+		float Intensity = 0.15f;
+	};
+
 	// Orthographic by default for 2D. Turn on Perspective for 3D.
 	struct CameraComponent
 	{
@@ -53,5 +82,7 @@ namespace FP
 		float FarClip = 1000;
 		bool Primary = true;
 		Color Background{ 0.08f, 0.08f, 0.1f, 1 };
+		float Exposure = 1;
+		bool Tonemap = true; // soft roll off for lights brighter than white
 	};
 }

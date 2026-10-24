@@ -1,0 +1,62 @@
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+struct PresentData
+{
+    float4 Params;
+};
+
+struct main0_out
+{
+    float4 OutColor [[color(0)]];
+};
+
+struct main0_in
+{
+    float2 InUV [[user(locn0)]];
+};
+
+static inline __attribute__((always_inline))
+float3 NeutralTonemap(thread float3& color)
+{
+    float x = fast::min(color.x, fast::min(color.y, color.z));
+    float _32;
+    if (x < 0.07999999821186065673828125)
+    {
+        _32 = x - ((6.25 * x) * x);
+    }
+    else
+    {
+        _32 = 0.039999999105930328369140625;
+    }
+    float offset = _32;
+    color -= float3(offset);
+    float peak = fast::max(color.x, fast::max(color.y, color.z));
+    if (peak < 0.7599999904632568359375)
+    {
+        return color;
+    }
+    float newPeak = 1.0 - (0.057599999010562896728515625 / ((peak + 0.23999999463558197021484375) - 0.7599999904632568359375));
+    color *= (newPeak / peak);
+    float g = 1.0 - (1.0 / ((0.1500000059604644775390625 * (peak - newPeak)) + 1.0));
+    return mix(color, float3(newPeak), float3(g));
+}
+
+fragment main0_out main0(main0_in in [[stage_in]], constant PresentData& Present [[buffer(0)]], texture2d<float> SceneColor [[texture(0)]], sampler SceneColorSmplr [[sampler(0)]])
+{
+    main0_out out = {};
+    float3 color = SceneColor.sample(SceneColorSmplr, in.InUV).xyz * Present.Params.x;
+    if (Present.Params.y > 0.5)
+    {
+        float3 param = color;
+        float3 _126 = NeutralTonemap(param);
+        color = _126;
+    }
+    out.OutColor = float4(fast::clamp(color, float3(0.0), float3(1.0)), 1.0);
+    return out;
+}
+

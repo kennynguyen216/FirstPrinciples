@@ -16,9 +16,9 @@ public:
 	void Update(FP::World& world, float deltaTime) override;
 };
 
-class CameraFollowSystem : public FP::System
+class FollowPlayerSystem : public FP::System
 {
 public:
-	const char* GetName() const override { return "CameraFollow"; }
+	const char* GetName() const override { return "FollowPlayer"; }
 	void Update(FP::World& world, float deltaTime) override;
 };
