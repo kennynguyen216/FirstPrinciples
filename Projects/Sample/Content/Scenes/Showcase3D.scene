@@ -180,3 +180,24 @@ component Material
   Slot 1 "Materials/Glass.material"
   Slot 2 "Materials/Gold.material"
   Slot 3 "Materials/Neon.material"
+
+entity 3d00000e-000e-400e-800e-00000000000e
+component Name
+  Name "Noodle"
+component Transform
+  Position -2.4 0 3
+  Rotation 0 0 0
+  Scale 1.3 1.3 1.3
+component SkeletalMesh
+  Mesh "Characters/Noodle.gltf"
+component Animator
+  Clip "Idle"
+  Speed 1
+  Playing true
+component Material
+  Material "Materials/Noodle.material"
+  Slot 1 "Materials/NoodleEyes.material"
+component Scripts
+  script "NoodleController"
+    MoveSpeed 2.5
+    TurnSpeed 720
