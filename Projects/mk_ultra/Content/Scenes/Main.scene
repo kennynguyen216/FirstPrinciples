@@ -1,2 +1,75 @@
 # FirstPrinciples scene
 version 2
+
+entity d2c7b3f8-0c24-46f2-b021-f8a8ae485aef
+component Name
+  Name "Plane"
+component Transform
+  Position -0.0772397518 -0.0223424435 0.0109181404
+  Rotation 0 -0.200083554 0
+  Scale 14 1 14
+component Mesh
+  Mesh "Plane"
+component Material
+  Material "Materials/BricksFloor.material"
+
+entity f12c2457-4186-4b39-9715-cbca82ad6d1d
+component Name
+  Name "Player"
+component Transform
+  Position -3.71704865 0.752186894 -2.60154748
+  Rotation 0 0 0
+  Scale 1 1 1
+component Camera
+  Perspective true
+  Zoom 63.4000015
+  FieldOfView 60.0999985
+  NearClip 0.200000003
+  FarClip 1000
+  Primary true
+  Background 0.0799999982 0.0799999982 0.100000001 1
+  Exposure 1
+  Tonemap true
+component Mesh
+  Mesh "Sphere"
+component Scripts
+  script "FirstPersonController"
+    MoveSpeed 4
+    SprintMultiplier 2
+    LookSensitivity 0.2
+    Gravity 20
+    JumpSpeed 6
+    EyeHeight 1.7
+    Floor "Plane"
+
+entity 30f4989c-8add-4e2e-9f50-43908c03e28d
+component Name
+  Name "Sphere"
+component Transform
+  Position 0 1.08036232 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component Mesh
+  Mesh "Sphere"
+
+entity 7a1c2e40-5b3d-4f8e-9a61-2c4d8e0f1b37
+component Name
+  Name "Ambient Light"
+component Transform
+  Position 0 0 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component AmbientLight
+  Color 0.6 0.7 1 1
+  Intensity 0.3
+
+entity 9e4b6d21-3c7a-4a0f-8b52-6f1e2d9c4a88
+component Name
+  Name "Sun"
+component Transform
+  Position 0 0 0
+  Rotation -40 70 0
+  Scale 1 1 1
+component DirectionalLight
+  Color 1 0.95 0.85 1
+  Intensity 1.6
