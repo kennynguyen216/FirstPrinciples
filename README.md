@@ -190,6 +190,32 @@ Ctrl+Z undoes and Ctrl+Shift+Z redoes (Cmd on macOS, and Ctrl+Y also redoes on W
 - History holds the last 100 steps and starts over when a scene is opened. Play mode changes are not
   recorded since Stop puts the scene back anyway.
 
+### Jobs
+
+`FP::JobSystem` spreads work over one worker thread per core. Jobs run on fibers, small stacks the
+engine switches between in user space, so a job that waits on other jobs parks its fiber and the
+thread moves on instead of blocking. A fiber switch costs tens of nanoseconds where starting an OS
+thread costs tens of microseconds.
+
+```cpp
+#include "Core/Jobs/JobSystem.h"
+
+FP::JobCounter counter;
+for (int32 i = 0; i < chunkCount; ++i)
+    FP::JobSystem::Run([i]() { ProcessChunk(i); }, &counter);
+FP::JobSystem::Wait(counter);
+
+FP::JobSystem::ParallelFor(enemyCount, 32, [&](int32 i) { UpdateEnemy(i); });
+```
+
+- Jobs can run and wait on more jobs. Waiting inside a job never ties up a thread.
+- The editor and runtime start the system for you. The main thread helps run jobs while it waits.
+- Job lambdas hold up to 48 bytes of captures. Capture large data by reference.
+- A job can resume on a different thread after a wait, so avoid `thread_local` inside jobs.
+- Never spin inside a job waiting for the main thread. It may be the thread running that job.
+- Systems update on the main thread. Use jobs for work that does not touch the world from many
+  jobs at once, such as math over arrays or loading.
+
 ### Editor controls
 
 | Action | Control |
@@ -268,6 +294,7 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 - The editor viewport renders offscreen and copies each frame back to Qt. Fine for editing, but slower than a native view.
 - File paths go through `fopen`, so non ASCII paths on Windows are not supported yet.
 - No undo yet.
+- The job queue uses a lock. A lock free queue will help when many tiny jobs are queued at once.
 - Glass draws after everything else, so glass behind glass is not refracted twice.
 - No shadows yet.
 - Editor grid and gizmo lines draw on top of everything.
