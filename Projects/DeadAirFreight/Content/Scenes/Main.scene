@@ -39,15 +39,28 @@ component TankConfig
   WaterLeakKgPerSecond 0.4
   Spacing 3
   PerRow 6
-component DefenderConfig
+component OnFootConfig
   MoveSpeed 6
   LookSensitivity 0.2
   EyeHeight 1.6
   BodyRadius 0.4
-  FireInterval 0.15
   LaserRange 60
+  FireInterval 0.15
   LaserDamage 1
   BeamSeconds 0.06
+  PatchSecondsPerHole 1.5
+component SoundCues
+  LaserFire "Audio/PlaceholderClick.wav"
+  RepairBeam ""
+  TankPuncture ""
+  TankPatched ""
+  MiteSpawn ""
+  MiteChitter "Audio/PlaceholderHum.wav"
+  MiteBite ""
+  MiteDeath ""
+  Boost ""
+  Countdown "Audio/PlaceholderClick.wav"
+  Go ""
 component SiphonConfig
   MitePoolPerCrew 24
   MiteHealth 2
@@ -205,8 +218,9 @@ component Transform
   Position -3000 -500 0
   Rotation 0 0 0
   Scale 1 1 1
-component CargoBay
+component Interior
   Crew 0
+  Kind "Bay"
   HalfWidth 10
   HalfLength 20
 
@@ -235,8 +249,9 @@ component Transform
   Position 3000 -500 0
   Rotation 0 0 0
   Scale 1 1 1
-component CargoBay
+component Interior
   Crew 1
+  Kind "Bay"
   HalfWidth 10
   HalfLength 20
 

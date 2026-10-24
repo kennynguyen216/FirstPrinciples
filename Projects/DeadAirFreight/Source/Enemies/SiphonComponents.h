@@ -2,19 +2,6 @@
 
 #include "Engine/Engine.h"
 
-// The Defender's controls and laser, on the Match entity.
-struct DefenderConfigComponent
-{
-	float MoveSpeed = 6;
-	float LookSensitivity = 0.2f; // degrees per pixel while the right mouse button is held
-	float EyeHeight = 1.6f;
-	float BodyRadius = 0.4f; // keeps the Defender out of tanks and walls
-	float FireInterval = 0.15f; // seconds between shots while the left button is held
-	float LaserRange = 60;
-	float LaserDamage = 1;
-	float BeamSeconds = 0.06f; // how long a shot's beam stays visible
-};
-
 // Creature tuning, on the Match entity.
 struct SiphonConfigComponent
 {
@@ -51,14 +38,4 @@ struct SiphonComponent
 	float LatchedSeconds = 0;
 	bool Bitten = false; // already chewed a hole in this tank
 	float Age = 0;
-};
-
-// The local Defender's laser state, added while playing.
-struct DefenderLaserComponent
-{
-	float Cooldown = 0;
-	float BeamTimeLeft = 0;
-	FP::Entity Beam = FP::NullEntity;
-	FP::Entity Crosshair = FP::NullEntity;
-	FP::Vec2 LastMouse;
 };

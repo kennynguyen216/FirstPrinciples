@@ -12,8 +12,9 @@ using namespace MatchQueries;
 
 namespace
 {
-	// Tanks stand this tall and wide before the real models arrive.
-	const Vec3 TankScale{ 1.2f, 2.4f, 1.2f };
+	// Tanks stand this tall and wide before the real models arrive. Just under eye height, so the
+	// Defender can see a Mite perched on any of them.
+	const Vec3 TankScale{ 1.2f, 1.5f, 1.2f };
 
 	bool IsRacing(World& world)
 	{
@@ -60,11 +61,7 @@ void LifeSupportSystem::OnStart(World& world)
 void LifeSupportSystem::SpawnTanks(World& world, int32 crew)
 {
 	Vec3 bay;
-	for (auto [entity, transform, cargoBay] : world.View<TransformComponent, CargoBayComponent>().each())
-	{
-		if (cargoBay.Crew == crew)
-			bay = transform.Position;
-	}
+	FindInterior(world, crew, "Bay", &bay);
 
 	const MatchConfigComponent match = GetMatchConfig(world);
 	const TankConfigComponent tanks = Cargo::GetTankConfig(world);

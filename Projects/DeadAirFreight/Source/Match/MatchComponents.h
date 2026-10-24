@@ -94,12 +94,13 @@ struct ColonyComponent
 	float ArrivalRadius = 25;
 };
 
-// Where a crew's cargo bay sits in the world, at floor level in its middle. The bay is far from the
-// race so it can be bigger on the inside than the truck it belongs to.
-struct CargoBayComponent
+// A room inside a crew's truck: its cargo bay or its cab. Placed far from the race, at floor level in
+// its middle, so it can be bigger on the inside than the truck it belongs to.
+struct InteriorComponent
 {
 	FP::int32 Crew = 0;
-	// Inside the walls, from the middle. Creatures come in through the walls.
+	FP::String Kind = "Bay"; // Bay or Cab
+	// Inside the walls, from the middle. Creatures come into the bay through its walls.
 	float HalfWidth = 10;
 	float HalfLength = 20;
 };

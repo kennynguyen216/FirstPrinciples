@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Bay/BayComponents.h"
+#include "Enemies/SiphonComponents.h"
 
 // Calls other systems make on the creature pool.
 namespace Siphons

@@ -1,4 +1,5 @@
 #include "Match/MatchSystems.h"
+#include "Audio/Sounds.h"
 #include "Match/MatchQueries.h"
 #include "LifeSupport/Cargo.h"
 #include "Physics/PhysicsComponents.h"
@@ -148,9 +149,13 @@ void MatchSystem::Update(World& world, float deltaTime)
 			{
 				state->Phase = MatchPhase::Racing;
 				FP_LOG("Match: GO");
+				Sounds::Play(world, SoundCue::Go);
 			}
 			else if (after != before)
+			{
 				FP_LOG("Match: %d", after);
+				Sounds::Play(world, SoundCue::Countdown);
+			}
 			break;
 		}
 		case MatchPhase::Racing:
@@ -218,6 +223,7 @@ void MatchSystem::StartCountdown(World& world, MatchStateComponent& state, const
 		FP_LOG_WARN("Match: starting without a Driver for both crews");
 	PlaceLocalMember(world);
 	FP_LOG("Match: countdown %.0f", config.CountdownSeconds);
+	Sounds::Play(world, SoundCue::Countdown);
 }
 
 void MatchSystem::PlaceLocalMember(World& world)
@@ -234,11 +240,10 @@ void MatchSystem::PlaceLocalMember(World& world)
 	if (member.Role == CrewRole::Defender)
 	{
 		// In the aisle in front of the tanks, facing them. The body's middle is half its height up.
-		for (auto [entity, bayTransform, bay] : world.View<TransformComponent, CargoBayComponent>().each())
-		{
-			if (bay.Crew == member.Crew)
-				transform.Position = bayTransform.Position + Vec3{ 0, transform.Scale.Y * 0.5f, bay.HalfLength * 0.6f };
-		}
+		Vec3 bayPosition;
+		InteriorComponent bay;
+		if (FindInterior(world, member.Crew, "Bay", &bayPosition, &bay) != NullEntity)
+			transform.Position = bayPosition + Vec3{ 0, transform.Scale.Y * 0.5f, bay.HalfLength * 0.6f };
 		transform.Rotation = {};
 		return;
 	}

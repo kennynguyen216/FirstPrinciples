@@ -70,8 +70,10 @@ struct CargoTankComponent
 	CargoKind Kind = CargoKind::Oxygen;
 	float AmountKg = 0;
 	float CapacityKg = 0;
-	// Each hole leaks until patched. Missed shots and Siphons make them (M3).
+	// Each hole leaks until patched. Missed shots and Siphons make them.
 	FP::int32 Holes = 0;
+	// Seconds of repair beam on the current hole.
+	float PatchProgress = 0;
 };
 
 // One crew's air, water and power. Lives on its own entity, made when play starts, so both
@@ -107,6 +109,7 @@ struct TruckResourcesComponent
 	float WaterRecycledKg = 0;
 	FP::int32 SiphonsKilled = 0;
 	FP::int32 TanksShot = 0; // missed shots that punctured cargo
+	FP::int32 HolesPatched = 0;
 };
 
 // The colony's oxygen, added to the Colony entity when play starts. Its countdown is how long

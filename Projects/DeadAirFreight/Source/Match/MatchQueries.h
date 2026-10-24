@@ -63,6 +63,22 @@ namespace MatchQueries
 		return FP::NullEntity;
 	}
 
+	// A crew's bay or cab. Returns NullEntity when the scene has none.
+	inline FP::Entity FindInterior(FP::World& world, FP::int32 crew, const char* kind, FP::Vec3* outPosition = nullptr, InteriorComponent* outInterior = nullptr)
+	{
+		for (auto [entity, transform, interior] : world.View<FP::TransformComponent, InteriorComponent>().each())
+		{
+			if (interior.Crew != crew || interior.Kind != kind)
+				continue;
+			if (outPosition)
+				*outPosition = transform.Position;
+			if (outInterior)
+				*outInterior = interior;
+			return entity;
+		}
+		return FP::NullEntity;
+	}
+
 	// Yaw in degrees that points an entity's forward (-Z) from one point toward another.
 	inline float YawToward(FP::Vec3 from, FP::Vec3 to)
 	{

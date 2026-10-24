@@ -1,5 +1,6 @@
 #include "Game.h"
-#include "Bay/DefenderSystem.h"
+#include "Audio/Sounds.h"
+#include "Crew/OnFootSystem.h"
 #include "Enemies/SiphonSystems.h"
 #include "LifeSupport/LifeSupportSystems.h"
 #include "Match/MatchSystems.h"
@@ -88,20 +89,23 @@ namespace Game
 		registry.Register<ColonyComponent>("Colony")
 			.Field("ArrivalRadius", &ColonyComponent::ArrivalRadius);
 
-		registry.Register<CargoBayComponent>("CargoBay")
-			.Field("Crew", &CargoBayComponent::Crew)
-			.Field("HalfWidth", &CargoBayComponent::HalfWidth)
-			.Field("HalfLength", &CargoBayComponent::HalfLength);
+		static const Array<const char*> interiorKinds = { "Bay", "Cab" };
+		registry.Register<InteriorComponent>("Interior")
+			.Field("Crew", &InteriorComponent::Crew)
+			.Field("Kind", &InteriorComponent::Kind).Choices(interiorKinds)
+			.Field("HalfWidth", &InteriorComponent::HalfWidth)
+			.Field("HalfLength", &InteriorComponent::HalfLength);
 
-		registry.Register<DefenderConfigComponent>("DefenderConfig")
-			.Field("MoveSpeed", &DefenderConfigComponent::MoveSpeed)
-			.Field("LookSensitivity", &DefenderConfigComponent::LookSensitivity)
-			.Field("EyeHeight", &DefenderConfigComponent::EyeHeight)
-			.Field("BodyRadius", &DefenderConfigComponent::BodyRadius)
-			.Field("FireInterval", &DefenderConfigComponent::FireInterval)
-			.Field("LaserRange", &DefenderConfigComponent::LaserRange)
-			.Field("LaserDamage", &DefenderConfigComponent::LaserDamage)
-			.Field("BeamSeconds", &DefenderConfigComponent::BeamSeconds);
+		registry.Register<OnFootConfigComponent>("OnFootConfig")
+			.Field("MoveSpeed", &OnFootConfigComponent::MoveSpeed)
+			.Field("LookSensitivity", &OnFootConfigComponent::LookSensitivity)
+			.Field("EyeHeight", &OnFootConfigComponent::EyeHeight)
+			.Field("BodyRadius", &OnFootConfigComponent::BodyRadius)
+			.Field("LaserRange", &OnFootConfigComponent::LaserRange)
+			.Field("FireInterval", &OnFootConfigComponent::FireInterval)
+			.Field("LaserDamage", &OnFootConfigComponent::LaserDamage)
+			.Field("BeamSeconds", &OnFootConfigComponent::BeamSeconds)
+			.Field("PatchSecondsPerHole", &OnFootConfigComponent::PatchSecondsPerHole);
 
 		registry.Register<SiphonConfigComponent>("SiphonConfig")
 			.Field("MitePoolPerCrew", &SiphonConfigComponent::MitePoolPerCrew)
@@ -112,6 +116,20 @@ namespace Game
 			.Field("MiteBiteHoleSeconds", &SiphonConfigComponent::MiteBiteHoleSeconds)
 			.Field("MiteTrickleSeconds", &SiphonConfigComponent::MiteTrickleSeconds);
 
+		const char* wav = "Audio (*.wav)";
+		registry.Register<SoundCuesComponent>("SoundCues")
+			.Field("LaserFire", &SoundCuesComponent::LaserFire).AssetPath(wav)
+			.Field("RepairBeam", &SoundCuesComponent::RepairBeam).AssetPath(wav)
+			.Field("TankPuncture", &SoundCuesComponent::TankPuncture).AssetPath(wav)
+			.Field("TankPatched", &SoundCuesComponent::TankPatched).AssetPath(wav)
+			.Field("MiteSpawn", &SoundCuesComponent::MiteSpawn).AssetPath(wav)
+			.Field("MiteChitter", &SoundCuesComponent::MiteChitter).AssetPath(wav)
+			.Field("MiteBite", &SoundCuesComponent::MiteBite).AssetPath(wav)
+			.Field("MiteDeath", &SoundCuesComponent::MiteDeath).AssetPath(wav)
+			.Field("Boost", &SoundCuesComponent::Boost).AssetPath(wav)
+			.Field("Countdown", &SoundCuesComponent::Countdown).AssetPath(wav)
+			.Field("Go", &SoundCuesComponent::Go).AssetPath(wav);
+
 		registry.Register<ChaseCameraComponent>("ChaseCamera")
 			.Field("Distance", &ChaseCameraComponent::Distance)
 			.Field("Height", &ChaseCameraComponent::Height)
@@ -120,6 +138,7 @@ namespace Game
 
 	void AddSystems(World& world)
 	{
+		world.AddSystem<SoundPreloadSystem>();
 		// Seats first so every later system sees this frame's crews and roles.
 		world.AddSystem<CrewSystem>();
 		world.AddSystem<MatchSystem>();
@@ -129,7 +148,7 @@ namespace Game
 		world.AddSystem<SiphonSpawnerSystem>();
 		world.AddSystem<SiphonSystem>();
 		world.AddSystem<TruckSystem>();
-		world.AddSystem<DefenderSystem>();
+		world.AddSystem<OnFootSystem>();
 		world.AddSystem<ChaseCameraSystem>();
 		world.AddSystem<LifeSupportReadoutSystem>();
 	}

@@ -1,4 +1,5 @@
 #include "Enemies/SiphonSystems.h"
+#include "Audio/Sounds.h"
 #include "LifeSupport/Cargo.h"
 #include "Match/MatchQueries.h"
 #include "Physics/PhysicsComponents.h"
@@ -15,10 +16,11 @@ namespace
 	constexpr float ParkDepth = 200;
 	constexpr float ParkedScale = 0.001f;
 	// Mite size empty, and how much bigger a full belly makes it.
-	constexpr float MiteScale = 0.5f;
+	constexpr float MiteScale = 0.7f;
 	constexpr float MiteFullGrowth = 0.4f;
-	// Distance from a tank's side where a Mite latches on.
-	constexpr float LatchGap = 0.35f;
+	// Mites perch on a tank's rim, toward the side they came from, high enough to show over the rows.
+	constexpr float LatchInset = 0.3f;
+	constexpr float LatchHeight = 0.3f;
 	constexpr float LatchReach = 0.15f;
 	constexpr float SpawnHeight = 1.5f;
 
@@ -29,23 +31,14 @@ namespace
 		return {};
 	}
 
-	bool FindBay(World& world, int32 crew, Vec3& outPosition, CargoBayComponent& outBay)
+	bool FindBay(World& world, int32 crew, Vec3& outPosition, InteriorComponent& outBay)
 	{
-		for (auto [entity, transform, bay] : world.View<TransformComponent, CargoBayComponent>().each())
-		{
-			if (bay.Crew == crew)
-			{
-				outPosition = transform.Position;
-				outBay = bay;
-				return true;
-			}
-		}
-		return false;
+		return FindInterior(world, crew, "Bay", &outPosition, &outBay) != NullEntity;
 	}
 
 	// A point on the bay's walls. Stepping the index by the golden ratio spreads spawns evenly
 	// around the walls without repeating, the same way for every crew.
-	Vec3 WallPoint(Vec3 bay, const CargoBayComponent& info, uint32 index)
+	Vec3 WallPoint(Vec3 bay, const InteriorComponent& info, uint32 index)
 	{
 		const float fraction = std::fmod(index * 0.618034f, 1.0f);
 		const float width = info.HalfWidth * 2;
@@ -65,11 +58,13 @@ namespace
 
 	void Park(World& world, Entity entity, SiphonComponent& siphon)
 	{
+		if (siphon.Active && world.Has<AudioSourceComponent>(entity))
+			world.GetAudio().StopSource(entity);
 		siphon.Active = false;
 		siphon.Target = NullEntity;
 		TransformComponent& transform = world.Get<TransformComponent>(entity);
 		Vec3 bay;
-		CargoBayComponent info;
+		InteriorComponent info;
 		FindBay(world, siphon.Crew, bay, info);
 		transform.Position = bay - Vec3{ 0, ParkDepth, 0 };
 		transform.Scale = { ParkedScale, ParkedScale, ParkedScale };
@@ -107,7 +102,7 @@ namespace Siphons
 	int32 Spawn(World& world, int32 crew, SiphonKind kind, int32 count, uint32 index)
 	{
 		Vec3 bay;
-		CargoBayComponent info;
+		InteriorComponent info;
 		if (!FindBay(world, crew, bay, info))
 			return 0;
 		const SiphonConfigComponent config = GetConfig(world);
@@ -125,6 +120,10 @@ namespace Siphons
 			siphon.Health = config.MiteHealth;
 			transform.Position = WallPoint(bay, info, index + woken);
 			transform.Scale = { MiteScale, MiteScale, MiteScale };
+			if (world.Has<AudioSourceComponent>(entity))
+				world.GetAudio().Play(entity);
+			if (woken == 0)
+				Sounds::PlayAt(world, SoundCue::MiteSpawn, transform.Position);
 			++woken;
 		}
 		return woken;
@@ -135,6 +134,7 @@ namespace Siphons
 		SiphonComponent& siphon = world.Get<SiphonComponent>(entity);
 		if (!siphon.Active)
 			return;
+		Sounds::PlayAt(world, SoundCue::MiteDeath, world.Get<TransformComponent>(entity).Position);
 		const float returned = Cargo::Refill(world, siphon.Crew, CargoKind::Oxygen, siphon.StolenOxygenKg);
 		if (TruckResourcesComponent* resources = Cargo::FindResources(world, siphon.Crew))
 		{
@@ -158,6 +158,7 @@ void SiphonSpawnerSystem::OnStart(World& world)
 	m_SinceTrickle = 0;
 	m_NextIndex = 0;
 	const SiphonConfigComponent config = GetConfig(world);
+	const String chitter = Sounds::GetClip(world, SoundCue::MiteChitter);
 	for (int32 crew = 0; crew < CrewCount; ++crew)
 	{
 		for (int32 i = 0; i < config.MitePoolPerCrew; ++i)
@@ -171,6 +172,15 @@ void SiphonSpawnerSystem::OnStart(World& world)
 			ColliderComponent& collider = world.Add<ColliderComponent>(entity);
 			collider.Shape = "Sphere";
 			collider.Layer = "Siphon";
+			if (!chitter.IsEmpty())
+			{
+				// A positioned loop, so the Defender can hear where Mites are before seeing them.
+				AudioSourceComponent& source = world.Add<AudioSourceComponent>(entity);
+				source.Clip = chitter;
+				source.Loop = true;
+				source.Spatial = true;
+				source.MaxDistance = 15;
+			}
 			Park(world, entity, siphon);
 		}
 	}
@@ -217,13 +227,13 @@ void SiphonSystem::Update(World& world, float deltaTime)
 		if (siphon.Target == NullEntity)
 			continue; // nothing left to eat
 
-		// Latch onto the side of the tank that faces the Mite.
+		// Perch on the tank's rim, on the side the Mite came from.
 		const TransformComponent& tankTransform = world.Get<TransformComponent>(siphon.Target);
 		Vec3 side = transform.Position - tankTransform.Position;
 		side.Y = 0;
 		side = side.LengthSquared() > 1e-6f ? side.Normalized() : Vec3{ 0, 0, 1 };
 		const float tankRadius = std::max(tankTransform.Scale.X, tankTransform.Scale.Z) * 0.5f;
-		const Vec3 latch = tankTransform.Position + side * (tankRadius + LatchGap) + Vec3{ 0, 0.4f, 0 };
+		const Vec3 latch = tankTransform.Position + side * std::max(0.0f, tankRadius - LatchInset) + Vec3{ 0, tankTransform.Scale.Y * 0.5f + LatchHeight, 0 };
 
 		const Vec3 toLatch = latch - transform.Position;
 		const float distance = toLatch.Length();
@@ -247,6 +257,7 @@ void SiphonSystem::Update(World& world, float deltaTime)
 			{
 				++tank.Holes;
 				siphon.Bitten = true;
+				Sounds::PlayAt(world, SoundCue::MiteBite, transform.Position);
 			}
 		}
 

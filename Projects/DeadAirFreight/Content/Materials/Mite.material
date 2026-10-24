@@ -16,7 +16,7 @@ SpecularMap ""
 Specular 0.5
 EmissiveMap ""
 EmissiveColor 0.7 0.2 1 1
-EmissiveIntensity 2
+EmissiveIntensity 6
 SubsurfaceMap ""
 SubsurfaceColor 1 0.400000006 0.300000012 1
 Subsurface 0
