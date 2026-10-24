@@ -402,3 +402,104 @@ FP_TEST(Net_SessionTimesOut)
 	c.Update(111);
 	FP_EXPECT(Drain(c, NetEventType::JoinFailed).Num() == 1);
 }
+
+#include "Engine/Engine.h"
+#include "Engine/Net/NetworkSystem.h"
+
+namespace
+{
+	int32 CountNamed(World& world, std::string_view name)
+	{
+		int32 count = 0;
+		for (Entity entity : world.GetEntities())
+			count += world.GetEntityName(entity) == name ? 1 : 0;
+		return count;
+	}
+
+	Entity FindNamed(World& world, std::string_view name, bool remote)
+	{
+		for (auto [entity, network] : world.View<NetworkComponent>().each())
+		{
+			if (network.Remote == remote && world.GetEntityName(entity) == name)
+				return entity;
+		}
+		return NullEntity;
+	}
+
+	bool Near(World& world, const Guid& id, Vec3 position)
+	{
+		const Entity entity = world.FindEntityByGuid(id);
+		return entity != NullEntity && (world.Get<TransformComponent>(entity).Position - position).Length() < 0.01f;
+	}
+}
+
+FP_TEST(Net_ReplicatesEntitiesBetweenWorlds)
+{
+	Engine::RegisterEngineComponents();
+	const Guid playerId = Guid::New();
+	const Guid crateId = Guid::New();
+	// Both peers load the same scene: a player template and a shared crate.
+	auto makeWorld = [&]() {
+		World* world = NewObject<World>();
+		world->Add<NetworkComponent>(world->CreateEntity("Player", playerId)).OnePerPeer = true;
+		world->Add<NetworkComponent>(world->CreateEntity("Crate", crateId));
+		return world;
+	};
+	StrongObjectPtr<World> worldA(makeWorld());
+	StrongObjectPtr<World> worldB(makeWorld());
+	World* a = worldA.Get();
+	World* b = worldB.Get();
+	NetworkSystem* networkA = a->AddSystem<NetworkSystem>();
+	NetworkSystem* networkB = b->AddSystem<NetworkSystem>();
+	FP_EXPECT(networkA->GetSession().Start(0) && networkB->GetSession().Start(0));
+	networkB->GetSession().Join(NetAddress::Loopback(networkA->GetSession().GetPort()));
+	a->BeginPlay();
+	b->BeginPlay();
+
+	auto pump = [&](auto done, bool withB = true) {
+		for (int i = 0; i < 1500; ++i)
+		{
+			a->Update(1.0f / 60.0f);
+			if (withB)
+				b->Update(1.0f / 60.0f);
+			if (done())
+				return true;
+			std::this_thread::sleep_for(std::chrono::milliseconds(2));
+		}
+		return false;
+	};
+
+	// The template turns into one player per peer, and each peer sees both.
+	FP_EXPECT(pump([&]() { return CountNamed(*a, "Player") == 2 && CountNamed(*b, "Player") == 2; }));
+	FP_EXPECT(a->FindEntityByGuid(playerId) == NullEntity);
+	const Entity mine = FindNamed(*a, "Player", false);
+	FP_EXPECT(mine != NullEntity);
+	const Guid mineId = a->Get<IdComponent>(mine).Id;
+	FP_EXPECT(b->FindEntityByGuid(mineId) != NullEntity && b->Get<NetworkComponent>(b->FindEntityByGuid(mineId)).Remote);
+
+	// Moving our player moves its copy on the other peer.
+	a->Get<TransformComponent>(mine).Position = { 5, 1, 0 };
+	FP_EXPECT(pump([&]() { return Near(*b, mineId, { 5, 1, 0 }); }));
+
+	// The shared crate follows whichever peer has authority.
+	const bool aLeads = networkA->GetSession().GetAuthority() == networkA->GetSession().GetLocalId();
+	World& leader = aLeads ? *a : *b;
+	World& follower = aLeads ? *b : *a;
+	FP_EXPECT(!leader.Get<NetworkComponent>(leader.FindEntityByGuid(crateId)).Remote);
+	FP_EXPECT(follower.Get<NetworkComponent>(follower.FindEntityByGuid(crateId)).Remote);
+	leader.Get<TransformComponent>(leader.FindEntityByGuid(crateId)).Position = { 0, 3, 0 };
+	FP_EXPECT(pump([&]() { return Near(follower, crateId, { 0, 3, 0 }); }));
+
+	// Spawning while playing shows up on the other peer, and so does destroying.
+	const Entity bullet = b->CreateEntity("Bullet");
+	b->Add<NetworkComponent>(bullet);
+	FP_EXPECT(pump([&]() { return CountNamed(*a, "Bullet") == 1; }));
+	b->DestroyEntity(bullet);
+	FP_EXPECT(pump([&]() { return CountNamed(*a, "Bullet") == 0; }));
+
+	// When B leaves, its player goes with it.
+	b->EndPlay();
+	FP_EXPECT(pump([&]() { return CountNamed(*a, "Player") == 1; }, false));
+	FP_EXPECT(!a->Get<NetworkComponent>(a->FindEntityByGuid(crateId)).Remote);
+	a->EndPlay();
+}
