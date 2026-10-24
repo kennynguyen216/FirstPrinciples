@@ -30,6 +30,18 @@ using namespace FP;
 
 namespace
 {
+	// The game picks how the mouse behaves. It is only held while the window has focus.
+	void ApplyCursorMode(SDL_Window* window)
+	{
+		const CursorMode mode = Input::GetCursorMode();
+		const bool focused = (SDL_GetWindowFlags(window) & SDL_WINDOW_INPUT_FOCUS) != 0;
+		SDL_SetWindowRelativeMouseMode(window, focused && mode == CursorMode::Locked);
+		if (mode == CursorMode::Visible)
+			SDL_ShowCursor();
+		else
+			SDL_HideCursor();
+	}
+
 	// Renders one frame offscreen and writes it as a BMP.
 	// The primary camera's view, with the window's pixel density so UI pages keep their size.
 	RenderView GameView(World& world, SDL_Window* window, uint32 width, uint32 height)
@@ -182,9 +194,13 @@ int main(int argc, char** argv)
 				{
 					event.motion.x *= density;
 					event.motion.y *= density;
+					event.motion.xrel *= density;
+					event.motion.yrel *= density;
 				}
 				Input::ProcessEvent(event);
 			}
+
+			ApplyCursorMode(window);
 
 			const uint64 now = SDL_GetTicksNS();
 			float deltaTime = static_cast<float>(now - lastTicks) / 1e9f;

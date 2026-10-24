@@ -20,6 +20,14 @@ namespace FP
 		Count,
 	};
 
+	// How the game wants the mouse while it has focus.
+	enum class CursorMode : uint8
+	{
+		Visible, // a normal pointer
+		Hidden,  // moves as usual but is not drawn, for games that draw their own
+		Locked,  // hidden and held in place, for mouse look. Read GetMouseDelta for movement
+	};
+
 	// Global input state for the current frame. The runtime feeds it SDL events and the editor
 	// feeds it Qt events, so game code reads input the same way in both.
 	namespace Input
@@ -33,6 +41,14 @@ namespace FP
 
 		// Pixels from the top left of the game view.
 		Vec2 GetMousePosition();
+
+		// How far the mouse moved this frame in pixels, also while locked. Positive Y is down.
+		Vec2 GetMouseDelta();
+
+		// Locked by default when play starts. The runtime and the editor viewport apply it while
+		// they have focus. In the editor Escape frees the mouse until the viewport is clicked.
+		void SetCursorMode(CursorMode mode);
+		CursorMode GetCursorMode();
 
 		// Wheel movement this frame. Positive Y scrolls up, positive X scrolls right.
 		Vec2 GetScroll();
@@ -48,6 +64,7 @@ namespace FP
 		void SetKey(Key key, bool down);
 		void SetMouseButton(MouseButton button, bool down);
 		void SetMousePosition(Vec2 position);
+		void AddMouseDelta(Vec2 delta);
 		void AddScroll(Vec2 amount);
 		void AddTypedText(std::string_view utf8);
 		void ProcessEvent(const SDL_Event& event);
@@ -55,7 +72,7 @@ namespace FP
 		// Call once after the frame is updated to clear pressed and released flags.
 		void EndFrame();
 
-		// Releases everything, for example when the window loses focus.
+		// Releases everything, for example when the window loses focus. Keeps the cursor mode.
 		void Reset();
 
 		// For ModuleContext so loaded modules read the host's input.

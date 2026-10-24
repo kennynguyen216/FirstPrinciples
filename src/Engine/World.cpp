@@ -1,4 +1,5 @@
 #include "Engine/World.h"
+#include "Engine/Input.h"
 #include "Engine/Animation/Animator.h"
 #include "Engine/Physics/PhysicsWorld.h"
 #include "Engine/UI/UISystem.h"
@@ -331,6 +332,8 @@ namespace FP
 			return;
 		m_Playing = true;
 		m_Time = 0;
+		// Scripts that want a pointer ask for one in OnStart.
+		Input::SetCursorMode(CursorMode::Locked);
 		GetAudio().BeginPlay();
 		for (int32 i = 0; i < m_Systems.Num(); ++i)
 			m_Systems[i]->OnStart(*this);

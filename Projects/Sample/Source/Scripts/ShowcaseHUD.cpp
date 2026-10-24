@@ -13,6 +13,9 @@ public:
 	FPPROPERTY()
 	String Sun = "Sun"; // the light the Shadows box turns on and off
 
+	// The HUD has buttons, so it keeps a pointer instead of the locked mouse.
+	void OnStart() override { Input::SetCursorMode(CursorMode::Visible); }
+
 	void OnUpdate(float) override
 	{
 		UIDocument* ui = GetUI();

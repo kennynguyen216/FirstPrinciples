@@ -449,6 +449,25 @@ FP_TEST(Input_TextAndScrollLastOneFrame)
 	FP_EXPECT(Input::GetTypedText().empty() && Input::GetScroll().Y == 0);
 }
 
+FP_TEST(Input_MouseDeltaLastsOneFrameAndResetKeepsCursorMode)
+{
+	Input::AddMouseDelta({ 3, -1 });
+	Input::AddMouseDelta({ 2, 4 });
+	FP_EXPECT(Input::GetMouseDelta().X == 5 && Input::GetMouseDelta().Y == 3);
+	Input::EndFrame();
+	FP_EXPECT(Input::GetMouseDelta().X == 0 && Input::GetMouseDelta().Y == 0);
+
+	Input::SetCursorMode(CursorMode::Hidden);
+	Input::Reset();
+	FP_EXPECT(Input::GetCursorMode() == CursorMode::Hidden);
+
+	// Play starts locked.
+	StrongObjectPtr<World> world(NewObject<World>(nullptr, "CursorWorld"));
+	world->BeginPlay();
+	FP_EXPECT(Input::GetCursorMode() == CursorMode::Locked);
+	world->EndPlay();
+}
+
 #include "Engine/Json.h"
 
 FP_TEST(Json_ReadsWhatPagesSend)
