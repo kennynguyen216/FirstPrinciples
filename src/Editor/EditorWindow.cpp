@@ -4,6 +4,7 @@
 #include "Editor/DockTab.h"
 #include "Editor/EditorIcons.h"
 #include "Editor/InspectorPanel.h"
+#include "Editor/PlaceActorsPanel.h"
 #include "Editor/ScriptBuilder.h"
 #include "Editor/ViewportWidget.h"
 #include "Engine/ComponentRegistry.h"
@@ -95,6 +96,11 @@ namespace FP::Editor
 		connect(m_Viewport, &ViewportWidget::EntityPicked, this, [this](Entity entity) { Select(entity); });
 		connect(m_Viewport, &ViewportWidget::EntityMoved, this, [this](Entity) { MarkDirty(); });
 		connect(m_Viewport, &ViewportWidget::AssetDropped, this, &EditorWindow::DropAsset);
+		connect(m_Viewport, &ViewportWidget::ActorDropped, this, [this](const QString& kind, Vec3 point) {
+			const Entity entity = CreateActor(kind);
+			if (entity != NullEntity)
+				m_World->Get<TransformComponent>(entity).Position = point;
+		});
 
 		// Drives the world and the viewport at about 60 fps.
 		m_Timer = new QTimer(this);
@@ -137,6 +143,12 @@ namespace FP::Editor
 			if (Guid::Parse(ToString(item->data(GuidRole).toString()), id))
 				Select(m_World->FindEntityByGuid(id));
 		});
+		PlaceActorsPanel* placeActors = new PlaceActorsPanel();
+		connect(placeActors, &PlaceActorsPanel::CreateRequested, this, [this](const QString& kind) { CreateActor(kind); });
+		QDockWidget* placeDock = DockTab::Create(this, "Place Actors", EditorIcon::PlaceActors, placeActors);
+		addDockWidget(Qt::LeftDockWidgetArea, placeDock);
+		resizeDocks({ placeDock }, { 250 }, Qt::Horizontal);
+
 		QDockWidget* outlinerDock = DockTab::Create(this, "Outliner", EditorIcon::Outliner, m_Hierarchy);
 
 		m_Inspector = new InspectorPanel();
@@ -235,36 +247,16 @@ namespace FP::Editor
 		m_RedoAction->setShortcuts(redoKeys);
 
 		QMenu* entity = menuBar()->addMenu("&Entity");
-		entity->addAction("Create &Empty", QKeySequence("Ctrl+Shift+N"), this, [this]() { CreateEntity(false); });
-		entity->addAction("Create &Sprite", QKeySequence("Ctrl+Shift+A"), this, [this]() { CreateEntity(true); });
+		entity->addAction("Create &Empty", QKeySequence("Ctrl+Shift+N"), this, [this]() { CreateActor("Empty Actor"); });
+		entity->addAction("Create &Sprite", QKeySequence("Ctrl+Shift+A"), this, [this]() { CreateActor("Sprite"); });
 		QMenu* meshes = entity->addMenu("Create &Mesh");
 		for (const char* shape : Primitives::GetNames())
 		{
 			const QString name = shape;
-			meshes->addAction(name, this, [this, name]() {
-				Entity mesh = m_World->CreateEntity(ToString(name));
-				m_World->Add<MeshComponent>(mesh).Mesh = ToString(name);
-				MarkDirty();
-				RefreshHierarchy();
-				Select(mesh);
-			});
+			meshes->addAction(name, this, [this, name]() { CreateActor(name); });
 		}
-		entity->addAction("Create &Point Light", this, [this]() {
-			Entity light = m_World->CreateEntity("Point Light");
-			m_World->Get<TransformComponent>(light).Position.Z = 1.5f; // above the sprites so it lights their faces
-			m_World->Add<PointLightComponent>(light);
-			MarkDirty();
-			RefreshHierarchy();
-			Select(light);
-		});
-		entity->addAction("Create &Directional Light", this, [this]() {
-			Entity light = m_World->CreateEntity("Directional Light");
-			m_World->Get<TransformComponent>(light).Rotation = { -40, 30, 0 };
-			m_World->Add<DirectionalLightComponent>(light);
-			MarkDirty();
-			RefreshHierarchy();
-			Select(light);
-		});
+		entity->addAction("Create &Point Light", this, [this]() { CreateActor("Point Light"); });
+		entity->addAction("Create &Directional Light", this, [this]() { CreateActor("Directional Light"); });
 		entity->addAction("&Duplicate", QKeySequence("Ctrl+D"), this, &EditorWindow::DuplicateSelected);
 		entity->addAction("De&lete", QKeySequence::Delete, this, &EditorWindow::DeleteSelected);
 
@@ -841,14 +833,55 @@ namespace FP::Editor
 		return SaveScene();
 	}
 
-	void EditorWindow::CreateEntity(bool withSprite)
+	Entity EditorWindow::CreateActor(const QString& kind)
 	{
-		Entity entity = m_World->CreateEntity(withSprite ? "Sprite" : "Entity");
-		if (withSprite)
+		const String name = ToString(kind);
+		Entity entity = NullEntity;
+		if (kind == "Empty Actor")
+		{
+			entity = m_World->CreateEntity("Actor");
+		}
+		else if (kind == "Sprite")
+		{
+			entity = m_World->CreateEntity(name);
 			m_World->Add<SpriteComponent>(entity);
+		}
+		else if (kind == "Camera")
+		{
+			entity = m_World->CreateEntity(name);
+			m_World->Add<CameraComponent>(entity);
+		}
+		else if (kind == "Point Light")
+		{
+			entity = m_World->CreateEntity(name);
+			m_World->Get<TransformComponent>(entity).Position.Z = 1.5f; // above the sprites so it lights their faces
+			m_World->Add<PointLightComponent>(entity);
+		}
+		else if (kind == "Directional Light")
+		{
+			entity = m_World->CreateEntity(name);
+			m_World->Get<TransformComponent>(entity).Rotation = { -40, 30, 0 };
+			m_World->Add<DirectionalLightComponent>(entity);
+		}
+		else if (kind == "Ambient Light")
+		{
+			entity = m_World->CreateEntity(name);
+			m_World->Add<AmbientLightComponent>(entity);
+		}
+		else if (Primitives::GetNames().FindIf([&](const char* shape) { return kind == shape; }) != INDEX_NONE)
+		{
+			entity = m_World->CreateEntity(name);
+			m_World->Add<MeshComponent>(entity).Mesh = name;
+		}
+		else
+		{
+			FP_LOG_WARN("Unknown actor kind %s", name.CStr());
+			return NullEntity;
+		}
 		MarkDirty();
 		RefreshHierarchy();
 		Select(entity);
+		return entity;
 	}
 
 	void EditorWindow::DuplicateSelected()

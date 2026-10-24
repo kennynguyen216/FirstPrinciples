@@ -1,4 +1,5 @@
 #include "Editor/ViewportWidget.h"
+#include "Editor/PlaceActorsPanel.h"
 #include "Engine/Input.h"
 
 #include <SDL3/SDL.h>
@@ -545,7 +546,7 @@ namespace FP::Editor
 
 	void ViewportWidget::dragEnterEvent(QDragEnterEvent* event)
 	{
-		if (!m_Playing && event->mimeData()->hasUrls())
+		if (!m_Playing && (event->mimeData()->hasUrls() || event->mimeData()->hasFormat(PlaceActorsPanel::MimeType)))
 			event->acceptProposedAction();
 	}
 
@@ -570,6 +571,13 @@ namespace FP::Editor
 		else
 		{
 			ray.IntersectZPlane(0, point);
+		}
+
+		if (event->mimeData()->hasFormat(PlaceActorsPanel::MimeType))
+		{
+			emit ActorDropped(QString::fromUtf8(event->mimeData()->data(PlaceActorsPanel::MimeType)), point);
+			event->acceptProposedAction();
+			return;
 		}
 
 		const Entity target = Pick(pixel);
