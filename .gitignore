@@ -1,4 +1,9 @@
-# Generated
+# Generated, per project
+Projects/*/Build/
+Projects/*/Binaries/
+Projects/*/Intermediate/
+
+# Older builds generated at the root
 Build/
 Binaries/
 Intermediate/

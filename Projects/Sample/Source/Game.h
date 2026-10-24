@@ -10,7 +10,4 @@ namespace Game
 
 	// Add the game's systems to a world. Called before the world starts playing.
 	void AddSystems(FP::World& world);
-
-	// Scene the runtime opens first, relative to Content.
-	inline constexpr const char* StartScene = "Scenes/Main.scene";
 }

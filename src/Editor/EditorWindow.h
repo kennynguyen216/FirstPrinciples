@@ -59,7 +59,7 @@ namespace FP::Editor
 		// Opens a script source file for editing.
 		void OpenScript(const QString& path);
 
-		// Creates Game/Scripts/<className>.cpp and opens it. Returns false and explains why on failure.
+		// Creates Source/Scripts/<className>.cpp and opens it. Returns false and explains why on failure.
 		bool NewScript(const QString& className);
 
 		ContentBrowser* GetContentBrowser() const { return m_ContentBrowser; }
@@ -73,6 +73,13 @@ namespace FP::Editor
 
 		// Shows an asset file in the inspector, clearing the entity selection. Absolute path.
 		void ShowAsset(const QString& path);
+
+		// Builds the editor of the project in dir, then closes this one and starts that one.
+		// Game code is compiled into the editor, so each project runs its own.
+		void OpenProject(const QString& dir);
+
+		// Creates a project next to the open one and opens it. Returns false and explains why on failure.
+		bool NewProject(const QString& name);
 
 	protected:
 		void closeEvent(QCloseEvent* event) override;
@@ -117,10 +124,11 @@ namespace FP::Editor
 
 		static void LogSink(LogLevel level, const char* message, void* userData);
 
-		// Watches Game/Scripts and rebuilds after edits settle when auto reload is on.
+		// Watches Source/Scripts and rebuilds after edits settle when auto reload is on.
 		void WatchScripts();
 		void OnScriptsChanged();
 		void OnScriptsBuilt(bool success);
+		void OnProjectBuilt(bool success, const QString& dir);
 
 		// Script tabs next to the viewport.
 		CodeEditor* FindScriptTab(const QString& path) const;

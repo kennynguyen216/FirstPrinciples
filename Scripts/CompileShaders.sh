@@ -5,7 +5,7 @@
 set -e
 cd "$(dirname "$0")/.."
 SRC=src/Engine/Shaders
-OUT=Content/Engine/Shaders
+OUT=Engine/Content/Shaders
 mkdir -p "$OUT"
 for file in "$SRC"/*.vert "$SRC"/*.frag; do
 	name=$(basename "$file")

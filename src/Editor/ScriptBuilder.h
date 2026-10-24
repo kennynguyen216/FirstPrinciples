@@ -20,11 +20,18 @@ namespace FP::Editor
 		void Build();
 		bool IsBuilding() const { return m_Process != nullptr; }
 
-		// Every .h and .cpp under Game/Scripts, relative to the project.
+		// Generates and builds the Editor of the project in projectDir, then emits ProjectBuilt.
+		// Game code is compiled into the editor, so every project needs its own.
+		void BuildProject(const QString& projectDir);
+
+		// Where the Editor of the project in projectDir is built to.
+		static QString EditorPath(const QString& projectDir);
+
+		// Every .h and .cpp under Source/Scripts, relative to the project.
 		static QStringList ListScriptFiles();
 		static QString ScriptsDirectory();
 
-		// Writes Game/Scripts/<className>.cpp from the starter template. Returns the path or empty on failure.
+		// Writes Source/Scripts/<className>.cpp from the starter template. Returns the path or empty on failure.
 		static QString CreateScriptFile(const QString& className, QString& error);
 
 		// Compilers record source paths relative to where they ran. Returns an absolute path.
@@ -33,6 +40,7 @@ namespace FP::Editor
 	signals:
 		void Started();
 		void Finished(bool success);
+		void ProjectBuilt(bool success, const QString& projectDir);
 
 	private:
 		struct Step
@@ -41,7 +49,8 @@ namespace FP::Editor
 			QStringList Arguments;
 		};
 
-		bool PlanSteps(QList<Step>& steps) const;
+		// Steps to build target in projectDir. Premake runs first when regenerate is set.
+		static bool PlanSteps(QList<Step>& steps, const QString& projectDir, const QString& target, bool regenerate);
 		void RunNext();
 		void OnOutput();
 		void OnStepFinished(int exitCode, QProcess::ExitStatus status);
@@ -50,5 +59,7 @@ namespace FP::Editor
 		QList<Step> m_Steps;
 		bool m_Pending = false;
 		bool m_RegeneratedThisBuild = false;
+		// Set while building another project's editor instead of scripts.
+		QString m_OtherProject;
 	};
 }

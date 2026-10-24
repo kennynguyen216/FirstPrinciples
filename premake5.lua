@@ -1,5 +1,6 @@
 -- FirstPrinciples workspace.
 -- macOS: premake5 gmake (or xcode4). Windows: Scripts/GenerateProjects.bat. See README.md.
+-- --project=Projects/Name picks the game to build. Projects/Sample is the default.
 
 local Root = path.getabsolute(".")
 local IsWindows = os.target() == "windows"
@@ -54,6 +55,21 @@ if QtDir then
 end
 
 local QtModules = { "Core", "Gui", "Widgets" }
+
+-- The game being built. Its Source folder becomes the Game and GameScripts projects and
+-- everything generated or built lands in its Build, Binaries and Intermediate folders.
+newoption {
+	trigger = "project",
+	value = "path",
+	description = "Project folder to build (default Projects/Sample)",
+}
+
+local ProjectDir = _OPTIONS["project"] and path.getabsolute(_OPTIONS["project"], _WORKING_DIR) or (Root .. "/Projects/Sample")
+local ProjectFile = os.matchfiles(ProjectDir .. "/*.fpproject")[1]
+if not ProjectFile then
+	error("No .fpproject file in " .. ProjectDir)
+end
+local ProjectName = io.readfile(ProjectFile):match('Name%s+"?([%w_]+)"?') or path.getbasename(ProjectFile)
 
 -- Helpers --------------------------------------------------------------------
 
@@ -115,11 +131,11 @@ local function AddMocRules(dir)
 			local name = path.getbasename(header)
 			local includeName = path.getrelative(Root .. "/src", path.getabsolute(header))
 			-- moc output is the same for every configuration so it lives in one shared folder.
-			local output = Root .. "/Intermediate/Moc/moc_" .. name .. ".cpp"
+			local output = ProjectDir .. "/Intermediate/Moc/moc_" .. name .. ".cpp"
 			filter { "files:" .. header }
 				buildmessage("moc " .. includeName)
 				buildcommands {
-					'{MKDIR} "' .. Root .. '/Intermediate/Moc"',
+					'{MKDIR} "' .. ProjectDir .. '/Intermediate/Moc"',
 					'"' .. MocPath .. '" "%{file.abspath}" -f"' .. includeName .. '" -o "' .. output .. '"',
 				}
 				buildoutputs { output }
@@ -131,8 +147,8 @@ end
 
 -- Workspace ------------------------------------------------------------------
 
-workspace "FirstPrinciples"
-	location "Build"
+workspace (ProjectName)
+	location (ProjectDir .. "/Build")
 	configurations { "Debug", "Release" }
 	startproject "Editor"
 
@@ -141,11 +157,11 @@ workspace "FirstPrinciples"
 	staticruntime "Off"
 	multiprocessorcompile "On"
 
-	targetdir (Root .. "/Binaries/%{cfg.buildcfg}")
-	objdir (Root .. "/Intermediate/%{cfg.buildcfg}/%{prj.name}")
-	debugdir (Root)
+	targetdir (ProjectDir .. "/Binaries/%{cfg.buildcfg}")
+	objdir (ProjectDir .. "/Intermediate/%{cfg.buildcfg}/%{prj.name}")
+	debugdir (ProjectDir)
 
-	includedirs { Root .. "/src", Root }
+	includedirs { Root .. "/src", ProjectDir .. "/Source" }
 
 	filter "configurations:Debug"
 		defines { "FP_DEBUG" }
@@ -193,22 +209,25 @@ project "Engine"
 	files { "src/Engine/Shaders/**" }
 	filter "files:src/Engine/Shaders/**"
 		buildaction "None"
+	-- Lets the engine find this project when nothing else points it at one.
+	filter "files:src/Engine/Paths.cpp"
+		defines { 'FP_PROJECT_DIR="' .. ProjectDir .. '"' }
 	filter {}
 	EngineIncludes()
 
--- Game: the team's code, linked into Editor and Runtime.
+-- Game: the project's code, linked into Editor and Runtime.
 project "Game"
 	kind "StaticLib"
-	files { "Game/**.h", "Game/**.cpp" }
+	files { ProjectDir .. "/Source/**.h", ProjectDir .. "/Source/**.cpp" }
 	-- Scripts build into the GameScripts library instead.
-	removefiles { "Game/Scripts/**" }
+	removefiles { ProjectDir .. "/Source/Scripts/**" }
 	EngineIncludes()
 
--- GameScripts: C++ scripts in Game/Scripts, built as a shared library the editor can hot reload.
+-- GameScripts: C++ scripts in the project's Source/Scripts, built as a shared library the editor can hot reload.
 project "GameScripts"
 	kind "SharedLib"
 	targetprefix ""
-	files { "Game/Scripts/**.h", "Game/Scripts/**.cpp", "src/Engine/Scripting/Module/**.cpp" }
+	files { ProjectDir .. "/Source/Scripts/**.h", ProjectDir .. "/Source/Scripts/**.cpp", "src/Engine/Scripting/Module/**.cpp" }
 	UseEngine(true)
 	filter "system:windows"
 		-- A new PDB name per build so a debugger holding the old one never blocks a rebuild.

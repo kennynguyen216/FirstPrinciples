@@ -19,8 +19,9 @@ Scripts/Setup.sh
 Scripts/Build.sh
 ```
 
-`Setup.sh` installs premake, SDL3 and Qt with Homebrew. `Build.sh` generates makefiles in `Build/`
-and builds everything into `Binaries/Debug`. Pass `release` for an optimised build.
+`Setup.sh` installs premake, SDL3 and Qt with Homebrew. `Build.sh` builds the Sample project: makefiles
+go in `Projects/Sample/Build` and everything builds into `Projects/Sample/Binaries/Debug`. Pass `release`
+for an optimised build, and a project folder to build another one, like `Scripts/Build.sh debug Projects/MyGame`.
 For Xcode run `Scripts/GenerateXcode.sh` instead.
 
 ### Windows
@@ -37,17 +38,40 @@ powershell -ExecutionPolicy Bypass -File Scripts\Setup.ps1
 Scripts\GenerateProjects.bat
 ```
 
-5. Open the generated solution in `Build` (`FirstPrinciples.sln` for VS 2022 or
-   `FirstPrinciples.slnx` for VS 2026), set `Editor` as the startup project and build.
+5. Open the generated solution in `Projects\Sample\Build` (`Sample.sln` for VS 2022 or
+   `Sample.slnx` for VS 2026), set `Editor` as the startup project and build.
+   Pass a project folder to generate another one, like `Scripts\GenerateProjects.bat Projects\MyGame`.
 
 `GenerateProjects.bat` selects the installed VS 2022 or VS 2026 C++ toolset. With Build Tools only,
-run `msbuild Build\FirstPrinciples.slnx /m /p:Configuration=Debug /p:Platform=x64` from its Developer
+run `msbuild Projects\Sample\Build\Sample.slnx /m /p:Configuration=Debug /p:Platform=x64` from its Developer
 PowerShell or Developer Command Prompt (use `.sln` for VS 2022). Use `Configuration=Release` for an optimised build.
 Run `powershell -ExecutionPolicy Bypass -File Scripts\TestGenerateProjects.ps1` to check Windows project generation.
 
+## Projects
+
+Each game is a project in its own folder under `Projects`, like Unreal's. A project only sees its own files.
+
+```
+Projects/MyGame/
+  MyGame.fpproject   name and start scene
+  Content/           scenes, materials and textures
+  Source/            game code (Game.h, Game.cpp and your components and systems)
+  Source/Scripts/    hot reloadable C++ scripts
+  Build/ Binaries/ Intermediate/   generated, not committed
+```
+
+Engine shaders live in `Engine/Content` and every project shares them.
+
+**File > New Project** in the editor creates a project next to the open one, with an empty scene and
+stub game code. **File > Open Project** opens another one. Game code is compiled into the editor, so
+opening a project builds that project's editor and switches to it. The first build of a project
+compiles the engine too and takes a little while. The Output Log shows its progress.
+
+Each built editor or runtime finds its project by looking for a `.fpproject` file above the executable.
+
 ## Making your game
 
-Game code lives in `Game/`. The editor and the runtime both link it.
+Game code lives in your project's `Source` folder. The editor and the runtime both link it.
 
 1. **Components** are plain structs. Fields can be `bool`, `int32`, `float`, `Vec2`, `Color` or `String`.
 
@@ -58,7 +82,7 @@ Game code lives in `Game/`. The editor and the runtime both link it.
    };
    ```
 
-2. **Register** them in `Game::RegisterComponents` (`Game/Game.cpp`) so the Details panel and scene files see them.
+2. **Register** them in `Game::RegisterComponents` (`Source/Game.cpp`) so the Details panel and scene files see them.
 
    ```cpp
    registry.Register<HealthComponent>("Health")
@@ -81,7 +105,7 @@ Game code lives in `Game/`. The editor and the runtime both link it.
 4. **Input** works the same in the editor and the runtime. Use `FP::Input::IsKeyDown(SDL_SCANCODE_SPACE)`
    or `FP::Input::GetMoveAxis()`.
 
-5. **Scenes** live in `Content/Scenes`. Build them in the editor and press Play to run your systems.
+5. **Scenes** live in the project's `Content/Scenes`. Build them in the editor and press Play to run your systems.
    Stop restores the scene. `Runtime` plays `Game::StartScene` or a scene passed on the command line.
 
 Textures are `.png`, `.jpg`, `.tga` or `.bmp` files under `Content/`. Use the `...` button next to a texture
@@ -89,7 +113,7 @@ field to pick one.
 
 ### Audio
 
-Use **File > Import Audio...** to copy a WAV into `Content/Audio`, or copy it there yourself.
+Use **File > Import Audio...** to copy a WAV into the open project's `Content/Audio`, or copy it there yourself.
 Add an **AudioSource** component to an entity and use its `Clip` picker to select the file.
 Turn on **PlayOnStart** to hear it when the scene starts, and **Loop** for ambience. The inspector
 provides preview, reload and playback controls. Editor **Stop** stops game audio and restores the scene.
@@ -121,9 +145,9 @@ voice handle. One-shots can optionally follow an owner entity through `FP::OneSh
 Scene replacement, owner destruction and ending play release the affected voices. These APIs run
 on the main thread. Preload effects before latency-sensitive triggers: an uncached load is synchronous.
 
-Open `Content/Scenes/AudioDemo.scene` and press Play. Move the listener with WASD/arrows and press
+Open `Projects/Sample/Content/Scenes/AudioDemo.scene` and press Play. Move the listener with WASD/arrows and press
 Space for overlapping clicks. Demo WAVs are original generated sounds; regenerate and check them
-with `python Scripts/GenerateAudioFixtures.py`. Run `Binaries/Debug/Tests Audio` for audio tests.
+with `python Scripts/GenerateAudioFixtures.py`. Run `Projects/Sample/Binaries/Debug/Tests Audio` for audio tests.
 
 The first version uses resident WAVs and simple stereo panning. Compressed/streamed music, HRTF,
 occlusion, Doppler and effects are deferred. Dense mixes can hard-clip, and an immediate Stop can
@@ -131,7 +155,7 @@ click.
 
 ### C++ scripts
 
-Scripts are per entity behaviour written in C++ in `Game/Scripts`. They build into a separate
+Scripts are per entity behaviour written in C++ in the project's `Source/Scripts`. They build into a separate
 `GameScripts` library that the editor reloads while it runs, so you can change code without
 restarting, even in the middle of play.
 
@@ -166,8 +190,8 @@ FP_SCRIPT(Rotator)
   clicking an error opens the file at that line.
 - Overrides: `OnStart`, `OnUpdate`, `OnStop` and `OnHotReload` (defaults to calling `OnStart`).
   Helpers: `GetTransform()`, `Get<T>()`, `TryGet<T>()`, `Add<T>()`, `FindEntity(name)`, `DestroySelf()`.
-- Components still live in `Game/` and are registered in `Game::RegisterComponents`. Keep new
-  component types out of `Game/Scripts`, since data owned by the scripts library would vanish
+- Components still live in `Source` and are registered in `Game::RegisterComponents`. Keep new
+  component types out of `Source/Scripts`, since data owned by the scripts library would vanish
   when it reloads.
 
 The runtime loads the same library at startup. Building from the command line works as before,
@@ -191,7 +215,7 @@ Each material picks a base shader:
 Every map is optional and its scalar multiplies it. `Tiling` and `Offset` move all maps together.
 Colors are picked in sRGB. Light comes from `PointLight`, `DirectionalLight` and `AmbientLight`
 components (Entity menu has shortcuts). In 2D a point light's `Position.Z` is its height above the
-sprites, so raise it to light their faces. Open `Content/Scenes/Lighting2D.scene` for an example of
+sprites, so raise it to light their faces. Open the Sample project's `Content/Scenes/Lighting2D.scene` for an example of
 every material type.
 
 ### 3D
@@ -199,7 +223,7 @@ every material type.
 Add a **Mesh** component to draw a `Cube`, `Sphere`, `Plane` or `Quad`, or pick an `.obj` file from
 `Content` with the `...` button. Meshes use the same materials as sprites and default to `Lit`.
 For a 3D game turn on `Perspective` on the camera and give it a position and rotation.
-Press **3D View** (Ctrl+3) in the editor to orbit around the scene. `Content/Scenes/Showcase3D.scene`
+Press **3D View** (Ctrl+3) in the editor to orbit around the scene. Sample's `Content/Scenes/Showcase3D.scene`
 shows every material on meshes, including a refracting glass sphere.
 
 `Transform.Rotation` is euler degrees as pitch (X), yaw (Y) and roll (Z). Cameras and lights point
@@ -225,7 +249,7 @@ The editor follows Unreal Engine 5's layout and dark theme, using this engine's 
 ### Content browser
 
 The **Content Browser** tab next to the **Output Log** at the bottom of the editor shows everything in
-`Content` plus the scripts in `Game/Scripts`. Textures show thumbnails and materials show their color.
+the project's `Content` plus its scripts in `Source/Scripts`. Textures show thumbnails and materials show their color.
 
 - Double click a scene to open it or a script to edit it in a tab. Click a material to edit it in
   the Details panel, or a texture to preview it.
@@ -300,14 +324,15 @@ FP::JobSystem::ParallelFor(enemyCount, 32, [&](int32 i) { UpdateEnemy(i); });
 ### Smoke tests
 
 ```bash
-Binaries/Debug/Tests
-Binaries/Debug/Runtime --screenshot runtime.bmp
-Binaries/Debug/Editor --play --screenshot editor.png
-Binaries/Debug/Editor --scene Scenes/Lighting2D.scene --select "Glass Pane" --screenshot lit.png
-Binaries/Debug/Editor --scene Scenes/Showcase3D.scene --3d --viewmode wireframe --screenshot 3d.png
-Binaries/Debug/Editor --build-scripts
-Binaries/Debug/Editor --browse Materials --asset Materials/Bricks.material --screenshot browser.png
-Binaries/Debug/Editor --drop Textures/Bricks_AO.png --undo --redo --screenshot undo.png
+Projects/Sample/Binaries/Debug/Tests
+Projects/Sample/Binaries/Debug/Runtime --screenshot runtime.bmp
+Projects/Sample/Binaries/Debug/Editor --play --screenshot editor.png
+Projects/Sample/Binaries/Debug/Editor --scene Scenes/Lighting2D.scene --select "Glass Pane" --screenshot lit.png
+Projects/Sample/Binaries/Debug/Editor --scene Scenes/Showcase3D.scene --3d --viewmode wireframe --screenshot 3d.png
+Projects/Sample/Binaries/Debug/Editor --build-scripts
+Projects/Sample/Binaries/Debug/Editor --browse Materials --asset Materials/Bricks.material --screenshot browser.png
+Projects/Sample/Binaries/Debug/Editor --drop Textures/Bricks_AO.png --undo --redo --screenshot undo.png
+Projects/Sample/Binaries/Debug/Editor --new-project MyGame
 ```
 
 ## Rendering
@@ -318,7 +343,7 @@ GPU driver with Vulkan support (any recent NVIDIA, AMD or Intel driver).
 The engine ships fixed base shaders. Games pick one per material and set its textures and values.
 Game code cannot add shaders yet.
 
-Shader sources live in `src/Engine/Shaders`. The compiled SPIR-V and MSL in `Content/Engine/Shaders` are
+Shader sources live in `src/Engine/Shaders`. The compiled SPIR-V and MSL in `Engine/Content/Shaders` are
 committed, so only engine developers who change a shader need the tools:
 
 ```bash
@@ -331,16 +356,16 @@ Scripts/CompileShaders.sh
 
 On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\CompileShaders.ps1`.
 
-## Projects
+## Build targets
 
-| Project | What it is |
+| Target | What it is |
 |---|---|
 | Engine | Static lib with `src/HAL`, `src/Core`, `src/CoreObject` and `src/Engine` |
-| Game | The game's components and systems (`Game/`) |
+| Game | The project's components and systems (`Source`) |
 | Editor | Qt editor |
 | Runtime | Standalone player for a scene |
-| GameScripts | Hot reloadable C++ scripts (`Game/Scripts`) |
-| Tests | Unit tests. Run `Binaries/Debug/Tests [filter]` |
+| GameScripts | Hot reloadable C++ scripts (`Source/Scripts`) |
+| Tests | Unit tests. Run `Projects/Sample/Binaries/Debug/Tests [filter]` |
 
 ## Third party
 

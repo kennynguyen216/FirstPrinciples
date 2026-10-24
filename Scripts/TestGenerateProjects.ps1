@@ -15,10 +15,10 @@ try {
     if ($LASTEXITCODE -ne 0 -or "$output" -notmatch "Using Qt:") {
         throw "Project generation failed to find an MSVC Qt kit: $output"
     }
-    if ("$output" -notmatch 'Open Build\\(FirstPrinciples\.slnx?)') {
+    if ("$output" -notmatch 'Open (Projects\\Sample\\Build\\Sample\.slnx?)') {
         throw "Project generation did not report its solution."
     }
-    if (-not (Test-Path (Join-Path $Root "Build\$($Matches[1])"))) {
+    if (-not (Test-Path (Join-Path $Root $Matches[1]))) {
         throw "Reported solution does not exist."
     }
     Write-Host "Windows project generation checks passed."

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Game/GameComponents.h"
+#include "GameComponents.h"
 
 class PlayerSystem : public FP::System
 {

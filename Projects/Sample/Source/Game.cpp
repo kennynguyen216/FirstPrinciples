@@ -1,5 +1,5 @@
-#include "Game/Game.h"
-#include "Game/GameSystems.h"
+#include "Game.h"
+#include "GameSystems.h"
 
 using namespace FP;
 

@@ -6,7 +6,7 @@ import struct
 import wave
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1] / "Projects/Sample"
 RATE = 48000
 
 
@@ -32,4 +32,4 @@ if __name__ == "__main__":
                lambda t: 0.35 * math.sin(2 * math.pi * 660 * t)
                * math.exp(-35 * t) * min(1, t / 0.003)
                * min(1, (0.16 - t) / 0.01))
-    print("Generated and checked Content/Audio/Hum.wav and Click.wav")
+    print("Generated and checked Projects/Sample/Content/Audio/Hum.wav and Click.wav")

@@ -3,6 +3,7 @@
 #include "Editor/EditorStyle.h"
 #include "Engine/Material.h"
 #include "Engine/Paths.h"
+#include "Engine/Project.h"
 #include "Core/Misc/Guid.h"
 
 #include <QApplication>
@@ -65,7 +66,7 @@ namespace FP::Editor
 	ContentBrowser::ContentBrowser(QWidget* parent) : QWidget(parent)
 	{
 		m_ContentRoot = QDir::cleanPath(QString::fromUtf8(Paths::GetContentDir().CStr()));
-		m_ScriptsRoot = QDir::cleanPath(ProjectDir() + "/Game/Scripts");
+		m_ScriptsRoot = QDir::cleanPath(QString::fromUtf8(Paths::GetProject().GetScriptsDir().CStr()));
 
 		QVBoxLayout* layout = new QVBoxLayout(this);
 		layout->setContentsMargins(4, 4, 4, 4);
@@ -486,8 +487,8 @@ namespace FP::Editor
 
 	bool ContentBrowser::IsHidden(const QString& name) const
 	{
-		// Engine shaders are not something a game edits, and dot files are OS noise.
-		return name.startsWith('.') || name == "Engine";
+		// Dot files are OS noise.
+		return name.startsWith('.');
 	}
 
 	QString ContentBrowser::AssetKind(const QString& path)
@@ -581,7 +582,7 @@ namespace FP::Editor
 			while (it.hasNext())
 			{
 				const QFileInfo info(it.next());
-				if (info.fileName().contains(filter, Qt::CaseInsensitive) && !info.absoluteFilePath().contains("/Engine/"))
+				if (info.fileName().contains(filter, Qt::CaseInsensitive))
 					entries.append(info);
 			}
 		}
