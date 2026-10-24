@@ -24,9 +24,11 @@
 // FPPROPERTY options: Tooltip, Category, Range = "min, max", ReadOnly and Asset = "Filter (*.ext)".
 // A comment on the line above, or at the end of the line, is used as the tooltip.
 // FPFUNCTION marks a function with no arguments as a button in the editor while playing.
+// Marked members must be public, or the class must contain FP_BODY() to let the reflection in.
 #define FPCLASS(...)
 #define FPPROPERTY(...)
 #define FPFUNCTION(...)
+#define FP_BODY() template <typename> friend struct ::FP::ScriptReflection;
 
 namespace FP
 {
