@@ -503,3 +503,77 @@ FP_TEST(Net_ReplicatesEntitiesBetweenWorlds)
 	FP_EXPECT(!a->Get<NetworkComponent>(a->FindEntityByGuid(crateId)).Remote);
 	a->EndPlay();
 }
+
+#include "Engine/Net/NetCrypto.h"
+
+#include <algorithm>
+
+FP_TEST(Net_CryptoSealsAndOpens)
+{
+	using namespace NetCrypto;
+	const KeyPair alice = KeyPair::Generate();
+	const KeyPair bob = KeyPair::Generate();
+	uint8 noPassword[KeySize] = {};
+	LinkKeys aliceKeys;
+	LinkKeys bobKeys;
+	FP_EXPECT(DeriveLinkKeys(alice, bob.Public, noPassword, false, aliceKeys));
+	FP_EXPECT(DeriveLinkKeys(bob, alice.Public, noPassword, false, bobKeys));
+	FP_EXPECT(std::memcmp(aliceKeys.Send, bobKeys.Receive, KeySize) == 0);
+	FP_EXPECT(std::memcmp(aliceKeys.Receive, bobKeys.Send, KeySize) == 0);
+	FP_EXPECT(std::memcmp(aliceKeys.Send, aliceKeys.Receive, KeySize) != 0);
+
+	const uint8 header[] = { 1, 2, 3 };
+	const char secret[] = "meet at the crate";
+	Array<uint8> sealed;
+	Seal(aliceKeys.Send, 7, header, sizeof(header), reinterpret_cast<const uint8*>(secret), sizeof(secret), sealed);
+	FP_EXPECT(sealed.Num() == static_cast<int32>(sizeof(secret)) + Overhead);
+	// The text never appears as is.
+	FP_EXPECT(std::search(sealed.begin(), sealed.end(), secret, secret + 4) == sealed.end());
+
+	uint64 counter = 0;
+	Array<uint8> opened;
+	FP_EXPECT(Open(bobKeys.Receive, header, sizeof(header), sealed.Data(), sealed.Num(), counter, opened));
+	FP_EXPECT(counter == 7 && opened.Num() == static_cast<int32>(sizeof(secret)));
+	FP_EXPECT(std::memcmp(opened.Data(), secret, sizeof(secret)) == 0);
+
+	// Any flipped bit, in the body, the counter or the clear header, and it will not open.
+	for (int32 i = 0; i < sealed.Num(); ++i)
+	{
+		Array<uint8> tampered = sealed;
+		tampered[i] ^= 0x10;
+		FP_EXPECT(!Open(bobKeys.Receive, header, sizeof(header), tampered.Data(), tampered.Num(), counter, opened));
+		FP_EXPECT(opened.IsEmpty());
+	}
+	const uint8 otherHeader[] = { 1, 2, 4 };
+	FP_EXPECT(!Open(bobKeys.Receive, otherHeader, sizeof(otherHeader), sealed.Data(), sealed.Num(), counter, opened));
+	// Only the right direction's key opens it.
+	FP_EXPECT(!Open(bobKeys.Send, header, sizeof(header), sealed.Data(), sealed.Num(), counter, opened));
+
+	// A different password gives keys that do not match.
+	uint8 password[KeySize];
+	uint8 wrong[KeySize];
+	HashPassword("swordfish", password);
+	HashPassword("swordfish!", wrong);
+	FP_EXPECT(DeriveLinkKeys(alice, bob.Public, password, true, aliceKeys));
+	FP_EXPECT(DeriveLinkKeys(bob, alice.Public, wrong, true, bobKeys));
+	FP_EXPECT(std::memcmp(aliceKeys.Send, bobKeys.Receive, KeySize) != 0);
+
+	// A zero public key would make the shared secret zero, so it is refused.
+	const uint8 zeros[KeySize] = {};
+	FP_EXPECT(!DeriveLinkKeys(alice, zeros, noPassword, false, aliceKeys));
+}
+
+FP_TEST(Net_ReplayWindowRejectsRepeats)
+{
+	NetCrypto::ReplayWindow window;
+	FP_EXPECT(window.Accept(10));
+	FP_EXPECT(!window.Accept(10));
+	FP_EXPECT(window.Accept(12));
+	FP_EXPECT(window.Accept(11));
+	FP_EXPECT(!window.Accept(11));
+	FP_EXPECT(window.Accept(200));
+	// Too far behind the newest to tell, so refused.
+	FP_EXPECT(!window.Accept(100));
+	FP_EXPECT(window.Accept(190));
+	FP_EXPECT(!window.Accept(190));
+}
