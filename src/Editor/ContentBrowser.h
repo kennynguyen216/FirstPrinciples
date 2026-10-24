@@ -34,12 +34,36 @@ namespace FP::Editor
 		// Kind of asset from the file extension, for example "Scene" or "Texture".
 		static QString AssetKind(const QString& path);
 
+		// Points every scene and material that used oldPath at newPath instead. Paths are relative
+		// to Content. Returns how many files changed.
+		static int ReplaceReferences(const QString& oldPath, const QString& newPath);
+
 	signals:
 		// Double clicked. Paths are absolute.
 		void AssetActivated(const QString& path);
 		void AssetSelected(const QString& path);
 
+		// The user asked for a new script. The editor owns script creation.
+		void NewScriptRequested();
+
+		// Files on disk were renamed and references rewritten, so open scenes may be stale.
+		void ReferencesChanged();
+
+	protected:
+		bool eventFilter(QObject* watched, QEvent* event) override;
+
 	private:
+		void ShowContextMenu(const QPoint& position);
+		void NewFolder();
+		void NewMaterial();
+		void NewScene();
+		void RenameSelected();
+		void DuplicateSelected();
+		void DeleteSelected();
+		QStringList SelectedPaths() const;
+		QString AskForName(const QString& title, const QString& initial);
+		void SelectPath(const QString& path);
+
 		void RebuildTree();
 		void RebuildFiles();
 		void AddFolderItems(QTreeWidgetItem* parent, const QString& path);

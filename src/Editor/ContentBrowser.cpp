@@ -1,8 +1,18 @@
 #include "Editor/ContentBrowser.h"
 #include "Engine/Material.h"
 #include "Engine/Paths.h"
+#include "Core/Misc/Guid.h"
 
+#include <QApplication>
+#include <QClipboard>
+#include <QDesktopServices>
 #include <QDir>
+#include <QFile>
+#include <QInputDialog>
+#include <QKeyEvent>
+#include <QMenu>
+#include <QMessageBox>
+#include <QProcess>
 #include <QDirIterator>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
@@ -15,6 +25,7 @@
 #include <QListWidget>
 #include <QPainter>
 #include <QPainterPath>
+#include <QRegularExpression>
 #include <QSplitter>
 #include <QTimer>
 #include <QTreeWidget>
@@ -105,6 +116,10 @@ namespace FP::Editor
 		});
 		connect(m_Search, &QLineEdit::textChanged, this, [this]() { RebuildFiles(); });
 
+		m_Files->setContextMenuPolicy(Qt::CustomContextMenu);
+		connect(m_Files, &QWidget::customContextMenuRequested, this, &ContentBrowser::ShowContextMenu);
+		m_Files->installEventFilter(this);
+
 		// Files change in bursts while saving or building, so refresh once things settle.
 		m_Watcher = new QFileSystemWatcher(this);
 		m_RefreshTimer = new QTimer(this);
@@ -114,6 +129,294 @@ namespace FP::Editor
 		connect(m_Watcher, &QFileSystemWatcher::directoryChanged, m_RefreshTimer, qOverload<>(&QTimer::start));
 
 		m_CurrentFolder = m_ContentRoot;
+		Refresh();
+	}
+
+	bool ContentBrowser::eventFilter(QObject* watched, QEvent* event)
+	{
+		if (watched == m_Files && event->type() == QEvent::KeyPress)
+		{
+			const int key = static_cast<QKeyEvent*>(event)->key();
+			if (key == Qt::Key_F2)
+			{
+				RenameSelected();
+				return true;
+			}
+			if (key == Qt::Key_Delete || (key == Qt::Key_Backspace && (static_cast<QKeyEvent*>(event)->modifiers() & Qt::ControlModifier)))
+			{
+				DeleteSelected();
+				return true;
+			}
+		}
+		return QWidget::eventFilter(watched, event);
+	}
+
+	QStringList ContentBrowser::SelectedPaths() const
+	{
+		QStringList paths;
+		for (const QListWidgetItem* item : m_Files->selectedItems())
+			paths.append(item->data(PathRole).toString());
+		return paths;
+	}
+
+	void ContentBrowser::SelectPath(const QString& path)
+	{
+		Refresh();
+		for (int i = 0; i < m_Files->count(); ++i)
+		{
+			if (m_Files->item(i)->data(PathRole).toString() == path)
+			{
+				m_Files->setCurrentRow(i);
+				m_Files->scrollToItem(m_Files->item(i));
+				return;
+			}
+		}
+	}
+
+	QString ContentBrowser::AskForName(const QString& title, const QString& initial)
+	{
+		bool ok = false;
+		const QString name = QInputDialog::getText(this, title, "Name:", QLineEdit::Normal, initial, &ok).trimmed();
+		if (!ok || name.isEmpty())
+			return {};
+		// Names become file names, so keep out path separators and characters Windows rejects.
+		static const QRegularExpression invalid(R"([\\/:*?"<>|])");
+		if (name.contains(invalid) || name.startsWith('.'))
+		{
+			QMessageBox::warning(this, title, "Names cannot contain \\ / : * ? \" < > | or start with a dot.");
+			return {};
+		}
+		return name;
+	}
+
+	void ContentBrowser::ShowContextMenu(const QPoint& position)
+	{
+		QListWidgetItem* clicked = m_Files->itemAt(position);
+		if (clicked && !clicked->isSelected())
+			m_Files->setCurrentItem(clicked);
+
+		QMenu menu(this);
+		const bool inScripts = m_CurrentFolder.startsWith(m_ScriptsRoot);
+		if (clicked)
+		{
+			const QString path = clicked->data(PathRole).toString();
+			menu.addAction("Open", this, [this, path]() {
+				if (QFileInfo(path).isDir())
+					ShowFolder(path);
+				else
+					emit AssetActivated(path);
+			});
+			menu.addAction("Rename...", QKeySequence(Qt::Key_F2), this, &ContentBrowser::RenameSelected);
+			menu.addAction("Duplicate", this, &ContentBrowser::DuplicateSelected);
+			menu.addAction("Delete", QKeySequence::Delete, this, &ContentBrowser::DeleteSelected);
+			menu.addSeparator();
+			menu.addAction("Copy Path", this, [path]() {
+				const QString relative = QDir(QString::fromUtf8(Paths::GetContentDir().CStr())).relativeFilePath(path);
+				QApplication::clipboard()->setText(relative.startsWith("..") ? path : relative);
+			});
+		}
+		else
+		{
+			menu.addAction("New Folder...", this, &ContentBrowser::NewFolder);
+			if (inScripts)
+			{
+				menu.addAction("New Script...", this, [this]() { emit NewScriptRequested(); });
+			}
+			else
+			{
+				menu.addAction("New Material...", this, &ContentBrowser::NewMaterial);
+				menu.addAction("New Scene...", this, &ContentBrowser::NewScene);
+			}
+		}
+		menu.addSeparator();
+#if defined(Q_OS_MACOS)
+		const char* revealLabel = "Show in Finder";
+#elif defined(Q_OS_WIN)
+		const char* revealLabel = "Show in Explorer";
+#else
+		const char* revealLabel = "Show in File Manager";
+#endif
+		const QString reveal = clicked ? clicked->data(PathRole).toString() : m_CurrentFolder;
+		menu.addAction(revealLabel, this, [reveal]() {
+#if defined(Q_OS_MACOS)
+			QProcess::startDetached("open", { "-R", reveal });
+#elif defined(Q_OS_WIN)
+			QProcess::startDetached("explorer", { "/select,", QDir::toNativeSeparators(reveal) });
+#else
+			QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(reveal).absolutePath()));
+#endif
+		});
+		menu.exec(m_Files->viewport()->mapToGlobal(position));
+	}
+
+	void ContentBrowser::NewFolder()
+	{
+		const QString name = AskForName("New Folder", "New Folder");
+		if (name.isEmpty())
+			return;
+		const QString path = m_CurrentFolder + "/" + name;
+		if (!QDir().mkpath(path))
+		{
+			QMessageBox::warning(this, "New Folder", "Could not create " + path);
+			return;
+		}
+		SelectPath(path);
+	}
+
+	void ContentBrowser::NewMaterial()
+	{
+		const QString name = AskForName("New Material", "NewMaterial");
+		if (name.isEmpty())
+			return;
+		const QString path = m_CurrentFolder + "/" + name + ".material";
+		if (QFileInfo::exists(path))
+		{
+			QMessageBox::warning(this, "New Material", name + " already exists.");
+			return;
+		}
+		const QString relative = QDir(m_ContentRoot).relativeFilePath(path);
+		if (!MaterialLibrary::Get().Create(String(relative.toUtf8().constData())))
+			return;
+		SelectPath(path);
+		emit AssetSelected(path);
+	}
+
+	void ContentBrowser::NewScene()
+	{
+		const QString name = AskForName("New Scene", "NewScene");
+		if (name.isEmpty())
+			return;
+		const QString path = m_CurrentFolder + "/" + name + ".scene";
+		if (QFileInfo::exists(path))
+		{
+			QMessageBox::warning(this, "New Scene", name + " already exists.");
+			return;
+		}
+		// A scene with just a camera, the same as File > New Scene.
+		const QString scene = QString(
+			"# FirstPrinciples scene\nversion 2\n\nentity %1\ncomponent Name\n  Name \"Main Camera\"\n"
+			"component Transform\n  Position 0 0 0\n  Rotation 0 0 0\n  Scale 1 1 1\ncomponent Camera\n  Primary true\n")
+			.arg(QString::fromUtf8(Guid::New().ToString().CStr()));
+		QFile file(path);
+		if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+		{
+			QMessageBox::warning(this, "New Scene", "Could not write " + path);
+			return;
+		}
+		file.write(scene.toUtf8());
+		file.close();
+		SelectPath(path);
+	}
+
+	int ContentBrowser::ReplaceReferences(const QString& oldPath, const QString& newPath)
+	{
+		const QString contentRoot = QString::fromUtf8(Paths::GetContentDir().CStr());
+		const QByteArray from = ("\"" + oldPath + "\"").toUtf8();
+		const QByteArray to = ("\"" + newPath + "\"").toUtf8();
+		int changed = 0;
+		QDirIterator it(contentRoot, { "*.scene", "*.material" }, QDir::Files, QDirIterator::Subdirectories);
+		while (it.hasNext())
+		{
+			QFile file(it.next());
+			if (!file.open(QIODevice::ReadOnly))
+				continue;
+			QByteArray text = file.readAll();
+			file.close();
+			if (!text.contains(from))
+				continue;
+			text.replace(from, to);
+			if (file.open(QIODevice::WriteOnly | QIODevice::Truncate))
+			{
+				file.write(text);
+				++changed;
+			}
+		}
+		return changed;
+	}
+
+	void ContentBrowser::RenameSelected()
+	{
+		const QStringList selected = SelectedPaths();
+		if (selected.size() != 1)
+			return;
+		const QFileInfo info(selected.first());
+		const QString name = AskForName("Rename", info.isDir() ? info.fileName() : info.completeBaseName());
+		if (name.isEmpty() || name == info.completeBaseName())
+			return;
+		const QString target = info.absolutePath() + "/" + name + (info.isDir() || info.suffix().isEmpty() ? "" : "." + info.suffix());
+		if (QFileInfo::exists(target))
+		{
+			QMessageBox::warning(this, "Rename", name + " already exists.");
+			return;
+		}
+		if (!QDir().rename(info.absoluteFilePath(), target))
+		{
+			QMessageBox::warning(this, "Rename", "Could not rename " + info.fileName());
+			return;
+		}
+
+		// Keep scenes and materials pointing at the file under its new name.
+		const QDir content(m_ContentRoot);
+		const QString oldRelative = content.relativeFilePath(info.absoluteFilePath());
+		const QString newRelative = content.relativeFilePath(target);
+		int changed = 0;
+		if (info.isDir())
+		{
+			QDirIterator it(target, QDir::Files, QDirIterator::Subdirectories);
+			while (it.hasNext())
+			{
+				const QString moved = content.relativeFilePath(it.next());
+				changed += ReplaceReferences(oldRelative + moved.mid(newRelative.size()), moved);
+			}
+		}
+		else if (!oldRelative.startsWith(".."))
+		{
+			changed = ReplaceReferences(oldRelative, newRelative);
+		}
+		if (changed > 0)
+		{
+			MaterialLibrary::Get().Clear();
+			emit ReferencesChanged();
+		}
+		SelectPath(target);
+	}
+
+	void ContentBrowser::DuplicateSelected()
+	{
+		QString last;
+		for (const QString& path : SelectedPaths())
+		{
+			const QFileInfo info(path);
+			if (info.isDir())
+				continue;
+			QString copy;
+			for (int n = 1; copy.isEmpty() || QFileInfo::exists(copy); ++n)
+				copy = info.absolutePath() + "/" + info.completeBaseName() + (n == 1 ? " Copy" : QString(" Copy %1").arg(n)) + "." + info.suffix();
+			if (QFile::copy(path, copy))
+				last = copy;
+		}
+		if (!last.isEmpty())
+			SelectPath(last);
+	}
+
+	void ContentBrowser::DeleteSelected()
+	{
+		const QStringList selected = SelectedPaths();
+		if (selected.isEmpty())
+			return;
+		QStringList names;
+		for (const QString& path : selected)
+			names.append(QFileInfo(path).fileName());
+		const auto answer = QMessageBox::question(this, "Delete",
+			QString("Move to the Trash?\n\n%1\n\nScenes and materials that use them will show them as missing.").arg(names.join("\n")));
+		if (answer != QMessageBox::Yes)
+			return;
+		for (const QString& path : selected)
+		{
+			// Trash instead of deleting so a mistake can be undone from the OS.
+			if (!QFile::moveToTrash(path))
+				FP_LOG_ERROR("Could not move %s to the Trash", path.toUtf8().constData());
+		}
 		Refresh();
 	}
 
