@@ -380,6 +380,8 @@ namespace FP
 			m_Failed.Add(path);
 			return nullptr;
 		}
+		if (model->Bones.Bones.Num() > MaxSkinBones)
+			FP_LOG_WARN("%s has %d bones. Only the first %d move the mesh.", path.CStr(), model->Bones.Bones.Num(), MaxSkinBones);
 		m_Models.Add(path, model);
 		return model.get();
 	}

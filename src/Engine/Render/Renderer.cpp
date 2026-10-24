@@ -1,5 +1,6 @@
 #include "Engine/Render/Renderer.h"
 #include "Engine/Material.h"
+#include "Engine/Animation/SkeletalModel.h"
 #include "HAL/PlatformMisc.h"
 
 #include <algorithm>
@@ -62,6 +63,7 @@ namespace FP
 	{
 		m_QuadVertices = device.CreateBuffer(SDL_GPU_BUFFERUSAGE_VERTEX, QuadVertices, sizeof(QuadVertices));
 		m_QuadIndices = device.CreateBuffer(SDL_GPU_BUFFERUSAGE_INDEX, QuadIndices, sizeof(QuadIndices));
+		m_BoneUpload.Resize(MaxSkinBones);
 		CreatePipelines();
 	}
 
@@ -77,7 +79,7 @@ namespace FP
 					SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
 			}
 		}
-		for (SDL_GPUGraphicsPipeline* pipeline : { m_PresentPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1] })
+		for (SDL_GPUGraphicsPipeline* pipeline : { m_PresentPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2] })
 		{
 			if (pipeline)
 				SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
@@ -107,37 +109,44 @@ namespace FP
 	SDL_GPUGraphicsPipeline* Renderer::CreateMeshPipeline(const char* fragment, uint32 numSamplers, uint32 numUniforms, Surface surface, bool glass, bool wireframe)
 	{
 		SDL_GPUDevice* gpu = m_Device.GetHandle();
-		SDL_GPUShader* vert = m_Device.LoadShader("Mesh.vert", 0, 1);
+		const bool skinned = surface == Surface::SkinnedMesh;
+		SDL_GPUShader* vert = skinned ? m_Device.LoadShader("SkinnedMesh.vert", 0, 2) : m_Device.LoadShader("Mesh.vert", 0, 1);
 		SDL_GPUShader* frag = m_Device.LoadShader(fragment, numSamplers, numUniforms);
 		SDL_GPUGraphicsPipeline* pipeline = nullptr;
 		if (vert && frag)
 		{
 			// Meshes are opaque and write depth. Sprites blend and only test depth so they
 			// sort by layer among themselves. Glass writes its final color so it never blends.
-			const bool isMesh = surface == Surface::Mesh;
+			const bool isMesh = surface != Surface::Sprite;
 			SDL_GPUColorTargetDescription colorTarget = {};
 			colorTarget.format = SceneFormat;
 			if (!isMesh && !glass && !wireframe)
 				colorTarget.blend_state = AlphaBlend();
 
-			SDL_GPUVertexBufferDescription buffer = {};
-			buffer.slot = 0;
-			buffer.pitch = sizeof(MeshVertex);
-			buffer.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+			// Skinned meshes add a second buffer with bones and weights.
+			SDL_GPUVertexBufferDescription buffers[2] = {};
+			buffers[0].slot = 0;
+			buffers[0].pitch = sizeof(MeshVertex);
+			buffers[0].input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+			buffers[1].slot = 1;
+			buffers[1].pitch = sizeof(SkinVertex);
+			buffers[1].input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
 
-			SDL_GPUVertexAttribute attributes[4] = {};
+			SDL_GPUVertexAttribute attributes[6] = {};
 			attributes[0] = { 0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(MeshVertex, Position) };
 			attributes[1] = { 1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(MeshVertex, Normal) };
 			attributes[2] = { 2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(MeshVertex, UV) };
 			attributes[3] = { 3, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(MeshVertex, Tangent) };
+			attributes[4] = { 4, 1, SDL_GPU_VERTEXELEMENTFORMAT_USHORT4, offsetof(SkinVertex, Bones) };
+			attributes[5] = { 5, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(SkinVertex, Weights) };
 
 			SDL_GPUGraphicsPipelineCreateInfo info = {};
 			info.vertex_shader = vert;
 			info.fragment_shader = frag;
-			info.vertex_input_state.vertex_buffer_descriptions = &buffer;
-			info.vertex_input_state.num_vertex_buffers = 1;
+			info.vertex_input_state.vertex_buffer_descriptions = buffers;
+			info.vertex_input_state.num_vertex_buffers = skinned ? 2 : 1;
 			info.vertex_input_state.vertex_attributes = attributes;
-			info.vertex_input_state.num_vertex_attributes = 4;
+			info.vertex_input_state.num_vertex_attributes = skinned ? 6 : 4;
 			info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
 			// Wireframe shows back edges too, so it never culls.
 			info.rasterizer_state.fill_mode = wireframe ? SDL_GPU_FILLMODE_LINE : SDL_GPU_FILLMODE_FILL;
@@ -164,7 +173,7 @@ namespace FP
 	void Renderer::CreatePipelines()
 	{
 		SDL_GPUDevice* gpu = m_Device.GetHandle();
-		for (Surface surface : { Surface::Sprite, Surface::Mesh })
+		for (Surface surface : { Surface::Sprite, Surface::Mesh, Surface::SkinnedMesh })
 		{
 			const int column = static_cast<int>(surface);
 			m_ScenePipelines[static_cast<int>(ShaderKind::Unlit)][column] = CreateMeshPipeline("Unlit.frag", 1, 1, surface, false);
@@ -172,7 +181,7 @@ namespace FP
 			m_ScenePipelines[static_cast<int>(ShaderKind::Glass)][column] = CreateMeshPipeline("Glass.frag", 4, 2, surface, true);
 			m_WirePipelines[column] = CreateMeshPipeline("Unlit.frag", 1, 1, surface, false, true);
 		}
-		if (!m_WirePipelines[0] || !m_WirePipelines[1])
+		if (!m_WirePipelines[0] || !m_WirePipelines[1] || !m_WirePipelines[2])
 			FP_LOG_WARN("This GPU cannot draw wireframes. The wireframe view mode will show normal shading.");
 
 		SDL_GPUColorTargetDescription colorTarget = {};
@@ -347,6 +356,14 @@ namespace FP
 		}
 		SDL_PushGPUVertexUniformData(cmd, 0, &object, sizeof(object));
 		SDL_PushGPUFragmentUniformData(cmd, 0, &material, sizeof(material));
+		if (draw.Type == Surface::SkinnedMesh)
+		{
+			// Bones past the pose stay as they were, which is fine since no vertex uses them.
+			const int32 count = draw.Skin ? (draw.Skin->Num() < MaxSkinBones ? draw.Skin->Num() : MaxSkinBones) : 0;
+			for (int32 i = 0; i < MaxSkinBones; ++i)
+				m_BoneUpload[i] = i < count ? (*draw.Skin)[i] : Mat4();
+			SDL_PushGPUVertexUniformData(cmd, 1, m_BoneUpload.Data(), static_cast<uint32>(MaxSkinBones * sizeof(Mat4)));
+		}
 
 		if (sprite)
 		{
@@ -357,8 +374,8 @@ namespace FP
 		}
 		else
 		{
-			SDL_GPUBufferBinding vertexBinding = { draw.Mesh->Vertices->GetHandle(), 0 };
-			SDL_BindGPUVertexBuffers(pass, 0, &vertexBinding, 1);
+			const SDL_GPUBufferBinding vertexBindings[2] = { { draw.Mesh->Vertices->GetHandle(), 0 }, { draw.Mesh->Skin ? draw.Mesh->Skin->GetHandle() : nullptr, 0 } };
+			SDL_BindGPUVertexBuffers(pass, 0, vertexBindings, draw.Type == Surface::SkinnedMesh ? 2 : 1);
 			SDL_GPUBufferBinding indexBinding = { draw.Mesh->Indices->GetHandle(), 0 };
 			SDL_BindGPUIndexBuffer(pass, &indexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
 		}
@@ -413,7 +430,7 @@ namespace FP
 			const MaterialComponent* materialComponent = world.TryGet<MaterialComponent>(entity);
 			const Material* material = materialComponent ? MaterialLibrary::Get().Load(materialComponent->GetForSection(section)) : nullptr;
 			// Meshes default to lit so they have shape. Sprites default to unlit so plain 2D games need no lights.
-			ShaderKind kind = type == Surface::Mesh ? ShaderKind::Lit : ShaderKind::Unlit;
+			ShaderKind kind = type != Surface::Sprite ? ShaderKind::Lit : ShaderKind::Unlit;
 			if (material)
 			{
 				const String& shader = material->GetData().Shader;
@@ -424,8 +441,9 @@ namespace FP
 				kind = ShaderKind::Unlit;
 			hasGlass |= kind == ShaderKind::Glass;
 			const MeshSection* part = mesh ? &mesh->Sections[section] : nullptr;
+			const SkeletalPoseComponent* pose = type == Surface::SkinnedMesh ? world.TryGet<SkeletalPoseComponent>(entity) : nullptr;
 			draws.Add({ layer, Vec3::Dot(transform.Position - view.CameraPosition, view.CameraForward), entity, kind, type, material, mesh,
-				part ? part->FirstIndex : 0, part ? part->IndexCount : 6 });
+				part ? part->FirstIndex : 0, part ? part->IndexCount : 6, pose ? &pose->Skin : nullptr });
 		};
 		for (auto [entity, transform, sprite] : world.View<TransformComponent, SpriteComponent>().each())
 			resolve(entity, transform, Surface::Sprite, sprite.Layer, nullptr, 0);
@@ -438,9 +456,17 @@ namespace FP
 					resolve(entity, transform, Surface::Mesh, 0, mesh, section);
 			}
 		}
+		for (auto [entity, transform, skeletal] : world.View<TransformComponent, SkeletalMeshComponent>().each())
+		{
+			if (const GPUMesh* mesh = m_Meshes.GetSkinned(skeletal.Mesh))
+			{
+				for (int32 section = 0; section < mesh->Sections.Num(); ++section)
+					resolve(entity, transform, Surface::SkinnedMesh, 0, mesh, section);
+			}
+		}
 
 		// Opaque meshes front to back, then sprites by layer back to front, then glass back to front.
-		auto bucket = [](const Draw& d) { return d.Kind == ShaderKind::Glass ? 2 : d.Type == Surface::Mesh ? 0 : 1; };
+		auto bucket = [](const Draw& d) { return d.Kind == ShaderKind::Glass ? 2 : d.Type != Surface::Sprite ? 0 : 1; };
 		std::stable_sort(draws.begin(), draws.end(), [&](const Draw& a, const Draw& b) {
 			const int ba = bucket(a);
 			const int bb = bucket(b);

@@ -7,6 +7,9 @@
 
 namespace FP
 {
+	// Bones a skeletal mesh can draw with. Matches MAX_BONES in Common.glsl.
+	constexpr int32 MaxSkinBones = 128;
+
 	// Up to four bones per vertex. Matches the second vertex buffer of SkinnedMesh.vert.
 	struct SkinVertex
 	{

@@ -19,6 +19,7 @@ namespace FP::Engine
 
 	// File picker filter for mesh fields.
 	extern const char* const MeshFilter;
+	extern const char* const SkeletalMeshFilter;
 
 	// Registers the built in components. Call once before loading scenes.
 	void RegisterEngineComponents();

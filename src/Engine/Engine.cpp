@@ -8,6 +8,7 @@ namespace FP::Engine
 {
 	const char* const ImageFilter = "Images (*.png *.jpg *.jpeg *.tga *.bmp)";
 	const char* const MeshFilter = "Meshes (*.obj *.gltf *.glb)";
+	const char* const SkeletalMeshFilter = "Skeletal meshes (*.gltf *.glb)";
 
 	namespace
 	{
@@ -98,6 +99,9 @@ namespace FP::Engine
 
 		registry.Register<MeshComponent>("Mesh")
 			.Field("Mesh", &MeshComponent::Mesh).Choices(Primitives::GetNames(), true).AssetPath(MeshFilter);
+
+		registry.Register<SkeletalMeshComponent>("SkeletalMesh")
+			.Field("Mesh", &SkeletalMeshComponent::Mesh).AssetPath(SkeletalMeshFilter);
 
 		registry.Register<MaterialComponent>("Material")
 			.Field("Material", &MaterialComponent::Material).AssetPath("Materials (*.material)")

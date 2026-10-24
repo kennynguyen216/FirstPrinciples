@@ -83,10 +83,12 @@ namespace FP
 		};
 
 		// Sprites blend and sort by layer. Meshes write depth and cull back faces.
+		// Skinned meshes are meshes that also follow bones.
 		enum class Surface : uint8
 		{
 			Sprite,
 			Mesh,
+			SkinnedMesh,
 		};
 
 		struct Draw
@@ -100,6 +102,7 @@ namespace FP
 			const GPUMesh* Mesh;
 			uint32 FirstIndex;
 			uint32 IndexCount;
+			const Array<Mat4>* Skin; // bone matrices for skinned meshes, null for the bind pose
 		};
 
 		void CreatePipelines();
@@ -118,11 +121,11 @@ namespace FP
 		FrameUniforms m_Frame;
 
 		// Indexed by ShaderKind then Surface.
-		SDL_GPUGraphicsPipeline* m_ScenePipelines[3][2] = {};
+		SDL_GPUGraphicsPipeline* m_ScenePipelines[3][3] = {};
 
 		// Line fill versions of Unlit for the wireframe view mode, indexed by Surface.
 		// Optional so a GPU without line fill still renders the other modes.
-		SDL_GPUGraphicsPipeline* m_WirePipelines[2] = {};
+		SDL_GPUGraphicsPipeline* m_WirePipelines[3] = {};
 		ViewMode m_Mode = ViewMode::Lit;
 		SDL_GPUGraphicsPipeline* m_PresentPipeline = nullptr;
 		SDL_GPUGraphicsPipeline* m_LinePipeline = nullptr;
@@ -133,5 +136,6 @@ namespace FP
 		RefPtr<GPUTexture> m_SceneColor;
 		RefPtr<GPUTexture> m_SceneCopy;
 		RefPtr<GPUTexture> m_Depth;
+		Array<Mat4> m_BoneUpload; // always MaxSkinBones long, the size the shader reads
 	};
 }

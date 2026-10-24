@@ -70,6 +70,20 @@ namespace FP
 		String Mesh = "Cube";
 	};
 
+	// A .gltf or .glb with a skin, relative to Content. Draws in its bind pose until an
+	// Animator moves its bones. Uses the entity's MaterialComponent like MeshComponent.
+	struct SkeletalMeshComponent
+	{
+		String Mesh;
+	};
+
+	// Bone matrices for a skeletal mesh this frame, written by the AnimationSystem.
+	// Not saved and not shown in the editor.
+	struct SkeletalPoseComponent
+	{
+		Array<Mat4> Skin;
+	};
+
 	// Points at shared .material files. Works on sprites and meshes.
 	// A sprite's own Texture is used as the base color map when the material has none.
 	struct MaterialComponent
