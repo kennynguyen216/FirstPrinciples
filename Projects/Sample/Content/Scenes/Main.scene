@@ -33,6 +33,9 @@ component Sprite
   Layer 10
 component Player
   Speed 6
+component Network
+  OnePerPeer true
+  SendRate 20
 
 entity 1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f
 component Name

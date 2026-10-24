@@ -1,14 +1,29 @@
 #include "GameSystems.h"
+#include "Engine/Net/NetworkComponent.h"
 
 #include <cmath>
 
 using namespace FP;
 
+namespace
+{
+	bool IsRemote(World& world, Entity entity)
+	{
+		const NetworkComponent* network = world.TryGet<NetworkComponent>(entity);
+		return network && network->Remote;
+	}
+}
+
 void PlayerSystem::Update(World& world, float deltaTime)
 {
 	const Vec3 move{ Input::GetMoveAxis().Normalized(), 0 };
 	for (auto [entity, transform, player] : world.View<TransformComponent, PlayerComponent>().each())
+	{
+		// Other peers' players move on their own machines.
+		if (IsRemote(world, entity))
+			continue;
 		transform.Position += move * player.Speed * deltaTime;
+	}
 }
 
 void SpinnerSystem::Update(World& world, float deltaTime)
@@ -26,6 +41,9 @@ void FollowPlayerSystem::Update(World& world, float deltaTime)
 	bool found = false;
 	for (auto [entity, transform, player] : world.View<TransformComponent, PlayerComponent>().each())
 	{
+		// In multiplayer the camera follows this peer's own player.
+		if (IsRemote(world, entity))
+			continue;
 		target = transform.Position;
 		found = true;
 		break;
