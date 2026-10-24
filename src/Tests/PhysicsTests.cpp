@@ -137,3 +137,71 @@ FP_TEST(Physics_KinematicBodiesPushAndChildrenFollow)
 	FP_EXPECT(std::fabs(world->Get<TransformComponent>(child).Position.Y + 2.5f) < 0.05f);
 	world->EndPlay();
 }
+
+#include "Engine/Scripting/Script.h"
+#include "Engine/Scripting/ScriptSystem.h"
+
+namespace
+{
+	// Counts what physics tells it, the way a gameplay script would react.
+	class TestContacts : public Script
+	{
+	public:
+		int32 Hits = 0;
+		int32 Leaves = 0;
+		int32 TriggersIn = 0;
+		int32 TriggersOut = 0;
+		Vec3 LastNormal;
+
+		void OnCollisionEnter(Entity, const Collision& collision) override
+		{
+			++Hits;
+			LastNormal = collision.Normal;
+		}
+		void OnCollisionExit(Entity) override { ++Leaves; }
+		void OnTriggerEnter(Entity) override { ++TriggersIn; }
+		void OnTriggerExit(Entity) override { ++TriggersOut; }
+	};
+}
+
+FP_SCRIPT_FIELDS(TestContacts) {}
+
+FP_TEST(Physics_ScriptsHearContactsAndTriggers)
+{
+	Engine::RegisterEngineComponents();
+	StrongObjectPtr<World> world(NewObject<World>());
+	const Entity floor = MakeFloor(*world.Get());
+	const Entity ball = MakeBox(*world.Get(), { 0, 3, 0 });
+	world->Get<ColliderComponent>(ball).Shape = "Sphere";
+	world->Add<ScriptComponent>(ball).Scripts.Emplace("TestContacts");
+	// A trigger box hanging in the ball's way, and another one away from it.
+	const Entity zone = world->CreateEntity("Zone");
+	world->Get<TransformComponent>(zone).Position = { 0, 1.5f, 0 };
+	world->Add<ColliderComponent>(zone).Trigger = true;
+	world->AddSystem<ScriptSystem>();
+	world->AddSystem<PhysicsSystem>();
+	world->BeginPlay();
+	TestContacts* contacts = static_cast<TestContacts*>(world->Get<ScriptComponent>(ball).Scripts[0].Instance);
+	FP_EXPECT(contacts);
+	if (!contacts)
+		return;
+
+	// The ball falls through the trigger and lands on the floor, once each.
+	Run(*world.Get(), 2);
+	FP_EXPECT(contacts->TriggersIn == 1);
+	FP_EXPECT(contacts->Hits == 1 && contacts->LastNormal.Y > 0.9f);
+
+	// Lifting it off the floor ends the contact.
+	world->Get<TransformComponent>(ball).Position = { 0, 8, 10 };
+	Run(*world.Get(), 0.1f);
+	FP_EXPECT(contacts->Leaves == 1 && contacts->TriggersOut == 1);
+
+	// Destroying the floor under a resting ball still sends the exit.
+	world->Get<TransformComponent>(ball).Position = { 3, 0.5f, 0 };
+	Run(*world.Get(), 0.5f);
+	FP_EXPECT(contacts->Hits == 2);
+	world->DestroyEntity(floor);
+	Run(*world.Get(), 0.1f);
+	FP_EXPECT(contacts->Leaves == 2);
+	world->EndPlay();
+}

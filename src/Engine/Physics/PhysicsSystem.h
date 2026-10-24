@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Engine/World.h"
+#include "Engine/Physics/PhysicsWorld.h"
 
 namespace FP
 {
@@ -16,5 +17,8 @@ namespace FP
 
 		// Drops every body, so playing again starts fresh.
 		void OnStop(World& world) override;
+
+	private:
+		static void Notify(World& world, const PhysicsEvent& event, Entity self, Entity other, Vec3 normal);
 	};
 }
