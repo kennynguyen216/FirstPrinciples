@@ -178,6 +178,18 @@ The **Content** tab next to the **Console** at the bottom of the editor shows ev
 - The browser refreshes on its own when files change, and the Console comes forward when a script
   build fails.
 
+### Undo and redo
+
+Ctrl+Z undoes and Ctrl+Shift+Z redoes (Cmd on macOS, and Ctrl+Y also redoes on Windows). Both are in the
+**Edit** menu too.
+
+- Every scene edit can be undone: moving, creating, duplicating, deleting, dropping assets, inspector
+  fields, components, scripts and material values. The selection comes back with each step.
+- A drag or a burst of typing becomes one step once the mouse comes up and edits pause briefly.
+- Script tabs and text fields keep their own text undo while they have focus.
+- History holds the last 100 steps and starts over when a scene is opened. Play mode changes are not
+  recorded since Stop puts the scene back anyway.
+
 ### Editor controls
 
 | Action | Control |
@@ -192,6 +204,7 @@ The **Content** tab next to the **Console** at the bottom of the editor shows ev
 | Select / move | Left click / left drag along the view plane (hold Shift to snap) |
 | Create sprite | Ctrl+Shift+A |
 | Duplicate / delete | Ctrl+D / Delete |
+| Undo / redo | Ctrl+Z / Ctrl+Shift+Z |
 | Play | Ctrl+P |
 | New script / reload scripts | Scripts menu / Ctrl+R |
 | Save | Ctrl+S |
@@ -206,6 +219,7 @@ Binaries/Debug/Editor --scene Scenes/Lighting2D.scene --select "Glass Pane" --sc
 Binaries/Debug/Editor --scene Scenes/Showcase3D.scene --3d --viewmode wireframe --screenshot 3d.png
 Binaries/Debug/Editor --build-scripts
 Binaries/Debug/Editor --browse Materials --asset Materials/Bricks.material --screenshot browser.png
+Binaries/Debug/Editor --drop Textures/Bricks_AO.png --undo --redo --screenshot undo.png
 ```
 
 ## Rendering
