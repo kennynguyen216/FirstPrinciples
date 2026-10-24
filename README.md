@@ -163,6 +163,21 @@ shows every material on meshes, including a refracting glass sphere.
 `Transform.Rotation` is euler degrees as pitch (X), yaw (Y) and roll (Z). Cameras and lights point
 down their local -Z axis.
 
+### Content browser
+
+The **Content** tab next to the **Console** at the bottom of the editor shows everything in
+`Content` plus the scripts in `Game/Scripts`. Textures show thumbnails and materials show their color.
+
+- Double click a scene to open it or a script to edit it in a tab. Click a material to edit it in
+  the inspector, or a texture to preview it.
+- Drag a texture into the viewport to make a sprite, an `.obj` to make a mesh, or a material onto a
+  sprite or mesh to assign it. Drag any asset onto a matching inspector field to fill it in.
+- Right click for New Folder, New Material, New Scene and New Script, plus Rename (F2), Duplicate,
+  Delete, Copy Path and Show in Finder or Explorer.
+- Renaming rewrites references in every scene and material. Delete moves files to the system Trash.
+- The browser refreshes on its own when files change, and the Console comes forward when a script
+  build fails.
+
 ### Editor controls
 
 | Action | Control |
@@ -172,6 +187,7 @@ down their local -Z axis.
 | Orbit (3D) | Right drag or Alt left drag |
 | Toggle 3D view | Ctrl+3 |
 | View mode | Toolbar dropdown, or Alt+4 Lit, Alt+3 Unlit, Alt+2 Wireframe |
+| Rename / delete asset | F2 / Delete in the content browser |
 | Focus selection | F |
 | Select / move | Left click / left drag along the view plane (hold Shift to snap) |
 | Create sprite | Ctrl+Shift+A |
@@ -189,6 +205,7 @@ Binaries/Debug/Editor --play --screenshot editor.png
 Binaries/Debug/Editor --scene Scenes/Lighting2D.scene --select "Glass Pane" --screenshot lit.png
 Binaries/Debug/Editor --scene Scenes/Showcase3D.scene --3d --viewmode wireframe --screenshot 3d.png
 Binaries/Debug/Editor --build-scripts
+Binaries/Debug/Editor --browse Materials --asset Materials/Bricks.material --screenshot browser.png
 ```
 
 ## Rendering
