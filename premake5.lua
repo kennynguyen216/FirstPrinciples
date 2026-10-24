@@ -348,6 +348,9 @@ project "Editor"
 	AddMocRules("src/Editor")
 	filter "system:windows"
 		entrypoint "mainCRTStartup"
+	-- The viewport warps the mouse with CoreGraphics while a game holds it.
+	filter "system:macosx"
+		links { "CoreGraphics.framework" }
 	filter {}
 
 project "Tests"

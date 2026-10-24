@@ -81,14 +81,11 @@ namespace FP
 
 	RenderView RenderView::FromWorld(World& world, uint32 width, uint32 height)
 	{
-		for (auto [entity, transform, camera] : world.View<TransformComponent, CameraComponent>().each())
+		if (const Entity camera = world.GetActiveCamera(); camera != NullEntity)
 		{
-			if (camera.Primary)
-			{
-				RenderView view = FromCamera(world.GetWorldTransform(entity), camera, width, height);
-				view.Camera = entity;
-				return view;
-			}
+			RenderView view = FromCamera(world.GetWorldTransform(camera), world.Get<CameraComponent>(camera), width, height);
+			view.Camera = camera;
+			return view;
 		}
 		return Orthographic2D({}, 64, width, height);
 	}

@@ -449,6 +449,25 @@ FP_TEST(Input_TextAndScrollLastOneFrame)
 	FP_EXPECT(Input::GetTypedText().empty() && Input::GetScroll().Y == 0);
 }
 
+FP_TEST(Input_MouseDeltaLastsOneFrameAndResetKeepsCursorMode)
+{
+	Input::AddMouseDelta({ 3, -1 });
+	Input::AddMouseDelta({ 2, 4 });
+	FP_EXPECT(Input::GetMouseDelta().X == 5 && Input::GetMouseDelta().Y == 3);
+	Input::EndFrame();
+	FP_EXPECT(Input::GetMouseDelta().X == 0 && Input::GetMouseDelta().Y == 0);
+
+	Input::SetCursorMode(CursorMode::Hidden);
+	Input::Reset();
+	FP_EXPECT(Input::GetCursorMode() == CursorMode::Hidden);
+
+	// Play starts locked.
+	StrongObjectPtr<World> world(NewObject<World>(nullptr, "CursorWorld"));
+	world->BeginPlay();
+	FP_EXPECT(Input::GetCursorMode() == CursorMode::Locked);
+	world->EndPlay();
+}
+
 #include "Engine/Json.h"
 
 FP_TEST(Json_ReadsWhatPagesSend)
@@ -469,4 +488,31 @@ FP_TEST(Json_ReadsWhatPagesSend)
 	// Broken text is null rather than half read.
 	FP_EXPECT(Json::Parse("{\"a\":1,").IsNull() && Json::Parse("[1 2]").IsNull() && Json::Parse("").IsNull() && Json::Parse("1 2").IsNull());
 	FP_EXPECT(Json::Parse(std::string(200, '[') + std::string(200, ']')).IsNull());
+}
+
+#include "Engine/Render/RenderView.h"
+
+FP_TEST(Cameras_SwitchingCutsTheView)
+{
+	Engine::RegisterEngineComponents();
+	StrongObjectPtr<World> world(NewObject<World>(nullptr, "CameraWorld"));
+	const Entity first = world->CreateEntity("First");
+	const Entity second = world->CreateEntity("Second");
+	const Entity prop = world->CreateEntity("Prop");
+	world->Add<CameraComponent>(first);
+	world->Add<CameraComponent>(second).Primary = false;
+	world->Get<TransformComponent>(second).Position = { 5, 0, 0 };
+
+	FP_EXPECT(world->GetActiveCamera() == first);
+	FP_EXPECT(world->SetActiveCamera(second));
+	FP_EXPECT(world->GetActiveCamera() == second);
+	FP_EXPECT(!world->Get<CameraComponent>(first).Primary);
+	FP_EXPECT(RenderView::FromWorld(*world.Get(), 64, 64).Camera == second);
+
+	// Something without a camera changes nothing.
+	FP_EXPECT(!world->SetActiveCamera(prop));
+	FP_EXPECT(world->GetActiveCamera() == second);
+
+	world->Get<CameraComponent>(second).Primary = false;
+	FP_EXPECT(world->GetActiveCamera() == NullEntity);
 }

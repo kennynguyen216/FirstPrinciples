@@ -1059,6 +1059,7 @@ namespace FP::Editor
 		if (deltaTime > 0.1f)
 			deltaTime = 0.1f;
 
+		m_Viewport->UpdateCursor();
 		m_World->Update(deltaTime);
 		Input::EndFrame();
 
@@ -1410,7 +1411,7 @@ namespace FP::Editor
 		m_ImportAudioAction->setEnabled(false);
 		m_Inspector->RefreshValues();
 		UpdateTitle();
-		FP_LOG("Play");
+		FP_LOG("Play. Esc frees the mouse and a click on the viewport takes it back");
 	}
 
 	void EditorWindow::Stop()

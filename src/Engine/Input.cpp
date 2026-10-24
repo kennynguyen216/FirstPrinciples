@@ -16,6 +16,8 @@ namespace FP::Input
 			bool MouseDown[static_cast<int>(MouseButton::Count)] = {};
 			bool MousePressed[static_cast<int>(MouseButton::Count)] = {};
 			Vec2 MousePosition;
+			Vec2 MouseDelta;
+			CursorMode Cursor = CursorMode::Locked;
 			Vec2 Scroll;
 			std::string Typed;
 		};
@@ -37,6 +39,9 @@ namespace FP::Input
 	bool IsMouseDown(MouseButton button) { return GetState().MouseDown[static_cast<int>(button)]; }
 	bool WasMousePressed(MouseButton button) { return GetState().MousePressed[static_cast<int>(button)]; }
 	Vec2 GetMousePosition() { return GetState().MousePosition; }
+	Vec2 GetMouseDelta() { return GetState().MouseDelta; }
+	void SetCursorMode(CursorMode mode) { GetState().Cursor = mode; }
+	CursorMode GetCursorMode() { return GetState().Cursor; }
 	Vec2 GetScroll() { return GetState().Scroll; }
 	std::string_view GetTypedText() { return GetState().Typed; }
 
@@ -67,6 +72,7 @@ namespace FP::Input
 	}
 
 	void SetMousePosition(Vec2 position) { GetState().MousePosition = position; }
+	void AddMouseDelta(Vec2 delta) { GetState().MouseDelta += delta; }
 	void AddScroll(Vec2 amount) { GetState().Scroll += amount; }
 	void AddTypedText(std::string_view utf8) { GetState().Typed.append(utf8); }
 
@@ -81,6 +87,7 @@ namespace FP::Input
 				break;
 			case SDL_EVENT_MOUSE_MOTION:
 				SetMousePosition({ event.motion.x, event.motion.y });
+				AddMouseDelta({ event.motion.xrel, event.motion.yrel });
 				break;
 			case SDL_EVENT_MOUSE_BUTTON_DOWN:
 			case SDL_EVENT_MOUSE_BUTTON_UP:
@@ -111,14 +118,17 @@ namespace FP::Input
 		std::memset(GetState().Released, 0, sizeof(GetState().Released));
 		std::memset(GetState().MousePressed, 0, sizeof(GetState().MousePressed));
 		GetState().Scroll = {};
+		GetState().MouseDelta = {};
 		GetState().Typed.clear();
 	}
 
 	void Reset()
 	{
 		const Vec2 mouse = GetState().MousePosition;
+		const CursorMode cursor = GetState().Cursor;
 		GetState() = State();
 		GetState().MousePosition = mouse;
+		GetState().Cursor = cursor;
 	}
 
 	void* GetSharedState()

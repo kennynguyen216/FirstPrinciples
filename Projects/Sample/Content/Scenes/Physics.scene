@@ -410,3 +410,31 @@ component Scripts
     MaxBalls 40
     DropFrom -6.5 8 0
     Material "Materials/Gold.material"
+
+entity 9a000012-0000-4000-8000-000000000012
+component Name
+  Name "Player Camera"
+component Transform
+  Position 7 2.5 7
+  Rotation -12 45 0
+  Scale 1 1 1
+component Camera
+  Perspective true
+  Zoom 64
+  FieldOfView 70
+  NearClip 0.05
+  FarClip 500
+  Primary false
+  Background 0.05 0.06 0.09 1
+  Exposure 1
+  Tonemap true
+component Scripts
+  script "FirstPersonHands"
+    OtherCamera "Main Camera"
+    LookSpeed 0.15
+    MoveSpeed 6
+    Reach 30
+    Push 6
+    HoldDistance 3
+    BlastRadius 4
+    BlastImpulse 15
