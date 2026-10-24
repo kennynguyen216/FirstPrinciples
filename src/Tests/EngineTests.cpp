@@ -436,3 +436,15 @@ FP_TEST(Math_GameplayHelpers)
 	}
 	FP_EXPECT(!Random::Chance(0) && Random::Chance(1));
 }
+
+FP_TEST(Input_TextAndScrollLastOneFrame)
+{
+	Input::AddTypedText("hi");
+	Input::AddTypedText(" there");
+	Input::AddScroll({ 0, 1 });
+	Input::AddScroll({ 0, 2 });
+	FP_EXPECT(Input::GetTypedText() == "hi there");
+	FP_EXPECT(Input::GetScroll().Y == 3);
+	Input::EndFrame();
+	FP_EXPECT(Input::GetTypedText().empty() && Input::GetScroll().Y == 0);
+}

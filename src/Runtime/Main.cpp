@@ -148,6 +148,8 @@ int main(int argc, char** argv)
 		uint64 lastTicks = SDL_GetTicksNS();
 		int32 frame = 0;
 		bool running = renderer.IsValid();
+		// Typed text reaches Input so UI text boxes work.
+		SDL_StartTextInput(window);
 		while (running)
 		{
 			SDL_Event event;
@@ -156,6 +158,13 @@ int main(int argc, char** argv)
 				audio.ProcessEvent(event);
 				if (event.type == SDL_EVENT_QUIT)
 					running = false;
+				// SDL reports the mouse in window points. The game view and UI work in pixels.
+				const float density = SDL_GetWindowPixelDensity(window);
+				if (event.type == SDL_EVENT_MOUSE_MOTION)
+				{
+					event.motion.x *= density;
+					event.motion.y *= density;
+				}
 				Input::ProcessEvent(event);
 			}
 

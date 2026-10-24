@@ -683,7 +683,11 @@ namespace FP::Editor
 	void ViewportWidget::wheelEvent(QWheelEvent* event)
 	{
 		if (m_Playing)
+		{
+			// One notch is 120, the same as one SDL wheel step.
+			Input::AddScroll(Vec2(static_cast<float>(event->angleDelta().x()), static_cast<float>(event->angleDelta().y())) / 120.0f);
 			return;
+		}
 		const float steps = static_cast<float>(event->angleDelta().y());
 		if (m_Flying)
 		{
@@ -710,6 +714,10 @@ namespace FP::Editor
 		{
 			if (!event->isAutoRepeat())
 				Input::SetKey(ToScancode(event->key()), true);
+			// Printable text goes to UI text boxes. Control characters arrive as key presses instead.
+			const QString text = event->text();
+			if (!text.isEmpty() && text[0].isPrint())
+				Input::AddTypedText(text.toUtf8().constData());
 			return;
 		}
 		m_FlyFast = event->modifiers() & Qt::ShiftModifier;
