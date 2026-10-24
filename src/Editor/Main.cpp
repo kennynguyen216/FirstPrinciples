@@ -1,4 +1,5 @@
 #include "Editor/ContentBrowser.h"
+#include "Editor/EditorStyle.h"
 #include "Editor/EditorWindow.h"
 #include "Editor/ScriptBuilder.h"
 #include "Engine/Engine.h"
@@ -9,7 +10,6 @@
 #include <SDL3/SDL.h>
 
 #include <QApplication>
-#include <QStyleFactory>
 #include <QTimer>
 
 int main(int argc, char** argv)
@@ -25,7 +25,7 @@ int main(int argc, char** argv)
 	}
 
 	QApplication::setApplicationName("FirstPrinciples Editor");
-	QApplication::setStyle(QStyleFactory::create("Fusion"));
+	FP::Editor::EditorStyle::Apply(app);
 
 	FP::Engine::RegisterEngineComponents();
 	Game::RegisterComponents();
