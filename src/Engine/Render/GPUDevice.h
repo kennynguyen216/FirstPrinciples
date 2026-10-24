@@ -64,7 +64,8 @@ namespace FP
 		// Uploads tightly packed RGBA8 pixels. Mipmaps are generated on the GPU when asked.
 		RefPtr<GPUTexture> CreateTexture(const void* rgba, uint32 width, uint32 height, bool srgb, bool mipmaps);
 
-		RefPtr<GPUTexture> CreateRenderTarget(SDL_GPUTextureFormat format, uint32 width, uint32 height, bool depth);
+		// sampledDepth lets shaders read a depth target, as shadow maps need.
+		RefPtr<GPUTexture> CreateRenderTarget(SDL_GPUTextureFormat format, uint32 width, uint32 height, bool depth, bool sampledDepth = false);
 
 		RefPtr<GPUBuffer> CreateBuffer(SDL_GPUBufferUsageFlags usage, const void* data, uint32 size);
 
@@ -77,6 +78,10 @@ namespace FP
 		SDL_GPUSampler* GetDefaultSampler() const { return m_LinearRepeat; }
 		SDL_GPUSampler* GetClampSampler() const { return m_LinearClamp; }
 		SDL_GPUTextureFormat GetDepthFormat() const { return m_DepthFormat; }
+
+		// Clamped, filtered depth comparison for sampler2DShadow.
+		SDL_GPUSampler* GetShadowSampler() const { return m_ShadowCompare; }
+		SDL_GPUTextureFormat GetShadowFormat() const { return m_ShadowFormat; }
 
 		// 1x1 fallbacks so shaders can always sample every slot.
 		GPUTexture* GetWhiteTexture() const { return m_White.Get(); }
@@ -91,6 +96,8 @@ namespace FP
 		SDL_GPUSampler* m_LinearRepeat = nullptr;
 		SDL_GPUSampler* m_LinearClamp = nullptr;
 		SDL_GPUTextureFormat m_DepthFormat = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
+		SDL_GPUSampler* m_ShadowCompare = nullptr;
+		SDL_GPUTextureFormat m_ShadowFormat = SDL_GPU_TEXTUREFORMAT_D16_UNORM;
 		RefPtr<GPUTexture> m_White;
 		RefPtr<GPUTexture> m_Black;
 		RefPtr<GPUTexture> m_FlatNormal;
