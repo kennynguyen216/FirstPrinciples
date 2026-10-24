@@ -148,8 +148,12 @@ namespace FP
 		void EndPlay();
 		bool IsPlaying() const { return m_Playing; }
 
-		// Runs systems when playing, then flushes deferred destroys.
+		// Runs systems when playing, then flushes deferred destroys and any requested scene load.
 		void Update(float deltaTime);
+
+		// Swaps in a scene file, relative to Content, at the end of this frame's Update so
+		// whatever asked can finish first. Play carries on in the new scene.
+		void RequestSceneLoad(std::string_view path) { m_PendingScene = String(path); }
 
 		double GetTime() const { return m_Time; }
 
@@ -166,5 +170,6 @@ namespace FP
 		double m_Time = 0;
 		bool m_Playing = false;
 		std::unique_ptr<AudioWorld> m_Audio;
+		String m_PendingScene;
 	};
 }

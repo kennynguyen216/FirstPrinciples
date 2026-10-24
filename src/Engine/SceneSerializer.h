@@ -34,6 +34,10 @@ namespace FP
 		// Returns the new entities in text order, or nothing when the text is broken.
 		Array<Entity> LoadEntitiesAsCopies(World& world, std::string_view text);
 
+		// Adds every entity of a scene file as copies, like placing a prefab. Top level entities
+		// are moved by offset. Returns them all in file order, or nothing when the file is broken.
+		Array<Entity> SpawnFromFile(World& world, const char* path, Vec3 offset = {});
+
 		bool SaveToFile(World& world, const char* path);
 		bool LoadFromFile(World& world, const char* path);
 	}

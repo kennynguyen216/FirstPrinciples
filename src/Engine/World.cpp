@@ -2,6 +2,8 @@
 #include "Engine/Animation/Animator.h"
 #include "Engine/Audio/AudioWorld.h"
 #include "Engine/ComponentRegistry.h"
+#include "Engine/Paths.h"
+#include "Engine/SceneSerializer.h"
 
 namespace FP
 {
@@ -322,6 +324,13 @@ namespace FP
 				m_Systems[i]->Update(*this, deltaTime);
 		}
 		FlushDestroyed();
+		if (!m_PendingScene.IsEmpty())
+		{
+			const String path = Paths::Content(m_PendingScene.View());
+			m_PendingScene.Clear();
+			if (SceneSerializer::LoadFromFile(*this, path.CStr()))
+				FP_LOG("Loaded scene %s", path.CStr());
+		}
 		if (m_Playing && m_Audio) m_Audio->Update();
 	}
 

@@ -231,6 +231,27 @@ namespace FP::SceneSerializer
 		return result;
 	}
 
+	Array<Entity> SpawnFromFile(World& world, const char* path, Vec3 offset)
+	{
+		String text;
+		if (!File::ReadAllText(path, text))
+		{
+			FP_LOG_ERROR("Could not read scene %s", path);
+			return {};
+		}
+		Array<Entity> spawned = LoadEntitiesAsCopies(world, text.View());
+		if (spawned.IsEmpty())
+			FP_LOG_ERROR("Could not spawn scene %s", path);
+		for (Entity entity : spawned)
+		{
+			if (world.GetParent(entity) != NullEntity)
+				continue;
+			if (TransformComponent* transform = world.TryGet<TransformComponent>(entity))
+				transform->Position += offset;
+		}
+		return spawned;
+	}
+
 	bool SaveToFile(World& world, const char* path)
 	{
 		if (!Validate(world)) { FP_LOG_ERROR("Refusing to save invalid scene %s", path); return false; }
