@@ -10,12 +10,12 @@
 #include "Editor/ScriptBuilder.h"
 #include "Editor/ViewportToolbar.h"
 #include "Editor/ViewportWidget.h"
-#include "Engine/Project.h"
 #include "Engine/ComponentRegistry.h"
 #include "Engine/Input.h"
 #include "Engine/Material.h"
 #include "Engine/Render/MeshData.h"
 #include "Engine/Paths.h"
+#include "Engine/Project.h"
 #include "Engine/SceneSerializer.h"
 #include "Engine/Scripting/ScriptRuntime.h"
 #include "Engine/Scripting/ScriptSystem.h"
@@ -40,6 +40,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPlainTextEdit>
+#include <QProcess>
 #include <QStatusBar>
 #include <QTabBar>
 #include <QTabWidget>
@@ -233,11 +234,23 @@ namespace FP::Editor
 	{
 		// The menu sits inside the window on every OS, like UE, with the project name on the right.
 		menuBar()->setNativeMenuBar(false);
-		QLabel* project = new QLabel(QFileInfo(ToQString(Paths::GetProjectDir())).fileName());
+		QLabel* project = new QLabel(ToQString(Paths::GetProject().Name));
 		project->setStyleSheet("background: #0f0f0f; color: #c0c0c0; border-radius: 4px; padding: 3px 14px; margin: 2px 6px;");
 		menuBar()->setCornerWidget(project, Qt::TopRightCorner);
 
 		QMenu* file = menuBar()->addMenu("&File");
+		file->addAction("New &Project...", this, [this]() {
+			const QString name = QInputDialog::getText(this, "New Project", "Project name:");
+			if (!name.isEmpty())
+				NewProject(name.trimmed());
+		});
+		file->addAction("Open P&roject...", this, [this]() {
+			const QString projects = QFileInfo(ToQString(Paths::GetProjectDir())).absolutePath();
+			const QString path = QFileDialog::getOpenFileName(this, "Open Project", projects, "Projects (*.fpproject)");
+			if (!path.isEmpty())
+				OpenProject(QFileInfo(path).absolutePath());
+		});
+		file->addSeparator();
 		file->addAction("&New Scene", QKeySequence::New, this, &EditorWindow::NewScene);
 		file->addAction("&Open Scene...", QKeySequence::Open, this, &EditorWindow::OpenSceneDialog);
 		file->addAction("&Save", QKeySequence::Save, this, &EditorWindow::SaveCurrent);
@@ -286,6 +299,7 @@ namespace FP::Editor
 
 		m_ScriptBuilder = new ScriptBuilder(this);
 		connect(m_ScriptBuilder, &ScriptBuilder::Finished, this, &EditorWindow::OnScriptsBuilt);
+		connect(m_ScriptBuilder, &ScriptBuilder::ProjectBuilt, this, &EditorWindow::OnProjectBuilt);
 		QMenu* scripts = menuBar()->addMenu("&Scripts");
 		scripts->addAction("&New Script...", this, [this]() {
 			const QString name = QInputDialog::getText(this, "New Script", "Class name:");
@@ -759,6 +773,57 @@ namespace FP::Editor
 		m_ScriptDebounce->start();
 	}
 
+	void EditorWindow::OpenProject(const QString& dir)
+	{
+		const QString path = QDir::cleanPath(QFileInfo(dir).absoluteFilePath());
+		if (path == QDir::cleanPath(ToQString(Paths::GetProjectDir())))
+			return;
+		Project project;
+		if (!project.Load(path.toUtf8().constData()))
+		{
+			QMessageBox::warning(this, "Open Project", "There is no project in " + path);
+			return;
+		}
+		if (m_ScriptBuilder->IsBuilding())
+		{
+			QMessageBox::information(this, "Open Project", "Wait for the current build to finish first.");
+			return;
+		}
+		Stop();
+		m_ConsoleDock->raise();
+		m_ScriptBuilder->BuildProject(path);
+	}
+
+	bool EditorWindow::NewProject(const QString& name)
+	{
+		// Projects live side by side, usually in Projects.
+		const QString parent = QFileInfo(ToQString(Paths::GetProjectDir())).absolutePath();
+		Project project;
+		String error;
+		if (!Project::Create(parent.toUtf8().constData(), name.toUtf8().constData(), project, error))
+		{
+			QMessageBox::warning(this, "New Project", ToQString(error));
+			return false;
+		}
+		FP_LOG("Created project %s", project.Dir.CStr());
+		OpenProject(ToQString(project.Dir));
+		return true;
+	}
+
+	void EditorWindow::OnProjectBuilt(bool success, const QString& dir)
+	{
+		if (!success)
+		{
+			QMessageBox::warning(this, "Open Project", "The project did not build. The Output Log has the errors.");
+			return;
+		}
+		// Closing asks about unsaved work first, and the other editor only starts once this one is gone.
+		if (!close())
+			return;
+		if (!QProcess::startDetached(ScriptBuilder::EditorPath(dir), {}, dir))
+			FP_LOG_ERROR("Could not start %s", ScriptBuilder::EditorPath(dir).toUtf8().constData());
+	}
+
 	void EditorWindow::OnScriptsBuilt(bool success)
 	{
 		if (!success)
@@ -918,7 +983,7 @@ namespace FP::Editor
 	void EditorWindow::UpdateTitle()
 	{
 		const QString name = m_ScenePath.isEmpty() ? "Untitled" : QFileInfo(m_ScenePath).fileName();
-		setWindowTitle(QString("%1%2 - FirstPrinciples%3").arg(name, m_Dirty ? "*" : "", m_World->IsPlaying() ? " [Playing]" : ""));
+		setWindowTitle(QString("%1%2 - %3 - FirstPrinciples%4").arg(name, m_Dirty ? "*" : "", ToQString(Paths::GetProject().Name), m_World->IsPlaying() ? " [Playing]" : ""));
 		// The viewport tab is the open scene, like UE's level tab.
 		m_CentralTabs->setTabText(m_CentralTabs->indexOf(m_Viewport), QFileInfo(name).completeBaseName() + (m_Dirty ? "*" : ""));
 	}

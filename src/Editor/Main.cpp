@@ -84,6 +84,14 @@ int main(int argc, char** argv)
 		if (newScriptIndex >= 0 && newScriptIndex + 1 < args.size() && !window.NewScript(args[newScriptIndex + 1]))
 			return 1;
 
+		// --new-project Name creates a project next to this one and opens it. --open-project dir opens one.
+		const int newProjectIndex = static_cast<int>(args.indexOf("--new-project"));
+		if (newProjectIndex >= 0 && newProjectIndex + 1 < args.size() && !window.NewProject(args[newProjectIndex + 1]))
+			return 1;
+		const int openProjectIndex = static_cast<int>(args.indexOf("--open-project"));
+		if (openProjectIndex >= 0 && openProjectIndex + 1 < args.size())
+			window.OpenProject(args[openProjectIndex + 1]);
+
 		// --build-scripts builds GameScripts and exits with 0 on success.
 		if (args.contains("--build-scripts"))
 		{
