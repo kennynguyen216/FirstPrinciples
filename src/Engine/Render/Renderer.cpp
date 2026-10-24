@@ -177,7 +177,7 @@ namespace FP
 		{
 			const int column = static_cast<int>(surface);
 			m_ScenePipelines[static_cast<int>(ShaderKind::Unlit)][column] = CreateMeshPipeline("Unlit.frag", 1, 1, surface, false);
-			m_ScenePipelines[static_cast<int>(ShaderKind::Lit)][column] = CreateMeshPipeline("Lit.frag", 8, 2, surface, false);
+			m_ScenePipelines[static_cast<int>(ShaderKind::Lit)][column] = CreateMeshPipeline("Lit.frag", 9, 2, surface, false);
 			m_ScenePipelines[static_cast<int>(ShaderKind::Glass)][column] = CreateMeshPipeline("Glass.frag", 4, 2, surface, true);
 			m_WirePipelines[column] = CreateMeshPipeline("Unlit.frag", 1, 1, surface, false, true);
 		}
@@ -388,7 +388,7 @@ namespace FP
 		GPUTexture* white = m_Device.GetWhiteTexture();
 		SDL_GPUSampler* sampler = m_Device.GetDefaultSampler();
 
-		SDL_GPUTextureSamplerBinding bindings[8] = {};
+		SDL_GPUTextureSamplerBinding bindings[9] = {};
 		uint32 count = 0;
 		auto bind = [&](GPUTexture* texture, SDL_GPUSampler* s = nullptr) { bindings[count++] = { texture->GetHandle(), s ? s : sampler }; };
 
@@ -402,6 +402,7 @@ namespace FP
 			bind(Texture(data.SpecularMap, false, white));
 			bind(Texture(data.EmissiveMap, true, white));
 			bind(Texture(data.SubsurfaceMap, false, white));
+			bind(m_ShadowMap.Get(), m_Device.GetShadowSampler());
 		}
 		else if (draw.Kind == ShaderKind::Glass)
 		{

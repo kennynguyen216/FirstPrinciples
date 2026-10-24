@@ -13,6 +13,7 @@ layout(set = 2, binding = 4) uniform sampler2D RoughnessMap;
 layout(set = 2, binding = 5) uniform sampler2D SpecularMap;
 layout(set = 2, binding = 6) uniform sampler2D EmissiveMap;
 layout(set = 2, binding = 7) uniform sampler2D SubsurfaceMap;
+layout(set = 2, binding = 8) uniform sampler2DShadow ShadowMap;
 
 layout(location = 0) in vec3 InWorldPosition;
 layout(location = 1) in vec2 InUV;
@@ -21,6 +22,25 @@ layout(location = 3) in vec4 InTangent;
 layout(location = 4) in vec4 InTint;
 
 layout(location = 0) out vec4 OutColor;
+
+// 1 where the sun reaches the point, down to 1 - strength where something blocks it.
+float SunVisibility(vec3 worldPosition, vec3 normal)
+{
+	if (Frame.ShadowParams.x <= 0.0)
+		return 1.0;
+	// Pushing the point out along its normal keeps surfaces from shadowing themselves.
+	vec3 p = worldPosition + normal * Frame.ShadowParams.z;
+	vec3 s = (Frame.ShadowMatrix * vec4(p, 1.0)).xyz;
+	if (s.x <= 0.0 || s.x >= 1.0 || s.y <= 0.0 || s.y >= 1.0 || s.z >= 1.0)
+		return 1.0;
+	// Four filtered taps a texel apart. Each already blends 2x2 texels, so edges soften over about 4.
+	float t = Frame.ShadowParams.y;
+	float lit = texture(ShadowMap, vec3(s.xy + vec2(-t, -t), s.z))
+		+ texture(ShadowMap, vec3(s.xy + vec2(t, -t), s.z))
+		+ texture(ShadowMap, vec3(s.xy + vec2(-t, t), s.z))
+		+ texture(ShadowMap, vec3(s.xy + vec2(t, t), s.z));
+	return mix(1.0, lit * 0.25, Frame.ShadowParams.x);
+}
 
 void main()
 {
@@ -31,8 +51,12 @@ void main()
 	vec3 n = ApplyNormalMap(InNormal, InTangent, texture(NormalMap, InUV).xyz, Material.Params.w);
 	vec3 v = ViewDirection(InWorldPosition);
 	// Two sided so sprites and planes light the same from both faces.
+	vec3 faceNormal = normalize(InNormal);
 	if (dot(InNormal, v) < 0.0)
+	{
 		n = -n;
+		faceNormal = -faceNormal;
+	}
 
 	float metallic = clamp(Material.Params.x * texture(MetallicMap, InUV).r, 0.0, 1.0);
 	float roughness = clamp(Material.Params.y * texture(RoughnessMap, InUV).r, 0.045, 1.0);
@@ -51,6 +75,8 @@ void main()
 		vec3 l;
 		vec3 radiance;
 		GetLight(i, InWorldPosition, l, radiance);
+		if (i == int(Frame.ShadowParams.w))
+			radiance *= SunVisibility(InWorldPosition, faceNormal);
 
 		vec3 h = normalize(v + l);
 		float nDotL = max(dot(n, l), 0.0);

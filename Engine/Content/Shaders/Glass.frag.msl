@@ -55,6 +55,8 @@ struct FrameData
     int4 LightCount;
     float4 LightPosition[16];
     float4 LightColor[16];
+    float4x4 ShadowMatrix;
+    float4 ShadowParams;
 };
 
 struct MaterialData
@@ -66,7 +68,7 @@ struct MaterialData
     float4 Params2;
 };
 
-constant spvUnsafeArray<float2, 8> _500 = spvUnsafeArray<float2, 8>({ float2(0.707099974155426025390625), float2(-0.707099974155426025390625, 0.707099974155426025390625), float2(0.707099974155426025390625, -0.707099974155426025390625), float2(-0.707099974155426025390625), float2(1.0, 0.0), float2(-1.0, 0.0), float2(0.0, 1.0), float2(0.0, -1.0) });
+constant spvUnsafeArray<float2, 8> _501 = spvUnsafeArray<float2, 8>({ float2(0.707099974155426025390625), float2(-0.707099974155426025390625, 0.707099974155426025390625), float2(0.707099974155426025390625, -0.707099974155426025390625), float2(-0.707099974155426025390625), float2(1.0, 0.0), float2(-1.0, 0.0), float2(0.0, 1.0), float2(0.0, -1.0) });
 
 struct main0_out
 {
@@ -89,10 +91,10 @@ float3 ApplyNormalMap(thread const float3& normal, thread const float4& tangent,
     float3 t = fast::normalize(tangent.xyz - (n * dot(n, tangent.xyz)));
     float3 b = cross(n, t) * tangent.w;
     float3 local = (sampled * 2.0) - float3(1.0);
-    float3 _121 = local;
-    float2 _123 = _121.xy * strength;
-    local.x = _123.x;
-    local.y = _123.y;
+    float3 _122 = local;
+    float2 _124 = _122.xy * strength;
+    local.x = _124.x;
+    local.y = _124.y;
     return fast::normalize(((t * local.x) + (b * local.y)) + (n * local.z));
 }
 
@@ -197,7 +199,7 @@ fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Materi
     {
         for (int i = 0; i < 8; i++)
         {
-            behind += SceneColor.sample(SceneColorSmplr, (screenUV + (_500[i] * blur))).xyz;
+            behind += SceneColor.sample(SceneColorSmplr, (screenUV + (_501[i] * blur))).xyz;
         }
         behind /= float3(9.0);
     }

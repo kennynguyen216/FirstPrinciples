@@ -49,6 +49,8 @@ layout(set = 3, binding = 1) uniform FrameData
 	ivec4 LightCount;
 	vec4 LightPosition[MAX_LIGHTS]; // xyz position, or direction the light travels. w is 0 directional, 1 point
 	vec4 LightColor[MAX_LIGHTS];    // rgb already multiplied by intensity, w range
+	mat4 ShadowMatrix;              // world to shadow map uv in xy and depth in z
+	vec4 ShadowParams;              // x strength (0 is off), y one texel in uv, z normal offset, w light index
 } Frame;
 
 #endif
