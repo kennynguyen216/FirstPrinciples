@@ -1,5 +1,6 @@
 #include "Editor/ScriptBuilder.h"
 #include "Engine/Paths.h"
+#include "Engine/Scripting/ScriptRuntime.h"
 #include "Core/Log.h"
 
 #include <QDir>
@@ -182,6 +183,13 @@ FP_SCRIPT(NAME)
 			return;
 		}
 		m_RegeneratedThisBuild = m_Steps.size() > 1;
+		if (m_RegeneratedThisBuild)
+		{
+			// A removed script leaves nothing newer than the old library, so make would skip
+			// the link and keep the deleted script. Deleting the output forces a relink.
+			// The editor runs a copy, so the original is never locked.
+			QFile::remove(QString::fromUtf8(ScriptRuntime::GetDefaultModulePath().CStr()));
+		}
 		FP_LOG("Building scripts...");
 		emit Started();
 		RunNext();
