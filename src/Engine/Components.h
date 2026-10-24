@@ -64,17 +64,24 @@ namespace FP
 	};
 
 	// A built in shape (Cube, Sphere, Plane, Quad) or a .obj file relative to Content.
-	// Uses the entity's MaterialComponent for shading.
+	// Uses the entity's MaterialComponent for shading, one material per mesh section.
 	struct MeshComponent
 	{
 		String Mesh = "Cube";
 	};
 
-	// Points at a shared .material file. Works on sprites and meshes.
+	// Points at shared .material files. Works on sprites and meshes.
 	// A sprite's own Texture is used as the base color map when the material has none.
 	struct MaterialComponent
 	{
-		String Material;
+		String Material; // used by every section without its own slot
+		Array<String> Slots; // one per mesh section, empty means use Material
+
+		// The material for one mesh section.
+		const String& GetForSection(int32 section) const
+		{
+			return Slots.IsValidIndex(section) && !Slots[section].IsEmpty() ? Slots[section] : Material;
+		}
 	};
 
 	// Light at the transform's position. In 2D, Position.Z is the height above the sprites.

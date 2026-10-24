@@ -150,6 +150,33 @@ FP_TEST(Scene_CopiesOneEntity)
 	FP_EXPECT(target->GetEntities().Num() == 2);
 }
 
+FP_TEST(Scene_SavesMaterialSlots)
+{
+	RegisterTestComponents();
+	StrongObjectPtr<World> world(NewObject<World>());
+	const Entity e = world->CreateEntity("Lamp");
+	MaterialComponent& material = world->Add<MaterialComponent>(e);
+	material.Material = "Materials/Base.material";
+	material.Slots = { "", "", "Materials/Glass.material" };
+
+	const String text = SceneSerializer::SaveEntityToString(*world.Get(), e);
+	FP_EXPECT(text.Contains("Slot 2 \"Materials/Glass.material\""));
+	FP_EXPECT(!text.Contains("Slot 0"));
+
+	StrongObjectPtr<World> loaded(NewObject<World>());
+	const Entity copy = SceneSerializer::LoadEntityFromString(*loaded.Get(), text.View());
+	const MaterialComponent& read = loaded->Get<MaterialComponent>(copy);
+	FP_EXPECT(read.GetForSection(0) == "Materials/Base.material");
+	FP_EXPECT(read.GetForSection(2) == "Materials/Glass.material");
+	FP_EXPECT(read.GetForSection(7) == "Materials/Base.material");
+
+	// Scenes from before slots still load.
+	const Entity old = SceneSerializer::LoadEntityFromString(*loaded.Get(),
+		"entity 00000000-0000-4000-8000-0000000000aa\ncomponent Material\n  Material \"Materials/Old.material\"\n");
+	FP_EXPECT(loaded->Get<MaterialComponent>(old).Material == "Materials/Old.material");
+	FP_EXPECT(loaded->Get<MaterialComponent>(old).Slots.IsEmpty());
+}
+
 FP_TEST(Scene_SkipsUnknownData)
 {
 	RegisterTestComponents();
