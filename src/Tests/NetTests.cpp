@@ -38,3 +38,48 @@ FP_TEST(Net_SocketSendsOverLoopback)
 	FP_EXPECT(from.Port == a.GetPort());
 	FP_EXPECT(b.Receive(from, buffer, sizeof(buffer)) == -1);
 }
+
+#include "Engine/Net/NetBuffer.h"
+
+FP_TEST(Net_BufferRoundTrips)
+{
+	NetWriter writer;
+	writer.WriteU8(7);
+	writer.WriteU16(65000);
+	writer.WriteU32(0xDEADBEEF);
+	writer.WriteU64(1ull << 40);
+	writer.WriteFloat(1.5f);
+	writer.WriteBool(true);
+	writer.WriteVec3({ 1, -2, 3 });
+	writer.WriteString("peer");
+
+	NetReader reader(writer.Data(), writer.Size());
+	FP_EXPECT(reader.ReadU8() == 7);
+	FP_EXPECT(reader.ReadU16() == 65000);
+	FP_EXPECT(reader.ReadU32() == 0xDEADBEEF);
+	FP_EXPECT(reader.ReadU64() == (1ull << 40));
+	FP_EXPECT(reader.ReadFloat() == 1.5f);
+	FP_EXPECT(reader.ReadBool());
+	const Vec3 v = reader.ReadVec3();
+	FP_EXPECT(v.X == 1 && v.Y == -2 && v.Z == 3);
+	FP_EXPECT(reader.ReadString() == "peer");
+	FP_EXPECT(reader.IsValid() && reader.Remaining() == 0);
+
+	// Reading past the end fails safely instead of overrunning.
+	FP_EXPECT(reader.ReadU32() == 0);
+	FP_EXPECT(!reader.IsValid());
+	NetReader truncated(writer.Data(), 2);
+	truncated.ReadU8();
+	FP_EXPECT(truncated.ReadU16() == 0 && !truncated.IsValid());
+}
+
+FP_TEST(Net_SequencesWrapAround)
+{
+	FP_EXPECT(SequenceGreater(1, 0));
+	FP_EXPECT(!SequenceGreater(0, 1));
+	FP_EXPECT(SequenceGreater(0, 65535));
+	FP_EXPECT(SequenceGreater(5, 65500));
+	FP_EXPECT(!SequenceGreater(65500, 5));
+	FP_EXPECT(!SequenceGreater(9, 9));
+	FP_EXPECT(SequenceLess(65535, 2));
+}
