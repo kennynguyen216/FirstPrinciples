@@ -24,6 +24,9 @@ namespace FP::Editor
 		static QStringList ListScriptFiles();
 		static QString ScriptsDirectory();
 
+		// Compilers record source paths relative to where they ran. Returns an absolute path.
+		static QString ResolveSourcePath(const QString& path);
+
 	signals:
 		void Started();
 		void Finished(bool success);

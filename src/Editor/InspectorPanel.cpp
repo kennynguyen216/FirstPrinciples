@@ -2,6 +2,7 @@
 #include "Engine/ComponentRegistry.h"
 #include "Engine/Material.h"
 #include "Engine/Paths.h"
+#include "Engine/Scripting/ScriptRuntime.h"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -94,7 +95,151 @@ namespace FP::Editor
 		m_Layout = new QVBoxLayout(m_Content);
 		m_Layout->setAlignment(Qt::AlignTop);
 		scroll->setWidget(m_Content);
+
+		// Script field rows point into script code, so let go of them before the library unloads.
+		m_RuntimeListener = ScriptRuntime::Get().AddListener([this](bool loaded) {
+			m_ScriptsUnloaded = !loaded;
+			Rebuild();
+		});
 		Rebuild();
+	}
+
+	InspectorPanel::~InspectorPanel()
+	{
+		ScriptRuntime::Get().RemoveListener(m_RuntimeListener);
+		m_Refreshers.clear();
+		ClearEditScripts();
+	}
+
+	void InspectorPanel::RebuildLater()
+	{
+		// Rebuilding deletes the button that was clicked, so wait until its click handler returns.
+		QMetaObject::invokeMethod(this, &InspectorPanel::Rebuild, Qt::QueuedConnection);
+	}
+
+	void InspectorPanel::ClearEditScripts()
+	{
+		for (const EditScript& edit : m_EditScripts)
+			ScriptRuntime::Get().DestroyInstance(*edit.Type, edit.Instance);
+		m_EditScripts.clear();
+	}
+
+	ScriptSlot* InspectorPanel::SlotAt(int32 index) const
+	{
+		if (!m_World || !m_World->IsValid(m_Entity))
+			return nullptr;
+		ScriptComponent* scripts = m_World->TryGet<ScriptComponent>(m_Entity);
+		return scripts && scripts->Scripts.IsValidIndex(index) ? &scripts->Scripts[index] : nullptr;
+	}
+
+	void InspectorPanel::AddScriptsSection(QVBoxLayout* layout)
+	{
+		if (m_ScriptsUnloaded)
+		{
+			QLabel* waiting = new QLabel("Scripts are reloading...");
+			waiting->setEnabled(false);
+			layout->addWidget(waiting);
+			return;
+		}
+
+		ScriptRuntime& runtime = ScriptRuntime::Get();
+		const ScriptComponent& component = m_World->Get<ScriptComponent>(m_Entity);
+		for (int32 index = 0; index < component.Scripts.Num(); ++index)
+		{
+			const ScriptSlot& slot = component.Scripts[index];
+			const ScriptType* type = runtime.FindType(slot.Name);
+
+			QGroupBox* box = new QGroupBox(ToQString(slot.Name));
+			QVBoxLayout* boxLayout = new QVBoxLayout(box);
+			QFormLayout* form = new QFormLayout();
+			form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+			form->setRowWrapPolicy(QFormLayout::WrapLongRows); // script field names are often long
+			boxLayout->addLayout(form);
+
+			if (!type)
+			{
+				QLabel* missing = new QLabel("Not compiled. Its saved values are kept.");
+				missing->setEnabled(false);
+				boxLayout->addWidget(missing);
+			}
+			else
+			{
+				// While playing the live instance is shown. Otherwise edits go to a throwaway
+				// instance and are written back to the slot's saved text.
+				Script* edit = runtime.CreateInstance(*type, m_World, m_Entity, slot.Properties.View());
+				m_EditScripts.push_back({ type, edit });
+				auto data = [this, index, edit]() -> void* {
+					const ScriptSlot* current = SlotAt(index);
+					return current && current->Instance ? current->Instance : edit;
+				};
+				auto changed = [this, index, type, edit]() {
+					ScriptSlot* current = SlotAt(index);
+					if (current && !current->Instance)
+						current->Properties = ScriptRuntime::CaptureProperties(*type, edit);
+					emit Modified();
+				};
+				for (const FieldInfo& field : type->Fields)
+					AddFieldEditor(form, field, data, changed);
+				if (type->Fields.IsEmpty())
+				{
+					QLabel* none = new QLabel("No exposed fields");
+					none->setEnabled(false);
+					boxLayout->addWidget(none);
+				}
+			}
+
+			QHBoxLayout* buttons = new QHBoxLayout();
+			buttons->addStretch();
+			if (type && type->SourceFile)
+			{
+				QPushButton* editButton = new QPushButton("Edit");
+				editButton->setFlat(true);
+				const QString source = QString::fromUtf8(type->SourceFile);
+				connect(editButton, &QPushButton::clicked, this, [this, source]() { emit OpenScriptRequested(source); });
+				buttons->addWidget(editButton);
+			}
+			QPushButton* remove = new QPushButton("Remove");
+			remove->setFlat(true);
+			connect(remove, &QPushButton::clicked, this, [this, index]() {
+				ScriptSlot* current = SlotAt(index);
+				if (!current)
+					return;
+				if (current->Instance)
+				{
+					current->Instance->OnStop();
+					ScriptRuntime::Get().DestroyInstance(*current->Type, current->Instance);
+					current->Instance = nullptr;
+				}
+				m_World->Get<ScriptComponent>(m_Entity).Scripts.RemoveAt(index);
+				emit Modified();
+				RebuildLater();
+			});
+			buttons->addWidget(remove);
+			boxLayout->addLayout(buttons);
+			layout->addWidget(box);
+		}
+
+		QToolButton* add = new QToolButton();
+		add->setText("Add Script");
+		add->setPopupMode(QToolButton::InstantPopup);
+		QMenu* menu = new QMenu(add);
+		for (const ScriptType* type : runtime.GetTypes())
+		{
+			const String name = type->Name;
+			menu->addAction(ToQString(name), this, [this, name]() {
+				if (ScriptComponent* scripts = m_World->TryGet<ScriptComponent>(m_Entity))
+				{
+					scripts->Scripts.Emplace(name);
+					emit Modified();
+					RebuildLater();
+				}
+			});
+		}
+		add->setMenu(menu);
+		add->setEnabled(!menu->isEmpty());
+		if (menu->isEmpty())
+			add->setToolTip("No scripts are compiled. Use Scripts > New Script.");
+		layout->addWidget(add, 0, Qt::AlignLeft);
 	}
 
 	void InspectorPanel::SetTarget(World* world, Entity entity)
@@ -131,7 +276,7 @@ namespace FP::Editor
 				{
 					m_World->Get<MaterialComponent>(m_Entity).Material = ToString(relative);
 					emit Modified();
-					Rebuild();
+					RebuildLater();
 				}
 			});
 			m_Layout->addWidget(create);
@@ -178,6 +323,7 @@ namespace FP::Editor
 	void InspectorPanel::Rebuild()
 	{
 		m_Refreshers.clear();
+		ClearEditScripts();
 		while (QLayoutItem* item = m_Layout->takeAt(0))
 		{
 			delete item->widget();
@@ -193,7 +339,8 @@ namespace FP::Editor
 		}
 
 		entt::registry& registry = m_World->GetRegistry();
-		QMenu* addMenu = new QMenu(this);
+		QToolButton* add = new QToolButton();
+		QMenu* addMenu = new QMenu(add);
 
 		for (const ComponentInfo* info : ComponentRegistry::Get().GetAll())
 		{
@@ -204,7 +351,7 @@ namespace FP::Editor
 				addMenu->addAction(info->Name, this, [this, info]() {
 					info->Add(m_World->GetRegistry(), m_Entity);
 					emit Modified();
-					Rebuild();
+					RebuildLater();
 				});
 				continue;
 			}
@@ -218,6 +365,8 @@ namespace FP::Editor
 			auto data = [this, info]() -> void* {
 				return m_World && m_World->IsValid(m_Entity) ? info->TryGet(m_World->GetRegistry(), m_Entity) : nullptr;
 			};
+			if (info->CustomInspector && info == ComponentRegistry::Get().Find<ScriptComponent>())
+				AddScriptsSection(groupLayout);
 			for (const FieldInfo& field : info->Fields)
 				AddFieldEditor(form, field, data, [this]() { emit Modified(); });
 
@@ -226,7 +375,7 @@ namespace FP::Editor
 			connect(remove, &QPushButton::clicked, this, [this, info]() {
 				info->Remove(m_World->GetRegistry(), m_Entity);
 				emit Modified();
-				Rebuild();
+				RebuildLater();
 			});
 			groupLayout->addWidget(remove, 0, Qt::AlignRight);
 			m_Layout->addWidget(group);
@@ -235,7 +384,6 @@ namespace FP::Editor
 				AddMaterialSection();
 		}
 
-		QToolButton* add = new QToolButton();
 		add->setText("Add Component");
 		add->setPopupMode(QToolButton::InstantPopup);
 		add->setMenu(addMenu);

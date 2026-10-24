@@ -59,6 +59,20 @@ namespace FP::Editor
 		return ProjectDir() + "/Game/Scripts";
 	}
 
+	QString ScriptBuilder::ResolveSourcePath(const QString& path)
+	{
+		if (QFileInfo(path).isAbsolute())
+			return QDir::cleanPath(path);
+		// Makefiles compile from Build, so relative paths start there.
+		for (const QString& base : { ProjectDir() + "/Build", ProjectDir() })
+		{
+			const QString candidate = QDir(base).absoluteFilePath(path);
+			if (QFileInfo::exists(candidate))
+				return QDir::cleanPath(candidate);
+		}
+		return path;
+	}
+
 	QStringList ScriptBuilder::ListScriptFiles()
 	{
 		QStringList files;

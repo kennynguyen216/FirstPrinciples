@@ -2,6 +2,7 @@
 
 #include "Engine/ComponentRegistry.h"
 #include "Engine/World.h"
+#include "Engine/Scripting/ScriptComponent.h"
 
 #include <QWidget>
 
@@ -21,6 +22,7 @@ namespace FP::Editor
 
 	public:
 		explicit InspectorPanel(QWidget* parent = nullptr);
+		~InspectorPanel() override;
 
 		// Rebuilds the widgets. Call when the selection or the set of components changes.
 		void SetTarget(World* world, Entity entity);
@@ -31,6 +33,9 @@ namespace FP::Editor
 	signals:
 		// A field was edited. Name changes matter to the hierarchy.
 		void Modified();
+
+		// The user asked to edit a script's source file.
+		void OpenScriptRequested(const QString& path);
 
 	public:
 		using DataFn = std::function<void*()>;
@@ -43,12 +48,27 @@ namespace FP::Editor
 
 	private:
 		void Rebuild();
+		void RebuildLater();
 		void AddMaterialSection();
+		void AddScriptsSection(QVBoxLayout* layout);
+		ScriptSlot* SlotAt(int32 index) const;
+
+		// Throwaway instances that hold a script's field values while editing outside play.
+		void ClearEditScripts();
 
 		World* m_World = nullptr;
 		Entity m_Entity = NullEntity;
 		QWidget* m_Content = nullptr;
 		QVBoxLayout* m_Layout = nullptr;
 		std::vector<std::function<void()>> m_Refreshers;
+
+		struct EditScript
+		{
+			const ScriptType* Type;
+			Script* Instance;
+		};
+		std::vector<EditScript> m_EditScripts;
+		int32 m_RuntimeListener = 0;
+		bool m_ScriptsUnloaded = false;
 	};
 }

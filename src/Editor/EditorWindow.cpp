@@ -18,7 +18,9 @@
 #include <QComboBox>
 #include <QDockWidget>
 #include <QFileDialog>
+#include <QDesktopServices>
 #include <QDir>
+#include <QUrl>
 #include <QFileSystemWatcher>
 #include <QFileInfo>
 #include <QKeySequence>
@@ -107,6 +109,9 @@ namespace FP::Editor
 		addDockWidget(Qt::LeftDockWidgetArea, hierarchyDock);
 
 		m_Inspector = new InspectorPanel();
+		connect(m_Inspector, &InspectorPanel::OpenScriptRequested, this, [](const QString& path) {
+			QDesktopServices::openUrl(QUrl::fromLocalFile(ScriptBuilder::ResolveSourcePath(path)));
+		});
 		connect(m_Inspector, &InspectorPanel::Modified, this, [this]() {
 			MarkDirty();
 			RefreshHierarchy();
