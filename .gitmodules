@@ -20,3 +20,6 @@
 	path = ThirdParty/imgui
 	url = https://github.com/ocornut/imgui.git
 	branch = docking
+[submodule "ThirdParty/opus"]
+	path = ThirdParty/opus
+	url = https://github.com/xiph/opus.git

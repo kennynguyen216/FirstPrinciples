@@ -75,6 +75,7 @@ int main(int argc, char** argv)
 	const char* screenshotPath = nullptr;
 	double screenshotDelay = 0.5;
 	bool host = false;
+	bool voice = false;
 	uint16 hostPort = 7777;
 	const char* joinAddress = nullptr;
 	const char* password = "";
@@ -85,6 +86,8 @@ int main(int argc, char** argv)
 			screenshotPath = argv[++i];
 		else if (arg == "--wait" && i + 1 < argc)
 			screenshotDelay = std::atof(argv[++i]);
+		else if (arg == "--voice")
+			voice = true;
 		else if (arg == "--host")
 		{
 			host = true;
@@ -101,6 +104,11 @@ int main(int argc, char** argv)
 			password = argv[++i];
 		else
 			scene = argv[i];
+	}
+	if (voice && !host && !joinAddress)
+	{
+		FP_LOG_ERROR("Voice chat needs --host or --join. Use a headset and hold V to talk.");
+		return 1;
 	}
 
 	GPUDevice* device = GPUDevice::Create();
@@ -134,7 +142,8 @@ int main(int argc, char** argv)
 	// Networking first so remote entities are in place before the game's systems look at them.
 	if (host || joinAddress)
 	{
-		NetSession& session = world->AddSystem<NetworkSystem>()->GetSession();
+		NetworkSystem* network = world->AddSystem<NetworkSystem>();
+		NetSession& session = network->GetSession();
 		session.SetPassword(password);
 		// Joiners listen too, on any free port, since every peer talks to every other one.
 		if (!session.Start(host ? hostPort : 0))
@@ -148,6 +157,11 @@ int main(int argc, char** argv)
 				return 1;
 			}
 			session.Join(address);
+		}
+		if (voice)
+		{
+			network->GetVoiceChat().SetEnabled(true);
+			FP_LOG("Proximity voice enabled. Use a headset; hold V to talk. %s", network->GetVoiceChat().GetStatusText().CStr());
 		}
 	}
 

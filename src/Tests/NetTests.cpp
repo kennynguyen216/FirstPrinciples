@@ -386,6 +386,11 @@ FP_TEST(Net_SessionTimesOut)
 	Drain(a, NetEventType::PeerLeft);
 
 	// B goes silent without saying goodbye. A drops it once the timeout passes.
+	// Consume the handshake's final queued packets before measuring a full quiet interval.
+	a.Update(now);
+	now += NetSession::Timeout - 0.1;
+	a.Update(now);
+	FP_EXPECT(a.GetPeers().Num() == 1);
 	now += NetSession::Timeout + 1;
 	a.Update(now);
 	const Array<NetEvent> left = Drain(a, NetEventType::PeerLeft);

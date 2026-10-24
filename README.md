@@ -151,9 +151,40 @@ Open `Projects/Sample/Content/Scenes/AudioDemo.scene` and press Play. Move the l
 Space for overlapping clicks. Demo WAVs are original generated sounds; regenerate and check them
 with `python Scripts/GenerateAudioFixtures.py`. Run `Projects/Sample/Binaries/Debug/Tests Audio` for audio tests.
 
-The first version uses resident WAVs and simple stereo panning. Compressed/streamed music, HRTF,
-occlusion, Doppler and effects are deferred. Dense mixes can hard-clip, and an immediate Stop can
-click.
+Spatial sources have **Occlusion** enabled by default. A solid physics collider between source
+and listener reduces volume and low-pass filters the sound. Triggers and the source/listener's
+own colliders are skipped. Add `PhysicsSystem` when setting up a world yourself; the editor and
+runtime already do this. Occlusion checks run at most 20 times per second per voice. The first
+version uses one solid hit with fixed muffling, rather than thickness or material simulation.
+
+For proximity voice, add **VoiceChat** and **Network** (`OnePerPeer` enabled) to the player and an
+**AudioListener** to its local listening position. Remote player listeners are ignored. Voice
+uses the player's world position, distance settings and the same collider occlusion as WAVs.
+The microphone starts only after explicit opt-in; hold **V** while the game view has focus to
+transmit. Use headsets: speaker echo cancellation is not implemented.
+
+The sample `Scenes/ProximityVoice.scene` has two sounds, a networked player and a wall to walk
+around. On Windows, run a host and a joiner from the repository root (use the host's LAN address
+instead of `127.0.0.1` when playing on another computer):
+
+```powershell
+Projects/Sample/Binaries/Debug/Runtime.exe Scenes/ProximityVoice.scene --host 7777 --voice --password example
+Projects/Sample/Binaries/Debug/Runtime.exe Scenes/ProximityVoice.scene --join 127.0.0.1:7777 --voice --password example
+```
+
+Without `--voice`, the microphone stays off and a player with VoiceChat can still listen.
+The editor's **Audio...** mixer has a separate Voice volume and mute, plus microphone opt-in and
+per-peer mute controls when a network system is active. The editor does not create a network
+session automatically; the runtime flags above are the first multiplayer test path.
+
+Speech is 48 kHz mono Opus in 20 ms packets over the existing encrypted UDP session. Incoming
+speech has a bounded jitter buffer, packet-loss concealment and bounded streaming playback.
+Packets are tied to their peer's player, with size and rate limits. Proximity filtering uses
+peer-replicated positions; a trusted server/relay is needed to enforce who may receive speech.
+The existing session has no relay for peers behind strict NATs.
+
+Compressed music streaming, HRTF, reflections and Doppler remain deferred. Dense mixes can
+hard-clip, and an immediate Stop can click.
 
 ### C++ scripts
 

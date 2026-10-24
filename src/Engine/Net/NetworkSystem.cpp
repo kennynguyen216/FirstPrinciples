@@ -58,6 +58,7 @@ namespace FP
 
 	void NetworkSystem::OnStop(World&)
 	{
+		m_Voice.Shutdown();
 		m_Session.Stop();
 	}
 
@@ -163,6 +164,9 @@ namespace FP
 		const MessageType type = static_cast<MessageType>(reader.ReadU8());
 		switch (type)
 		{
+			case MessageType::Voice:
+				m_Voice.Receive(world, event);
+				break;
 			case MessageType::Spawn:
 			{
 				const Guid id = ReadGuid(reader);
@@ -310,7 +314,10 @@ namespace FP
 	void NetworkSystem::Update(World& world, float deltaTime)
 	{
 		if (!m_Session.IsRunning())
+		{
+			m_Voice.Shutdown();
 			return;
+		}
 		const double now = PlatformMisc::GetTimeSeconds();
 		m_Session.Update(now);
 
@@ -329,6 +336,7 @@ namespace FP
 					}
 					break;
 				case NetEventType::PeerLeft:
+					m_Voice.RemovePeer(event.Peer);
 					for (auto [entity, id, network] : world.View<IdComponent, NetworkComponent>().each())
 					{
 						if (network.Owner == event.Peer && !m_SceneEntities.Contains(id.Id))
@@ -352,5 +360,6 @@ namespace FP
 		ClaimEntities(world);
 		Smooth(world, deltaTime);
 		SendTransforms(world, now);
+		m_Voice.Update(world, m_Session, deltaTime);
 	}
 }

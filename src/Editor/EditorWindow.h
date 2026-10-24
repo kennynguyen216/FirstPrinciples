@@ -188,8 +188,8 @@ namespace FP::Editor
 		QAction* m_View3DAction = nullptr;
 		QAction* m_ImportAudioAction = nullptr;
 		QLabel* m_AudioStatus = nullptr;
-		float m_AudioGains[4] = { 1, 1, 1, 1 };
-		bool m_AudioMutes[4] = {};
+		float m_AudioGains[5] = { 1, 1, 1, 1, 1 };
+		bool m_AudioMutes[5] = {};
 		ViewportToolbar* m_ViewportToolbar = nullptr;
 		ScriptBuilder* m_ScriptBuilder = nullptr;
 		QTabWidget* m_CentralTabs = nullptr;
