@@ -19,11 +19,14 @@ namespace FP::Editor
 	{
 		QString ProjectDir() { return QString::fromUtf8(Paths::GetProjectDir().CStr()); }
 
-		// Folder with premake5.lua and the generated Build folder.
+		// Folder with premake5.lua.
 		QString RootDir() { return QFileInfo(QString::fromUtf8(Paths::GetEngineDir().CStr())).absolutePath(); }
 
+		// The project's generated makefiles or solution.
+		QString BuildDir() { return ProjectDir() + "/Build"; }
+
 		// Records which script files the projects were generated with.
-		QString StampPath() { return RootDir() + "/Build/ScriptFiles.txt"; }
+		QString StampPath() { return BuildDir() + "/ScriptFiles.txt"; }
 
 		// GUI apps on macOS do not inherit the shell PATH, so add the usual Homebrew locations.
 		QProcessEnvironment BuildEnvironment()
@@ -124,7 +127,7 @@ FP_SCRIPT(NAME)
 		if (QFileInfo(path).isAbsolute())
 			return QDir::cleanPath(path);
 		// Makefiles compile from Build, so relative paths start there.
-		for (const QString& base : { RootDir() + "/Build", RootDir() })
+		for (const QString& base : { BuildDir(), ProjectDir(), RootDir() })
 		{
 			const QString candidate = QDir(base).absoluteFilePath(path);
 			if (QFileInfo::exists(candidate))
@@ -147,28 +150,30 @@ FP_SCRIPT(NAME)
 	bool ScriptBuilder::PlanSteps(QList<Step>& steps) const
 	{
 		const QString root = RootDir();
+		const QStringList premakeArgs = { "--file=" + root + "/premake5.lua", "--project=" + ProjectDir() };
 		const QString files = ListScriptFiles().join('\n');
 		QFile stamp(StampPath());
 		const bool regenerate = !stamp.open(QIODevice::ReadOnly) || QString::fromUtf8(stamp.readAll()) != files;
 
 #if defined(_WIN32)
 		// The solution format tells which Visual Studio generated it.
-		const bool vs2026 = QFileInfo::exists(root + "/Build/FirstPrinciples.slnx");
-		const QString solution = root + (vs2026 ? "/Build/FirstPrinciples.slnx" : "/Build/FirstPrinciples.sln");
+		const QString name = QString::fromUtf8(Paths::GetProject().Name.CStr());
+		const bool vs2026 = QFileInfo::exists(BuildDir() + "/" + name + ".slnx");
+		const QString solution = BuildDir() + "/" + name + (vs2026 ? ".slnx" : ".sln");
 		if (!QFileInfo::exists(solution))
 		{
-			FP_LOG_ERROR("No solution in Build. Run Scripts\\GenerateProjects.bat first.");
+			FP_LOG_ERROR("No solution in the project's Build folder. Run Scripts\\GenerateProjects.bat first.");
 			return false;
 		}
 		if (regenerate)
-			steps.append({ root + "/ThirdParty/premake/premake5.exe", { "--file=" + root + "/premake5.lua", vs2026 ? "vs2026" : "vs2022" } });
+			steps.append({ root + "/ThirdParty/premake/premake5.exe", premakeArgs + QStringList{ vs2026 ? "vs2026" : "vs2022" } });
 		const QString config = FP_BUILD_DEBUG ? "Debug" : "Release";
 		steps.append({ FindMSBuild(), { solution, "/t:GameScripts", "/p:Configuration=" + config, "/p:Platform=x64", "/m", "/nologo", "/v:minimal" } });
 #else
 		if (regenerate)
-			steps.append({ FindProgram("premake5"), { "--file=" + root + "/premake5.lua", "gmake" } });
+			steps.append({ FindProgram("premake5"), premakeArgs + QStringList{ "gmake" } });
 		const QString config = FP_BUILD_DEBUG ? "debug" : "release";
-		steps.append({ FindProgram("make"), { "-C", root + "/Build", "GameScripts", "config=" + config, QString("-j%1").arg(QThread::idealThreadCount()) } });
+		steps.append({ FindProgram("make"), { "-C", BuildDir(), "GameScripts", "config=" + config, QString("-j%1").arg(QThread::idealThreadCount()) } });
 #endif
 		return true;
 	}

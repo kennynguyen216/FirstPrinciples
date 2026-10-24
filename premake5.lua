@@ -1,5 +1,6 @@
 -- FirstPrinciples workspace.
 -- macOS: premake5 gmake (or xcode4). Windows: Scripts/GenerateProjects.bat. See README.md.
+-- --project=Projects/Name picks the game to build. Projects/Sample is the default.
 
 local Root = path.getabsolute(".")
 local IsWindows = os.target() == "windows"
@@ -55,8 +56,20 @@ end
 
 local QtModules = { "Core", "Gui", "Widgets" }
 
--- The game being built. Its Source folder becomes the Game and GameScripts projects.
-local ProjectDir = Root .. "/Projects/Sample"
+-- The game being built. Its Source folder becomes the Game and GameScripts projects and
+-- everything generated or built lands in its Build, Binaries and Intermediate folders.
+newoption {
+	trigger = "project",
+	value = "path",
+	description = "Project folder to build (default Projects/Sample)",
+}
+
+local ProjectDir = _OPTIONS["project"] and path.getabsolute(_OPTIONS["project"], _WORKING_DIR) or (Root .. "/Projects/Sample")
+local ProjectFile = os.matchfiles(ProjectDir .. "/*.fpproject")[1]
+if not ProjectFile then
+	error("No .fpproject file in " .. ProjectDir)
+end
+local ProjectName = io.readfile(ProjectFile):match('Name%s+"?([%w_]+)"?') or path.getbasename(ProjectFile)
 
 -- Helpers --------------------------------------------------------------------
 
@@ -118,11 +131,11 @@ local function AddMocRules(dir)
 			local name = path.getbasename(header)
 			local includeName = path.getrelative(Root .. "/src", path.getabsolute(header))
 			-- moc output is the same for every configuration so it lives in one shared folder.
-			local output = Root .. "/Intermediate/Moc/moc_" .. name .. ".cpp"
+			local output = ProjectDir .. "/Intermediate/Moc/moc_" .. name .. ".cpp"
 			filter { "files:" .. header }
 				buildmessage("moc " .. includeName)
 				buildcommands {
-					'{MKDIR} "' .. Root .. '/Intermediate/Moc"',
+					'{MKDIR} "' .. ProjectDir .. '/Intermediate/Moc"',
 					'"' .. MocPath .. '" "%{file.abspath}" -f"' .. includeName .. '" -o "' .. output .. '"',
 				}
 				buildoutputs { output }
@@ -134,8 +147,8 @@ end
 
 -- Workspace ------------------------------------------------------------------
 
-workspace "FirstPrinciples"
-	location "Build"
+workspace (ProjectName)
+	location (ProjectDir .. "/Build")
 	configurations { "Debug", "Release" }
 	startproject "Editor"
 
@@ -144,9 +157,9 @@ workspace "FirstPrinciples"
 	staticruntime "Off"
 	multiprocessorcompile "On"
 
-	targetdir (Root .. "/Binaries/%{cfg.buildcfg}")
-	objdir (Root .. "/Intermediate/%{cfg.buildcfg}/%{prj.name}")
-	debugdir (Root)
+	targetdir (ProjectDir .. "/Binaries/%{cfg.buildcfg}")
+	objdir (ProjectDir .. "/Intermediate/%{cfg.buildcfg}/%{prj.name}")
+	debugdir (ProjectDir)
 
 	includedirs { Root .. "/src", ProjectDir .. "/Source" }
 
