@@ -7,10 +7,8 @@ using namespace FP;
 
 namespace
 {
-	constexpr float Advance = 0.75f; // glyph cells are 8 font pixels wide, letters step 6
+	constexpr float Advance = 0.75f;
 
-	// Material file name for a character, matching Tools/MakeFont.py. Lowercase draws as uppercase;
-	// characters the font doesn't have show as '?'.
 	std::string GlyphName(char c)
 	{
 		const char upper = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
@@ -71,7 +69,7 @@ void Hud::Place(World& world, Entity entity, Vec2 at, Vec2 size, Color color, in
 {
 	TransformComponent& transform = world.Get<TransformComponent>(entity);
 	transform.Position = m_Origin + m_Rotation.Rotate({ at.X * m_Scale, at.Y * m_Scale, -m_Distance });
-	transform.Rotation = (m_Rotation * Quat::FromEuler({ 0, 0, rollDegrees })).ToEuler(); // keeps the camera's own roll
+	transform.Rotation = (m_Rotation * Quat::FromEuler({ 0, 0, rollDegrees })).ToEuler();
 	transform.Scale = { 1, 1, 1 };
 	SpriteComponent sprite;
 	sprite.Tint = color;
@@ -106,7 +104,6 @@ void Hud::Box(World& world, Vec2 center, Vec2 size, Color color, int32 layer)
 
 void Hud::End(World& world)
 {
-	// Unused sprites lose their SpriteComponent so they cost nothing to draw.
 	for (size_t i = m_GlyphsUsed; i < m_Glyphs.size(); ++i)
 	{
 		if (world.IsValid(m_Glyphs[i]) && world.Has<SpriteComponent>(m_Glyphs[i]))
@@ -123,7 +120,7 @@ bool Hud::ToScreen(Vec3 point, Vec2& screen) const
 {
 	const Quat inverse{ -m_Rotation.X, -m_Rotation.Y, -m_Rotation.Z, m_Rotation.W };
 	const Vec3 local = inverse.Rotate(point - m_Origin);
-	const float halfHeight = m_Scale / m_Distance; // tan of half the vertical field of view
+	const float halfHeight = m_Scale / m_Distance;
 	if (local.Z >= 0)
 	{
 		screen = Vec2{ local.X, local.Y };

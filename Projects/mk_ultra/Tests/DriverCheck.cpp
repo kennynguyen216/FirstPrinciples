@@ -1,7 +1,3 @@
-// Self-check for the Driver's game logic. Needs no engine build. Run from the repo root (it reads the
-// real settings file and the saved fallback bundle):
-//   clang++ -std=c++20 -Isrc -Isrc/Core -IProjects/mk_ultra/Source Projects/mk_ultra/Tests/DriverCheck.cpp Projects/mk_ultra/Source/{Truck,Cab,SpaceWeather,Asteroids,LifeSupport,Tickets}.cpp -o /tmp/DriverCheck && /tmp/DriverCheck
-
 #include "Asteroids.h"
 #include "Cab.h"
 #include "LifeSupport.h"
@@ -18,7 +14,6 @@
 
 using namespace FP;
 
-// Engine headers take over assert, so check by hand.
 #define CHECK(condition) if (!(condition)) { std::printf("FAILED line %d: %s\n", __LINE__, #condition); std::exit(1); }
 
 static void CheckFlight()
@@ -28,17 +23,15 @@ static void CheckFlight()
 	settings.ThrustAccel = 10;
 	settings.MaxPitch = 80;
 	settings.TurnTime90 = 1.5f;
-	const SpaceWeatherNow calm{}; // all disturbance settings are 0, so no wobble or jerks
+	const SpaceWeatherNow calm{};
 	const float dt = 1.0f / 60;
 
-	// The drive is always on: speed climbs to cruise and stays there, wheel or not.
 	TruckState truck;
 	TruckControls controls;
 	for (int i = 0; i < 600; ++i)
 		StepTruck(truck, controls, calm, 1, settings, dt);
 	CHECK(std::abs(truck.Speed - settings.CruiseSpeed) < 1e-3f)
 
-	// Jackpot hyperdrive: past cruise while it lasts, back to cruise after.
 	settings.BoostSpeedScale = 2.5f;
 	settings.BoostAccel = 80;
 	truck.Boost = 3;
@@ -49,7 +42,6 @@ static void CheckFlight()
 		StepTruck(truck, controls, calm, 1, settings, dt);
 	CHECK(truck.Boost == 0 && std::abs(truck.Speed - settings.CruiseSpeed) < 1e-3f)
 
-	// The hyperdrive jerks the nose around even in calm weather.
 	settings.BoostJerkInterval = 0.5f;
 	settings.BoostJerkStrength = 70;
 	settings.JerkDecay = 5;
@@ -59,20 +51,34 @@ static void CheckFlight()
 	for (int i = 0; i < 60; ++i)
 		StepTruck(truck, controls, calm, 1, settings, dt);
 	CHECK(truck.Yaw != 0 || truck.Pitch != 0)
+
+	for (const float startYaw : { 10.0f, -10.0f })
+	{
+		for (int jerk = 0; jerk < 20; ++jerk)
+		{
+			truck = {};
+			truck.Destination = { 0, 0, -1000 };
+			truck.Yaw = startYaw;
+			truck.Pitch = 5;
+			truck.Boost = 3;
+			truck.Random = 1 + jerk;
+			truck.BoostJerkSide = jerk % 2 ? 1 : -1;
+			StepDisturbance(truck, calm, settings, 1e-4f);
+			CHECK(truck.JerkRate.X * startYaw + truck.JerkRate.Y * truck.Pitch > 0)
+		}
+	}
 	settings.JerkDecay = 0;
 
-	// The sliding semi: snap the nose 90 degrees while moving. Travel lags, then catches up in TurnTime90.
 	truck = {};
 	truck.AtWheel = true;
 	truck.Speed = settings.CruiseSpeed;
-	truck.Yaw = -90; // nose now points +X, travel still -Z
+	truck.Yaw = -90;
 	StepTruck(truck, {}, calm, 1, settings, dt);
 	CHECK(truck.Travel.Z < -0.9f)
-	for (int i = 0; i < 89; ++i) // 90 steps of 1/60 s = TurnTime90
+	for (int i = 0; i < 89; ++i)
 		StepTruck(truck, {}, calm, 1, settings, dt);
 	CHECK(Vec3::Dot(truck.Travel, GetNose(truck)) > 0.999f)
 
-	// Pitch is clamped.
 	truck = {};
 	truck.AtWheel = true;
 	controls = {};
@@ -81,7 +87,6 @@ static void CheckFlight()
 		StepTruck(truck, controls, calm, 1, settings, dt);
 	CHECK(truck.Pitch == settings.MaxPitch)
 
-	// Same seed and inputs fly the same path, jerks included.
 	settings.CalmJerkInterval = settings.StormJerkInterval = 1;
 	settings.JerkStrength = 90;
 	settings.JerkDecay = 5;
@@ -96,9 +101,8 @@ static void CheckFlight()
 		StepTruck(b, {}, calm, 1, settings, dt);
 	}
 	CHECK(a.Yaw == b.Yaw && a.Pitch == b.Pitch && a.Position.X == b.Position.X)
-	CHECK(a.Yaw != 0) // the disturbance actually moved the nose
+	CHECK(a.Yaw != 0)
 
-	// Wheel left empty: controls do nothing, the truck holds steady for SteadyTime, then drifts.
 	settings.SteadyTime = 6;
 	settings.DriftRampTime = 15;
 	truck = {};
@@ -110,7 +114,7 @@ static void CheckFlight()
 	CHECK(GetDriftAmount(truck, settings) == 0)
 	for (int i = 0; i < 10 * 60; ++i)
 		StepTruck(truck, {}, calm, 1, settings, dt);
-	CHECK(truck.Yaw != 0) // drifting now
+	CHECK(truck.Yaw != 0)
 	for (int i = 0; i < 10 * 60; ++i)
 		StepTruck(truck, {}, calm, 1, settings, dt);
 	CHECK(GetDriftAmount(truck, settings) == 1)
@@ -118,7 +122,6 @@ static void CheckFlight()
 	StepTruck(truck, {}, calm, 1, settings, dt);
 	CHECK(truck.WheelEmptyTime == 0)
 
-	// On foot: walking forward goes -Z, and the cab walls stop you.
 	settings.WalkSpeed = 3;
 	settings.InteractRange = 2;
 	DriverState driver;
@@ -138,7 +141,6 @@ static std::string ReadFile(const char* path)
 	return text.str();
 }
 
-// The real tuning, read the same way the game reads it (LoadDriverSettings needs the engine).
 static DriverSettings LoadRealSettings()
 {
 	DriverSettings settings;
@@ -156,7 +158,7 @@ static DriverSettings LoadRealSettings()
 		DRIVER_SETTINGS(DRIVER_SETTING_READ)
 #undef DRIVER_SETTING_READ
 	}
-	CHECK(found > 50) // run from the repo root
+	CHECK(found > 50)
 	return settings;
 }
 
@@ -166,7 +168,6 @@ static void CheckSpaceWeather(const DriverSettings& settings)
 	CHECK(FormatDate(ParseUtc("2026-10-24T19:10:00Z")) == "2026-10-24")
 	CHECK(FormatDate(ParseUtc("2024-02-29T23:59:59")) == "2024-02-29")
 
-	// The saved bundle is real NOAA and NASA responses, so this checks the parsers on real data.
 	MatchSources sources;
 	sources.SolarWind = ParseSolarWind(ReadFile("Projects/mk_ultra/Content/SpaceWeather/Fallback/SolarWind.json"));
 	sources.Kp = ParseKp(ReadFile("Projects/mk_ultra/Content/SpaceWeather/Fallback/Kp.json"));
@@ -177,7 +178,7 @@ static void CheckSpaceWeather(const DriverSettings& settings)
 	CHECK(sources.Flybys.front().SpeedKmPerSecond > 0 && sources.Flybys.front().MissLunar > 0 && sources.Flybys.front().Time > 0)
 
 	const MatchPackage package = BuildMatchPackage(sources, settings, 7);
-	CHECK(package.WeatherLabel == "REPLAY " + package.WindowDate) // fallback data is never labelled live
+	CHECK(package.WeatherLabel == "REPLAY " + package.WindowDate)
 	CHECK(!package.SolarWind.empty() && package.SolarWind.front().Time >= 0 && package.SolarWind.back().Time <= settings.WeatherWindowHours + 0.01f)
 	CHECK(package.PeakSolarWind >= SolarWindAt(package, settings.MatchLength * 0.5f, settings))
 	CHECK(KpAt(package, 0, settings) >= 0 && KpAt(package, settings.MatchLength, settings) <= 9)
@@ -185,20 +186,18 @@ static void CheckSpaceWeather(const DriverSettings& settings)
 	bool blocked = false;
 	for (const AsteroidCluster& cluster : package.Clusters)
 		blocked |= cluster.Offset == 0;
-	CHECK(blocked) // the straight line is always blocked somewhere
+	CHECK(blocked)
 
-	// Both trucks must rebuild the same package from its text.
 	MatchPackage copy;
 	CHECK(FromText(ToText(package), copy))
 	CHECK(ToText(copy) == ToText(package))
 	MatchPackage timeSeeded = package;
-	timeSeeded.Seed = 1793000123; // match seeds come from the clock, so they're 10 digits
+	timeSeeded.Seed = 1793000123;
 	MatchPackage timeSeededCopy;
 	CHECK(FromText(ToText(timeSeeded), timeSeededCopy) && timeSeededCopy.Seed == timeSeeded.Seed)
 	MatchPackage broken;
 	CHECK(!FromText("nonsense line", broken))
 
-	// Same package, same rocks.
 	const Route route{ {}, { 0, 0, -1 }, settings.CruiseSpeed * settings.CrossingTime };
 	const std::vector<Rock> a = BuildRocks(package, route, settings);
 	const std::vector<Rock> b = BuildRocks(copy, route, settings);
@@ -213,12 +212,12 @@ static void CheckAsteroidBounce(const DriverSettings& settings)
 	rock.Axis = { 0, 1, 0 };
 	rock.Radius = 5;
 	TruckState truck;
-	truck.Position = { 0, 0, -3 }; // inside rock radius + truck radius
+	truck.Position = { 0, 0, -3 };
 	truck.Speed = 40;
-	truck.Travel = { 0, 0, -1 };   // flying into it
+	truck.Travel = { 0, 0, -1 };
 	CHECK(CollideWithRocks(truck, { rock }, 0, settings))
 	CHECK(truck.Speed < 40 * settings.BounceSpeedKeep + 1e-3f)
-	CHECK(truck.Travel.Z > 0) // bounced back
+	CHECK(truck.Travel.Z > 0)
 	CHECK((truck.Position - rock.Center).Length() >= rock.Radius + settings.TruckRadius - 1e-3f)
 	CHECK(!CollideWithRocks(truck, { rock }, 0, settings))
 }
@@ -227,10 +226,9 @@ static void CheckLifeSupport(const DriverSettings& settings)
 {
 	const float dt = 1.0f / 60;
 	LifeSupport life = StartLifeSupport(settings);
-	CHECK(std::abs(GetTimeCompression(settings) - 288) < 1) // 24 h into 5 min
+	CHECK(std::abs(GetTimeCompression(settings) - 288) < 1)
 	CHECK(life.ColonyTimeLeft > settings.CrossingTime && life.ColonyTimeLeft < settings.MatchLength * 1.5f)
 
-	// The cab reserve runs out first, then the cargo pays.
 	for (int i = 0; i < static_cast<int>(settings.CabReserveTime * 60) - 10; ++i)
 		StepLifeSupport(life, false, settings, dt);
 	CHECK(life.CabReserve > 0 && life.Cargo == settings.StartingCargo)
@@ -238,18 +236,16 @@ static void CheckLifeSupport(const DriverSettings& settings)
 		StepLifeSupport(life, false, settings, dt);
 	CHECK(life.CabReserve == 0 && life.Cargo < settings.StartingCargo)
 
-	// Broken scrubber: CO2 climbs to a blackout, then the Driver wakes with it still high.
 	BreakScrubber(life);
 	CHECK(life.ScrubberBroken)
 	for (int i = 0; i < static_cast<int>(settings.Co2RiseTime * 60) + 5; ++i)
 		StepLifeSupport(life, false, settings, dt);
 	CHECK(IsBlackedOut(life))
-	CHECK(GetDisturbanceScale(life, settings) > 1) // woozy
+	CHECK(GetDisturbanceScale(life, settings) > 1)
 	for (int i = 0; i < static_cast<int>(settings.BlackoutTime * 60) + 5; ++i)
 		StepLifeSupport(life, false, settings, dt);
 	CHECK(!IsBlackedOut(life) && life.Co2 <= settings.Co2AfterBlackout + 0.05f)
 
-	// Holding E for the repair time fixes it, and CO2 clears.
 	for (int i = 0; i < static_cast<int>(settings.ScrubberRepairTime * 60) + 5; ++i)
 		StepLifeSupport(life, true, settings, dt);
 	CHECK(!life.ScrubberBroken)
@@ -257,7 +253,6 @@ static void CheckLifeSupport(const DriverSettings& settings)
 		StepLifeSupport(life, false, settings, dt);
 	CHECK(life.Co2 == 0)
 
-	// A banked Free Fix eats the next break.
 	life.AutoFix = true;
 	BreakScrubber(life);
 	CHECK(!life.ScrubberBroken && !life.AutoFix)
@@ -268,16 +263,14 @@ static void CheckTickets(const DriverSettings& settings)
 	const std::vector<float> odds = GetPrizeOdds(settings);
 	CHECK(RollPrize(0, odds) == Prize::Dud)
 	CHECK(RollPrize(0.999f, odds) == Prize::Jackpot)
-	// On average tickets lose a little air: expected refund is less than the cost.
 	CHECK(settings.PrizeJackpot * settings.JackpotTickets < 1)
 
 	LifeSupport life = StartLifeSupport(settings);
 	Ticket ticket;
 	CHECK(BuyTicket(ticket, life, Prize::Jackpot, settings))
 	CHECK(std::abs(life.Cargo - settings.StartingCargo * (1 - settings.TicketCostFraction)) < 1e-3f)
-	CHECK(!BuyTicket(ticket, life, Prize::Dud, settings)) // one at a time
+	CHECK(!BuyTicket(ticket, life, Prize::Dud, settings))
 
-	// Scratch one row: not enough to reveal. Then sweep the whole ticket.
 	CHECK(!StepTicket(ticket, life, {}, true, settings, 0.016f))
 	CHECK(GetScratchedFraction(ticket) > 0 && GetScratchedFraction(ticket) < settings.TicketRevealFraction)
 	bool revealed = false;
@@ -293,7 +286,6 @@ static void CheckTickets(const DriverSettings& settings)
 	CHECK(revealed && ticket.Revealed)
 	CHECK(std::abs(life.Cargo - settings.StartingCargo * (1 + settings.TicketCostFraction * (settings.JackpotTickets - 1))) < 1e-3f)
 
-	// Free Fix repairs a broken scrubber on the spot.
 	life.ScrubberBroken = true;
 	ApplyPrize(Prize::FreeFix, life, settings);
 	CHECK(!life.ScrubberBroken)

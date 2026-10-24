@@ -9,7 +9,6 @@ void StepOnFoot(DriverState& driver, Vec2 look, Vec2 moveAxis, const CabBounds& 
 	driver.Yaw -= look.X;
 	driver.Pitch = std::clamp(driver.Pitch - look.Y, -89.0f, 89.0f);
 
-	// Walk on the floor, so looking up or down doesn't change speed.
 	const float yaw = driver.Yaw * DegToRad;
 	const Vec3 forward{ -std::sin(yaw), 0, -std::cos(yaw) };
 	const Vec3 right{ std::cos(yaw), 0, -std::sin(yaw) };

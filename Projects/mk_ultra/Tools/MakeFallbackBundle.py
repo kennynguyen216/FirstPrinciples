@@ -1,11 +1,3 @@
-"""Saves today's real space weather as the offline fallback bundle in Content/SpaceWeather/Fallback.
-
-The game replays this bundle (labelled with its real date) whenever a live request fails, so it
-must only ever hold real responses. Files keep the live formats so one parser reads both; the
-solar wind file is only trimmed to the fields the game reads.
-
-Run from anywhere: python3 Projects/mk_ultra/Tools/MakeFallbackBundle.py [NASA_API_KEY]
-"""
 import datetime
 import json
 import os

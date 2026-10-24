@@ -6,7 +6,6 @@ using namespace FP;
 
 std::vector<Rock> BuildRocks(const MatchPackage& package, const Route& route, const DriverSettings& settings)
 {
-	// Axes across the route, to place clusters around the straight line.
 	Vec3 right = Vec3::Cross(route.Direction, { 0, 1, 0 });
 	right = right.LengthSquared() < 1e-6f ? Vec3{ 1, 0, 0 } : right.Normalized();
 	const Vec3 up = Vec3::Cross(right, route.Direction);
@@ -30,7 +29,6 @@ std::vector<Rock> BuildRocks(const MatchPackage& package, const Route& route, co
 			if (rock.Axis.LengthSquared() < 1e-4f)
 				rock.Axis = { 0, 1, 0 };
 			rock.Radius = cluster.RockSize * (0.3f + 0.4f * NextRandom(random));
-			// Drift is the rock's speed along its circle.
 			rock.DegreesPerSecond = cluster.Drift / std::max(rock.Offset.Length(), 1.0f) * RadToDeg;
 			rocks.push_back(rock);
 		}

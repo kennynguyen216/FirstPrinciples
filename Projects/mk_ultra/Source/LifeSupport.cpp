@@ -22,7 +22,6 @@ LifeSupport StartLifeSupport(const DriverSettings& settings)
 	LifeSupport life;
 	life.CabReserve = GetBreathingRate(settings) * settings.CabReserveTime;
 	life.Cargo = settings.StartingCargo;
-	// The colony's countdown is its reserve over what its crew breathes, at the same compression.
 	const float colonyRate = settings.OxygenPerPersonPerDay * settings.ColonyCrew / 86400 * GetTimeCompression(settings);
 	life.ColonyTimeLeft = colonyRate > 0 ? settings.ColonyReserveKg / colonyRate : 0;
 	return life;
@@ -30,7 +29,6 @@ LifeSupport StartLifeSupport(const DriverSettings& settings)
 
 void StepLifeSupport(LifeSupport& life, bool repairing, const DriverSettings& settings, float deltaTime)
 {
-	// Breathe the cab reserve first, then the cargo.
 	float breath = GetBreathingRate(settings) * deltaTime;
 	const float fromCab = std::min(breath, life.CabReserve);
 	life.CabReserve -= fromCab;
@@ -56,7 +54,6 @@ void StepLifeSupport(LifeSupport& life, bool repairing, const DriverSettings& se
 	else
 		life.Co2 = std::max(life.Co2 - deltaTime / settings.Co2FallTime, 0.0f);
 
-	// At max CO2 the Driver passes out, then wakes with CO2 still high until the scrubber is fixed.
 	if (IsBlackedOut(life))
 	{
 		life.Blackout = std::max(life.Blackout - deltaTime, 0.0f);

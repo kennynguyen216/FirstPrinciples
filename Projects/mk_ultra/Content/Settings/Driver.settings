@@ -1,127 +1,112 @@
-# Dead Air Freight: Driver settings. Every tuning number and real-world constant lives here.
-# Format: Name value  (everything after # is a note). Reloaded each time Play starts, no rebuild needed.
-# All values are first guesses from the design doc, Section 6. Tune them in playtests.
+MatchLength 300
+CrossingTime 210
+WeatherWindowHours 24
 
-# ---- Match ----------------------------------------------------------------
-MatchLength 300              # seconds, target length of one match (~5 min, fits a judging table)
-CrossingTime 210             # seconds to fly the straight-line route at CruiseSpeed; sets route length
-WeatherWindowHours 24        # hours of real space weather replayed per match (24 h into MatchLength is ~288x)
+TimeBonusPerSecond 0.1
 
-TimeBonusPerSecond 0.1       # score kg per second left on the colony clock at delivery
+OxygenPerPersonPerDay 0.8
+CrewSize 2
+ColonyCrew 6
+ColonyReserveKg 5.3
+StartingCargo 50
 
-# ---- Real-world constants (the real-ratio rule: tune time compression, never these) ----
-OxygenPerPersonPerDay 0.8    # kg O2 per crew member per day, NASA BVAD
-CrewSize 2                   # people per truck: Driver + Defender
-ColonyCrew 6                 # people at the colony breathing its reserve
-ColonyReserveKg 5.3          # kg O2 the colony has left; with the compression it sets the countdown (~330 s)
-StartingCargo 50             # kg O2 each truck hauls
+CruiseSpeed 40
+ThrustAccel 12
+MouseSensitivity 0.15
+MouseJumpLimit 150
+MaxPitch 80
+TurnTime90 1.5
 
-# ---- Flight: the wrestle (M1) ----------------------------------------------
-CruiseSpeed 40               # units/s, the hyperspeed the drive always holds (no throttle)
-ThrustAccel 12               # units/s^2 the drive spins up at, from the start and after a hit
-MouseSensitivity 0.15        # deg the nose turns per pixel of mouse movement
-MouseJumpLimit 150           # pixels; a bigger jump in one frame is the cursor entering the view, not movement
-MaxPitch 80                  # deg, nose can't pitch past this up or down
-TurnTime90 1.5               # seconds for travel direction to catch up to a 90 deg nose turn (the sliding semi)
-
-# ---- Control disturbance ----------------------------------------------------
-CalmSolarWind 400            # km/s, solar wind treated as calm (gentle wobble)
-StormSolarWind 700           # km/s, solar wind treated as stormy (strong wobble)
-CalmWobble 4                 # deg/s push on the aim at calm solar wind
-StormWobble 22               # deg/s push on the aim at storm solar wind
-WobbleFrequency 0.3          # Hz, how fast the wobble sways
-CalmKp 2                     # Kp index treated as calm
-StormKp 7                    # Kp index treated as stormy
-CalmJerkInterval 8           # seconds between jerks at CalmKp
-StormJerkInterval 2          # seconds between jerks at StormKp and above
-JerkStrength 90              # deg/s kick a jerk gives the aim
-JerkDecay 5                  # per second, how fast a jerk's kick dies away
+CalmSolarWind 400
+StormSolarWind 700
+CalmWobble 4
+StormWobble 22
+WobbleFrequency 0.3
+CalmKp 2
+StormKp 7
+CalmJerkInterval 8
+StormJerkInterval 2
+JerkStrength 90
+JerkDecay 5
 
 
-# ---- Real data (M5) -----------------------------------------------------------
-FetchLive 1                  # 1 tries NOAA/NASA at match start, 0 always plays the saved fallback bundle
-FetchTimeout 4               # seconds each live request may take before the fallback is used
+FetchLive 1
+FetchTimeout 4
 
-# ---- The cab and leaving the wheel (M3) -----------------------------------
-SteadyTime 6                 # seconds the truck holds course after the wheel is left
-DriftRampTime 15             # seconds after leaving until drift reaches full strength
-WalkSpeed 3                  # units/s the Driver walks in the cab
-LookSensitivity 0.15         # deg the view turns per pixel of mouse movement on foot
-EyeHeight 1.7                # units from the cab floor to the Driver's eyes
-InteractRange 2              # units from the wheel or scrubber within which E works
-CabWallMargin 0.4            # units the Driver stays away from the cab walls
+SteadyTime 6
+DriftRampTime 15
+WalkSpeed 3
+LookSensitivity 0.15
+EyeHeight 1.7
+InteractRange 2
+CabWallMargin 0.4
 
-# ---- Life support (M4) ------------------------------------------------------
-ScrubberRepairTime 4         # seconds holding E to fix the scrubber
-Co2RiseTime 40               # seconds for CO2 to go from safe to max with the scrubber down
-Co2FallTime 10               # seconds for CO2 to clear from max once the scrubber works
-BlackoutTime 5               # seconds the Driver is blacked out at max CO2
-Co2AfterBlackout 0.8         # CO2 (0-1) the Driver wakes up to; stays high until the scrubber is fixed
-Co2DarkenMax 0.6             # how dark the screen gets at max CO2 (0-1)
-Co2WobbleBoost 1.5           # extra wobble at max CO2 (1.5 = 2.5x)
-CabReserveTime 60            # seconds of breathing the cab reserve holds before cargo is drawn
-PowerFlickerTime 1.5         # seconds power dips when it flickers (nothing triggers it right now)
-PowerFlickerLevel 0.3        # power (0-1) during the dip
+ScrubberRepairTime 4
+Co2RiseTime 40
+Co2FallTime 10
+BlackoutTime 5
+Co2AfterBlackout 0.8
+Co2DarkenMax 0.6
+Co2WobbleBoost 1.5
+CabReserveTime 60
+PowerFlickerTime 1.5
+PowerFlickerLevel 0.3
 
-# ---- Scratch tickets (M6) ---------------------------------------------------
-TicketCostFraction 0.02      # fraction of starting cargo oxygen one ticket costs
-CalmHandsTime 10             # seconds Calm Hands reduces wobble and jerks
-JackpotTickets 3             # tickets' worth of oxygen a Jackpot refunds
-BoostTime 8                  # seconds of hyperdrive a Jackpot also gives
-BoostSpeedScale 2.5          # times CruiseSpeed during the hyperdrive
-BoostAccel 80                # units/s^2 the hyperdrive punches up at (it eases back down at ThrustAccel)
-BoostFov 35                  # degrees the view widens at full hyperdrive speed, so you feel it
-BoostShake 0.6               # degrees the view shakes at full hyperdrive speed
-BoostJerkInterval 0.7        # seconds between hyperdrive jerks, steady so they come like a pulse
-BoostJerkStrength 70         # deg/s kick each hyperdrive jerk gives the aim, each swinging roughly opposite the last
-PrizeDud 0.40                # odds; the four prizes should add up to 1
+TicketCostFraction 0.02
+CalmHandsTime 10
+JackpotTickets 3
+BoostTime 8
+BoostSpeedScale 2.5
+BoostAccel 80
+BoostFov 35
+BoostShake 0.6
+BoostJerkInterval 0.7
+BoostJerkStrength 70
+PrizeDud 0.40
 PrizeCalmHands 0.25
 PrizeFreeFix 0.20
 PrizeJackpot 0.15
-CalmHandsScale 0.2           # wobble and jerks multiplier during Calm Hands
-TicketColumns 24             # coating cells across the ticket
-TicketRows 9                 # coating cells down the ticket
-TicketRevealFraction 0.55    # fraction scratched off before the prize shows
-TicketShowTime 2.5           # seconds the revealed prize stays up
-TicketCoinSpeed 0.06         # cells the coin moves per pixel of mouse movement
-TicketCoinRadius 1.3         # cells the coin scratches around itself
+CalmHandsScale 0.2
+TicketColumns 24
+TicketRows 9
+TicketRevealFraction 0.55
+TicketShowTime 2.5
+TicketCoinSpeed 0.06
+TicketCoinRadius 1.3
 
-# ---- Map --------------------------------------------------------------------
-ColonyRadius 1200            # units, the colony planet's radius; big, so it grows the whole way in
-DeliveryAltitude 150         # units above the colony's surface that count as landed
-KmPerUnit 10000              # km per unit for the HUD: the route is ~84 million km (Earth-Mars) and cruise is ~1.3c
+ColonyRadius 1200
+DeliveryAltitude 150
+KmPerUnit 10000
 
-# ---- Asteroids from real flybys (Section 5.9), clamped to playable ranges ----
-MaxClusters 20               # most flybys turned into clusters (closest passes kept)
-RocksPerCluster 10           # rocks in each cluster
-ClusterSpread 4              # cluster radius in rock sizes
-MinRockDiameter 10           # m, real diameter that maps to MinRockSize
-MaxRockDiameter 500          # m, real diameter that maps to MaxRockSize
-MinRockSize 4                # units
-MaxRockSize 18               # units
-MinFlybySpeed 5              # km/s real flyby speed that maps to MinDrift
-MaxFlybySpeed 30             # km/s real flyby speed that maps to MaxDrift
-MinDrift 0.5                 # units/s rock drift
-MaxDrift 4                   # units/s rock drift
-MaxMissLunar 150             # lunar distances; a miss this far or more sits MaxRouteOffset off the line
-MaxRouteOffset 220           # units from the straight line
-RouteClusterStart 0.12       # fraction of the route where the first cluster sits
-RouteClusterEnd 0.9          # fraction of the route where the last cluster sits
-TruckRadius 6                # units, the truck's collision size (the cab is 8 wide, 12 long)
-BounceSpeedKeep 0.3          # fraction of speed kept after hitting a rock
-BounceJerk 150               # deg/s kick to the aim from a hit
+MaxClusters 20
+RocksPerCluster 10
+ClusterSpread 4
+MinRockDiameter 10
+MaxRockDiameter 500
+MinRockSize 4
+MaxRockSize 18
+MinFlybySpeed 5
+MaxFlybySpeed 30
+MinDrift 0.5
+MaxDrift 4
+MaxMissLunar 150
+MaxRouteOffset 220
+RouteClusterStart 0.12
+RouteClusterEnd 0.9
+TruckRadius 6
+BounceSpeedKeep 0.3
+BounceJerk 150
 
-# ---- Display (not gameplay) -------------------------------------------------
-ChaseDistance 16             # units the camera sits behind the truck's nose
-ChaseHeight 4                # units the camera sits above the truck
-SeatedEyeHeight 2.2          # units from the cab floor to the Driver's eyes when sitting; high enough to see over the wheel
-BankPerTurn 0.25             # degrees the cab rolls into a turn per degree/s of turning
-BankMax 25                   # most the cab rolls, degrees
-BankSmoothing 4              # how fast the roll follows the turn, per second
-DustCount 400                # specks of space dust that show motion
-DustSpread 400               # size of the dust box kept around the truck, units
-StreakLength 60              # units a speck stretches along the travel at cruise speed: the hyperspeed streaks
-StreakSpeed 400              # extra units/s the streaks rush past at cruise speed, on top of the real speed (display only)
-HudDistance 0.3              # units in front of the camera the HUD is drawn; keep above the camera NearClip and below CabWallMargin
-HudAspect 1.6                # widest screen shape the HUD lays out for (16:10); narrower windows crop the sides
-HudTextSize 0.05             # character height as a fraction of half the screen height
+ChaseDistance 16
+ChaseHeight 4
+SeatedEyeHeight 2.2
+BankPerTurn 0.25
+BankMax 25
+BankSmoothing 4
+DustCount 400
+DustSpread 400
+StreakLength 60
+StreakSpeed 400
+HudDistance 0.3
+HudAspect 1.6
+HudTextSize 0.05

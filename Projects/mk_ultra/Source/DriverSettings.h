@@ -1,7 +1,5 @@
 #pragma once
 
-// Every Driver tuning number, loaded from Content/Settings/Driver.settings. Nothing here has a
-// gameplay default on purpose: the file is the one place numbers live (design doc, Section 6).
 #define DRIVER_SETTINGS(X) \
 	X(MatchLength) X(CrossingTime) X(WeatherWindowHours) X(TimeBonusPerSecond) \
 	X(OxygenPerPersonPerDay) X(CrewSize) X(ColonyCrew) X(ColonyReserveKg) X(StartingCargo) \
@@ -27,5 +25,4 @@ struct DriverSettings
 #undef DRIVER_SETTING_FIELD
 };
 
-// Reads "Name value" lines; # starts a note. Logs unknown or missing names. False if the file can't be read.
 bool LoadDriverSettings(const char* path, DriverSettings& out);

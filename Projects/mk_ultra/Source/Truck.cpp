@@ -16,43 +16,50 @@ Vec3 RotateTowards(Vec3 v, Vec3 target, float maxDegrees)
 		return target;
 	Vec3 axis = Vec3::Cross(v, target);
 	if (axis.LengthSquared() < 1e-8f)
-		axis = { 0, 1, 0 }; // exactly opposite, any perpendicular axis works
+		axis = { 0, 1, 0 };
 	return Quat::AxisAngle(axis, maxDegrees).Rotate(v).Normalized();
+}
+
+static Vec2 JerkDirection(const TruckState& truck, float offset)
+{
+	const Vec3 to = (truck.Destination - truck.Position).Normalized();
+	const float yawOff = std::remainder(std::atan2(-to.X, -to.Z) * RadToDeg - truck.Yaw, 360.0f);
+	const float pitchOff = std::asin(std::clamp(to.Y, -1.0f, 1.0f)) * RadToDeg - truck.Pitch;
+	const Vec2 away = Vec2{ -yawOff, -pitchOff }.Normalized();
+	const float angle = (away.LengthSquared() > 0 ? std::atan2(away.Y, away.X) : 0) + offset;
+	return { std::cos(angle), std::sin(angle) };
 }
 
 Vec2 StepDisturbance(TruckState& truck, const SpaceWeatherNow& weather, const DriverSettings& settings, float deltaTime)
 {
-	// Wobble: a smooth sway, two sines so it never settles into an obvious rhythm.
 	const float wind = MapClamped(weather.SolarWind, settings.CalmSolarWind, settings.StormSolarWind, 0, 1);
 	const float wobble = settings.CalmWobble + (settings.StormWobble - settings.CalmWobble) * wind;
 	const float phase = 2 * Pi * settings.WobbleFrequency * truck.Time;
 	const Vec2 sway{ 0.6f * std::sin(phase) + 0.4f * std::sin(1.7f * phase + 1.3f),
 		0.6f * std::sin(0.8f * phase + 2.1f) + 0.4f * std::sin(1.9f * phase + 0.4f) };
 
-	// Jerks: sharp kicks that die away, more often the stormier Kp is.
 	truck.NextJerk -= deltaTime;
 	if (truck.NextJerk <= 0)
 	{
 		const float storm = MapClamped(weather.Kp, settings.CalmKp, settings.StormKp, 0, 1);
 		const float interval = settings.CalmJerkInterval + (settings.StormJerkInterval - settings.CalmJerkInterval) * storm;
-		truck.NextJerk = interval * (0.5f + NextRandom(truck.Random)); // +-50% so they can't be timed
-		const float angle = NextRandom(truck.Random) * 2 * Pi;
-		truck.JerkRate += Vec2{ std::cos(angle), std::sin(angle) } * settings.JerkStrength;
+		truck.NextJerk = interval * (0.5f + NextRandom(truck.Random));
+		truck.JerkRate += JerkDirection(truck, (NextRandom(truck.Random) * 2 - 1) * 1.2f) * settings.JerkStrength;
 	}
-	// Hyperdrive: the truck is too fast to hold. Regular kicks, each swinging roughly the other way.
 	if (truck.Boost > 0)
 	{
 		truck.NextBoostJerk -= deltaTime;
 		if (truck.NextBoostJerk <= 0)
 		{
 			truck.NextBoostJerk += settings.BoostJerkInterval;
-			truck.BoostJerkAngle += Pi * (0.6f + 0.8f * NextRandom(truck.Random)); // 108-252 degrees on
-			truck.JerkRate += Vec2{ std::cos(truck.BoostJerkAngle), std::sin(truck.BoostJerkAngle) } * settings.BoostJerkStrength;
+			truck.BoostJerkSide = -truck.BoostJerkSide;
+			const float offset = truck.BoostJerkSide * (0.3f + 0.9f * NextRandom(truck.Random));
+			truck.JerkRate += JerkDirection(truck, offset) * settings.BoostJerkStrength;
 		}
 	}
 	else
 	{
-		truck.NextBoostJerk = 0; // the first kick lands the moment the hyperdrive fires
+		truck.NextBoostJerk = 0;
 	}
 	truck.JerkRate *= std::exp(-settings.JerkDecay * deltaTime);
 
@@ -74,7 +81,6 @@ void StepTruck(TruckState& truck, const TruckControls& controls, const SpaceWeat
 	truck.WheelEmptyTime = truck.AtWheel ? 0 : truck.WheelEmptyTime + deltaTime;
 	const TruckControls input = truck.AtWheel ? controls : TruckControls{};
 
-	// The mouse aims the nose; space weather pushes it around on top.
 	const Vec2 push = StepDisturbance(truck, weather, settings, deltaTime) * (GetDriftAmount(truck, settings) * disturbanceScale);
 	truck.Yaw += -input.Aim.X + push.X * deltaTime;
 	truck.Pitch += -input.Aim.Y + push.Y * deltaTime;
@@ -87,8 +93,6 @@ void StepTruck(TruckState& truck, const TruckControls& controls, const SpaceWeat
 	else
 		truck.Speed = std::max(truck.Speed - settings.ThrustAccel * deltaTime, targetSpeed);
 
-	// Travel swings toward the nose at a limited rate: point one way and momentum carries you the other.
-	// At a standstill there's no momentum, so travel just follows the nose.
 	const Vec3 nose = GetNose(truck);
 	const float turnRate = settings.TurnTime90 > 0 ? 90 / settings.TurnTime90 : 360;
 	truck.Travel = truck.Speed > 0.01f ? RotateTowards(truck.Travel, nose, turnRate * deltaTime) : nose;

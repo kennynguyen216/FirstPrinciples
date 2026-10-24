@@ -16,8 +16,6 @@
 
 namespace
 {
-	// ponytail: the engine has no HTTP client, so this shells out to curl (macOS, Linux, Windows 10+).
-	// Swap for an engine HTTP API if one arrives (see EngineRequests.md).
 	std::string FetchOnce(const std::string& url, int timeout)
 	{
 		char command[1024];
@@ -35,7 +33,6 @@ namespace
 		return body;
 	}
 
-	// Connections sometimes reset straight away, so retry while there's time left.
 	std::string Fetch(const std::string& url, float timeout)
 	{
 		const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(static_cast<int>(timeout * 1000));
@@ -71,7 +68,6 @@ MatchSources GatherMatchSources(const DriverSettings& settings)
 	MatchSources sources;
 	if (settings.FetchLive > 0)
 	{
-		// A registered key avoids DEMO_KEY's tight rate limit. Put it alone in Content/Settings/NasaApiKey.txt.
 		std::string key = Trim(ReadContent("Settings/NasaApiKey.txt"));
 		if (key.empty())
 			key = "DEMO_KEY";

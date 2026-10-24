@@ -9,7 +9,6 @@
 
 namespace
 {
-	// Days since 1970-01-01 for a civil date (Howard Hinnant's algorithm).
 	long long DaysFromCivil(int y, int m, int d)
 	{
 		y -= m <= 2;
@@ -20,8 +19,6 @@ namespace
 		return era * 146097 + doe - 719468;
 	}
 
-	// Reads the value of "key" somewhere in [pos, end): a quoted string, or a bare number/true/false/null.
-	// Moves pos past the value.
 	bool ReadField(const std::string& json, size_t& pos, size_t end, const char* key, std::string& value)
 	{
 		const std::string quoted = std::string("\"") + key + "\"";
@@ -51,7 +48,6 @@ namespace
 		return true;
 	}
 
-	// Calls read(begin, end) for each flat {...} object in a JSON array.
 	template <typename Read>
 	void ForEachFlatObject(const std::string& json, Read read)
 	{
@@ -65,8 +61,6 @@ namespace
 		}
 	}
 
-	// Calls read(begin, end) for each object nested exactly depth levels inside the value that starts at from.
-	// Skips braces inside strings, so key order and formatting don't matter.
 	template <typename Read>
 	void ForEachObjectAtDepth(const std::string& json, size_t from, int depth, Read read)
 	{
@@ -136,7 +130,6 @@ double ParseUtc(const std::string& text)
 
 std::string FormatDate(double time)
 {
-	// Civil date from days (inverse of DaysFromCivil).
 	long long z = static_cast<long long>(std::floor(time / 86400.0)) + 719468;
 	const long long era = (z >= 0 ? z : z - 146096) / 146097;
 	const unsigned doe = static_cast<unsigned>(z - era * 146097);
@@ -182,7 +175,6 @@ std::vector<TimedValue> ParseKp(const std::string& json)
 
 std::vector<Flyby> ParseFlybys(const std::string& json)
 {
-	// near_earth_objects is { "date": [ {asteroid}, ... ], ... }, so each asteroid sits 3 levels in.
 	static const char* months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
 	std::vector<Flyby> flybys;
 	const size_t list = json.find("\"near_earth_objects\"");
@@ -191,7 +183,7 @@ std::vector<Flyby> ParseFlybys(const std::string& json)
 	ForEachObjectAtDepth(json, json.find('{', list), 3, [&](size_t open, size_t close) {
 		std::string name, diameter, approach, speed, lunar;
 		size_t namePos = open, approachPos = open, speedPos = open, lunarPos = open;
-		size_t metersPos = json.find("\"meters\"", open); // the diameter in meters, not feet or miles
+		size_t metersPos = json.find("\"meters\"", open);
 		if (metersPos > close || !ReadField(json, namePos, close, "name", name) || !ReadField(json, metersPos, close, "estimated_diameter_max", diameter)
 			|| !ReadField(json, approachPos, close, "close_approach_date_full", approach) || !ReadField(json, speedPos, close, "kilometers_per_second", speed)
 			|| !ReadField(json, lunarPos, close, "lunar", lunar))
@@ -201,7 +193,6 @@ std::vector<Flyby> ParseFlybys(const std::string& json)
 		IsNumber(diameter, flyby.DiameterMeters);
 		IsNumber(speed, flyby.SpeedKmPerSecond);
 		IsNumber(lunar, flyby.MissLunar);
-		// "2026-Oct-24 21:10"
 		int y = 0, d = 0, h = 0, mi = 0;
 		char month[4] = {};
 		if (std::sscanf(approach.c_str(), "%d-%3s-%d %d:%d", &y, month, &d, &h, &mi) == 5)
@@ -253,14 +244,12 @@ MatchPackage BuildMatchPackage(const MatchSources& sources, const DriverSettings
 			package.PeakSolarWind = std::max(package.PeakSolarWind, wind.Value);
 		}
 	}
-	// Kp is 3-hourly, so keep the reading in force when the window opens.
 	for (const TimedValue& kp : sources.Kp)
 	{
 		if (kp.Time >= start - 3 * 3600.0 && kp.Time <= end)
 			package.Kp.push_back({ hour(kp.Time), kp.Value });
 	}
 
-	// Each real flyby becomes a cluster. Keep the closest passes, then lay them out in flyby order.
 	std::vector<Flyby> flybys = sources.Flybys;
 	std::sort(flybys.begin(), flybys.end(), [](const Flyby& x, const Flyby& y) { return x.MissLunar < y.MissLunar; });
 	if (flybys.size() > static_cast<size_t>(settings.MaxClusters))
@@ -274,7 +263,6 @@ MatchPackage BuildMatchPackage(const MatchSources& sources, const DriverSettings
 		cluster.Name = flyby.Name;
 		cluster.RouteFraction = settings.RouteClusterStart + (settings.RouteClusterEnd - settings.RouteClusterStart) * (static_cast<float>(i) + 0.5f) / static_cast<float>(flybys.size());
 		cluster.OffsetAngle = NextRandom(random) * 360;
-		// Closer pass, closer to the line. The closest one always sits on it, so the straight route is blocked.
 		cluster.Offset = flyby.Name == closest ? 0 : MapClamped(flyby.MissLunar, 0, settings.MaxMissLunar, 0, settings.MaxRouteOffset);
 		cluster.RockSize = MapClamped(flyby.DiameterMeters, settings.MinRockDiameter, settings.MaxRockDiameter, settings.MinRockSize, settings.MaxRockSize);
 		cluster.Drift = MapClamped(flyby.SpeedKmPerSecond, settings.MinFlybySpeed, settings.MaxFlybySpeed, settings.MinDrift, settings.MaxDrift);

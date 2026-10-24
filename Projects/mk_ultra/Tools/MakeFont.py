@@ -1,12 +1,3 @@
-"""TODO(engine UI): temporary. Delete this script and Content/UI once the engine's C++ UI framework
-(Blazor-style) lands; see Source/Hud.h.
-
-Generates the HUD font: Content/UI/Font.png and one Unlit material per character in Content/UI/Glyphs.
-
-The engine has no text rendering, so the HUD draws each character as a sprite whose material picks
-one cell of the font atlas with Tiling and Offset. Hand drawn 5x7 pixel glyphs, so no font licence
-to worry about. Run from anywhere: python3 Projects/mk_ultra/Tools/MakeFont.py
-"""
 import os
 import struct
 import zlib
@@ -72,20 +63,17 @@ GLYPHS = {
     '*': ['.....', '#.#.#', '.###.', '#####', '.###.', '#.#.#', '.....'],
     '_': ['.....', '.....', '.....', '.....', '.....', '.....', '#####'],
 }
-# Lower case draws as upper case.
 
-COLUMNS, ROWS, FIRST = 16, 6, 32  # ASCII 32..127
+COLUMNS, ROWS, FIRST = 16, 6, 32
 
-# Material file names for symbols; letters and digits use themselves (A.material, 7.material).
-# Keep in sync with GlyphName in Source/Hud.cpp.
 SYMBOL_NAMES = {
     '.': 'Period', ',': 'Comma', ':': 'Colon', '%': 'Percent', '/': 'Slash', '-': 'Minus', '+': 'Plus',
     '(': 'OpenParen', ')': 'CloseParen', '[': 'OpenBracket', ']': 'CloseBracket', '!': 'Exclamation',
     '?': 'Question', '>': 'Greater', '<': 'Less', '^': 'Caret', '=': 'Equals', "'": 'Apostrophe',
     '"': 'Quote', '#': 'Hash', '*': 'Star', '_': 'Underscore',
 }
-CELL = 8          # font pixels per cell (glyph is 5x7 at column 1, row 0)
-SCALE = 8         # texels per font pixel, so linear filtering stays crisp
+CELL = 8
+SCALE = 8
 SIZE_X, SIZE_Y = COLUMNS * CELL * SCALE, ROWS * CELL * SCALE
 
 
@@ -103,7 +91,7 @@ def main():
     content = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'Content', 'UI')
     os.makedirs(os.path.join(content, 'Glyphs'), exist_ok=True)
 
-    pixels = bytearray([255, 255, 255, 0] * SIZE_X * SIZE_Y)  # white, fully transparent
+    pixels = bytearray([255, 255, 255, 0] * SIZE_X * SIZE_Y)
     for char, rows in GLYPHS.items():
         assert len(rows) == 7 and all(len(r) == 5 for r in rows), char
         index = ord(char) - FIRST
@@ -124,7 +112,7 @@ def main():
         os.remove(os.path.join(glyphs, old))
     for char in GLYPHS:
         if char == ' ':
-            continue  # the HUD skips spaces
+            continue
         index = ord(char) - FIRST
         name = char if char.isalnum() else SYMBOL_NAMES[char]
         with open(os.path.join(glyphs, f'{name}.material'), 'w') as f:
