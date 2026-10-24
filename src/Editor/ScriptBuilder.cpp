@@ -147,20 +147,21 @@ FP_SCRIPT(NAME)
 		return files;
 	}
 
-	bool ScriptBuilder::PlanSteps(QList<Step>& steps) const
+	bool ScriptBuilder::PlanSteps(QList<Step>& steps, const QString& projectDir, const QString& target, bool regenerate)
 	{
 		const QString root = RootDir();
-		const QStringList premakeArgs = { "--file=" + root + "/premake5.lua", "--project=" + ProjectDir() };
-		const QString files = ListScriptFiles().join('\n');
-		QFile stamp(StampPath());
-		const bool regenerate = !stamp.open(QIODevice::ReadOnly) || QString::fromUtf8(stamp.readAll()) != files;
+		const QString buildDir = projectDir + "/Build";
+		const QStringList premakeArgs = { "--file=" + root + "/premake5.lua", "--project=" + projectDir };
 
 #if defined(_WIN32)
-		// The solution format tells which Visual Studio generated it.
-		const QString name = QString::fromUtf8(Paths::GetProject().Name.CStr());
-		const bool vs2026 = QFileInfo::exists(BuildDir() + "/" + name + ".slnx");
-		const QString solution = BuildDir() + "/" + name + (vs2026 ? ".slnx" : ".sln");
-		if (!QFileInfo::exists(solution))
+		// The solution format tells which Visual Studio generated it. A project without one
+		// matches the open project's.
+		const QString name = QDir(projectDir).dirName();
+		const QString current = BuildDir() + "/" + QDir(ProjectDir()).dirName();
+		const bool vs2026 = QFileInfo::exists(buildDir + "/" + name + ".slnx")
+			|| (!QFileInfo::exists(buildDir + "/" + name + ".sln") && QFileInfo::exists(current + ".slnx"));
+		const QString solution = buildDir + "/" + name + (vs2026 ? ".slnx" : ".sln");
+		if (!regenerate && !QFileInfo::exists(solution))
 		{
 			FP_LOG_ERROR("No solution in the project's Build folder. Run Scripts\\GenerateProjects.bat first.");
 			return false;
@@ -168,14 +169,46 @@ FP_SCRIPT(NAME)
 		if (regenerate)
 			steps.append({ root + "/ThirdParty/premake/premake5.exe", premakeArgs + QStringList{ vs2026 ? "vs2026" : "vs2022" } });
 		const QString config = FP_BUILD_DEBUG ? "Debug" : "Release";
-		steps.append({ FindMSBuild(), { solution, "/t:GameScripts", "/p:Configuration=" + config, "/p:Platform=x64", "/m", "/nologo", "/v:minimal" } });
+		steps.append({ FindMSBuild(), { solution, "/t:" + target, "/p:Configuration=" + config, "/p:Platform=x64", "/m", "/nologo", "/v:minimal" } });
 #else
 		if (regenerate)
 			steps.append({ FindProgram("premake5"), premakeArgs + QStringList{ "gmake" } });
 		const QString config = FP_BUILD_DEBUG ? "debug" : "release";
-		steps.append({ FindProgram("make"), { "-C", BuildDir(), "GameScripts", "config=" + config, QString("-j%1").arg(QThread::idealThreadCount()) } });
+		steps.append({ FindProgram("make"), { "-C", buildDir, target, "config=" + config, QString("-j%1").arg(QThread::idealThreadCount()) } });
 #endif
 		return true;
+	}
+
+	QString ScriptBuilder::EditorPath(const QString& projectDir)
+	{
+#if defined(_WIN32)
+		return projectDir + (FP_BUILD_DEBUG ? "/Binaries/Debug/Editor.exe" : "/Binaries/Release/Editor.exe");
+#else
+		return projectDir + (FP_BUILD_DEBUG ? "/Binaries/Debug/Editor" : "/Binaries/Release/Editor");
+#endif
+	}
+
+	void ScriptBuilder::BuildProject(const QString& projectDir)
+	{
+		if (m_Process)
+		{
+			FP_LOG_WARN("Wait for the current build to finish first.");
+			emit ProjectBuilt(false, projectDir);
+			return;
+		}
+		m_Steps.clear();
+		m_OtherProject = projectDir;
+		m_RegeneratedThisBuild = false;
+		// The editor target depends on GameScripts, so one build makes both.
+		if (!PlanSteps(m_Steps, projectDir, "Editor", true))
+		{
+			m_OtherProject.clear();
+			emit ProjectBuilt(false, projectDir);
+			return;
+		}
+		FP_LOG("Building %s. The first build of a project compiles the whole engine and can take a few minutes.", QDir(projectDir).dirName().toUtf8().constData());
+		emit Started();
+		RunNext();
 	}
 
 	void ScriptBuilder::Build()
@@ -186,7 +219,10 @@ FP_SCRIPT(NAME)
 			return;
 		}
 		m_Steps.clear();
-		if (!PlanSteps(m_Steps))
+		const QString files = ListScriptFiles().join('\n');
+		QFile stamp(StampPath());
+		const bool regenerate = !stamp.open(QIODevice::ReadOnly) || QString::fromUtf8(stamp.readAll()) != files;
+		if (!PlanSteps(m_Steps, ProjectDir(), "GameScripts", regenerate))
 		{
 			emit Finished(false);
 			return;
@@ -261,11 +297,22 @@ FP_SCRIPT(NAME)
 				stamp.write(ListScriptFiles().join('\n').toUtf8());
 		}
 		m_Steps.clear();
-		if (ok)
-			FP_LOG("Scripts built");
+		if (!m_OtherProject.isEmpty())
+		{
+			const QString projectDir = m_OtherProject;
+			m_OtherProject.clear();
+			if (!ok)
+				FP_LOG_ERROR("Project build failed");
+			emit ProjectBuilt(ok, projectDir);
+		}
 		else
-			FP_LOG_ERROR("Script build failed");
-		emit Finished(ok);
+		{
+			if (ok)
+				FP_LOG("Scripts built");
+			else
+				FP_LOG_ERROR("Script build failed");
+			emit Finished(ok);
+		}
 
 		if (m_Pending)
 		{
