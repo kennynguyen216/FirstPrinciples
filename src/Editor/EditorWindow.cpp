@@ -80,6 +80,10 @@ namespace FP::Editor
 		m_CentralTabs->tabBar()->setTabButton(0, QTabBar::RightSide, nullptr);
 		m_CentralTabs->tabBar()->setTabButton(0, QTabBar::LeftSide, nullptr);
 		connect(m_CentralTabs, &QTabWidget::tabCloseRequested, this, [this](int index) { CloseScriptTab(index); });
+		connect(m_CentralTabs, &QTabWidget::currentChanged, this, [this]() {
+			if (m_UndoAction)
+				UpdateUndoActions();
+		});
 		setCentralWidget(m_CentralTabs);
 
 		BuildDocks();
@@ -210,6 +214,18 @@ namespace FP::Editor
 		file->addAction("Save Scene &As...", QKeySequence::SaveAs, this, &EditorWindow::SaveSceneAs);
 		file->addSeparator();
 		file->addAction("E&xit", QKeySequence::Quit, this, &QWidget::close);
+
+		QMenu* edit = menuBar()->addMenu("&Edit");
+		m_UndoAction = edit->addAction("&Undo", QKeySequence::Undo, this, &EditorWindow::Undo);
+		m_RedoAction = edit->addAction("&Redo", this, &EditorWindow::Redo);
+		// Ctrl+Shift+Z everywhere, plus the platform key (Ctrl+Y on Windows). Mac already uses Cmd+Shift+Z.
+		QList<QKeySequence> redoKeys = { QKeySequence("Ctrl+Shift+Z") };
+		for (const QKeySequence& key : QKeySequence::keyBindings(QKeySequence::Redo))
+		{
+			if (!redoKeys.contains(key))
+				redoKeys.append(key);
+		}
+		m_RedoAction->setShortcuts(redoKeys);
 
 		QMenu* entity = menuBar()->addMenu("&Entity");
 		entity->addAction("Create &Empty", QKeySequence("Ctrl+Shift+N"), this, [this]() { CreateEntity(false); });
@@ -655,6 +671,7 @@ namespace FP::Editor
 			return;
 		m_EditPending = true;
 		m_HistoryTimer->start();
+		UpdateUndoActions();
 		if (m_Dirty)
 			return;
 		m_Dirty = true;
@@ -668,6 +685,7 @@ namespace FP::Editor
 			return;
 		m_EditPending = false;
 		m_History->Commit(m_SelectedGuid);
+		UpdateUndoActions();
 	}
 
 	void EditorWindow::ResetHistory()
@@ -675,6 +693,60 @@ namespace FP::Editor
 		m_HistoryTimer->stop();
 		m_EditPending = false;
 		m_History->Reset(m_SelectedGuid);
+		UpdateUndoActions();
+	}
+
+	void EditorWindow::Undo()
+	{
+		if (CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->currentWidget()))
+		{
+			editor->undo();
+			return;
+		}
+		if (m_World->IsPlaying())
+			return;
+		CommitHistory();
+		if (m_History->Undo())
+			RestoreHistoryStep();
+	}
+
+	void EditorWindow::Redo()
+	{
+		if (CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->currentWidget()))
+		{
+			editor->redo();
+			return;
+		}
+		if (m_World->IsPlaying())
+			return;
+		CommitHistory();
+		if (m_History->Redo())
+			RestoreHistoryStep();
+	}
+
+	void EditorWindow::RestoreHistoryStep()
+	{
+		// The world was reloaded, so every entity handle is new.
+		m_Selected = NullEntity;
+		RefreshHierarchy();
+		Select(m_World->FindEntityByGuid(m_History->GetSelection()));
+		m_Inspector->SetTarget(m_World.Get(), m_Selected);
+		// Not an edit to record, but the scene no longer matches the file.
+		m_Dirty = true;
+		UpdateTitle();
+		UpdateUndoActions();
+	}
+
+	void EditorWindow::UpdateUndoActions()
+	{
+		if (qobject_cast<CodeEditor*>(m_CentralTabs->currentWidget()))
+		{
+			m_UndoAction->setEnabled(true);
+			m_RedoAction->setEnabled(true);
+			return;
+		}
+		m_UndoAction->setEnabled(m_EditPending || m_History->CanUndo());
+		m_RedoAction->setEnabled(!m_EditPending && m_History->CanRedo());
 	}
 
 	void EditorWindow::UpdateTitle()

@@ -45,6 +45,10 @@ namespace FP::Editor
 		void Play();
 		void Stop();
 		void Select(Entity entity);
+
+		// Steps the scene back or forward. A focused script tab gets its own text undo instead.
+		void Undo();
+		void Redo();
 		ScriptBuilder* GetScriptBuilder() const { return m_ScriptBuilder; }
 
 		// Opens a script source file for editing.
@@ -80,6 +84,8 @@ namespace FP::Editor
 		// Turns the edits since the last step into one undo step.
 		void CommitHistory();
 		void ResetHistory();
+		void RestoreHistoryStep();
+		void UpdateUndoActions();
 		void UpdateTitle();
 		bool ConfirmDiscard();
 
@@ -130,6 +136,8 @@ namespace FP::Editor
 		QListWidget* m_Hierarchy = nullptr;
 		QPlainTextEdit* m_Console = nullptr;
 		QTimer* m_Timer = nullptr;
+		QAction* m_UndoAction = nullptr;
+		QAction* m_RedoAction = nullptr;
 		QAction* m_PlayAction = nullptr;
 		QAction* m_StopAction = nullptr;
 		QAction* m_View3DAction = nullptr;
