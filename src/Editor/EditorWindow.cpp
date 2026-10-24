@@ -22,6 +22,7 @@
 #include <QFileDialog>
 #include <QDir>
 #include <QFileSystemWatcher>
+#include <QGuiApplication>
 #include <QInputDialog>
 #include <QMouseEvent>
 #include <QRegularExpression>
@@ -56,6 +57,17 @@ namespace FP::Editor
 	EditorWindow::EditorWindow(GPUDevice& device)
 	{
 		m_World.Reset(NewObject<World>(nullptr, "EditorWorld"));
+		m_History = std::make_unique<SceneHistory>(*m_World.Get());
+		m_HistoryTimer = new QTimer(this);
+		m_HistoryTimer->setSingleShot(true);
+		m_HistoryTimer->setInterval(300);
+		connect(m_HistoryTimer, &QTimer::timeout, this, [this]() {
+			// Still dragging, so the edit is not finished yet.
+			if (QGuiApplication::mouseButtons() != Qt::NoButton)
+				m_HistoryTimer->start();
+			else
+				CommitHistory();
+		});
 
 		m_Viewport = new ViewportWidget(device, this);
 		m_Viewport->SetWorld(m_World.Get());
@@ -639,10 +651,30 @@ namespace FP::Editor
 
 	void EditorWindow::MarkDirty()
 	{
-		if (m_World->IsPlaying() || m_Dirty)
+		if (m_World->IsPlaying())
+			return;
+		m_EditPending = true;
+		m_HistoryTimer->start();
+		if (m_Dirty)
 			return;
 		m_Dirty = true;
 		UpdateTitle();
+	}
+
+	void EditorWindow::CommitHistory()
+	{
+		m_HistoryTimer->stop();
+		if (!m_EditPending)
+			return;
+		m_EditPending = false;
+		m_History->Commit(m_SelectedGuid);
+	}
+
+	void EditorWindow::ResetHistory()
+	{
+		m_HistoryTimer->stop();
+		m_EditPending = false;
+		m_History->Reset(m_SelectedGuid);
 	}
 
 	void EditorWindow::UpdateTitle()
@@ -674,6 +706,7 @@ namespace FP::Editor
 		m_Dirty = false;
 		Select(NullEntity);
 		RefreshHierarchy();
+		ResetHistory();
 		UpdateTitle();
 	}
 
@@ -690,6 +723,7 @@ namespace FP::Editor
 		Select(NullEntity);
 		m_Inspector->SetTarget(m_World.Get(), NullEntity);
 		RefreshHierarchy();
+		ResetHistory();
 		UpdateTitle();
 	}
 
@@ -777,6 +811,7 @@ namespace FP::Editor
 	{
 		if (m_World->IsPlaying())
 			return;
+		CommitHistory();
 		// Snapshot the scene so Stop can put everything back.
 		m_PlaySnapshot = SceneSerializer::SaveToString(*m_World.Get());
 		m_World->AddSystem<ScriptSystem>();
