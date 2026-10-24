@@ -39,6 +39,7 @@ namespace FP::Editor
 			{ "Ambient Light", "Lights", EditorIcon::AmbientLight, "Flat light that fills every shadow" },
 			{ "Cube", "Shapes", EditorIcon::Mesh, "A 1 unit cube mesh" },
 			{ "Sphere", "Shapes", EditorIcon::Entity, "A sphere mesh with a 0.5 unit radius" },
+			{ "Capsule", "Shapes", EditorIcon::Entity, "A pill 2 units tall and 1 wide" },
 			{ "Plane", "Shapes", EditorIcon::Grid, "A flat 10 unit ground plane" },
 			{ "Quad", "Shapes", EditorIcon::Sprite, "A 1 unit quad facing forward" },
 		};
