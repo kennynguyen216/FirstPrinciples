@@ -153,7 +153,7 @@ namespace FP::Editor::EditorIcons
 				for (int i = 0; i < 3; ++i)
 					p.drawLine(QPointF(3, 4.5 + i * 3.5), QPointF(13, 4.5 + i * 3.5));
 				break;
-			case EditorIcon::Actor:
+			case EditorIcon::Entity:
 			{
 				QRadialGradient shade(QPointF(6, 6), 8);
 				shade.setColorAt(0, QColor(255, 255, 255));
@@ -264,7 +264,7 @@ namespace FP::Editor::EditorIcons
 				p.drawPolyline(QPolygonF({ { 2, 3 }, { 2, 13 }, { 4, 13 } }));
 				p.drawLine(QPointF(2, 8), QPointF(4, 8));
 				break;
-			case EditorIcon::PlaceActors:
+			case EditorIcon::PlaceEntities:
 				fill();
 				p.drawRect(QRectF(2, 2, 5, 5));
 				p.drawEllipse(QRectF(9, 2, 5, 5));

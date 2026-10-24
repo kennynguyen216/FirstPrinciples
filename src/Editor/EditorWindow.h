@@ -46,8 +46,8 @@ namespace FP::Editor
 		void Stop();
 		void Select(Entity entity);
 
-		// Creates an entity from a Place Actors kind such as "Point Light" or "Cube" and selects it.
-		Entity CreateActor(const QString& kind);
+		// Creates an entity from a Place Entities kind such as "Point Light" or "Cube" and selects it.
+		Entity CreateEntity(const QString& kind);
 
 		// Steps the scene back or forward. A focused script tab gets its own text undo instead.
 		void Undo();

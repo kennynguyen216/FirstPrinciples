@@ -5,7 +5,7 @@
 #include "Editor/EditorIcons.h"
 #include "Editor/InspectorPanel.h"
 #include "Editor/OutlinerPanel.h"
-#include "Editor/PlaceActorsPanel.h"
+#include "Editor/PlaceEntitiesPanel.h"
 #include "Editor/ScriptBuilder.h"
 #include "Editor/ViewportWidget.h"
 #include "Engine/ComponentRegistry.h"
@@ -95,8 +95,8 @@ namespace FP::Editor
 		connect(m_Viewport, &ViewportWidget::EntityPicked, this, [this](Entity entity) { Select(entity); });
 		connect(m_Viewport, &ViewportWidget::EntityMoved, this, [this](Entity) { MarkDirty(); });
 		connect(m_Viewport, &ViewportWidget::AssetDropped, this, &EditorWindow::DropAsset);
-		connect(m_Viewport, &ViewportWidget::ActorDropped, this, [this](const QString& kind, Vec3 point) {
-			const Entity entity = CreateActor(kind);
+		connect(m_Viewport, &ViewportWidget::EntityDropped, this, [this](const QString& kind, Vec3 point) {
+			const Entity entity = CreateEntity(kind);
 			if (entity != NullEntity)
 				m_World->Get<TransformComponent>(entity).Position = point;
 		});
@@ -136,9 +136,9 @@ namespace FP::Editor
 	{
 		m_Outliner = new OutlinerPanel();
 		connect(m_Outliner, &OutlinerPanel::EntityClicked, this, [this](const Guid& id) { Select(m_World->FindEntityByGuid(id)); });
-		PlaceActorsPanel* placeActors = new PlaceActorsPanel();
-		connect(placeActors, &PlaceActorsPanel::CreateRequested, this, [this](const QString& kind) { CreateActor(kind); });
-		QDockWidget* placeDock = DockTab::Create(this, "Place Actors", EditorIcon::PlaceActors, placeActors);
+		PlaceEntitiesPanel* placeEntities = new PlaceEntitiesPanel();
+		connect(placeEntities, &PlaceEntitiesPanel::CreateRequested, this, [this](const QString& kind) { CreateEntity(kind); });
+		QDockWidget* placeDock = DockTab::Create(this, "Place Entities", EditorIcon::PlaceEntities, placeEntities);
 		addDockWidget(Qt::LeftDockWidgetArea, placeDock);
 		resizeDocks({ placeDock }, { 250 }, Qt::Horizontal);
 
@@ -240,16 +240,16 @@ namespace FP::Editor
 		m_RedoAction->setShortcuts(redoKeys);
 
 		QMenu* entity = menuBar()->addMenu("&Entity");
-		entity->addAction("Create &Empty", QKeySequence("Ctrl+Shift+N"), this, [this]() { CreateActor("Empty Actor"); });
-		entity->addAction("Create &Sprite", QKeySequence("Ctrl+Shift+A"), this, [this]() { CreateActor("Sprite"); });
+		entity->addAction("Create &Empty", QKeySequence("Ctrl+Shift+N"), this, [this]() { CreateEntity("Empty Entity"); });
+		entity->addAction("Create &Sprite", QKeySequence("Ctrl+Shift+A"), this, [this]() { CreateEntity("Sprite"); });
 		QMenu* meshes = entity->addMenu("Create &Mesh");
 		for (const char* shape : Primitives::GetNames())
 		{
 			const QString name = shape;
-			meshes->addAction(name, this, [this, name]() { CreateActor(name); });
+			meshes->addAction(name, this, [this, name]() { CreateEntity(name); });
 		}
-		entity->addAction("Create &Point Light", this, [this]() { CreateActor("Point Light"); });
-		entity->addAction("Create &Directional Light", this, [this]() { CreateActor("Directional Light"); });
+		entity->addAction("Create &Point Light", this, [this]() { CreateEntity("Point Light"); });
+		entity->addAction("Create &Directional Light", this, [this]() { CreateEntity("Directional Light"); });
 		entity->addAction("&Duplicate", QKeySequence("Ctrl+D"), this, &EditorWindow::DuplicateSelected);
 		entity->addAction("De&lete", QKeySequence::Delete, this, &EditorWindow::DeleteSelected);
 
@@ -810,13 +810,13 @@ namespace FP::Editor
 		return SaveScene();
 	}
 
-	Entity EditorWindow::CreateActor(const QString& kind)
+	Entity EditorWindow::CreateEntity(const QString& kind)
 	{
 		const String name = ToString(kind);
 		Entity entity = NullEntity;
-		if (kind == "Empty Actor")
+		if (kind == "Empty Entity")
 		{
-			entity = m_World->CreateEntity("Actor");
+			entity = m_World->CreateEntity("Entity");
 		}
 		else if (kind == "Sprite")
 		{
@@ -852,7 +852,7 @@ namespace FP::Editor
 		}
 		else
 		{
-			FP_LOG_WARN("Unknown actor kind %s", name.CStr());
+			FP_LOG_WARN("Unknown entity kind %s", name.CStr());
 			return NullEntity;
 		}
 		MarkDirty();

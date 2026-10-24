@@ -48,8 +48,8 @@ namespace FP::Editor
 		// A file was dropped. point is where it landed in the world and target is what was under it.
 		void AssetDropped(const QString& path, FP::Vec3 point, FP::Entity target);
 
-		// An entry from Place Actors was dropped.
-		void ActorDropped(const QString& kind, FP::Vec3 point);
+		// An entry from Place Entities was dropped.
+		void EntityDropped(const QString& kind, FP::Vec3 point);
 
 	protected:
 		void paintEvent(QPaintEvent* event) override;

@@ -19,13 +19,13 @@ namespace FP::Editor
 
 		EditorIcon IconForType(const QString& type)
 		{
-			if (type == "CameraActor") return EditorIcon::Camera;
-			if (type == "PointLight") return EditorIcon::PointLight;
-			if (type == "DirectionalLight") return EditorIcon::DirectionalLight;
-			if (type == "AmbientLight") return EditorIcon::AmbientLight;
-			if (type == "StaticMeshActor") return EditorIcon::Mesh;
-			if (type == "SpriteActor") return EditorIcon::Sprite;
-			return EditorIcon::Actor;
+			if (type == "Camera") return EditorIcon::Camera;
+			if (type == "Point Light") return EditorIcon::PointLight;
+			if (type == "Directional Light") return EditorIcon::DirectionalLight;
+			if (type == "Ambient Light") return EditorIcon::AmbientLight;
+			if (type == "Mesh") return EditorIcon::Mesh;
+			if (type == "Sprite") return EditorIcon::Sprite;
+			return EditorIcon::Entity;
 		}
 
 		QString ToQString(const String& text) { return QString::fromUtf8(text.CStr(), text.Length()); }
@@ -83,13 +83,13 @@ namespace FP::Editor
 
 	QString OutlinerPanel::TypeName(World& world, Entity entity)
 	{
-		if (world.Has<CameraComponent>(entity)) return "CameraActor";
-		if (world.Has<PointLightComponent>(entity)) return "PointLight";
-		if (world.Has<DirectionalLightComponent>(entity)) return "DirectionalLight";
-		if (world.Has<AmbientLightComponent>(entity)) return "AmbientLight";
-		if (world.Has<MeshComponent>(entity)) return "StaticMeshActor";
-		if (world.Has<SpriteComponent>(entity)) return "SpriteActor";
-		return "Actor";
+		if (world.Has<CameraComponent>(entity)) return "Camera";
+		if (world.Has<PointLightComponent>(entity)) return "Point Light";
+		if (world.Has<DirectionalLightComponent>(entity)) return "Directional Light";
+		if (world.Has<AmbientLightComponent>(entity)) return "Ambient Light";
+		if (world.Has<MeshComponent>(entity)) return "Mesh";
+		if (world.Has<SpriteComponent>(entity)) return "Sprite";
+		return "Entity";
 	}
 
 	void OutlinerPanel::Rebuild(World& world, const QString& sceneName)
@@ -154,6 +154,6 @@ namespace FP::Editor
 	void OutlinerPanel::UpdateFooter()
 	{
 		const int selected = m_Tree->currentItem() && m_Tree->currentItem()->parent() ? 1 : 0;
-		m_Footer->setText(QString("%1 actors (%2 selected)").arg(m_Count).arg(selected));
+		m_Footer->setText(QString("%1 entities (%2 selected)").arg(m_Count).arg(selected));
 	}
 }

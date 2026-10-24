@@ -1,4 +1,4 @@
-#include "Editor/PlaceActorsPanel.h"
+#include "Editor/PlaceEntitiesPanel.h"
 #include "Editor/EditorIcons.h"
 #include "Editor/EditorStyle.h"
 
@@ -22,23 +22,23 @@ namespace FP::Editor
 		constexpr int IconRole = Qt::UserRole + 2;
 		constexpr int RowHeight = 60;
 
-		struct ActorEntry
+		struct EntityEntry
 		{
-			const char* Kind; // passed to EditorWindow::CreateActor
+			const char* Kind; // passed to EditorWindow::CreateEntity
 			const char* Category;
 			EditorIcon Icon;
 			const char* Help;
 		};
 
-		const ActorEntry Entries[] = {
-			{ "Empty Actor", "Basic", EditorIcon::Actor, "An entity with only a name and transform" },
+		const EntityEntry Entries[] = {
+			{ "Empty Entity", "Basic", EditorIcon::Entity, "An entity with only a name and transform" },
 			{ "Sprite", "Basic", EditorIcon::Sprite, "A textured quad for 2D games" },
 			{ "Camera", "Basic", EditorIcon::Camera, "The view the game renders from" },
 			{ "Point Light", "Lights", EditorIcon::PointLight, "Light that shines in every direction from a point" },
 			{ "Directional Light", "Lights", EditorIcon::DirectionalLight, "Sun style light that comes from one direction" },
 			{ "Ambient Light", "Lights", EditorIcon::AmbientLight, "Flat light that fills every shadow" },
 			{ "Cube", "Shapes", EditorIcon::Mesh, "A 1 unit cube mesh" },
-			{ "Sphere", "Shapes", EditorIcon::Actor, "A sphere mesh with a 0.5 unit radius" },
+			{ "Sphere", "Shapes", EditorIcon::Entity, "A sphere mesh with a 0.5 unit radius" },
 			{ "Plane", "Shapes", EditorIcon::Grid, "A flat 10 unit ground plane" },
 			{ "Quad", "Shapes", EditorIcon::Sprite, "A 1 unit quad facing forward" },
 		};
@@ -50,14 +50,14 @@ namespace FP::Editor
 		};
 
 		const Category Categories[] = {
-			{ "All", EditorIcon::PlaceActors },
-			{ "Basic", EditorIcon::Actor },
+			{ "All", EditorIcon::PlaceEntities },
+			{ "Basic", EditorIcon::Entity },
 			{ "Lights", EditorIcon::PointLight },
 			{ "Shapes", EditorIcon::Mesh },
 		};
 
-		// Carries the actor kind when dragged so the viewport can place it under the mouse.
-		class ActorList : public QListWidget
+		// Carries the entity kind when dragged so the viewport can place it under the mouse.
+		class EntityList : public QListWidget
 		{
 		public:
 			using QListWidget::QListWidget;
@@ -67,15 +67,15 @@ namespace FP::Editor
 			{
 				QMimeData* data = new QMimeData();
 				if (!items.isEmpty())
-					data->setData(PlaceActorsPanel::MimeType, items.first()->data(KindRole).toString().toUtf8());
+					data->setData(PlaceEntitiesPanel::MimeType, items.first()->data(KindRole).toString().toUtf8());
 				return data;
 			}
 
-			QStringList mimeTypes() const override { return { PlaceActorsPanel::MimeType }; }
+			QStringList mimeTypes() const override { return { PlaceEntitiesPanel::MimeType }; }
 		};
 
 		// Draws a row like UE: a dark tile with a large icon, the name, then a help badge.
-		class ActorDelegate : public QStyledItemDelegate
+		class EntityDelegate : public QStyledItemDelegate
 		{
 		public:
 			using QStyledItemDelegate::QStyledItemDelegate;
@@ -121,20 +121,20 @@ namespace FP::Editor
 		};
 	}
 
-	PlaceActorsPanel::PlaceActorsPanel(QWidget* parent) : QWidget(parent)
+	PlaceEntitiesPanel::PlaceEntitiesPanel(QWidget* parent) : QWidget(parent)
 	{
 		QVBoxLayout* layout = new QVBoxLayout(this);
 		layout->setContentsMargins(6, 6, 6, 6);
 		layout->setSpacing(6);
 
 		m_Search = new QLineEdit();
-		m_Search->setPlaceholderText("Search Classes");
+		m_Search->setPlaceholderText("Search");
 		m_Search->setProperty("search", true);
 		m_Search->addAction(EditorIcons::Get(EditorIcon::Search), QLineEdit::LeadingPosition);
 		m_Search->setClearButtonEnabled(true);
 		layout->addWidget(m_Search);
 
-		// Category buttons filter the list, like UE's row of class icons.
+		// Category buttons filter the list, like UE's row of category icons.
 		QHBoxLayout* categories = new QHBoxLayout();
 		categories->setSpacing(2);
 		m_Categories = new QButtonGroup(this);
@@ -159,8 +159,8 @@ namespace FP::Editor
 		m_CategoryLabel->setStyleSheet("font-weight: bold; color: #c0c0c0; padding: 4px;");
 		layout->addWidget(m_CategoryLabel);
 
-		m_List = new ActorList();
-		m_List->setItemDelegate(new ActorDelegate(m_List));
+		m_List = new EntityList();
+		m_List->setItemDelegate(new EntityDelegate(m_List));
 		m_List->setMouseTracking(true);
 		m_List->setDragEnabled(true);
 		m_List->setDragDropMode(QAbstractItemView::DragOnly);
@@ -168,8 +168,8 @@ namespace FP::Editor
 		m_List->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
 		layout->addWidget(m_List, 1);
 
-		connect(m_Search, &QLineEdit::textChanged, this, &PlaceActorsPanel::Rebuild);
-		connect(m_Categories, &QButtonGroup::idClicked, this, &PlaceActorsPanel::Rebuild);
+		connect(m_Search, &QLineEdit::textChanged, this, &PlaceEntitiesPanel::Rebuild);
+		connect(m_Categories, &QButtonGroup::idClicked, this, &PlaceEntitiesPanel::Rebuild);
 		connect(m_List, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) {
 			emit CreateRequested(item->data(KindRole).toString());
 			m_List->clearSelection();
@@ -177,13 +177,13 @@ namespace FP::Editor
 		Rebuild();
 	}
 
-	void PlaceActorsPanel::Rebuild()
+	void PlaceEntitiesPanel::Rebuild()
 	{
 		const QString category = Categories[std::max(0, m_Categories->checkedId())].Name;
 		m_CategoryLabel->setText(category.toUpper());
 		const QString filter = m_Search->text().trimmed();
 		m_List->clear();
-		for (const ActorEntry& entry : Entries)
+		for (const EntityEntry& entry : Entries)
 		{
 			if (category != "All" && category != entry.Category)
 				continue;
