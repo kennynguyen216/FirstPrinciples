@@ -13,6 +13,7 @@ namespace FP
 	class World;
 	class AudioWorld;
 	class Animator;
+	class UIDocument;
 
 	using Entity = entt::entity;
 	inline constexpr entt::null_t NullEntity = entt::null;
@@ -42,6 +43,10 @@ namespace FP
 		// The entity's animator, made on first use. Null without an AnimatorComponent.
 		// Virtual for the same reason as GetAudio.
 		virtual Animator* GetAnimator(Entity entity);
+
+		// The page of the entity's UI component, made on first use. Null without one.
+		// Virtual for the same reason as GetAudio.
+		virtual UIDocument* GetUI(Entity entity);
 
 		// ---- Entities ------------------------------------------------------
 

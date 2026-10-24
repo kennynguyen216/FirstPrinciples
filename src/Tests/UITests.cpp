@@ -101,3 +101,56 @@ FP_TEST(UI_SystemLoadsPagesForComponents)
 	world->EndPlay();
 	FP_EXPECT(!world->Has<UIStateComponent>(hud));
 }
+
+#include "Engine/Scripting/Script.h"
+#include "Engine/Scripting/ScriptSystem.h"
+
+namespace
+{
+	// Talks to its entity's page the way a HUD script would.
+	class TestUIListener : public Script
+	{
+	public:
+		String LastEvent;
+		double LastValue = 0;
+
+		void OnStart() override
+		{
+			if (UIDocument* ui = GetUI())
+				ui->Set("greeting", "hello");
+		}
+
+		void OnUIEvent(std::string_view name, const Json& data) override
+		{
+			LastEvent = String(name);
+			LastValue = data["n"].AsNumber();
+		}
+	};
+}
+
+FP_SCRIPT_FIELDS(TestUIListener) {}
+
+FP_TEST(UI_PagesTalkToScripts)
+{
+	if (!UIRuntime::Get().IsAvailable())
+		return;
+	Engine::RegisterEngineComponents();
+	UIRuntime::Get().SetVirtualFile("Tests/Talk.html", R"html(<html><body><i data-bind="greeting"></i>
+<script>engine.watch("greeting", function (text) { engine.send("greeted", { n: text.length }); });</script></body></html>)html");
+	StrongObjectPtr<World> world(NewObject<World>());
+	const Entity hud = world->CreateEntity("Hud");
+	world->Add<UIComponent>(hud).Page = "Tests/Talk.html";
+	world->Add<ScriptComponent>(hud).Scripts.Emplace("TestUIListener");
+	world->AddSystem<ScriptSystem>();
+	world->AddSystem<UISystem>();
+	world->BeginPlay();
+
+	TestUIListener* listener = static_cast<TestUIListener*>(world->Get<ScriptComponent>(hud).Scripts[0].Instance);
+	FP_EXPECT(listener);
+	if (!listener)
+		return;
+	// The value set in OnStart reaches the page, which answers through engine.send.
+	FP_EXPECT(Pump([&] { world->Update(0.016f); return listener->LastEvent == "greeted"; }));
+	FP_EXPECT(listener->LastValue == 5);
+	world->EndPlay();
+}

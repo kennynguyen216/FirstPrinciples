@@ -29,5 +29,8 @@ namespace FP
 
 		// The page for an entity with a UI component, made on first use. Null otherwise.
 		static UIDocumentInstance* For(World& world, Entity entity);
+
+	private:
+		static void Dispatch(World& world, Entity entity, const UIMessage& message);
 	};
 }
