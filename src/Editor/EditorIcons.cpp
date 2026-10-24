@@ -252,6 +252,28 @@ namespace FP::Editor::EditorIcons
 				p.drawPolygon(QPolygonF({ { 0.5, 8 }, { 3.5, 5.5 }, { 3.5, 10.5 } }));
 				p.drawPolygon(QPolygonF({ { 15.5, 8 }, { 12.5, 5.5 }, { 12.5, 10.5 } }));
 				break;
+			case EditorIcon::Rotate:
+				// Most of a ring with an arrowhead where it ends.
+				p.drawArc(QRectF(2.5, 2.5, 11, 11), 90 * 16, 270 * 16);
+				fill();
+				p.drawPolygon(QPolygonF({ { 13.5, 8.5 }, { 11, 4.5 }, { 16, 4.5 } }));
+				break;
+			case EditorIcon::Scale:
+				p.drawRect(QRectF(2, 6, 8, 8));
+				p.drawLine(QPointF(7, 9), QPointF(13.5, 2.5));
+				fill();
+				p.drawPolygon(QPolygonF({ { 14.5, 1.5 }, { 14.5, 7 }, { 9, 1.5 } }));
+				break;
+			case EditorIcon::World:
+				p.drawEllipse(QPointF(8, 8), 6.5, 6.5);
+				p.drawEllipse(QPointF(8, 8), 2.8, 6.5);
+				p.drawLine(QPointF(1.5, 8), QPointF(14.5, 8));
+				break;
+			case EditorIcon::Local:
+				p.drawRect(QRectF(2, 5, 9, 9));
+				p.drawPolyline(QPolygonF({ { 2, 5 }, { 5, 2 }, { 14, 2 }, { 14, 11 }, { 11, 14 } }));
+				p.drawLine(QPointF(11, 5), QPointF(14, 2));
+				break;
 			case EditorIcon::Details:
 				p.drawRoundedRect(QRectF(2, 2, 12, 12), 1.5, 1.5);
 				p.drawLine(QPointF(5, 6), QPointF(11, 6));
