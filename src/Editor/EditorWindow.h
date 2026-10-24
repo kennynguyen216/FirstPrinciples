@@ -13,7 +13,6 @@ class QComboBox;
 class QFileSystemWatcher;
 class QTabWidget;
 class QDockWidget;
-class QListWidget;
 class QPlainTextEdit;
 class QTimer;
 
@@ -27,6 +26,7 @@ namespace FP::Editor
 	class CodeEditor;
 	class ContentBrowser;
 	class InspectorPanel;
+	class OutlinerPanel;
 	class ScriptBuilder;
 	class ViewportWidget;
 
@@ -135,7 +135,7 @@ namespace FP::Editor
 
 		ViewportWidget* m_Viewport = nullptr;
 		InspectorPanel* m_Inspector = nullptr;
-		QListWidget* m_Hierarchy = nullptr;
+		OutlinerPanel* m_Outliner = nullptr;
 		QPlainTextEdit* m_Console = nullptr;
 		QTimer* m_Timer = nullptr;
 		QAction* m_UndoAction = nullptr;

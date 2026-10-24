@@ -4,6 +4,7 @@
 #include "Editor/DockTab.h"
 #include "Editor/EditorIcons.h"
 #include "Editor/InspectorPanel.h"
+#include "Editor/OutlinerPanel.h"
 #include "Editor/PlaceActorsPanel.h"
 #include "Editor/ScriptBuilder.h"
 #include "Editor/ViewportWidget.h"
@@ -32,7 +33,6 @@
 #include <QTextBlock>
 #include <QFileInfo>
 #include <QKeySequence>
-#include <QListWidget>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPlainTextEdit>
@@ -46,7 +46,6 @@ namespace FP::Editor
 {
 	namespace
 	{
-		constexpr int GuidRole = Qt::UserRole + 1;
 
 		QString ToQString(const String& text) { return QString::fromUtf8(text.CStr(), text.Length()); }
 
@@ -135,21 +134,15 @@ namespace FP::Editor
 
 	void EditorWindow::BuildDocks()
 	{
-		m_Hierarchy = new QListWidget();
-		connect(m_Hierarchy, &QListWidget::currentItemChanged, this, [this](QListWidgetItem* item) {
-			if (!item)
-				return;
-			Guid id;
-			if (Guid::Parse(ToString(item->data(GuidRole).toString()), id))
-				Select(m_World->FindEntityByGuid(id));
-		});
+		m_Outliner = new OutlinerPanel();
+		connect(m_Outliner, &OutlinerPanel::EntityClicked, this, [this](const Guid& id) { Select(m_World->FindEntityByGuid(id)); });
 		PlaceActorsPanel* placeActors = new PlaceActorsPanel();
 		connect(placeActors, &PlaceActorsPanel::CreateRequested, this, [this](const QString& kind) { CreateActor(kind); });
 		QDockWidget* placeDock = DockTab::Create(this, "Place Actors", EditorIcon::PlaceActors, placeActors);
 		addDockWidget(Qt::LeftDockWidgetArea, placeDock);
 		resizeDocks({ placeDock }, { 250 }, Qt::Horizontal);
 
-		QDockWidget* outlinerDock = DockTab::Create(this, "Outliner", EditorIcon::Outliner, m_Hierarchy);
+		QDockWidget* outlinerDock = DockTab::Create(this, "Outliner", EditorIcon::Outliner, m_Outliner);
 
 		m_Inspector = new InspectorPanel();
 		connect(m_Inspector, &InspectorPanel::OpenScriptRequested, this, &EditorWindow::OpenScript);
@@ -637,15 +630,8 @@ namespace FP::Editor
 		if (!m_EditPending)
 			m_History->SetSelection(m_SelectedGuid);
 
-		// Keep the hierarchy row in sync without feeding back into Select.
-		const QString key = ToQString(m_SelectedGuid.ToString());
-		QSignalBlocker block(m_Hierarchy);
-		m_Hierarchy->setCurrentItem(nullptr);
-		for (int i = 0; i < m_Hierarchy->count(); ++i)
-		{
-			if (m_Hierarchy->item(i)->data(GuidRole).toString() == key)
-				m_Hierarchy->setCurrentRow(i);
-		}
+		// Keep the outliner row in sync without feeding back into Select.
+		m_Outliner->SetSelected(m_SelectedGuid);
 
 		if (changed)
 			m_Inspector->SetTarget(m_World.Get(), entity);
@@ -653,18 +639,9 @@ namespace FP::Editor
 
 	void EditorWindow::RefreshHierarchy()
 	{
-		QSignalBlocker block(m_Hierarchy);
-		m_Hierarchy->clear();
-		const Array<Entity> entities = m_World->GetEntities();
-		for (Entity entity : entities)
-		{
-			QListWidgetItem* item = new QListWidgetItem(ToQString(m_World->GetEntityName(entity)));
-			item->setData(GuidRole, ToQString(m_World->Get<IdComponent>(entity).Id.ToString()));
-			m_Hierarchy->addItem(item);
-			if (entity == m_Selected)
-				m_Hierarchy->setCurrentItem(item);
-		}
-		m_HierarchyCount = entities.Num();
+		m_Outliner->Rebuild(*m_World.Get(), m_ScenePath.isEmpty() ? "Untitled" : QFileInfo(m_ScenePath).completeBaseName());
+		m_Outliner->SetSelected(m_SelectedGuid);
+		m_HierarchyCount = m_World->GetEntities().Num();
 	}
 
 	void EditorWindow::MarkDirty()
