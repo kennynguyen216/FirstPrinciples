@@ -175,26 +175,43 @@ namespace FP
 			m_Registry.remove<ParentComponent>(child);
 		else
 			m_Registry.emplace_or_replace<ParentComponent>(child, ParentComponent{ m_Registry.get<IdComponent>(parent).Id, parent });
-
-		TransformComponent* transform = m_Registry.try_get<TransformComponent>(child);
-		if (keepWorldTransform && transform)
-		{
-			// Work out the local transform that lands in the same place under the new parent.
-			const Mat4 local = parent == NullEntity ? world : GetWorldMatrix(parent).Inverse() * world;
-			transform->Position = { local.At(3, 0), local.At(3, 1), local.At(3, 2) };
-			Vec3 scale;
-			Mat4 rotation = local;
-			for (int c = 0; c < 3; ++c)
-			{
-				const float length = Vec3(local.At(c, 0), local.At(c, 1), local.At(c, 2)).Length();
-				(&scale.X)[c] = length;
-				for (int r = 0; r < 3; ++r)
-					rotation.At(c, r) /= length > 1e-8f ? length : 1;
-			}
-			transform->Scale = scale;
-			transform->Rotation = Quat::FromMatrix(rotation).ToEuler();
-		}
+		if (keepWorldTransform)
+			SetLocalFromWorld(child, world);
 		return true;
+	}
+
+	void World::SetLocalFromWorld(Entity entity, const Mat4& world)
+	{
+		TransformComponent* transform = m_Registry.try_get<TransformComponent>(entity);
+		if (!transform)
+			return;
+		// The local transform that lands in the same place under the current parent.
+		const Entity parent = GetParent(entity);
+		const Mat4 local = parent == NullEntity ? world : GetWorldMatrix(parent).Inverse() * world;
+		transform->Position = { local.At(3, 0), local.At(3, 1), local.At(3, 2) };
+		Mat4 rotation = local;
+		for (int c = 0; c < 3; ++c)
+		{
+			const float length = Vec3(local.At(c, 0), local.At(c, 1), local.At(c, 2)).Length();
+			(&transform->Scale.X)[c] = length;
+			for (int r = 0; r < 3; ++r)
+				rotation.At(c, r) /= length > 1e-8f ? length : 1;
+		}
+		transform->Rotation = Quat::FromMatrix(rotation).ToEuler();
+	}
+
+	void World::SetWorldTransform(Entity entity, const TransformComponent& world)
+	{
+		if (!IsValid(entity))
+			return;
+		if (GetParent(entity) == NullEntity)
+		{
+			// Without a parent the values go straight in, so euler angles past 90 stay as typed.
+			if (TransformComponent* transform = m_Registry.try_get<TransformComponent>(entity))
+				*transform = world;
+			return;
+		}
+		SetLocalFromWorld(entity, world.GetMatrix());
 	}
 
 	Mat4 World::GetWorldMatrix(Entity entity) const

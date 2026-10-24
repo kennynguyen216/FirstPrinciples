@@ -95,6 +95,9 @@ namespace FP
 		// Moves the entity so its world position is position, whatever its parents are.
 		void SetWorldPosition(Entity entity, Vec3 position);
 
+		// Sets the local transform that puts the entity at a world position, rotation and scale.
+		void SetWorldTransform(Entity entity, const TransformComponent& world);
+
 		// Removes every entity.
 		void Clear();
 		void ReplaceScene(World& candidate);
@@ -154,6 +157,7 @@ namespace FP
 
 	private:
 		void FlushDestroyed();
+		void SetLocalFromWorld(Entity entity, const Mat4& world);
 
 		entt::registry m_Registry;
 		Array<RefPtr<System>> m_Systems;

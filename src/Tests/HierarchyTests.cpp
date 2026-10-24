@@ -41,6 +41,16 @@ FP_TEST(Hierarchy_ChildrenFollowTheirParent)
 	world->SetWorldPosition(bolt, { 0, 0, 0 });
 	FP_EXPECT(Near(world->GetWorldPosition(bolt), { 0, 0, 0 }));
 
+	// So does a whole world transform, the way the editor's gizmo moves children.
+	TransformComponent placed;
+	placed.Position = { 3, 4, 5 };
+	placed.Rotation = { 0, 30, 0 };
+	placed.Scale = { 4, 4, 4 };
+	world->SetWorldTransform(bolt, placed);
+	FP_EXPECT(Near(world->GetWorldPosition(bolt), { 3, 4, 5 }));
+	FP_EXPECT(Near(world->GetWorldTransform(bolt).Rotation, { 0, 30, 0 }));
+	FP_EXPECT(Near(world->Get<TransformComponent>(bolt).Scale, { 2, 2, 2 }));
+
 	// No loops, and detaching keeps the wheel where it is.
 	FP_EXPECT(!world->SetParent(car, bolt));
 	FP_EXPECT(!world->SetParent(car, car));
