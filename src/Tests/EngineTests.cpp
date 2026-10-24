@@ -249,6 +249,17 @@ FP_TEST(Math_QuatToEulerRoundTrips)
 	FP_EXPECT(Near(Quat::FromEuler({ 10, 20, 30 }).ToEuler(), { 10, 20, 30 }));
 }
 
+FP_TEST(Math_QuatSlerp)
+{
+	const Quat a;
+	const Quat b = Quat::AxisAngle({ 0, 1, 0 }, 90);
+	FP_EXPECT(Near(Quat::Slerp(a, b, 0.5f).ToEuler(), { 0, 45, 0 }));
+	FP_EXPECT(Near(Quat::Slerp(a, b, 1).ToEuler(), { 0, 90, 0 }));
+	// The same rotation with every sign flipped still takes the short way.
+	const Quat flipped{ -b.X, -b.Y, -b.Z, -b.W };
+	FP_EXPECT(Near(Quat::Slerp(a, flipped, 0.5f).ToEuler(), { 0, 45, 0 }));
+}
+
 #include "Engine/Render/MeshData.h"
 
 FP_TEST(Mesh_PrimitivesAreWellFormed)
