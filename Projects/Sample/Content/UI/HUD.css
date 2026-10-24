@@ -83,7 +83,7 @@ button {
 button:hover { background: #5aa2ff; }
 button:active { transform: scale(0.94); }
 
-label { display: flex; align-items: center; gap: 8px; color: #c9d0dc; }
+label { display: flex; align-items: center; gap: 8px; color: #c9d0dc; white-space: nowrap; }
 input[type=range] { width: 130px; }
 #animationSpeedValue { width: 44px; color: #f2f4f8; }
 
