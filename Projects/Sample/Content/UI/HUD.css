@@ -1,0 +1,99 @@
+/* The page covers the screen and is see through wherever nothing is drawn. */
+body {
+	margin: 0;
+	font-family: Helvetica, Arial, sans-serif;
+	color: #f2f4f8;
+	user-select: none;
+}
+
+.card, .toolbar {
+	position: absolute;
+	background: rgba(14, 18, 28, 0.72);
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 14px;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.card {
+	top: 24px;
+	left: 24px;
+	width: 230px;
+	padding: 16px 18px;
+}
+
+.title {
+	font-size: 13px;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+	color: #ffb35c;
+	margin-bottom: 10px;
+}
+
+.row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin: 8px 0;
+	font-size: 15px;
+}
+
+.label { color: #a9b1c2; }
+
+.badge {
+	padding: 3px 10px;
+	border-radius: 999px;
+	background: #3a8dff;
+	font-weight: bold;
+	transition: background 0.2s;
+}
+
+.badge.Walk { background: #2fb36b; }
+.badge.Jump { background: #e0563a; }
+
+progress {
+	width: 110px;
+	height: 8px;
+	appearance: none;
+	-webkit-appearance: none;
+}
+progress::-webkit-progress-bar { background: rgba(255, 255, 255, 0.15); border-radius: 4px; }
+progress::-webkit-progress-value { background: linear-gradient(90deg, #3a8dff, #6be3ff); border-radius: 4px; }
+
+.toolbar {
+	bottom: 24px;
+	left: 50%;
+	transform: translateX(-50%);
+	display: flex;
+	align-items: center;
+	gap: 18px;
+	padding: 12px 18px;
+	font-size: 15px;
+}
+
+button {
+	font: inherit;
+	font-weight: bold;
+	padding: 8px 22px;
+	border: 0;
+	border-radius: 10px;
+	color: white;
+	background: #3a8dff;
+	transition: transform 0.08s, background 0.15s;
+}
+button:hover { background: #5aa2ff; }
+button:active { transform: scale(0.94); }
+
+label { display: flex; align-items: center; gap: 8px; color: #c9d0dc; white-space: nowrap; }
+input[type=range] { width: 130px; }
+#animationSpeedValue { width: 44px; color: #f2f4f8; }
+
+.hint {
+	position: absolute;
+	top: 24px;
+	right: 24px;
+	padding: 8px 12px;
+	border-radius: 8px;
+	background: rgba(0, 0, 0, 0.45);
+	font-size: 13px;
+	color: #c9d0dc;
+}

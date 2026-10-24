@@ -1,6 +1,7 @@
 #include "Engine/Render/Renderer.h"
 #include "Engine/Material.h"
 #include "Engine/Animation/SkeletalModel.h"
+#include "Engine/UI/UISystem.h"
 #include "HAL/PlatformMisc.h"
 
 #include <algorithm>
@@ -79,7 +80,7 @@ namespace FP
 					SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
 			}
 		}
-		for (SDL_GPUGraphicsPipeline* pipeline : { m_PresentPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1] })
+		for (SDL_GPUGraphicsPipeline* pipeline : { m_PresentPipeline, m_UIPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1] })
 		{
 			if (pipeline)
 				SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
@@ -203,6 +204,26 @@ namespace FP
 			m_PresentPipeline = SDL_CreateGPUGraphicsPipeline(gpu, &info);
 			if (!m_PresentPipeline)
 				FP_LOG_ERROR("Present pipeline failed: %s", SDL_GetError());
+
+			// UI pages over the finished frame. They come premultiplied.
+			SDL_GPUShader* uiFrag = m_Device.LoadShader("UI.frag", 1, 0);
+			if (uiFrag)
+			{
+				SDL_GPUColorTargetDescription uiTarget = colorTarget;
+				uiTarget.blend_state.enable_blend = true;
+				uiTarget.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+				uiTarget.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+				uiTarget.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+				uiTarget.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+				uiTarget.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+				uiTarget.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+				info.fragment_shader = uiFrag;
+				info.target_info.color_target_descriptions = &uiTarget;
+				m_UIPipeline = SDL_CreateGPUGraphicsPipeline(gpu, &info);
+				if (!m_UIPipeline)
+					FP_LOG_WARN("UI pipeline failed, so game UI will not draw: %s", SDL_GetError());
+				SDL_ReleaseGPUShader(gpu, uiFrag);
+			}
 		}
 
 		SDL_GPUShader* lineVert = m_Device.LoadShader("Line.vert", 0, 1);
@@ -291,7 +312,7 @@ namespace FP
 				m_ShadowCaster = entity;
 				m_ShadowLight = count;
 			}
-			m_Frame.LightPosition[count] = { transform.GetForward(), 0 };
+			m_Frame.LightPosition[count] = { world.GetWorldRotation(entity).Rotate({ 0, 0, -1 }), 0 };
 			m_Frame.LightColor[count] = { ToLinear(light.Color).XYZ() * light.Intensity, 0 };
 			++count;
 		}
@@ -299,7 +320,7 @@ namespace FP
 		{
 			if (count == MaxLights)
 				break;
-			m_Frame.LightPosition[count] = { transform.Position, 1 };
+			m_Frame.LightPosition[count] = { world.GetWorldPosition(entity), 1 };
 			m_Frame.LightColor[count] = { ToLinear(light.Color).XYZ() * light.Intensity, light.Range };
 			++count;
 		}
@@ -342,14 +363,14 @@ namespace FP
 
 	void Renderer::DrawObject(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, World& world, const Draw& draw, const Mat4& viewProjection)
 	{
-		const TransformComponent& transform = world.Get<TransformComponent>(draw.Value);
 		const SpriteComponent* sprite = draw.Type == Surface::Sprite ? &world.Get<SpriteComponent>(draw.Value) : nullptr;
 		const MaterialData defaults;
 		const MaterialData& data = draw.Mat ? draw.Mat->GetData() : defaults;
 
 		ObjectUniforms object;
 		object.ViewProjection = viewProjection;
-		object.Model = sprite ? transform.GetMatrix() * Mat4::Scale({ sprite->Size, 1 }) : transform.GetMatrix();
+		const Mat4 model = world.GetWorldMatrix(draw.Value);
+		object.Model = sprite ? model * Mat4::Scale({ sprite->Size, 1 }) : model;
 		object.NormalMatrix = object.Model.Inverse().Transposed();
 		object.UVTransform = { data.Tiling.X, data.Tiling.Y, data.Offset.X, data.Offset.Y };
 		object.Tint = sprite ? ToLinear(sprite->Tint) : Vec4(1, 1, 1, 1);
@@ -509,17 +530,17 @@ namespace FP
 			return;
 		}
 
-		const TransformComponent& lightTransform = world.Get<TransformComponent>(m_ShadowCaster);
-		const ShadowView shadow = FitShadowView(view, lightTransform.GetRotation(), light->ShadowDistance, static_cast<int32>(size));
+		const ShadowView shadow = FitShadowView(view, world.GetWorldRotation(m_ShadowCaster), light->ShadowDistance, static_cast<int32>(size));
 		const float texel = shadow.Radius * 2 / static_cast<float>(size);
 		m_Frame.ShadowMatrix = shadow.ToTexture;
 		m_Frame.ShadowParams = { light->ShadowStrength > 1 ? 1 : light->ShadowStrength, 1.0f / static_cast<float>(size), texel * 1.5f, static_cast<float>(m_ShadowLight) };
 
 		// Every section that is not glass casts. Meshes outside the box are skipped.
-		auto cast = [&](Entity entity, const TransformComponent& transform, const GPUMesh* mesh, int32 pipeline, const Array<Mat4>* skin, float reach) {
-			const Mat4 model = transform.GetMatrix();
-			const Vec3 scale{ std::fabs(transform.Scale.X), std::fabs(transform.Scale.Y), std::fabs(transform.Scale.Z) };
-			const float largest = std::fmax(scale.X, std::fmax(scale.Y, scale.Z));
+		auto cast = [&](Entity entity, const GPUMesh* mesh, int32 pipeline, const Array<Mat4>* skin, float reach) {
+			const Mat4 model = world.GetWorldMatrix(entity);
+			float largest = 0;
+			for (int c = 0; c < 3; ++c)
+				largest = std::fmax(largest, Vec3(model.At(c, 0), model.At(c, 1), model.At(c, 2)).Length());
 			const Vec3 center = model.TransformPoint((mesh->BoundsMin + mesh->BoundsMax) * 0.5f);
 			if (!shadow.Touches(center, (mesh->BoundsMax - mesh->BoundsMin).Length() * 0.5f * largest * reach))
 				return;
@@ -548,16 +569,70 @@ namespace FP
 		for (auto [entity, transform, meshComponent] : world.View<TransformComponent, MeshComponent>().each())
 		{
 			if (const GPUMesh* mesh = m_Meshes.Get(meshComponent.Mesh))
-				cast(entity, transform, mesh, 0, nullptr, 1);
+				cast(entity, mesh, 0, nullptr, 1);
 		}
 		for (auto [entity, transform, skeletal] : world.View<TransformComponent, SkeletalMeshComponent>().each())
 		{
 			// Animation can reach past the bind pose bounds, so cull them loosely.
 			const SkeletalPoseComponent* pose = world.TryGet<SkeletalPoseComponent>(entity);
 			if (const GPUMesh* mesh = m_Meshes.GetSkinned(skeletal.Mesh))
-				cast(entity, transform, mesh, 1, pose ? &pose->Skin : nullptr, 1.5f);
+				cast(entity, mesh, 1, pose ? &pose->Skin : nullptr, 1.5f);
 		}
 		SDL_EndGPURenderPass(pass);
+	}
+
+	Array<GPUTexture*> Renderer::PrepareUI(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view, uint32 width, uint32 height)
+	{
+		struct Page
+		{
+			int32 Order;
+			GPUTexture* Texture;
+		};
+		Array<Page> pages;
+		Array<UITexture> kept;
+		for (auto [entity, ui, state] : world.View<UIComponent, UIStateComponent>().each())
+		{
+			state.Drawn = false;
+			// A UI on a camera belongs to that camera's view. Others show on every view.
+			if (!ui.Visible || !state.Document || !m_UIPipeline || (world.Has<CameraComponent>(entity) && entity != view.Camera))
+				continue;
+			state.Drawn = true;
+			state.Width = width;
+			state.Height = height;
+			state.Scale = view.PixelScale;
+
+			UIDocumentInstance& document = *state.Document;
+			const uint32 key = static_cast<uint32>(entt::to_integral(entity));
+			const int32 found = m_UITextures.FindIf([key](const UITexture& t) { return t.Entity == key; });
+			UITexture cached = found >= 0 ? m_UITextures[found] : UITexture{ key, nullptr, 0 };
+			if (document.GetWidth() == 0 || document.GetHeight() == 0)
+				continue;
+			if (!cached.Texture || cached.Texture->GetWidth() != document.GetWidth() || cached.Texture->GetHeight() != document.GetHeight())
+			{
+				cached.Texture = m_Device.CreateDynamicTexture(SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM_SRGB, document.GetWidth(), document.GetHeight());
+				cached.Version = ~0ull;
+			}
+			if (cached.Texture && cached.Version != document.GetVersion())
+			{
+				document.ReadPixels([&](const void* pixels, uint32 pageWidth, uint32 pageHeight, uint32 rowBytes) {
+					if (pageWidth == cached.Texture->GetWidth() && pageHeight == cached.Texture->GetHeight())
+						m_Device.UploadToTexture(cmd, *cached.Texture, pixels, rowBytes);
+				});
+				cached.Version = document.GetVersion();
+			}
+			if (cached.Texture)
+			{
+				pages.Add({ ui.Order, cached.Texture.Get() });
+				kept.Add(cached);
+			}
+		}
+		// Pages no longer on screen let go of their textures.
+		m_UITextures = kept;
+		pages.Sort([](const Page& a, const Page& b) { return a.Order < b.Order; });
+		Array<GPUTexture*> textures;
+		for (const Page& page : pages)
+			textures.Add(page.Texture);
+		return textures;
 	}
 
 	void Renderer::Render(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* target, uint32 width, uint32 height,
@@ -577,7 +652,7 @@ namespace FP
 		// Collect everything visible with its shader and surface.
 		Array<Draw> draws;
 		bool hasGlass = false;
-		auto resolve = [&](Entity entity, const TransformComponent& transform, Surface type, int32 layer, const GPUMesh* mesh, int32 section) {
+		auto resolve = [&](Entity entity, Surface type, int32 layer, const GPUMesh* mesh, int32 section) {
 			const MaterialComponent* materialComponent = world.TryGet<MaterialComponent>(entity);
 			const Material* material = materialComponent ? MaterialLibrary::Get().Load(materialComponent->GetForSection(section)) : nullptr;
 			// Meshes default to lit so they have shape. Sprites default to unlit so plain 2D games need no lights.
@@ -593,18 +668,18 @@ namespace FP
 			hasGlass |= kind == ShaderKind::Glass;
 			const MeshSection* part = mesh ? &mesh->Sections[section] : nullptr;
 			const SkeletalPoseComponent* pose = type == Surface::SkinnedMesh ? world.TryGet<SkeletalPoseComponent>(entity) : nullptr;
-			draws.Add({ layer, Vec3::Dot(transform.Position - view.CameraPosition, view.CameraForward), entity, kind, type, material, mesh,
+			draws.Add({ layer, Vec3::Dot(world.GetWorldPosition(entity) - view.CameraPosition, view.CameraForward), entity, kind, type, material, mesh,
 				part ? part->FirstIndex : 0, part ? part->IndexCount : 6, pose ? &pose->Skin : nullptr });
 		};
 		for (auto [entity, transform, sprite] : world.View<TransformComponent, SpriteComponent>().each())
-			resolve(entity, transform, Surface::Sprite, sprite.Layer, nullptr, 0);
+			resolve(entity, Surface::Sprite, sprite.Layer, nullptr, 0);
 		// One draw per section so each can use its own material and shader.
 		for (auto [entity, transform, meshComponent] : world.View<TransformComponent, MeshComponent>().each())
 		{
 			if (const GPUMesh* mesh = m_Meshes.Get(meshComponent.Mesh))
 			{
 				for (int32 section = 0; section < mesh->Sections.Num(); ++section)
-					resolve(entity, transform, Surface::Mesh, 0, mesh, section);
+					resolve(entity, Surface::Mesh, 0, mesh, section);
 			}
 		}
 		for (auto [entity, transform, skeletal] : world.View<TransformComponent, SkeletalMeshComponent>().each())
@@ -612,7 +687,7 @@ namespace FP
 			if (const GPUMesh* mesh = m_Meshes.GetSkinned(skeletal.Mesh))
 			{
 				for (int32 section = 0; section < mesh->Sections.Num(); ++section)
-					resolve(entity, transform, Surface::SkinnedMesh, 0, mesh, section);
+					resolve(entity, Surface::SkinnedMesh, 0, mesh, section);
 			}
 		}
 
@@ -692,7 +767,9 @@ namespace FP
 			SDL_EndGPURenderPass(pass);
 		}
 
-		// Present pass with editor lines on top.
+		const Array<GPUTexture*> pages = PrepareUI(cmd, world, view, width, height);
+
+		// Present pass with UI pages and editor lines on top.
 		SDL_GPUColorTargetInfo output = {};
 		output.texture = target;
 		output.load_op = SDL_GPU_LOADOP_DONT_CARE;
@@ -705,6 +782,17 @@ namespace FP
 		SDL_GPUTextureSamplerBinding scene = { m_SceneColor->GetHandle(), m_Device.GetClampSampler() };
 		SDL_BindGPUFragmentSamplers(pass, 0, &scene, 1);
 		SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+
+		if (!pages.IsEmpty())
+		{
+			SDL_BindGPUGraphicsPipeline(pass, m_UIPipeline);
+			for (GPUTexture* page : pages)
+			{
+				SDL_GPUTextureSamplerBinding binding = { page->GetHandle(), m_Device.GetClampSampler() };
+				SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
+				SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+			}
+		}
 
 		if (hasLines)
 		{

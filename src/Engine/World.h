@@ -13,6 +13,8 @@ namespace FP
 	class World;
 	class AudioWorld;
 	class Animator;
+	class Physics;
+	class UIDocument;
 
 	using Entity = entt::entity;
 	inline constexpr entt::null_t NullEntity = entt::null;
@@ -43,6 +45,12 @@ namespace FP
 		// Virtual for the same reason as GetAudio.
 		virtual Animator* GetAnimator(Entity entity);
 
+		// Bodies, forces and raycasts. Made on first use. Virtual for the same reason as GetAudio.
+		virtual Physics& GetPhysics();
+		// The page of the entity's UI component, made on first use. Null without one.
+		// Virtual for the same reason as GetAudio.
+		virtual UIDocument* GetUI(Entity entity);
+
 		// ---- Entities ------------------------------------------------------
 
 		// New entity with an id, a name and a transform.
@@ -51,7 +59,8 @@ namespace FP
 		// Entity with only an id. Used when loading so saved components fully decide the rest.
 		Entity CreateEmptyEntity(const Guid& id = Guid::New());
 
-		// Deferred until the end of Update while playing so systems can destroy safely mid loop.
+		// Removes the entity and all of its children. Deferred until the end of Update while
+		// playing so systems can destroy safely mid loop.
 		void DestroyEntity(Entity entity);
 
 		bool IsValid(Entity entity) const { return entity != NullEntity && m_Registry.valid(entity); }
@@ -62,6 +71,44 @@ namespace FP
 
 		// Every entity in creation order.
 		Array<Entity> GetEntities() const;
+
+		// The entity holding scene wide scripts, or NullEntity when the scene has none yet.
+		Entity GetSceneEntity() const;
+		Entity GetOrCreateSceneEntity();
+
+		// ---- Hierarchy -----------------------------------------------------
+
+		// NullEntity for top level entities.
+		Entity GetParent(Entity entity) const;
+
+		// Direct children in creation order.
+		Array<Entity> GetChildren(Entity entity) const;
+
+		// The first child with the name, searching grandchildren too when recursive.
+		Entity FindChild(Entity parent, std::string_view name, bool recursive = false) const;
+
+		// True when ancestor is the entity's parent, its parent's parent and so on.
+		bool IsDescendantOf(Entity entity, Entity ancestor) const;
+
+		// Makes child follow parent, or detaches it when parent is NullEntity. With
+		// keepWorldTransform it stays where it is, otherwise its Transform is reused as is.
+		// Returns false when the parent is the child itself or one of its descendants.
+		bool SetParent(Entity child, Entity parent, bool keepWorldTransform = true);
+
+		// Transforms after every parent is applied.
+		Mat4 GetWorldMatrix(Entity entity) const;
+		Vec3 GetWorldPosition(Entity entity) const;
+		Quat GetWorldRotation(Entity entity) const;
+
+		// The world transform as position, euler rotation and scale. Scale ignores any skew a
+		// rotated parent with uneven scale would add.
+		TransformComponent GetWorldTransform(Entity entity) const;
+
+		// Moves the entity so its world position is position, whatever its parents are.
+		void SetWorldPosition(Entity entity, Vec3 position);
+
+		// Sets the local transform that puts the entity at a world position, rotation and scale.
+		void SetWorldTransform(Entity entity, const TransformComponent& world);
 
 		// Removes every entity.
 		void Clear();
@@ -113,8 +160,12 @@ namespace FP
 		void EndPlay();
 		bool IsPlaying() const { return m_Playing; }
 
-		// Runs systems when playing, then flushes deferred destroys.
+		// Runs systems when playing, then flushes deferred destroys and any requested scene load.
 		void Update(float deltaTime);
+
+		// Swaps in a scene file, relative to Content, at the end of this frame's Update so
+		// whatever asked can finish first. Play carries on in the new scene.
+		void RequestSceneLoad(std::string_view path) { m_PendingScene = String(path); }
 
 		double GetTime() const { return m_Time; }
 
@@ -122,6 +173,7 @@ namespace FP
 
 	private:
 		void FlushDestroyed();
+		void SetLocalFromWorld(Entity entity, const Mat4& world);
 
 		entt::registry m_Registry;
 		Array<RefPtr<System>> m_Systems;
@@ -130,5 +182,7 @@ namespace FP
 		double m_Time = 0;
 		bool m_Playing = false;
 		std::unique_ptr<AudioWorld> m_Audio;
+		std::unique_ptr<Physics> m_Physics;
+		String m_PendingScene;
 	};
 }

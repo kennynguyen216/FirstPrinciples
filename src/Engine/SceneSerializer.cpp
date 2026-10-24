@@ -183,6 +183,75 @@ namespace FP::SceneSerializer
 		return world.FindEntityByGuid(id);
 	}
 
+	String SaveEntityTreeToString(World& world, Entity root)
+	{
+		String out;
+		if (!world.IsValid(root))
+			return out;
+		Array<Entity> pending = { root };
+		while (!pending.IsEmpty())
+		{
+			const Entity entity = pending[0];
+			pending.RemoveAt(0);
+			WriteEntity(out, world, entity);
+			for (Entity child : world.GetChildren(entity))
+				pending.Add(child);
+		}
+		return out;
+	}
+
+	Array<Entity> LoadEntitiesAsCopies(World& world, std::string_view text)
+	{
+		Array<Entity> result;
+		String remapped(text);
+		Array<Guid> ids;
+		for (const String& line : String(text).Split('\n'))
+		{
+			const String trimmed = line.Trimmed();
+			Guid old;
+			if (!trimmed.StartsWith("entity ") || !Guid::Parse(trimmed.View().substr(7), old))
+				continue;
+			const Guid fresh = Guid::New();
+			remapped.Replace(old.ToString().View(), fresh.ToString().View());
+			ids.Add(fresh);
+		}
+
+		StrongObjectPtr<World> candidate(NewObject<World>());
+		if (ids.IsEmpty() || !ParseScene(*candidate.Get(), remapped.View()) || !Validate(*candidate.Get()) || !ParseScene(world, remapped.View()))
+			return result;
+		for (const Guid& id : ids)
+		{
+			const Entity entity = world.FindEntityByGuid(id);
+			if (entity == NullEntity)
+				continue;
+			if (const ParentComponent* parent = world.TryGet<ParentComponent>(entity); parent && world.GetParent(entity) == NullEntity)
+				world.Remove<ParentComponent>(entity);
+			result.Add(entity);
+		}
+		return result;
+	}
+
+	Array<Entity> SpawnFromFile(World& world, const char* path, Vec3 offset)
+	{
+		String text;
+		if (!File::ReadAllText(path, text))
+		{
+			FP_LOG_ERROR("Could not read scene %s", path);
+			return {};
+		}
+		Array<Entity> spawned = LoadEntitiesAsCopies(world, text.View());
+		if (spawned.IsEmpty())
+			FP_LOG_ERROR("Could not spawn scene %s", path);
+		for (Entity entity : spawned)
+		{
+			if (world.GetParent(entity) != NullEntity)
+				continue;
+			if (TransformComponent* transform = world.TryGet<TransformComponent>(entity))
+				transform->Position += offset;
+		}
+		return spawned;
+	}
+
 	bool SaveToFile(World& world, const char* path)
 	{
 		if (!Validate(world)) { FP_LOG_ERROR("Refusing to save invalid scene %s", path); return false; }

@@ -15,6 +15,20 @@ namespace FP::Engine
 		// Slots are written only when set, as "Slot index path", so one material stays one line.
 		constexpr int32 MaxMaterialSlots = 256;
 
+		void WriteParentComponent(String& out, const void* component)
+		{
+			out.Appendf("  Parent %s\n", static_cast<const ParentComponent*>(component)->Parent.ToString().CStr());
+		}
+
+		void ReadParentComponent(void* component, const Array<String>& tokens, std::string_view)
+		{
+			Guid id;
+			if (tokens[0] == "Parent" && tokens.Num() > 1 && Guid::Parse(tokens[1].View(), id))
+				static_cast<ParentComponent*>(component)->Parent = id;
+			else
+				FP_LOG_WARN("Parent component needs a parent id");
+		}
+
 		void WriteMaterialComponent(String& out, const void* component)
 		{
 			const MaterialComponent& material = *static_cast<const MaterialComponent*>(component);
@@ -56,6 +70,12 @@ namespace FP::Engine
 
 		registry.Register<IdComponent>("Id").HideInEditor();
 
+		registry.Register<ParentComponent>("Parent")
+			.CustomSerializer(&WriteParentComponent, &ReadParentComponent)
+			.HideInEditor();
+
+		registry.Register<SceneComponent>("Scene").HideInEditor();
+
 		registry.Register<NameComponent>("Name")
 			.Field("Name", &NameComponent::Name);
 
@@ -63,15 +83,15 @@ namespace FP::Engine
 		registry.Register<AudioSourceComponent>("AudioSource")
 			.Field("Clip", &AudioSourceComponent::Clip).AssetPath("Audio (*.wav)")
 			.Field("Enabled", &AudioSourceComponent::Enabled)
-			.Field("Volume", &AudioSourceComponent::Volume)
-			.Field("Pitch", &AudioSourceComponent::Pitch)
+			.Field("Volume", &AudioSourceComponent::Volume).Range(0, 1)
+			.Field("Pitch", &AudioSourceComponent::Pitch).Range(0.25f, 4)
 			.Field("Loop", &AudioSourceComponent::Loop)
 			.Field("PlayOnStart", &AudioSourceComponent::PlayOnStart)
 			.Field("Bus", &AudioSourceComponent::Bus).Choices(audioBuses)
 			.Field("Spatial", &AudioSourceComponent::Spatial)
-			.Field("MinDistance", &AudioSourceComponent::MinDistance)
-			.Field("MaxDistance", &AudioSourceComponent::MaxDistance)
-			.Field("Priority", &AudioSourceComponent::Priority);
+			.Field("MinDistance", &AudioSourceComponent::MinDistance).Range(0.001f, 1e9f)
+			.Field("MaxDistance", &AudioSourceComponent::MaxDistance).Range(0.001f, 1e9f)
+			.Field("Priority", &AudioSourceComponent::Priority).Range(0, 255).Tooltip("Higher priority voices keep playing when too many sounds play at once");
 		registry.Register<AudioListenerComponent>("AudioListener")
 			.Field("Enabled", &AudioListenerComponent::Enabled);
 
@@ -89,7 +109,7 @@ namespace FP::Engine
 		registry.Register<CameraComponent>("Camera")
 			.Field("Perspective", &CameraComponent::Perspective)
 			.Field("Zoom", &CameraComponent::Zoom)
-			.Field("FieldOfView", &CameraComponent::FieldOfView)
+			.Field("FieldOfView", &CameraComponent::FieldOfView).Range(1, 179).Tooltip("Vertical angle in degrees for perspective cameras")
 			.Field("NearClip", &CameraComponent::NearClip)
 			.Field("FarClip", &CameraComponent::FarClip)
 			.Field("Primary", &CameraComponent::Primary)
@@ -112,6 +132,12 @@ namespace FP::Engine
 			.Field("Material", &MaterialComponent::Material).AssetPath("Materials (*.material)")
 			.CustomSerializer(&WriteMaterialComponent, &ReadMaterialComponent);
 
+		registry.Register<UIComponent>("UI")
+			.Field("Page", &UIComponent::Page).AssetPath("Pages (*.html *.htm)")
+			.Field("Visible", &UIComponent::Visible)
+			.Field("Input", &UIComponent::Input).Tooltip("Gets the mouse and keyboard while drawn")
+			.Field("Order", &UIComponent::Order).Tooltip("Higher draws on top");
+
 		registry.Register<ScriptComponent>("Scripts")
 			.CustomSerializer(&ScriptComponentFormat::Write, &ScriptComponentFormat::Read)
 			.CustomInspector();
@@ -119,6 +145,27 @@ namespace FP::Engine
 		registry.Register<NetworkComponent>("Network")
 			.Field("OnePerPeer", &NetworkComponent::OnePerPeer)
 			.Field("SendRate", &NetworkComponent::SendRate);
+
+		static const Array<const char*> colliderShapes{ "Box", "Sphere", "Capsule", "Mesh" };
+		registry.Register<ColliderComponent>("Collider")
+			.Field("Shape", &ColliderComponent::Shape).Choices(colliderShapes)
+			.Field("Size", &ColliderComponent::Size).Tooltip("Box size before the transform's scale")
+			.Field("Radius", &ColliderComponent::Radius).Tooltip("Sphere and capsule radius")
+			.Field("Height", &ColliderComponent::Height).Tooltip("Capsule height from end to end, along Y")
+			.Field("Offset", &ColliderComponent::Offset)
+			.Field("Trigger", &ColliderComponent::Trigger).Tooltip("Reports overlaps to scripts instead of blocking");
+
+		static const Array<const char*> motionTypes{ "Dynamic", "Kinematic", "Static" };
+		registry.Register<RigidBodyComponent>("RigidBody")
+			.Field("Motion", &RigidBodyComponent::Motion).Choices(motionTypes)
+			.Field("Mass", &RigidBodyComponent::Mass).Range(0.001f, 100000).Tooltip("Kilograms")
+			.Field("Friction", &RigidBodyComponent::Friction).Range(0, 1)
+			.Field("Restitution", &RigidBodyComponent::Restitution).Range(0, 1).Tooltip("Bounciness")
+			.Field("LinearDamping", &RigidBodyComponent::LinearDamping).Range(0, 1)
+			.Field("AngularDamping", &RigidBodyComponent::AngularDamping).Range(0, 1)
+			.Field("GravityScale", &RigidBodyComponent::GravityScale)
+			.Field("LockRotation", &RigidBodyComponent::LockRotation).Tooltip("Keeps it upright, for characters")
+			.Field("Continuous", &RigidBodyComponent::Continuous).Tooltip("Stops fast, small bodies passing through thin walls");
 
 		registry.Register<PointLightComponent>("PointLight")
 			.Field("Color", &PointLightComponent::Color)
@@ -129,9 +176,9 @@ namespace FP::Engine
 			.Field("Color", &DirectionalLightComponent::Color)
 			.Field("Intensity", &DirectionalLightComponent::Intensity)
 			.Field("CastShadows", &DirectionalLightComponent::CastShadows)
-			.Field("ShadowResolution", &DirectionalLightComponent::ShadowResolution)
+			.Field("ShadowResolution", &DirectionalLightComponent::ShadowResolution).Range(64, 4096).Tooltip("Pixels per side. Lower is faster and softer")
 			.Field("ShadowDistance", &DirectionalLightComponent::ShadowDistance)
-			.Field("ShadowStrength", &DirectionalLightComponent::ShadowStrength);
+			.Field("ShadowStrength", &DirectionalLightComponent::ShadowStrength).Range(0, 1);
 
 		registry.Register<AmbientLightComponent>("AmbientLight")
 			.Field("Color", &AmbientLightComponent::Color)

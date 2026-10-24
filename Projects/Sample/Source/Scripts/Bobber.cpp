@@ -8,8 +8,11 @@ using namespace FP;
 class Bobber : public Script
 {
 public:
-	float Height = 0.5f;
-	float Speed = 2;
+	FPPROPERTY(Range = "0, 5")
+	float Height = 0.5f; // how far it rises and falls, in world units
+
+	FPPROPERTY(Range = "0, 10")
+	float Speed = 2; // radians per second
 
 	void OnStart() override
 	{
@@ -28,8 +31,4 @@ private:
 	float m_Time = 0;
 };
 
-FP_SCRIPT(Bobber)
-{
-	fields.Field("Height", &Bobber::Height);
-	fields.Field("Speed", &Bobber::Speed);
-}
+FP_SCRIPT(Bobber);

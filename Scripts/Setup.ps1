@@ -31,5 +31,7 @@ if (-not (Test-Path (Join-Path $SdlDir "include"))) {
     Remove-Item $tmp -Recurse
 }
 
+& (Join-Path $PSScriptRoot "GetUltralight.ps1")
+
 Write-Host "Qt must be an MSVC 64-bit kit. Kits under C:\Qt are detected automatically; otherwise set QT_DIR."
 Write-Host "Done. Run Scripts\GenerateProjects.bat"
