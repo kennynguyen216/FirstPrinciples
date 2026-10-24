@@ -101,29 +101,101 @@ component Mesh
 component Material
   Material "Materials/Plastic.material"
 
-entity 26caec4f-e9c4-4ed9-b505-71081f7751e2
+entity f2803974-3bee-4257-a3b5-e5c1ab4195f5
 component Name
   Name "CabWallLeft"
 component Transform
-  Position -4.1 -4998 0
+  Position -4.1 -4999.25 0
   Rotation 0 0 0
-  Scale 0.2 4 12.4
+  Scale 0.2 1.5 12.4
 component Mesh
   Mesh "Cube"
 component Material
   Material "Materials/Plastic.material"
 
-entity 54296ea9-8a7e-4340-8c0b-f0d50e6d0e08
+entity 6b9fa0a5-8427-4d60-b7f3-0c54c6f2b5d7
 component Name
-  Name "CabWallRight"
+  Name "CabWallLeftTop"
 component Transform
-  Position 4.1 -4998 0
+  Position -4.1 -4996.25 0
   Rotation 0 0 0
-  Scale 0.2 4 12.4
+  Scale 0.2 0.5 12.4
 component Mesh
   Mesh "Cube"
 component Material
   Material "Materials/Plastic.material"
+
+entity 9dd11169-704d-48b5-86f4-4a28ecf6178c
+component Name
+  Name "CabWallLeftBack"
+component Transform
+  Position -4.1 -4997.5 4.1
+  Rotation 0 0 0
+  Scale 0.2 2 4.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Plastic.material"
+
+entity d6f84fc6-ea62-4caf-836c-9967e714db4d
+component Name
+  Name "CabWindowLeft"
+component Transform
+  Position -4.1 -4997.5 -2.1
+  Rotation 0 0 0
+  Scale 0.2 2 8.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Windshield.material"
+
+entity bcaf6ff6-cfb9-4822-ab56-cfed4c86a4a0
+component Name
+  Name "CabWallRight"
+component Transform
+  Position 4.1 -4999.25 0
+  Rotation 0 0 0
+  Scale 0.2 1.5 12.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Plastic.material"
+
+entity 2eba3cc9-3a5b-4ecc-afa3-5fc1e7dcffe7
+component Name
+  Name "CabWallRightTop"
+component Transform
+  Position 4.1 -4996.25 0
+  Rotation 0 0 0
+  Scale 0.2 0.5 12.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Plastic.material"
+
+entity 9086ea9c-0a7b-4c5e-a371-5ddf40910887
+component Name
+  Name "CabWallRightBack"
+component Transform
+  Position 4.1 -4997.5 4.1
+  Rotation 0 0 0
+  Scale 0.2 2 4.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Plastic.material"
+
+entity cc50ad78-e944-431d-8c41-21a2a4ad4c1b
+component Name
+  Name "CabWindowRight"
+component Transform
+  Position 4.1 -4997.5 -2.1
+  Rotation 0 0 0
+  Scale 0.2 2 8.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Windshield.material"
 
 entity 95f69f6e-20c7-41a2-8875-5eb62cb87f22
 component Name

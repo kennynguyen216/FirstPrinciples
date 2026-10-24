@@ -74,11 +74,16 @@ void DriverSystem::OnStart(World& world)
 	truck.Travel = GetNose(truck);
 	truck.Random = m_Package.Seed;
 
-	// The straight-line route is as long as CrossingTime at cruise speed, ahead of where the truck starts.
+	// The straight-line route is as long as CrossingTime at cruise speed, ahead of where the truck starts,
+	// and ends on the colony's surface. The planet is huge so it visibly grows the whole way in.
 	m_Route = { truck.Position, truck.Travel, m_Settings.CruiseSpeed * m_Settings.CrossingTime };
-	m_Colony = m_Route.Start + m_Route.Direction * m_Route.Length;
+	m_Colony = m_Route.Start + m_Route.Direction * (m_Route.Length + m_Settings.ColonyRadius);
 	if (const Entity colony = FindOrNull(world, "Colony"); colony != NullEntity)
-		world.Get<TransformComponent>(colony).Position = m_Colony;
+	{
+		TransformComponent& colonyTransform = world.Get<TransformComponent>(colony);
+		colonyTransform.Position = m_Colony;
+		colonyTransform.Scale = Vec3{ 1, 1, 1 } * (m_Settings.ColonyRadius * 2);
+	}
 
 	m_Rocks = BuildRocks(m_Package, m_Route, m_Settings);
 	m_RockEntities.clear();
@@ -148,13 +153,16 @@ void DriverSystem::OnStart(World& world)
 		const Entity dust = world.CreateEntity("Dust");
 		TransformComponent& transform = world.Get<TransformComponent>(dust);
 		transform.Position = truck.Position + Vec3{ random(), random(), random() };
-		transform.Scale = { 0.3f, 0.3f, 0.3f };
+		transform.Scale = { 0.15f, 0.15f, 0.15f };
 		world.Add<MeshComponent>(dust).Mesh = "Cube";
 		world.Add<DustComponent>(dust);
 	}
 
 	m_LastMouse = Input::GetMousePosition();
 	m_Bank = 0;
+	m_BaseFieldOfView = 60;
+	for (auto [entity, camera] : world.View<CameraComponent>().each())
+		m_BaseFieldOfView = camera.Primary ? camera.FieldOfView : m_BaseFieldOfView;
 	m_PeakWindFought = 0;
 	m_Messages.clear();
 	m_Results.clear();
@@ -173,11 +181,13 @@ void DriverSystem::Update(World& world, float deltaTime)
 
 	if (!m_Finished)
 		Simulate(*truck, life, ticket, driver, deltaTime);
+	if (m_Finished) // the run is over: no more streaks, hyperdrive view or shake behind the results
+		truck->Speed = truck->Boost = 0;
 	for (Message& message : m_Messages)
 		message.TimeLeft -= deltaTime;
 	m_Messages.erase(std::remove_if(m_Messages.begin(), m_Messages.end(), [](const Message& m) { return m.TimeLeft <= 0; }), m_Messages.end());
 
-	Display(world, *truck, life, ticket, driver);
+	Display(world, *truck, life, ticket, driver, deltaTime);
 }
 
 void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket, DriverState* driver, float deltaTime)
@@ -211,8 +221,10 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 		if (!BuyTicket(ticket, life, prize, m_Settings))
 			Notify("NOT ENOUGH CARGO AIR FOR A TICKET", Bad, 2);
 	}
-	// Scratching a ticket or blacking out takes your hands off the wheel.
-	truck.AtWheel = seated && !ticket.Active && awake;
+	// Scratching a ticket or blacking out takes your hands off the wheel. Once the prize shows they're
+	// back, while the ticket stays up a moment.
+	const bool scratching = ticket.Active && !ticket.Revealed;
+	truck.AtWheel = seated && !scratching && awake;
 
 	// ---- Space weather: the 24 hour timelapse ----
 	m_WindNow = SolarWindAt(m_Package, truck.Time, m_Settings);
@@ -224,8 +236,6 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 	if (truck.AtWheel)
 	{
 		controls.Aim = mouseMove * m_Settings.MouseSensitivity;
-		controls.Thrust = Input::IsKeyDown(SDL_SCANCODE_W);
-		controls.Brake = Input::IsKeyDown(SDL_SCANCODE_S);
 	}
 	const float yawBefore = truck.Yaw;
 	StepTruck(truck, controls, { m_WindNow, m_KpNow }, GetDisturbanceScale(life, m_Settings), m_Settings, deltaTime);
@@ -235,7 +245,8 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 		const float bank = std::clamp((truck.Yaw - yawBefore) / deltaTime * m_Settings.BankPerTurn, -m_Settings.BankMax, m_Settings.BankMax);
 		m_Bank += (bank - m_Bank) * std::min(1.0f, m_Settings.BankSmoothing * deltaTime);
 	}
-	if (CollideWithRocks(truck, m_Rocks, truck.Time, m_Settings))
+	// Above cruise (the hyperdrive and its wind-down) the truck phases through rocks.
+	if (truck.Speed <= m_Settings.CruiseSpeed && CollideWithRocks(truck, m_Rocks, truck.Time, m_Settings))
 		Notify("ASTEROID HIT!", Bad, 1.5f);
 
 	// ---- Life support and tickets ----
@@ -245,13 +256,20 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 		Notify("SCRUBBER FIXED", Good, 2.5f);
 	// Blacked out, the coin stays put; the ticket still finishes showing its prize.
 	if (StepTicket(ticket, life, ticket.Active && awake ? mouseMove : Vec2{}, awake && Input::IsMouseDown(MouseButton::Left), m_Settings, deltaTime))
+	{
 		FP_LOG("Ticket: %s", GetPrizeName(ticket.Won));
+		if (ticket.Won == Prize::Jackpot)
+		{
+			truck.Boost = m_Settings.BoostTime;
+			Notify("JACKPOT! HYPERDRIVE OVERLOAD", Good, 3);
+		}
+	}
 
 	if (driver && !driver->Seated && awake)
 		StepOnFoot(*driver, mouseMove * m_Settings.LookSensitivity, Input::GetMoveAxis(), m_CabBounds, m_Settings, deltaTime);
 
 	// ---- End of the run ----
-	if ((truck.Position - m_Colony).Length() <= m_Settings.DeliveryRadius)
+	if (GetAltitude(truck) <= m_Settings.DeliveryAltitude)
 		Finish("DELIVERED", truck, life);
 	else if (life.ColonyTimeLeft <= 0)
 		Finish("THE COLONY RAN OUT OF AIR", truck, life);
@@ -298,12 +316,22 @@ Quat DriverSystem::GetTruckRotation(const TruckState& truck) const
 	return Quat::FromEuler({ truck.Pitch, truck.Yaw, m_Bank });
 }
 
+float DriverSystem::GetAltitude(const TruckState& truck) const
+{
+	return (truck.Position - m_Colony).Length() - m_Settings.ColonyRadius;
+}
+
+float DriverSystem::GetSpeedRatio(const TruckState& truck) const
+{
+	return truck.Speed / std::max(m_Settings.CruiseSpeed, 1.0f);
+}
+
 Vec3 DriverSystem::CabToWorld(const TruckState& truck, Vec3 cabPoint) const
 {
 	return truck.Position + GetTruckRotation(truck).Rotate(cabPoint - m_CabOrigin);
 }
 
-void DriverSystem::Display(World& world, const TruckState& truck, const LifeSupport& life, const Ticket& ticket, const DriverState* driver)
+void DriverSystem::Display(World& world, const TruckState& truck, const LifeSupport& life, const Ticket& ticket, const DriverState* driver, float deltaTime)
 {
 	TransformComponent& transform = world.Get<TransformComponent>(m_Truck);
 	transform.Position = truck.Position;
@@ -328,11 +356,27 @@ void DriverSystem::Display(World& world, const TruckState& truck, const LifeSupp
 			world.Get<TransformComponent>(m_RockEntities[i]).Position = GetRockPosition(m_Rocks[i], truck.Time);
 	}
 
+	// Hyperspeed: each speck stretches into a streak along the travel, longer the faster the truck goes.
+	Vec3 streakAxis = Vec3::Cross({ 0, 0, -1 }, truck.Travel);
+	const float streakAngle = std::acos(std::clamp(-truck.Travel.Z, -1.0f, 1.0f)) * RadToDeg;
+	const Vec3 streakRotation = (streakAxis.LengthSquared() > 1e-8f ? Quat::AxisAngle(streakAxis, streakAngle) : Quat{}).ToEuler();
+	const float speedRatio = GetSpeedRatio(truck);
+	const float streak = 0.15f + m_Settings.StreakLength * speedRatio;
+	// The streaks rush past faster than the truck really moves, so cruise feels like hyperspace.
+	const Vec3 rush = truck.Travel * (-m_Settings.StreakSpeed * speedRatio * deltaTime);
+	const float clearance = m_Settings.TruckRadius * 2;
 	for (auto [entity, dustTransform] : world.View<DustComponent, TransformComponent>().each()) // empty tags aren't listed
 	{
-		const Vec3 offset = dustTransform.Position - truck.Position;
+		Vec3 offset = dustTransform.Position + rush - truck.Position;
+		// Keep streaks out of a tube along the truck's path so none cut through the cab.
+		const Vec3 side = offset - truck.Travel * Vec3::Dot(offset, truck.Travel);
+		const float sideDistance = side.Length();
+		if (sideDistance < clearance)
+			offset += (sideDistance > 1e-4f ? side * (1 / sideDistance) : Vec3::Cross(truck.Travel, { 0, 1, 0 }).Normalized()) * (clearance - sideDistance);
 		dustTransform.Position = truck.Position + Vec3{ Wrap(offset.X, m_Settings.DustSpread),
 			Wrap(offset.Y, m_Settings.DustSpread), Wrap(offset.Z, m_Settings.DustSpread) };
+		dustTransform.Rotation = streakRotation;
+		dustTransform.Scale.Z = streak;
 	}
 
 	if (m_CabLight != NullEntity)
@@ -371,6 +415,12 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 			cameraTransformIt.Position = CabToWorld(truck, driver->Position + Vec3{ 0, m_Settings.EyeHeight, 0 });
 			cameraTransformIt.Rotation = (truckRotation * Quat::FromEuler({ driver->Pitch, driver->Yaw, 0 })).ToEuler();
 		}
+		// The hyperdrive widens the view and shakes it, both with speed above cruise.
+		const float overdrive = m_Settings.BoostSpeedScale > 1 ? std::clamp((GetSpeedRatio(truck) - 1) / (m_Settings.BoostSpeedScale - 1), 0.0f, 1.0f) : 0;
+		camera.FieldOfView = m_BaseFieldOfView + m_Settings.BoostFov * overdrive;
+		const float shake = m_Settings.BoostShake * overdrive;
+		const float phase = truck.Time * 2 * Pi;
+		cameraTransformIt.Rotation += Vec3{ std::sin(phase * 23) + 0.5f * std::sin(phase * 37 + 1), std::sin(phase * 19 + 2) + 0.5f * std::sin(phase * 41), 0 } * (shake / 1.5f);
 		cameraTransform = &cameraTransformIt;
 		fieldOfView = camera.FieldOfView;
 	}
@@ -407,6 +457,8 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 		hud.Text(world, { left, y -= line }, t, Good, Format("CALM HANDS %.0fS", std::ceil(life.CalmHands)));
 	if (life.AutoFix)
 		hud.Text(world, { left, y -= line }, t, Good, "FREE FIX BANKED");
+	if (truck.Boost > 0)
+		hud.Text(world, { left, y -= line }, t, flash ? Good : White, Format("HYPERDRIVE %.0fS", std::ceil(truck.Boost)));
 
 	// ---- Top center: the colony's countdown ----
 	const int clock = static_cast<int>(std::ceil(life.ColonyTimeLeft));
@@ -447,7 +499,7 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 		}
 		else if (seated)
 		{
-			hud.Text(world, { 0, promptY }, t, Dim, Format("MOUSE AIM  W THRUST  S BRAKE  [T] TICKET -%.1fKG%s", GetTicketCost(m_Settings), driver ? "  [E] STAND UP" : ""), Hud::Align::Center);
+			hud.Text(world, { 0, promptY }, t, Dim, Format("MOUSE AIM  [T] TICKET -%.1fKG%s", GetTicketCost(m_Settings), driver ? "  [E] STAND UP" : ""), Hud::Align::Center);
 		}
 		else if (driver)
 		{
@@ -469,18 +521,24 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 
 	// ---- Bottom: Route Tracker, always on ----
 	const Vec3 toColony = m_Colony - truck.Position;
-	const float progress = std::clamp(1 - toColony.Length() / m_Route.Length, 0.0f, 1.0f);
+	const float altitude = std::max(GetAltitude(truck), 0.0f);
+	const float progress = std::clamp(1 - altitude / m_Route.Length, 0.0f, 1.0f);
 	const float barWidth = 1.4f;
 	const float barY = -0.8f;
 	hud.Box(world, { 0, barY }, { barWidth, t * 0.5f }, { 0.15f, 0.15f, 0.2f, 0.8f }, 10);
 	hud.Box(world, { -barWidth * 0.5f + progress * barWidth * 0.5f, barY }, { progress * barWidth, t * 0.5f }, Good, 11);
-	hud.Text(world, { -barWidth * 0.5f, barY + line * 0.8f }, t * 0.8f, Dim, "DEPOT");
-	hud.Text(world, { barWidth * 0.5f, barY + line * 0.8f }, t * 0.8f, Dim, "COLONY", Hud::Align::Right);
-	hud.Text(world, { 0, barY + line * 0.8f }, t * 0.8f, White, Format("%.0f%%", progress * 100), Hud::Align::Center);
+	hud.Text(world, { -barWidth * 0.5f - t, barY }, t * 0.8f, Dim, "DEPOT", Hud::Align::Right);
+	hud.Text(world, { barWidth * 0.5f + t, barY }, t * 0.8f, Dim, "COLONY");
+	// Distance meter: km to the colony's surface, and when you'll land. Below cruise counts as cruise,
+	// since the drive always gets back to it, so the ETA doesn't spike while spinning up.
+	const float km = altitude * m_Settings.KmPerUnit;
+	const int eta = static_cast<int>(std::ceil(altitude / std::max({ truck.Speed, m_Settings.CruiseSpeed, 1.0f })));
+	hud.Text(world, { 0, barY + line * 0.8f }, t * 1.2f, White,
+		(km >= 1e6f ? Format("%.1f MILLION KM", km / 1e6f) : Format("%.0f KM", km)) + Format("   ETA %d:%02d", eta / 60, eta % 60), Hud::Align::Center);
 	// On course: the truck's actual direction of travel, not its nose, against the way to the colony.
 	const float offCourse = std::acos(std::clamp(Vec3::Dot(truck.Travel, toColony.Normalized()), -1.0f, 1.0f)) * RadToDeg;
 	const Color courseColor = offCourse < 10 ? Good : offCourse < 35 ? Warn : Bad;
-	hud.Text(world, { 0, barY - line }, t, courseColor, Format("OFF COURSE %.0f DEG    SPEED %.0f", offCourse, truck.Speed), Hud::Align::Center);
+	hud.Text(world, { 0, barY - line }, t, courseColor, Format("OFF COURSE %.0f DEG    SPEED %.2fC", offCourse, truck.Speed * m_Settings.KmPerUnit / 299792.458f), Hud::Align::Center);
 	const float gauge = std::min(offCourse / 90, 1.0f);
 	hud.Box(world, { 0, barY - line * 1.8f }, { barWidth, t * 0.3f }, { 0.15f, 0.15f, 0.2f, 0.8f }, 10);
 	hud.Box(world, { -barWidth * 0.5f + gauge * barWidth * 0.5f, barY - line * 1.8f }, { gauge * barWidth, t * 0.3f }, courseColor, 11);
@@ -492,7 +550,7 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 		const float length = std::sqrt(screen.X * screen.X + screen.Y * screen.Y);
 		const Vec2 direction = length > 1e-6f ? screen * (1 / length) : Vec2{ 0, -1 };
 		const float roll = std::atan2(direction.Y, direction.X) * RadToDeg;
-		hud.Text(world, { direction.X * a * 0.8f - t, direction.Y * 0.7f }, t * 2.5f, Warn, ">", Hud::Align::Left, 20, roll);
+		hud.Text(world, { direction.X * a * 0.8f - t, direction.Y * 0.7f }, t * 2.5f, Warn, ">", Hud::Align::Left, 40, roll); // above the ticket
 	}
 
 	if (ticket.Active)
@@ -504,10 +562,11 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 
 void DriverSystem::DrawTicket(World& world, const Ticket& ticket)
 {
-	const float cell = 0.05f;
+	// Off to the right, like a ticket held beside the wheel, so the road ahead stays in view.
+	const float cell = 0.04f;
 	const float width = cell * static_cast<float>(ticket.Columns);
 	const float height = cell * static_cast<float>(ticket.Rows);
-	const Vec2 center{ 0, 0.05f };
+	const Vec2 center{ m_Hud.GetAspect() - width * 0.5f - 0.08f, 0.1f };
 	const float left = center.X - width * 0.5f;
 	const float top = center.Y + height * 0.5f;
 	const float t = m_Settings.HudTextSize;

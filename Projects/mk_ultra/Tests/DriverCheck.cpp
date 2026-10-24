@@ -26,25 +26,40 @@ static void CheckFlight()
 	DriverSettings settings;
 	settings.CruiseSpeed = 40;
 	settings.ThrustAccel = 10;
-	settings.BrakeDecel = 20;
 	settings.MaxPitch = 80;
 	settings.TurnTime90 = 1.5f;
 	const SpaceWeatherNow calm{}; // all disturbance settings are 0, so no wobble or jerks
 	const float dt = 1.0f / 60;
 
-	// Thrust tops out at cruise speed, brake stops at zero.
+	// The drive is always on: speed climbs to cruise and stays there, wheel or not.
 	TruckState truck;
-	truck.AtWheel = true;
 	TruckControls controls;
-	controls.Thrust = true;
 	for (int i = 0; i < 600; ++i)
 		StepTruck(truck, controls, calm, 1, settings, dt);
 	CHECK(std::abs(truck.Speed - settings.CruiseSpeed) < 1e-3f)
-	controls = {};
-	controls.Brake = true;
-	for (int i = 0; i < 600; ++i)
+
+	// Jackpot hyperdrive: past cruise while it lasts, back to cruise after.
+	settings.BoostSpeedScale = 2.5f;
+	settings.BoostAccel = 80;
+	truck.Boost = 3;
+	for (int i = 0; i < 2 * 60; ++i)
 		StepTruck(truck, controls, calm, 1, settings, dt);
-	CHECK(truck.Speed == 0)
+	CHECK(std::abs(truck.Speed - settings.CruiseSpeed * settings.BoostSpeedScale) < 1e-3f)
+	for (int i = 0; i < 20 * 60; ++i)
+		StepTruck(truck, controls, calm, 1, settings, dt);
+	CHECK(truck.Boost == 0 && std::abs(truck.Speed - settings.CruiseSpeed) < 1e-3f)
+
+	// The hyperdrive jerks the nose around even in calm weather.
+	settings.BoostJerkInterval = 0.5f;
+	settings.BoostJerkStrength = 70;
+	settings.JerkDecay = 5;
+	truck = {};
+	truck.AtWheel = true;
+	truck.Boost = 3;
+	for (int i = 0; i < 60; ++i)
+		StepTruck(truck, controls, calm, 1, settings, dt);
+	CHECK(truck.Yaw != 0 || truck.Pitch != 0)
+	settings.JerkDecay = 0;
 
 	// The sliding semi: snap the nose 90 degrees while moving. Travel lags, then catches up in TurnTime90.
 	truck = {};
@@ -88,11 +103,10 @@ static void CheckFlight()
 	settings.DriftRampTime = 15;
 	truck = {};
 	controls = {};
-	controls.Thrust = true;
 	controls.Aim = { 5, 5 };
 	for (int i = 0; i < 5 * 60; ++i)
 		StepTruck(truck, controls, calm, 1, settings, dt);
-	CHECK(truck.Speed == 0 && truck.Yaw == 0 && truck.Pitch == 0)
+	CHECK(truck.Yaw == 0 && truck.Pitch == 0)
 	CHECK(GetDriftAmount(truck, settings) == 0)
 	for (int i = 0; i < 10 * 60; ++i)
 		StepTruck(truck, {}, calm, 1, settings, dt);

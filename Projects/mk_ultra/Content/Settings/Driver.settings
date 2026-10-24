@@ -17,9 +17,8 @@ ColonyReserveKg 5.3          # kg O2 the colony has left; with the compression i
 StartingCargo 50             # kg O2 each truck hauls
 
 # ---- Flight: the wrestle (M1) ----------------------------------------------
-CruiseSpeed 40               # units/s, top speed while holding W
-ThrustAccel 12               # units/s^2 gained while holding W
-BrakeDecel 25                # units/s^2 lost while holding S
+CruiseSpeed 40               # units/s, the hyperspeed the drive always holds (no throttle)
+ThrustAccel 12               # units/s^2 the drive spins up at, from the start and after a hit
 MouseSensitivity 0.15        # deg the nose turns per pixel of mouse movement
 MouseJumpLimit 150           # pixels; a bigger jump in one frame is the cursor entering the view, not movement
 MaxPitch 80                  # deg, nose can't pitch past this up or down
@@ -68,6 +67,13 @@ PowerFlickerLevel 0.3        # power (0-1) during the dip
 TicketCostFraction 0.02      # fraction of starting cargo oxygen one ticket costs
 CalmHandsTime 10             # seconds Calm Hands reduces wobble and jerks
 JackpotTickets 3             # tickets' worth of oxygen a Jackpot refunds
+BoostTime 8                  # seconds of hyperdrive a Jackpot also gives
+BoostSpeedScale 2.5          # times CruiseSpeed during the hyperdrive
+BoostAccel 80                # units/s^2 the hyperdrive punches up at (it eases back down at ThrustAccel)
+BoostFov 35                  # degrees the view widens at full hyperdrive speed, so you feel it
+BoostShake 0.6               # degrees the view shakes at full hyperdrive speed
+BoostJerkInterval 0.7        # seconds between hyperdrive jerks, steady so they come like a pulse
+BoostJerkStrength 70         # deg/s kick each hyperdrive jerk gives the aim, each swinging roughly opposite the last
 PrizeDud 0.40                # odds; the four prizes should add up to 1
 PrizeCalmHands 0.25
 PrizeFreeFix 0.20
@@ -81,7 +87,9 @@ TicketCoinSpeed 0.06         # cells the coin moves per pixel of mouse movement
 TicketCoinRadius 1.3         # cells the coin scratches around itself
 
 # ---- Map --------------------------------------------------------------------
-DeliveryRadius 300           # units from the colony's center that count as delivered
+ColonyRadius 1200            # units, the colony planet's radius; big, so it grows the whole way in
+DeliveryAltitude 150         # units above the colony's surface that count as landed
+KmPerUnit 10000              # km per unit for the HUD: the route is ~84 million km (Earth-Mars) and cruise is ~1.3c
 
 # ---- Asteroids from real flybys (Section 5.9), clamped to playable ranges ----
 MaxClusters 20               # most flybys turned into clusters (closest passes kept)
@@ -110,8 +118,10 @@ SeatedEyeHeight 2.2          # units from the cab floor to the Driver's eyes whe
 BankPerTurn 0.25             # degrees the cab rolls into a turn per degree/s of turning
 BankMax 25                   # most the cab rolls, degrees
 BankSmoothing 4              # how fast the roll follows the turn, per second
-DustCount 300                # specks of space dust that show motion
+DustCount 400                # specks of space dust that show motion
 DustSpread 400               # size of the dust box kept around the truck, units
+StreakLength 60              # units a speck stretches along the travel at cruise speed: the hyperspeed streaks
+StreakSpeed 400              # extra units/s the streaks rush past at cruise speed, on top of the real speed (display only)
 HudDistance 0.3              # units in front of the camera the HUD is drawn; keep above the camera NearClip and below CabWallMargin
 HudAspect 1.6                # widest screen shape the HUD lays out for (16:10); narrower windows crop the sides
 HudTextSize 0.05             # character height as a fraction of half the screen height

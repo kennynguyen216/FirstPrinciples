@@ -39,6 +39,21 @@ Vec2 StepDisturbance(TruckState& truck, const SpaceWeatherNow& weather, const Dr
 		const float angle = NextRandom(truck.Random) * 2 * Pi;
 		truck.JerkRate += Vec2{ std::cos(angle), std::sin(angle) } * settings.JerkStrength;
 	}
+	// Hyperdrive: the truck is too fast to hold. Regular kicks, each swinging roughly the other way.
+	if (truck.Boost > 0)
+	{
+		truck.NextBoostJerk -= deltaTime;
+		if (truck.NextBoostJerk <= 0)
+		{
+			truck.NextBoostJerk += settings.BoostJerkInterval;
+			truck.BoostJerkAngle += Pi * (0.6f + 0.8f * NextRandom(truck.Random)); // 108-252 degrees on
+			truck.JerkRate += Vec2{ std::cos(truck.BoostJerkAngle), std::sin(truck.BoostJerkAngle) } * settings.BoostJerkStrength;
+		}
+	}
+	else
+	{
+		truck.NextBoostJerk = 0; // the first kick lands the moment the hyperdrive fires
+	}
 	truck.JerkRate *= std::exp(-settings.JerkDecay * deltaTime);
 
 	return sway * wobble + truck.JerkRate;
@@ -65,10 +80,12 @@ void StepTruck(TruckState& truck, const TruckControls& controls, const SpaceWeat
 	truck.Pitch += -input.Aim.Y + push.Y * deltaTime;
 	truck.Pitch = std::clamp(truck.Pitch, -settings.MaxPitch, settings.MaxPitch);
 
-	if (input.Thrust)
-		truck.Speed = std::min(truck.Speed + settings.ThrustAccel * deltaTime, settings.CruiseSpeed);
-	if (input.Brake)
-		truck.Speed = std::max(truck.Speed - settings.BrakeDecel * deltaTime, 0.0f);
+	truck.Boost = std::max(truck.Boost - deltaTime, 0.0f);
+	const float targetSpeed = truck.Boost > 0 ? settings.CruiseSpeed * settings.BoostSpeedScale : settings.CruiseSpeed;
+	if (truck.Speed < targetSpeed)
+		truck.Speed = std::min(truck.Speed + (truck.Boost > 0 ? settings.BoostAccel : settings.ThrustAccel) * deltaTime, targetSpeed);
+	else
+		truck.Speed = std::max(truck.Speed - settings.ThrustAccel * deltaTime, targetSpeed);
 
 	// Travel swings toward the nose at a limited rate: point one way and momentum carries you the other.
 	// At a standstill there's no momentum, so travel just follows the nose.

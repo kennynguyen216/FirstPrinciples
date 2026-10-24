@@ -53,8 +53,10 @@ private:
 	void Notify(const std::string& text, FP::Color color, float seconds);
 
 	FP::Quat GetTruckRotation(const TruckState& truck) const;
+	float GetAltitude(const TruckState& truck) const; // units above the colony's surface
+	float GetSpeedRatio(const TruckState& truck) const; // speed over cruise: 1 cruising, BoostSpeedScale at full hyperdrive
 	FP::Vec3 CabToWorld(const TruckState& truck, FP::Vec3 cabPoint) const;
-	void Display(FP::World& world, const TruckState& truck, const LifeSupport& life, const Ticket& ticket, const DriverState* driver);
+	void Display(FP::World& world, const TruckState& truck, const LifeSupport& life, const Ticket& ticket, const DriverState* driver, float deltaTime);
 	void DrawHud(FP::World& world, const TruckState& truck, const LifeSupport& life, const Ticket& ticket, const DriverState* driver);
 	void DrawTicket(FP::World& world, const Ticket& ticket);
 	void DrawResults(FP::World& world);
@@ -78,6 +80,7 @@ private:
 	FP::Vec3 m_SeatEye;
 	std::vector<CabPart> m_CabParts;
 	float m_Bank = 0;
+	float m_BaseFieldOfView = 60; // the primary camera's FOV at start; the hyperdrive widens it from there
 
 	FP::Vec2 m_LastMouse;
 	float m_WindNow = 0;
