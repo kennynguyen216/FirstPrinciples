@@ -46,6 +46,31 @@ namespace FP::Editor
 				default: return SDL_SCANCODE_UNKNOWN;
 			}
 		}
+
+		// Bits in m_FlyKeys for the keys that fly the camera.
+		enum FlyKey : uint32
+		{
+			FlyForward = 1 << 0,
+			FlyBack = 1 << 1,
+			FlyLeft = 1 << 2,
+			FlyRight = 1 << 3,
+			FlyDown = 1 << 4,
+			FlyUp = 1 << 5,
+		};
+
+		uint32 ToFlyKey(int qtKey)
+		{
+			switch (qtKey)
+			{
+				case Qt::Key_W: return FlyForward;
+				case Qt::Key_S: return FlyBack;
+				case Qt::Key_A: return FlyLeft;
+				case Qt::Key_D: return FlyRight;
+				case Qt::Key_Q: return FlyDown;
+				case Qt::Key_E: return FlyUp;
+				default: return 0;
+			}
+		}
 	}
 
 	ViewportWidget::ViewportWidget(GPUDevice& device, QWidget* parent) : QWidget(parent), m_Device(device)
@@ -70,6 +95,9 @@ namespace FP::Editor
 	{
 		m_Playing = playing;
 		m_Dragging = false;
+		m_Flying = false;
+		m_FlyKeys = 0;
+		m_Gizmo.EndDrag();
 		Input::Reset();
 		if (playing)
 			setFocus();
@@ -102,9 +130,7 @@ namespace FP::Editor
 		RenderView view;
 		if (m_3D)
 		{
-			TransformComponent transform;
-			transform.Rotation = { m_Pitch, m_Yaw, 0 };
-			transform.Position = m_OrbitTarget - transform.GetForward() * m_Distance;
+			const TransformComponent transform = EditorCamera();
 			CameraComponent camera;
 			camera.Perspective = true;
 			camera.FieldOfView = 60;
@@ -119,6 +145,54 @@ namespace FP::Editor
 		view.Background = { 0.12f, 0.12f, 0.14f, 1 };
 		view.Mode = m_ViewMode;
 		return view;
+	}
+
+	TransformComponent ViewportWidget::EditorCamera() const
+	{
+		TransformComponent transform;
+		transform.Rotation = { m_Pitch, m_Yaw, 0 };
+		transform.Position = m_OrbitTarget - transform.GetForward() * m_Distance;
+		return transform;
+	}
+
+	void ViewportWidget::SetGizmoMode(GizmoMode mode)
+	{
+		m_Gizmo.SetMode(mode);
+		m_Gizmo.SetHover(TransformGizmo::Handle::None);
+		update();
+	}
+
+	TransformComponent* ViewportWidget::SelectedTransform() const
+	{
+		if (!m_World || !m_World->IsValid(m_Selected))
+			return nullptr;
+		return m_World->TryGet<TransformComponent>(m_Selected);
+	}
+
+	void ViewportWidget::Fly(float deltaTime)
+	{
+		if (!m_Flying || m_FlyKeys == 0)
+			return;
+		auto axis = [this](uint32 positive, uint32 negative) {
+			return static_cast<float>((m_FlyKeys & positive) ? 1 : 0) - static_cast<float>((m_FlyKeys & negative) ? 1 : 0);
+		};
+		const float forward = axis(FlyForward, FlyBack);
+		const float right = axis(FlyRight, FlyLeft);
+		const float up = axis(FlyUp, FlyDown);
+		const float speed = m_FlySpeed * (m_FlyFast ? 3.0f : 1.0f) * deltaTime;
+		if (m_3D)
+		{
+			const TransformComponent camera = EditorCamera();
+			// Q and E go straight down and up, like UE.
+			m_OrbitTarget += (camera.GetForward() * forward + camera.GetRight() * right + Vec3(0, up, 0)) * speed;
+		}
+		else
+		{
+			// Same screen speed at any zoom. Q and E zoom out and in.
+			m_CameraCenter += Vec2(right, forward) * speed * (48.0f / m_PixelsPerUnit);
+			if (up != 0)
+				m_PixelsPerUnit = std::clamp(m_PixelsPerUnit * std::pow(1.5f, up * deltaTime * 2), 4.0f, 1024.0f);
+		}
 	}
 
 	Vec2 ViewportWidget::ToPixels(QPointF point) const
@@ -351,6 +425,13 @@ namespace FP::Editor
 		if (!m_Renderer->IsValid() || !m_World || !m_Target)
 			return;
 
+		// Frame time for flying. Stalls are capped so the camera never jumps.
+		const uint64 now = SDL_GetTicksNS();
+		const float deltaTime = m_LastFrameTicks ? std::fmin(static_cast<float>(now - m_LastFrameTicks) / 1e9f, 0.1f) : 0.0f;
+		m_LastFrameTicks = now;
+		if (!m_Playing)
+			Fly(deltaTime);
+
 		const RenderView view = CurrentView();
 		m_Lines.Clear();
 		if (!m_Playing)
@@ -385,6 +466,12 @@ namespace FP::Editor
 			painter.fillRect(rect(), Qt::black);
 		else
 			painter.drawImage(QPointF(0, 0), m_Image);
+		// Drawn with Qt over the frame so handles are thick, smooth and always on top.
+		if (!m_Playing && m_Target)
+		{
+			if (const TransformComponent* transform = SelectedTransform())
+				m_Gizmo.Paint(painter, CurrentView(), static_cast<float>(devicePixelRatioF()), *transform);
+		}
 	}
 
 	void ViewportWidget::resizeEvent(QResizeEvent*)
@@ -418,7 +505,17 @@ namespace FP::Editor
 
 		const bool alt = event->modifiers() & Qt::AltModifier;
 		const bool shift = event->modifiers() & Qt::ShiftModifier;
-		if (m_3D && ((event->button() == Qt::RightButton && !shift) || (event->button() == Qt::LeftButton && alt)))
+		if (event->button() == Qt::RightButton && !shift)
+		{
+			// Looks around in 3D and pans in 2D. WASD flies while it is held.
+			m_Flying = true;
+			m_FlyKeys = 0;
+			if (m_3D)
+				m_Looking = true;
+			else
+				m_Panning = true;
+		}
+		else if (m_3D && event->button() == Qt::LeftButton && alt)
 		{
 			m_Orbiting = true;
 		}
@@ -429,13 +526,24 @@ namespace FP::Editor
 		else if (event->button() == Qt::LeftButton)
 		{
 			const Vec2 pixel = ToPixels(event->position());
+			const RenderView view = CurrentView();
+			const float dpr = static_cast<float>(devicePixelRatioF());
+			// Handles of the selected entity's gizmo come before anything they cover.
+			if (const TransformComponent* transform = SelectedTransform())
+			{
+				if (m_Gizmo.BeginDrag(m_Gizmo.HitTest(view, dpr, *transform, pixel), view, dpr, *transform, pixel))
+					return;
+			}
+
 			const Entity picked = Pick(pixel);
 			m_Selected = picked;
+			m_Gizmo.SetHover(TransformGizmo::Handle::None);
 			emit EntityPicked(picked);
-			if (picked != NullEntity)
+			// Dragging the entity itself moves it, unless the gizmo is set to rotate or scale.
+			const bool freeMove = m_Gizmo.GetMode() == GizmoMode::Select || m_Gizmo.GetMode() == GizmoMode::Move;
+			if (picked != NullEntity && freeMove)
 			{
 				// Grab on a plane facing the camera through the object.
-				const RenderView view = CurrentView();
 				const Vec3 position = m_World->Get<TransformComponent>(picked).Position;
 				m_DragPlanePoint = position;
 				m_DragPlaneNormal = -view.CameraForward;
@@ -460,9 +568,17 @@ namespace FP::Editor
 			if (event->button() == Qt::MiddleButton) Input::SetMouseButton(MouseButton::Middle, false);
 			return;
 		}
+		if (event->button() == Qt::RightButton)
+		{
+			m_Flying = false;
+			m_FlyKeys = 0;
+			m_Looking = false;
+		}
 		m_Panning = false;
 		m_Orbiting = false;
 		m_Dragging = false;
+		m_Gizmo.EndDrag();
+		update();
 	}
 
 	void ViewportWidget::mouseMoveEvent(QMouseEvent* event)
@@ -477,7 +593,29 @@ namespace FP::Editor
 		const QPointF delta = position - m_LastMouse;
 		const float dx = static_cast<float>(delta.x());
 		const float dy = static_cast<float>(delta.y());
-		if (m_Orbiting)
+		const bool shift = event->modifiers() & Qt::ShiftModifier;
+		if (m_Gizmo.IsDragging())
+		{
+			if (TransformComponent* transform = SelectedTransform())
+			{
+				// Snapping is on with the toolbar button, or off with Shift held.
+				const bool snapping = m_SnapEnabled != shift;
+				m_Gizmo.UpdateDrag(CurrentView(), ToPixels(position), *transform, snapping ? m_SnapSize : 0.0f, snapping);
+				emit EntityMoved(m_Selected);
+				update();
+			}
+		}
+		else if (m_Looking)
+		{
+			// Turn in place by keeping the camera where it is and moving the target around it.
+			const Vec3 eye = EditorCamera().Position;
+			m_Yaw -= dx * 0.3f;
+			m_Pitch = std::clamp(m_Pitch - dy * 0.3f, -89.0f, 89.0f);
+			TransformComponent turned;
+			turned.Rotation = { m_Pitch, m_Yaw, 0 };
+			m_OrbitTarget = eye + turned.GetForward() * m_Distance;
+		}
+		else if (m_Orbiting)
 		{
 			m_Yaw -= dx * 0.3f;
 			m_Pitch = std::clamp(m_Pitch - dy * 0.3f, -89.0f, 89.0f);
@@ -504,7 +642,6 @@ namespace FP::Editor
 				const float t = Vec3::Dot(m_DragPlanePoint - ray.Origin, m_DragPlaneNormal) / denom;
 				Vec3 target = ray.Origin + ray.Direction * t + m_DragOffset;
 				// Snap to the grid when snapping is on, or off with Shift held. Axes facing the camera are left alone.
-				const bool shift = event->modifiers() & Qt::ShiftModifier;
 				if (m_SnapEnabled != shift && m_SnapSize > 0)
 				{
 					auto snap = [this](float value) { return std::round(value / m_SnapSize) * m_SnapSize; };
@@ -516,6 +653,16 @@ namespace FP::Editor
 				emit EntityMoved(m_Selected);
 			}
 		}
+		else if (event->buttons() == Qt::NoButton)
+		{
+			// Light up the handle under the mouse.
+			const TransformComponent* transform = SelectedTransform();
+			const TransformGizmo::Handle hover = transform
+				? m_Gizmo.HitTest(CurrentView(), static_cast<float>(devicePixelRatioF()), *transform, ToPixels(position))
+				: TransformGizmo::Handle::None;
+			m_Gizmo.SetHover(hover);
+			update();
+		}
 		m_LastMouse = position;
 	}
 
@@ -524,6 +671,12 @@ namespace FP::Editor
 		if (m_Playing)
 			return;
 		const float steps = static_cast<float>(event->angleDelta().y());
+		if (m_Flying)
+		{
+			// While flying the wheel sets the speed, like UE.
+			m_FlySpeed = std::clamp(m_FlySpeed * std::pow(1.2f, steps / 120.0f), 0.25f, 500.0f);
+			return;
+		}
 		if (m_3D)
 		{
 			m_Distance = std::clamp(m_Distance * std::pow(0.998f, steps), 0.5f, 2000.0f);
@@ -539,9 +692,32 @@ namespace FP::Editor
 
 	void ViewportWidget::keyPressEvent(QKeyEvent* event)
 	{
-		if (m_Playing && !event->isAutoRepeat())
-			Input::SetKey(ToScancode(event->key()), true);
-		else if (!m_Playing && event->key() == Qt::Key_F)
+		if (m_Playing)
+		{
+			if (!event->isAutoRepeat())
+				Input::SetKey(ToScancode(event->key()), true);
+			return;
+		}
+		m_FlyFast = event->modifiers() & Qt::ShiftModifier;
+		if (m_Flying && ToFlyKey(event->key()))
+		{
+			m_FlyKeys |= ToFlyKey(event->key());
+			return;
+		}
+		// Gizmo keys only without modifiers, so Ctrl+S and friends still reach the menus.
+		const bool plain = (event->modifiers() & ~Qt::KeypadModifier) == Qt::NoModifier;
+		const GizmoMode modes[] = { GizmoMode::Select, GizmoMode::Move, GizmoMode::Rotate, GizmoMode::Scale };
+		const int keys[] = { Qt::Key_Q, Qt::Key_W, Qt::Key_E, Qt::Key_R };
+		for (int i = 0; i < 4; ++i)
+		{
+			if (plain && event->key() == keys[i] && !event->isAutoRepeat())
+			{
+				SetGizmoMode(modes[i]);
+				emit GizmoModeChanged(modes[i]);
+				return;
+			}
+		}
+		if (event->key() == Qt::Key_F)
 			FocusSelected();
 		else
 			QWidget::keyPressEvent(event);
@@ -549,8 +725,15 @@ namespace FP::Editor
 
 	void ViewportWidget::keyReleaseEvent(QKeyEvent* event)
 	{
-		if (m_Playing && !event->isAutoRepeat())
-			Input::SetKey(ToScancode(event->key()), false);
+		if (m_Playing)
+		{
+			if (!event->isAutoRepeat())
+				Input::SetKey(ToScancode(event->key()), false);
+			return;
+		}
+		m_FlyFast = event->modifiers() & Qt::ShiftModifier;
+		if (!event->isAutoRepeat() && ToFlyKey(event->key()))
+			m_FlyKeys &= ~ToFlyKey(event->key());
 		else
 			QWidget::keyReleaseEvent(event);
 	}
@@ -603,6 +786,7 @@ namespace FP::Editor
 	void ViewportWidget::focusOutEvent(QFocusEvent* event)
 	{
 		Input::Reset();
+		m_FlyKeys = 0;
 		QWidget::focusOutEvent(event);
 	}
 }

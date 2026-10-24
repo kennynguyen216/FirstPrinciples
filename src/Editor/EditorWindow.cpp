@@ -444,7 +444,7 @@ namespace FP::Editor
 		});
 		statusBar()->addWidget(command);
 
-		QLabel* hint = new QLabel("Right drag orbits or pans, wheel zooms, left drag moves, F focuses");
+		QLabel* hint = new QLabel("Hold right mouse and WASD to fly, Alt drag orbits, W E R move rotate scale, F focuses");
 		hint->setStyleSheet("color: #7a7a7a; padding-right: 8px;");
 		statusBar()->addPermanentWidget(hint);
 	}

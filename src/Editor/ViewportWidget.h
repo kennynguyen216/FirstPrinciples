@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Editor/TransformGizmo.h"
 #include "Engine/Render/Renderer.h"
 
 #include <QImage>
@@ -11,8 +12,11 @@ namespace FP::Editor
 	// Avoids embedding a native SDL window, which behaves differently on every OS.
 	//
 	// 2D edit mode: right or middle drag pans, wheel zooms.
-	// 3D edit mode: right drag (or Alt left drag) orbits, middle drag (or Shift right drag) pans, wheel dollies.
-	// Both: left click selects, left drag moves along the view plane, F focuses the selection.
+	// 3D edit mode: right drag looks around, Alt left drag orbits, middle drag (or Shift right drag) pans,
+	// wheel dollies.
+	// Both: hold the right button and use WASD to fly, Q and E for down and up, Shift to go faster and the
+	// wheel to change speed. Left click selects, F focuses the selection. The gizmo moves, rotates or
+	// scales the selection, and Q, W, E and R switch between select, move, rotate and scale.
 	// Play mode: shows the game camera and forwards keys and mouse to Input.
 	class ViewportWidget : public QWidget
 	{
@@ -26,7 +30,7 @@ namespace FP::Editor
 		void SetSelected(Entity entity) { m_Selected = entity; }
 		void SetPlaying(bool playing);
 
-		void Set3D(bool enabled) { m_3D = enabled; }
+		void Set3D(bool enabled) { m_3D = enabled; m_Gizmo.Set3D(enabled); }
 		bool Is3D() const { return m_3D; }
 
 		// Lit, Unlit or Wireframe. Applies in edit and play so the game can be inspected while it runs.
@@ -35,6 +39,12 @@ namespace FP::Editor
 
 		// Snaps dragged entities to a grid of this size. Shift inverts it while dragging.
 		void SetSnap(bool enabled, float size) { m_SnapEnabled = enabled; m_SnapSize = size; }
+
+		void SetGizmoMode(GizmoMode mode);
+		GizmoMode GetGizmoMode() const { return m_Gizmo.GetMode(); }
+
+		// Move and rotate along the entity's own axes instead of the world's.
+		void SetGizmoLocal(bool local) { m_Gizmo.SetLocal(local); update(); }
 
 		// A widget that floats along the top edge, like the viewport toolbar. The viewport keeps it sized.
 		void SetOverlay(QWidget* overlay);
@@ -50,6 +60,9 @@ namespace FP::Editor
 	signals:
 		void EntityPicked(FP::Entity entity);
 		void EntityMoved(FP::Entity entity);
+
+		// A key switched the gizmo, so buttons showing the mode can follow.
+		void GizmoModeChanged(FP::Editor::GizmoMode mode);
 
 		// A file was dropped. point is where it landed in the world and target is what was under it.
 		void AssetDropped(const QString& path, FP::Vec3 point, FP::Entity target);
@@ -79,6 +92,13 @@ namespace FP::Editor
 		// Gizmos first, then the surface the ray hits. 2D prefers the highest sprite layer.
 		Entity Pick(Vec2 pixel) const;
 		Entity PickGizmo(Vec2 pixel) const;
+		TransformComponent* SelectedTransform() const;
+
+		// The 3D editor camera, placed behind the orbit target.
+		TransformComponent EditorCamera() const;
+
+		// Moves the camera for held WASD keys while the right button is down.
+		void Fly(float deltaTime);
 		bool HitSurface(const Ray& ray, Entity entity, float& outDistance) const;
 
 		void AddGizmos(const RenderView& view);
@@ -109,7 +129,17 @@ namespace FP::Editor
 		QPointF m_LastMouse;
 		bool m_Panning = false;
 		bool m_Orbiting = false;
+		bool m_Looking = false;
 		bool m_Dragging = false;
+
+		TransformGizmo m_Gizmo;
+
+		// Right button held, so WASD flies instead of switching gizmo modes.
+		bool m_Flying = false;
+		uint32 m_FlyKeys = 0;
+		bool m_FlyFast = false;
+		float m_FlySpeed = 5;
+		uint64 m_LastFrameTicks = 0;
 
 		QWidget* m_Overlay = nullptr;
 		bool m_SnapEnabled = false;
