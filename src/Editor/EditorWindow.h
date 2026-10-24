@@ -52,6 +52,9 @@ namespace FP::Editor
 
 		ContentBrowser* GetContentBrowser() const { return m_ContentBrowser; }
 
+		// Creates or changes entities for a file dropped onto the viewport. Absolute path.
+		void DropAsset(const QString& path, Vec3 point, Entity target);
+
 		// Shows an asset file in the inspector, clearing the entity selection. Absolute path.
 		void ShowAsset(const QString& path);
 

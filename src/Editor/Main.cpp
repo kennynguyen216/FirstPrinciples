@@ -88,6 +88,14 @@ int main(int argc, char** argv)
 			window.GetScriptBuilder()->Build();
 		}
 
+		// --drop path drops an asset at the origin onto the selected entity, like a drag from the browser.
+		const int dropIndex = static_cast<int>(args.indexOf("--drop"));
+		if (dropIndex >= 0 && dropIndex + 1 < args.size())
+		{
+			const FP::Entity target = window.GetWorld().FindEntityByName(selectIndex >= 0 && selectIndex + 1 < args.size() ? args[selectIndex + 1].toUtf8().constData() : "");
+			window.DropAsset(QString::fromUtf8(FP::Paths::Content(args[dropIndex + 1].toUtf8().constData()).CStr()), {}, target);
+		}
+
 		const int shotIndex = static_cast<int>(args.indexOf("--screenshot"));
 		if (shotIndex >= 0 && shotIndex + 1 < args.size())
 		{

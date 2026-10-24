@@ -76,6 +76,7 @@ namespace FP::Editor
 
 		connect(m_Viewport, &ViewportWidget::EntityPicked, this, [this](Entity entity) { Select(entity); });
 		connect(m_Viewport, &ViewportWidget::EntityMoved, this, [this](Entity) { MarkDirty(); });
+		connect(m_Viewport, &ViewportWidget::AssetDropped, this, &EditorWindow::DropAsset);
 
 		// Drives the world and the viewport at about 60 fps.
 		m_Timer = new QTimer(this);
@@ -281,6 +282,58 @@ namespace FP::Editor
 	void EditorWindow::SetViewMode(ViewMode mode)
 	{
 		m_ViewModeBox->setCurrentIndex(static_cast<int>(mode));
+	}
+
+	void EditorWindow::DropAsset(const QString& path, Vec3 point, Entity target)
+	{
+		const QString relative = QDir(ToQString(Paths::GetContentDir())).relativeFilePath(path);
+		if (relative.startsWith(".."))
+		{
+			FP_LOG_WARN("Only assets inside Content can be dropped");
+			return;
+		}
+		const QString kind = ContentBrowser::AssetKind(path);
+		const String name = ToString(QFileInfo(path).completeBaseName());
+
+		Entity changed = NullEntity;
+		if (kind == "Texture")
+		{
+			changed = m_World->CreateEntity(name);
+			m_World->Get<TransformComponent>(changed).Position = point;
+			m_World->Add<SpriteComponent>(changed).Texture = ToString(relative);
+		}
+		else if (kind == "Mesh")
+		{
+			changed = m_World->CreateEntity(name);
+			m_World->Get<TransformComponent>(changed).Position = point;
+			m_World->Add<MeshComponent>(changed).Mesh = ToString(relative);
+		}
+		else if (kind == "Material")
+		{
+			if (!m_World->IsValid(target))
+			{
+				FP_LOG_WARN("Drop a material onto a sprite or mesh");
+				return;
+			}
+			changed = target;
+			m_World->Add<MaterialComponent>(changed).Material = ToString(relative);
+		}
+		else if (kind == "Scene")
+		{
+			if (ConfirmDiscard())
+				OpenScene(path);
+			return;
+		}
+		else
+		{
+			FP_LOG_WARN("%s files cannot be dropped into the scene", kind.toUtf8().constData());
+			return;
+		}
+
+		MarkDirty();
+		RefreshHierarchy();
+		m_Selected = NullEntity; // force the inspector to rebuild with the new component
+		Select(changed);
 	}
 
 	void EditorWindow::ShowAsset(const QString& path)

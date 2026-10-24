@@ -18,7 +18,10 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QLineEdit>
+#include <QMimeData>
 #include <QMenu>
 #include <QPushButton>
 #include <QScrollArea>
@@ -65,6 +68,45 @@ namespace FP::Editor
 			const QByteArray utf8 = text.toUtf8();
 			return String(utf8.constData(), static_cast<int32>(utf8.size()));
 		}
+
+		// Line edit for asset paths that takes files dropped from the content browser and stores
+		// them relative to Content.
+		class AssetLineEdit : public QLineEdit
+		{
+		public:
+			using QLineEdit::QLineEdit;
+
+		protected:
+			void dragEnterEvent(QDragEnterEvent* event) override
+			{
+				if (RelativePath(event->mimeData()).isEmpty())
+					QLineEdit::dragEnterEvent(event);
+				else
+					event->acceptProposedAction();
+			}
+
+			void dropEvent(QDropEvent* event) override
+			{
+				const QString relative = RelativePath(event->mimeData());
+				if (relative.isEmpty())
+				{
+					QLineEdit::dropEvent(event);
+					return;
+				}
+				setText(relative);
+				emit editingFinished();
+				event->acceptProposedAction();
+			}
+
+		private:
+			static QString RelativePath(const QMimeData* data)
+			{
+				if (!data->hasUrls() || data->urls().isEmpty() || !data->urls().first().isLocalFile())
+					return {};
+				const QString relative = QDir(ToQString(Paths::GetContentDir())).relativeFilePath(data->urls().first().toLocalFile());
+				return relative.startsWith("..") ? QString() : relative;
+			}
+		};
 
 		// Spin boxes for Vec2 and Vec3 share this so every axis behaves the same.
 		QWidget* MakeVectorRow(int count, QDoubleSpinBox** boxes)
@@ -592,6 +634,7 @@ namespace FP::Editor
 					// Editable list: pick a built in name or type a path.
 					combo = new QComboBox();
 					combo->setEditable(true);
+					combo->setLineEdit(new AssetLineEdit());
 					combo->setInsertPolicy(QComboBox::NoInsert);
 					for (const char* choice : *field.Choices)
 						combo->addItem(choice);
@@ -601,7 +644,7 @@ namespace FP::Editor
 				}
 				else
 				{
-					edit = new QLineEdit();
+					edit = field.AssetFilter ? new AssetLineEdit() : new QLineEdit();
 					layout->addWidget(edit, 1);
 				}
 				connect(edit, &QLineEdit::editingFinished, this, [=]() { apply(edit->text()); });

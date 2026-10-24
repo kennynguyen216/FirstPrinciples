@@ -45,6 +45,9 @@ namespace FP::Editor
 		void EntityPicked(FP::Entity entity);
 		void EntityMoved(FP::Entity entity);
 
+		// A file was dropped. point is where it landed in the world and target is what was under it.
+		void AssetDropped(const QString& path, FP::Vec3 point, FP::Entity target);
+
 	protected:
 		void paintEvent(QPaintEvent* event) override;
 		void resizeEvent(QResizeEvent* event) override;
@@ -55,6 +58,8 @@ namespace FP::Editor
 		void keyPressEvent(QKeyEvent* event) override;
 		void keyReleaseEvent(QKeyEvent* event) override;
 		void focusOutEvent(QFocusEvent* event) override;
+		void dragEnterEvent(QDragEnterEvent* event) override;
+		void dropEvent(QDropEvent* event) override;
 
 	private:
 		void RecreateTarget();

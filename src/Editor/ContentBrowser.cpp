@@ -10,6 +10,8 @@
 #include <QImageReader>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMimeData>
+#include <QUrl>
 #include <QListWidget>
 #include <QPainter>
 #include <QPainterPath>
@@ -24,6 +26,23 @@ namespace FP::Editor
 	{
 		constexpr int IconSize = 64;
 		constexpr int PathRole = Qt::UserRole + 1;
+
+		// Drags carry plain file URLs so the viewport, inspector and other apps all understand them.
+		class AssetList : public QListWidget
+		{
+		protected:
+			QMimeData* mimeData(const QList<QListWidgetItem*>& items) const override
+			{
+				QList<QUrl> urls;
+				for (const QListWidgetItem* item : items)
+					urls.append(QUrl::fromLocalFile(item->data(PathRole).toString()));
+				QMimeData* data = new QMimeData();
+				data->setUrls(urls);
+				return data;
+			}
+
+			QStringList mimeTypes() const override { return { "text/uri-list" }; }
+		};
 
 		QString ProjectDir() { return QString::fromUtf8(Paths::GetProjectDir().CStr()); }
 	}
@@ -52,7 +71,9 @@ namespace FP::Editor
 		m_Folders = new QTreeWidget();
 		m_Folders->setHeaderHidden(true);
 		m_Folders->setMinimumWidth(140);
-		m_Files = new QListWidget();
+		m_Files = new AssetList();
+		m_Files->setDragEnabled(true);
+		m_Files->setDragDropMode(QAbstractItemView::DragOnly);
 		m_Files->setViewMode(QListView::IconMode);
 		m_Files->setIconSize({ IconSize, IconSize });
 		m_Files->setGridSize({ IconSize + 40, IconSize + 36 });
