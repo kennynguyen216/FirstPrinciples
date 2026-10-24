@@ -577,3 +577,136 @@ FP_TEST(Net_ReplayWindowRejectsRepeats)
 	FP_EXPECT(window.Accept(190));
 	FP_EXPECT(!window.Accept(190));
 }
+
+namespace
+{
+	// Sits between two peers and forwards everything, like a router on the path. It can read,
+	// change and resend packets, which is what encryption has to hold up against.
+	struct Middleman
+	{
+		UdpSocket Socket;
+		NetAddress Target;
+		NetAddress Client;
+		Array<Array<uint8>> Seen;
+		int32 Forwarded = 0;
+		bool Tamper = false;
+
+		void Pump()
+		{
+			uint8 buffer[UdpSocket::MaxDatagram];
+			NetAddress from;
+			int32 size = 0;
+			while ((size = Socket.Receive(from, buffer, sizeof(buffer))) >= 0)
+			{
+				Array<uint8>& copy = Seen.Emplace();
+				copy.Resize(size);
+				std::memcpy(copy.Data(), buffer, static_cast<usize>(size));
+				// Flip a bit in every third data packet past the header.
+				if (Tamper && size > 40 && buffer[4] == 2 && ++Forwarded % 3 == 0)
+					buffer[size - 1] ^= 1;
+				if (from == Target)
+					Socket.Send(Client, buffer, static_cast<usize>(size));
+				else
+				{
+					Client = from;
+					Socket.Send(Target, buffer, static_cast<usize>(size));
+				}
+			}
+		}
+
+		void ReplayAll()
+		{
+			for (const Array<uint8>& packet : Seen)
+				Socket.Send(Target, packet.Data(), static_cast<usize>(packet.Num()));
+		}
+	};
+}
+
+FP_TEST(Net_SessionEncryptsAndResistsTampering)
+{
+	NetSession a;
+	NetSession b;
+	FP_EXPECT(a.Start(0) && b.Start(0));
+	Middleman middle;
+	FP_EXPECT(middle.Socket.Open(0));
+	middle.Target = NetAddress::Loopback(a.GetPort());
+	middle.Tamper = true;
+
+	double now = 0;
+	b.Join(NetAddress::Loopback(middle.Socket.GetPort()));
+	FP_EXPECT(Pump({ &a, &b }, now, [&]() { middle.Pump(); return a.GetPeers().Num() == 1 && b.GetPeers().Num() == 1; }));
+
+	// Reliable messages get through in order even though some packets were changed on the way.
+	const char secret[] = "the treasure is under the crate";
+	for (uint32 i = 0; i < 40; ++i)
+	{
+		NetWriter message;
+		message.WriteU32(i);
+		message.WriteBytes(secret, sizeof(secret));
+		b.Broadcast(NetChannel::Reliable, message.Data(), message.Size());
+	}
+	b.Broadcast(NetChannel::Unreliable, "once", 5);
+	Array<uint32> got;
+	int32 unreliable = 0;
+	FP_EXPECT(Pump({ &a, &b }, now, [&]() {
+		middle.Pump();
+		for (const NetEvent& event : Drain(a, NetEventType::Message))
+		{
+			NetReader reader(event.Data.Data(), event.Data.Num());
+			if (event.Channel == NetChannel::Reliable)
+				got.Add(reader.ReadU32());
+			else
+				++unreliable;
+		}
+		return got.Num() == 40;
+	}));
+	for (int32 i = 0; i < got.Num(); ++i)
+		FP_EXPECT(got[i] == static_cast<uint32>(i));
+	FP_EXPECT(middle.Forwarded >= 3);
+
+	// Nothing on the wire shows the message.
+	bool leaked = false;
+	for (const Array<uint8>& packet : middle.Seen)
+		leaked = leaked || std::search(packet.begin(), packet.end(), secret, secret + 12) != packet.end();
+	FP_EXPECT(!leaked);
+
+	// Played back later, every recorded packet is refused, so nothing arrives twice.
+	middle.Tamper = false;
+	middle.ReplayAll();
+	Pump({ &a, &b }, now, [&]() { middle.Pump(); return false; });
+	FP_EXPECT(Drain(a, NetEventType::Message).IsEmpty());
+	FP_EXPECT(unreliable <= 1);
+	FP_EXPECT(a.GetPeers().Num() == 1);
+}
+
+FP_TEST(Net_SessionPasswordsMustMatch)
+{
+	NetSession a;
+	NetSession b;
+	NetSession c;
+	a.SetPassword("swordfish");
+	b.SetPassword("swordfish");
+	c.SetPassword("tuna");
+	FP_EXPECT(a.Start(0) && b.Start(0) && c.Start(0));
+	double now = 0;
+
+	b.Join(NetAddress::Loopback(a.GetPort()));
+	FP_EXPECT(Pump({ &a, &b, &c }, now, [&]() { return a.GetPeers().Num() == 1 && b.GetPeers().Num() == 1; }));
+
+	// The wrong password never counts as joined, and the join fails once the timeout passes.
+	c.Join(NetAddress::Loopback(a.GetPort()));
+	for (int i = 0; i < 50; ++i)
+	{
+		now += 0.01;
+		a.Update(now);
+		b.Update(now);
+		c.Update(now);
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+	FP_EXPECT(c.GetPeers().IsEmpty());
+	FP_EXPECT(a.GetPeers().Num() == 1);
+	FP_EXPECT(Drain(a, NetEventType::PeerJoined).Num() == 1);
+	now += NetSession::Timeout + 1;
+	c.Update(now);
+	FP_EXPECT(Drain(c, NetEventType::JoinFailed).Num() == 1);
+}

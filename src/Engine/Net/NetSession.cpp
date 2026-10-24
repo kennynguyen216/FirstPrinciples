@@ -2,13 +2,15 @@
 #include "HAL/PlatformMisc.h"
 
 #include <cstdio>
+#include <cstring>
 
 namespace FP
 {
 	namespace
 	{
-		// "FPN1". Packets without it are someone else's and get ignored.
-		constexpr uint32 Magic = 0x314E5046;
+		// "FPN2". Packets without it are someone else's, or from the unencrypted first version.
+		constexpr uint32 Magic = 0x324E5046;
+		constexpr int32 HeaderSize = 13;
 		constexpr double HelloInterval = 0.25;
 		constexpr double JoinTimeout = 10.0;
 
@@ -31,6 +33,15 @@ namespace FP
 		}
 	}
 
+	void NetSession::SetPassword(std::string_view password)
+	{
+		m_HasPassword = !password.empty();
+		if (m_HasPassword)
+			NetCrypto::HashPassword(password, m_Password);
+		else
+			std::memset(m_Password, 0, sizeof(m_Password));
+	}
+
 	bool NetSession::Start(uint16 port)
 	{
 		Stop();
@@ -42,7 +53,9 @@ namespace FP
 		do
 			PlatformMisc::GetRandomBytes(&m_LocalId, sizeof(m_LocalId));
 		while (m_LocalId == 0);
-		FP_LOG("Network session on port %u as peer %s", m_Socket.GetPort(), IdText(m_LocalId).c_str());
+		// New keys every session, so a key leaked later never opens packets recorded earlier.
+		m_Keys = NetCrypto::KeyPair::Generate();
+		FP_LOG("Network session on port %u as peer %s%s", m_Socket.GetPort(), IdText(m_LocalId).c_str(), m_HasPassword ? " with a password" : "");
 		return true;
 	}
 
@@ -53,12 +66,13 @@ namespace FP
 		// Three tries since a goodbye is never resent. Peers that miss them all time out instead.
 		for (Peer* peer : m_Peers)
 		{
-			for (int i = 0; i < 3; ++i)
-				SendControl(peer->Address, PacketType::Bye);
+			for (int i = 0; peer->Verified && i < 3; ++i)
+				SendSealed(*peer, PacketType::Bye, nullptr, 0);
 		}
 		while (!m_Peers.IsEmpty())
 			RemovePeer(m_Peers.Num() - 1, false);
 		m_Pending.Clear();
+		m_Keys.Wipe();
 		m_Socket.Close();
 	}
 
@@ -81,11 +95,24 @@ namespace FP
 		pending.Started = now;
 	}
 
-	void NetSession::SendControl(const NetAddress& to, PacketType type)
+	void NetSession::SendHandshake(const NetAddress& to, PacketType type)
 	{
 		NetWriter packet;
 		WriteHeader(packet, static_cast<uint8>(type), m_LocalId);
+		if (type != PacketType::Full)
+			packet.WriteBytes(m_Keys.Public, NetCrypto::KeySize);
 		m_Socket.Send(to, packet.Data(), static_cast<usize>(packet.Size()));
+	}
+
+	void NetSession::SendSealed(Peer& peer, PacketType type, const uint8* body, int32 size)
+	{
+		NetWriter header;
+		WriteHeader(header, static_cast<uint8>(type), m_LocalId);
+		Array<uint8> packet;
+		packet.Resize(header.Size());
+		std::memcpy(packet.Data(), header.Data(), static_cast<usize>(header.Size()));
+		NetCrypto::Seal(peer.Keys.Send, peer.SendCounter++, header.Data(), header.Size(), body, size, packet);
+		m_Socket.Send(peer.Address, packet.Data(), static_cast<usize>(packet.Num()));
 	}
 
 	NetSession::Peer* NetSession::FindPeer(const NetAddress& address)
@@ -112,7 +139,7 @@ namespace FP
 	{
 		for (const Peer* peer : m_Peers)
 		{
-			if (peer->Id == id)
+			if (peer->Id == id && peer->Verified)
 				return &peer->Connection;
 		}
 		return nullptr;
@@ -122,7 +149,10 @@ namespace FP
 	{
 		Array<PeerId> ids;
 		for (const Peer* peer : m_Peers)
-			ids.Add(peer->Id);
+		{
+			if (peer->Verified)
+				ids.Add(peer->Id);
+		}
 		return ids;
 	}
 
@@ -130,44 +160,55 @@ namespace FP
 	{
 		PeerId lowest = m_LocalId;
 		for (const Peer* peer : m_Peers)
-			lowest = peer->Id < lowest ? peer->Id : lowest;
+			lowest = peer->Verified && peer->Id < lowest ? peer->Id : lowest;
 		return lowest;
 	}
 
-	NetSession::Peer* NetSession::AddPeer(PeerId id, const NetAddress& address, double now)
+	NetSession::Peer* NetSession::AddPeer(PeerId id, const NetAddress& address, const uint8* publicKey, double now)
 	{
 		Peer* peer = new Peer();
+		if (!NetCrypto::DeriveLinkKeys(m_Keys, publicKey, m_Password, m_HasPassword, peer->Keys))
+		{
+			delete peer;
+			return nullptr;
+		}
 		peer->Id = id;
 		peer->Address = address;
 		peer->Joined = now;
+		std::memcpy(peer->PublicKey, publicKey, NetCrypto::KeySize);
 		m_Peers.Add(peer);
 		m_Pending.RemoveAll([&](const PendingJoin& pending) { return pending.Address == address; });
-		FP_LOG("Peer %s joined from %s", IdText(id).c_str(), address.ToString().c_str());
+		return peer;
+	}
 
+	void NetSession::OnVerified(Peer& peer)
+	{
+		peer.Verified = true;
+		FP_LOG("Peer %s joined from %s", IdText(peer.Id).c_str(), peer.Address.ToString().c_str());
 		NetEvent& event = m_Events.Emplace();
 		event.Type = NetEventType::PeerJoined;
-		event.Peer = id;
-		event.Address = address;
+		event.Peer = peer.Id;
+		event.Address = peer.Address;
 
 		// Introduce the newcomer to everyone we know, and everyone we know to the newcomer.
+		// Only verified peers, so nobody learns addresses without the keys.
 		Array<const Peer*> others;
 		for (Peer* other : m_Peers)
 		{
-			if (other != peer)
+			if (other != &peer && other->Verified)
 			{
 				others.Add(other);
-				SendPeerList(*other, { peer });
+				SendPeerList(*other, { &peer });
 			}
 		}
 		if (!others.IsEmpty())
-			SendPeerList(*peer, others);
-		return peer;
+			SendPeerList(peer, others);
 	}
 
 	void NetSession::RemovePeer(int32 index, bool notify)
 	{
 		Peer* peer = m_Peers[index];
-		if (notify)
+		if (notify && peer->Verified)
 		{
 			FP_LOG("Peer %s left", IdText(peer->Id).c_str());
 			NetEvent& event = m_Events.Emplace();
@@ -216,68 +257,95 @@ namespace FP
 		if (!reader.IsValid() || magic != Magic || sender == 0 || sender == m_LocalId)
 			return;
 
-		auto indexOf = [this](const Peer* peer) { return m_Peers.Find(const_cast<Peer*>(peer)); };
 		Peer* peer = FindPeer(from);
+		auto remove = [this](Peer* gone) { RemovePeer(m_Peers.Find(gone), true); };
 
 		switch (type)
 		{
 			case PacketType::Hello:
-				// Same address with a new id means that peer restarted.
-				if (peer && peer->Id != sender)
+			case PacketType::Welcome:
+			{
+				const uint8* publicKey = reader.ReadBytes(NetCrypto::KeySize);
+				if (!publicKey)
+					return;
+				// Same address with a new id or new keys. A handshake is not signed, so this could be
+				// anyone, and a verified peer is never dropped for it. A peer that really restarted
+				// gets back in once its old entry times out.
+				if (peer && (peer->Id != sender || std::memcmp(peer->PublicKey, publicKey, NetCrypto::KeySize) != 0))
 				{
-					RemovePeer(indexOf(peer), true);
+					if (peer->Verified)
+						return;
+					remove(peer);
 					peer = nullptr;
 				}
-				if (!peer)
+				const bool expected = m_Pending.FindIf([&](const PendingJoin& pending) { return pending.Address == from; }) != INDEX_NONE;
+				if (!peer && (type == PacketType::Hello || expected))
 				{
 					if (m_Peers.Num() >= MaxPeers)
 					{
-						SendControl(from, PacketType::Full);
+						SendHandshake(from, PacketType::Full);
 						return;
 					}
-					AddPeer(sender, from, now);
+					peer = AddPeer(sender, from, publicKey, now);
 				}
-				// Sent for every hello, since the hello may be a retry after our last welcome got lost.
-				SendControl(from, PacketType::Welcome);
+				// Every hello gets a welcome, since the hello may be a retry after our last welcome got lost.
+				if (peer && type == PacketType::Hello)
+					SendHandshake(from, PacketType::Welcome);
 				break;
-
-			case PacketType::Welcome:
-				if (!peer && m_Pending.FindIf([&](const PendingJoin& pending) { return pending.Address == from; }) != INDEX_NONE)
-					AddPeer(sender, from, now);
-				break;
+			}
 
 			case PacketType::Data:
+			case PacketType::Bye:
 			{
-				if (!peer || peer->Id != sender || !peer->Connection.ReadPacket(reader, now))
+				if (!peer || peer->Id != sender)
+					return;
+				uint64 counter = 0;
+				Array<uint8> body;
+				if (!NetCrypto::Open(peer->Keys.Receive, data, HeaderSize, data + HeaderSize, size - HeaderSize, counter, body))
+				{
+					if (!peer->Verified && !peer->WarnedDecrypt)
+					{
+						FP_LOG_WARN("Packets from %s do not decrypt. Is the password the same on both sides?", from.ToString().c_str());
+						peer->WarnedDecrypt = true;
+					}
+					return;
+				}
+				if (!peer->Replay.Accept(counter))
+					return;
+				if (!peer->Verified)
+					OnVerified(*peer);
+				if (type == PacketType::Bye)
+				{
+					remove(peer);
+					return;
+				}
+
+				NetReader inner(body.Data(), body.Num());
+				if (!peer->Connection.ReadPacket(inner, now))
 					return;
 				NetMessage message;
 				while (peer->Connection.Receive(message))
 				{
-					NetReader body(message.Data.Data(), message.Data.Num());
-					const uint8 kind = body.ReadU8();
+					NetReader content(message.Data.Data(), message.Data.Num());
+					const uint8 kind = content.ReadU8();
 					if (kind == PeerListMessage)
 					{
-						HandleSessionMessage(*peer, body, now);
+						HandleSessionMessage(*peer, content, now);
 					}
-					else if (kind == GameMessage && body.IsValid())
+					else if (kind == GameMessage && content.IsValid())
 					{
 						NetEvent& event = m_Events.Emplace();
 						event.Type = NetEventType::Message;
 						event.Peer = peer->Id;
 						event.Address = peer->Address;
 						event.Channel = message.Channel;
-						event.Data.Resize(body.Remaining());
-						if (body.Remaining() > 0)
-							std::memcpy(event.Data.Data(), body.ReadBytes(body.Remaining()), static_cast<usize>(event.Data.Num()));
+						event.Data.Resize(content.Remaining());
+						if (content.Remaining() > 0)
+							std::memcpy(event.Data.Data(), content.ReadBytes(content.Remaining()), static_cast<usize>(event.Data.Num()));
 					}
 				}
 				break;
 			}
-
-			case PacketType::Bye:
-				if (peer && peer->Id == sender)
-					RemovePeer(indexOf(peer), true);
-				break;
 
 			case PacketType::Full:
 			{
@@ -328,7 +396,7 @@ namespace FP
 			}
 			else if (pending.LastHello < 0 || now - pending.LastHello >= HelloInterval)
 			{
-				SendControl(pending.Address, PacketType::Hello);
+				SendHandshake(pending.Address, PacketType::Hello);
 				pending.LastHello = now;
 			}
 		}
@@ -337,28 +405,32 @@ namespace FP
 		{
 			const Peer* peer = m_Peers[i];
 			const double lastHeard = peer->Connection.PacketsReceived > 0 ? peer->Connection.GetLastReceiveTime() : peer->Joined;
-			if (now - lastHeard > Timeout)
-				RemovePeer(i, true);
+			if (now - lastHeard <= Timeout)
+				continue;
+			if (!peer->Verified)
+			{
+				// Keys never matched, or it went away mid handshake.
+				FP_LOG_WARN("Could not connect to %s", peer->Address.ToString().c_str());
+				NetEvent& event = m_Events.Emplace();
+				event.Type = NetEventType::JoinFailed;
+				event.Address = peer->Address;
+			}
+			RemovePeer(i, true);
 		}
 
+		// Unverified peers get packets too. The first one that opens on their side verifies us.
 		NetWriter packet;
-		NetWriter framed;
 		for (Peer* peer : m_Peers)
 		{
 			while (peer->Connection.WritePacket(packet, now))
-			{
-				framed.Clear();
-				WriteHeader(framed, static_cast<uint8>(PacketType::Data), m_LocalId);
-				framed.WriteBytes(packet.Data(), static_cast<usize>(packet.Size()));
-				m_Socket.Send(peer->Address, framed.Data(), static_cast<usize>(framed.Size()));
-			}
+				SendSealed(*peer, PacketType::Data, packet.Data(), packet.Size());
 		}
 	}
 
 	bool NetSession::Send(PeerId id, NetChannel channel, const void* data, int32 size)
 	{
 		Peer* peer = FindPeer(id);
-		if (!peer)
+		if (!peer || !peer->Verified)
 			return false;
 		NetWriter message;
 		message.WriteU8(GameMessage);
@@ -369,7 +441,10 @@ namespace FP
 	void NetSession::Broadcast(NetChannel channel, const void* data, int32 size)
 	{
 		for (Peer* peer : m_Peers)
-			Send(peer->Id, channel, data, size);
+		{
+			if (peer->Verified)
+				Send(peer->Id, channel, data, size);
+		}
 	}
 
 	bool NetSession::PollEvent(NetEvent& out)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Engine/Net/NetConnection.h"
+#include "Engine/Net/NetCrypto.h"
 #include "HAL/PlatformSocket.h"
 
 namespace FP
@@ -13,7 +14,8 @@ namespace FP
 		PeerJoined,
 		PeerLeft,
 		Message,
-		// Join gave up because nobody answered, or the session was full.
+		// A peer never finished connecting: nobody answered, the session was full, or its password
+		// did not match ours.
 		JoinFailed,
 	};
 
@@ -33,9 +35,19 @@ namespace FP
 	// at the same time. That also opens the way through most home routers (UDP hole punching).
 	// There is no relay, so peers behind strict NATs cannot reach each other.
 	//
-	// Every packet starts with a magic number, a type and the sender's peer id. Data packets carry a
-	// NetConnection packet, and each message in it starts with one byte saying whether it is the
-	// game's or the session's own (the peer lists used for introductions).
+	// Everything after the handshake is encrypted. Hello and Welcome swap fresh X25519 public keys,
+	// each side derives a key per direction, and from then on every packet is sealed with
+	// XChaCha20-Poly1305. A peer only counts as joined once a packet from it opens, which proves it
+	// holds the matching keys. Changed, forged or replayed packets are dropped.
+	//
+	// Without a password this stops anyone listening in or tampering, but not someone who sits in
+	// the middle from the very first packet. SetPassword closes that gap: the password is mixed into
+	// the keys, so only peers that know it can talk.
+	//
+	// Every packet starts with a magic number, a type and the sender's peer id, in the clear but
+	// covered by the seal. Data packets carry a NetConnection packet, and each message in it starts
+	// with one byte saying whether it is the game's or the session's own (the peer lists used for
+	// introductions).
 	class NetSession
 	{
 	public:
@@ -45,7 +57,10 @@ namespace FP
 
 		~NetSession() { Stop(); }
 
-		// Opens the socket. Port 0 lets the OS choose, see GetPort.
+		// Peers must share it to connect. Set it before Start. Empty means none.
+		void SetPassword(std::string_view password);
+
+		// Opens the socket and makes fresh keys. Port 0 lets the OS choose, see GetPort.
 		bool Start(uint16 port);
 
 		// Says goodbye to everyone and closes the socket.
@@ -90,7 +105,16 @@ namespace FP
 			PeerId Id = 0;
 			NetAddress Address;
 			double Joined = 0;
+			// Set by the first packet that opens with our keys. Until then the peer is not reported.
+			bool Verified = false;
+			bool WarnedDecrypt = false;
+			uint8 PublicKey[NetCrypto::KeySize] = {};
+			NetCrypto::LinkKeys Keys;
+			uint64 SendCounter = 0;
+			NetCrypto::ReplayWindow Replay;
 			NetConnection Connection;
+
+			~Peer() { Keys.Wipe(); }
 		};
 
 		struct PendingJoin
@@ -100,11 +124,13 @@ namespace FP
 			double LastHello = -1;
 		};
 
-		void SendControl(const NetAddress& to, PacketType type);
+		void SendHandshake(const NetAddress& to, PacketType type);
+		void SendSealed(Peer& peer, PacketType type, const uint8* body, int32 size);
 		void HandlePacket(const NetAddress& from, const uint8* data, int32 size, double now);
 		Peer* FindPeer(const NetAddress& address);
 		Peer* FindPeer(PeerId id);
-		Peer* AddPeer(PeerId id, const NetAddress& address, double now);
+		Peer* AddPeer(PeerId id, const NetAddress& address, const uint8* publicKey, double now);
+		void OnVerified(Peer& peer);
 		void RemovePeer(int32 index, bool notify);
 		void SendPeerList(Peer& to, const Array<const Peer*>& peers);
 		void HandleSessionMessage(Peer& from, NetReader& reader, double now);
@@ -112,6 +138,9 @@ namespace FP
 
 		UdpSocket m_Socket;
 		PeerId m_LocalId = 0;
+		NetCrypto::KeyPair m_Keys;
+		uint8 m_Password[NetCrypto::KeySize] = {};
+		bool m_HasPassword = false;
 		Array<Peer*> m_Peers;
 		Array<PendingJoin> m_Pending;
 		Array<NetEvent> m_Events;
