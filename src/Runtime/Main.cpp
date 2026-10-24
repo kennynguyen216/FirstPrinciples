@@ -84,6 +84,7 @@ int main(int argc, char** argv)
 
 	{
 		Renderer renderer(*device, swapchainFormat);
+		renderer.PreloadTextures(*world.Get());
 		uint64 lastTicks = SDL_GetTicksNS();
 		int32 frame = 0;
 		bool running = renderer.IsValid();

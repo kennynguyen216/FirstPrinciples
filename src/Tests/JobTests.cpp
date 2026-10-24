@@ -147,3 +147,20 @@ FP_TEST(Job_NestedParallelFor)
 	});
 	FP_EXPECT(sum.load() == static_cast<int64>(1600) * 1599 / 2);
 }
+
+#include "Engine/Render/ImageDecoder.h"
+
+FP_TEST(Job_DecodesImagesInParallel)
+{
+	ScopedJobs jobs;
+	Array<String> paths = { "Textures/Bricks_BaseColor.png", "Textures/Bricks_Normal.png", "Textures/Glow_Mask.png", "Textures/Missing.png" };
+	Array<DecodedImage> images = DecodeImages(paths);
+	FP_EXPECT(images.Num() == 4);
+	for (int32 i = 0; i < 3; ++i)
+	{
+		FP_EXPECT(images[i].Pixels != nullptr);
+		FP_EXPECT(images[i].Width == 256 && images[i].Height == 256);
+		FP_EXPECT(images[i].Path == paths[i]);
+	}
+	FP_EXPECT(images[3].Pixels == nullptr);
+}

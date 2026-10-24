@@ -1,5 +1,6 @@
 #include "Engine/Render/Renderer.h"
 #include "Engine/Material.h"
+#include "HAL/PlatformMisc.h"
 
 #include <algorithm>
 #include <cmath>
@@ -285,6 +286,29 @@ namespace FP
 			++count;
 		}
 		m_Frame.LightCount[0] = count;
+	}
+
+	void Renderer::PreloadTextures(World& world)
+	{
+		Array<TextureCache::Request> requests;
+		for (auto [entity, sprite] : world.View<SpriteComponent>().each())
+			requests.Add({ sprite.Texture, true });
+		for (auto [entity, materialComponent] : world.View<MaterialComponent>().each())
+		{
+			const Material* material = MaterialLibrary::Get().Load(materialComponent.Material);
+			if (!material)
+				continue;
+			const MaterialData& data = material->GetData();
+			requests.Add({ data.BaseColorMap, true });
+			requests.Add({ data.EmissiveMap, true });
+			for (const String* map : { &data.NormalMap, &data.AmbientOcclusionMap, &data.MetallicMap, &data.RoughnessMap, &data.SpecularMap, &data.SubsurfaceMap })
+				requests.Add({ *map, false });
+		}
+
+		const double start = PlatformMisc::GetTimeSeconds();
+		const int32 loaded = m_Textures.Preload(requests);
+		if (loaded > 0)
+			FP_LOG("Loaded %d textures in %.1f ms", loaded, (PlatformMisc::GetTimeSeconds() - start) * 1000.0);
 	}
 
 	GPUTexture* Renderer::Texture(const String& path, bool srgb, GPUTexture* fallback)
