@@ -10,8 +10,19 @@ using namespace FP;
 class NoodleController : public Script
 {
 public:
-	float MoveSpeed = 2.5f;
+	FPPROPERTY(Range = "0, 10", Category = "Movement")
+	float MoveSpeed = 2.5f; // meters per second
+
+	FPPROPERTY(Range = "0, 1440", Category = "Movement")
 	float TurnSpeed = 720; // degrees per second
+
+	// Plays the jump as if Space was pressed. Handy for testing from the editor.
+	FPFUNCTION()
+	void Jump()
+	{
+		if (Animator* animator = GetAnimator())
+			animator->SetTrigger("Jump");
+	}
 
 	void OnStart() override
 	{
@@ -57,8 +68,4 @@ public:
 	}
 };
 
-FP_SCRIPT_FIELDS(NoodleController)
-{
-	fields.Field("MoveSpeed", &NoodleController::MoveSpeed);
-	fields.Field("TurnSpeed", &NoodleController::TurnSpeed);
-}
+FP_SCRIPT(NoodleController);
