@@ -19,7 +19,8 @@ Scripts/Setup.sh
 Scripts/Build.sh
 ```
 
-`Setup.sh` installs premake, SDL3 and Qt with Homebrew. `Build.sh` builds the Sample project: makefiles
+`Setup.sh` installs premake, SDL3, Qt and 7-Zip with Homebrew, then downloads the Ultralight SDK used
+for game UI (`Scripts/GetUltralight.sh` does just that part). `Build.sh` builds the Sample project: makefiles
 go in `Projects/Sample/Build` and everything builds into `Projects/Sample/Binaries/Debug`. Pass `release`
 for an optimised build, and a project folder to build another one, like `Scripts/Build.sh debug Projects/MyGame`.
 For Xcode run `Scripts/GenerateXcode.sh` instead.
@@ -601,6 +602,7 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 | [Monocypher](https://monocypher.org) | Key exchange and encryption for network packets | Git submodule in `ThirdParty/monocypher` |
 | [spdlog](https://github.com/gabime/spdlog) | Logging to the console, files and the editor | Git submodule in `ThirdParty/spdlog` |
 | [cgltf](https://github.com/jkuhlmann/cgltf) | glTF loading for skeletal meshes and animations | Git submodule in `ThirdParty/cgltf` |
+| [Ultralight](https://ultralig.ht) 2.0 beta | Game UI in HTML, CSS and JavaScript | Binary SDK downloaded by `Scripts/GetUltralight.sh` or `.ps1` into `ThirdParty/Ultralight`. Optional: without it game UI draws nothing |
 
 ## Known limitations
 
