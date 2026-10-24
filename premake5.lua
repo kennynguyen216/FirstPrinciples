@@ -245,9 +245,13 @@ project "Jolt"
 	removefiles { JoltDir .. "/Jolt/Compute/CPU/**", JoltDir .. "/Jolt/Compute/DX12/**", JoltDir .. "/Jolt/Compute/MTL/**", JoltDir .. "/Jolt/Compute/VK/**", JoltDir .. "/Jolt/Shaders/**" }
 	includedirs { JoltDir }
 	warnings "Off"
-	-- Physics is slow unoptimised, so even Debug builds optimise it.
+	-- Physics is slow unoptimised, so even Debug builds optimise it. Keep the Debug C runtime though:
+	-- optimising alone switches MSVC to the Release runtime, which cannot link with Debug code. MSVC's
+	-- runtime checks cannot be combined with optimising, so they are off for Jolt.
 	filter "configurations:Debug"
 		optimize "Speed"
+		runtime "Debug"
+		runtimechecks "Off"
 	filter {}
 
 project "ImGui"

@@ -35,10 +35,24 @@ the middle of the screen. R swaps it between vaporize (cyan) and repair (amber).
 kill a Mite and put the oxygen it ate back in the tanks, and a shot that hits a tank instead punctures
 it. Holding the repair beam on a tank patches one hole every 1.5 seconds.
 
-Driver: W/S thrust, A/D turn, Shift boost (vents cargo oxygen). Reaching the colony docks the truck
-and hands its cargo over. The match ends when every truck has docked, or when the colony's oxygen
-runs out and everybody loses. Until there is a HUD, match events and a life support readout go to
-the log every few seconds, and Tab prints one on demand.
+Driver: the Driver's game from `game/driver-player`, unchanged, in `Source/Driver`. E sits at the
+wheel or stands up, the mouse flies the truck, T buys a scratch ticket, and holding E at the scrubber
+repairs it. Space weather (NOAA solar wind and Kp) and asteroid flybys (NASA NeoWs) are fetched live
+at GO, falling back to the bundle in `Content/SpaceWeather` when offline. Its settings are in
+`Content/Settings/Driver.settings`, its HUD is 3D sprites until it moves to the engine's UI system,
+and `EngineRequests.md` lists what it still needs from the engine.
+
+A life support readout for both crews goes to the log every few seconds, and Tab prints one.
+
+## How the Driver and the rest fit together
+
+`Source/Bridge/DriverBridge` joins them without changing the Driver's code:
+
+- At GO a seated Driver gets the Driver's systems, so the lobby, seats and countdown still decide
+  who drives. The live data fetch happens then, so GO can pause for a few seconds.
+- The Driver's cargo number is the crew's oxygen tanks. Mites, leaks and missed shots show on the
+  Driver's HUD, and the Driver's breathing and tickets empty the tanks the Defender guards.
+- The Driver's cab breathes for the crew, and its colony clock and results end the match.
 
 ## How the resources work
 
@@ -66,10 +80,8 @@ swap in the real ones as they are made. `Sounds::Play` and `Sounds::PlayAt` play
 
 ## Physics
 
-`Source/Physics` holds collider and rigid body components plus `Raycast` and `OverlapSphere`. For now
-`PhysicsQueries.cpp` answers them by testing every collider. When Jolt lands, answer them from Jolt in
-that one file and gameplay code stays the same. If the engine brings its own collider components,
-move the fields over and delete ours.
+The engine's Jolt physics. Tanks and bay walls have static colliders, Mites kinematic spheres, and
+the laser raycasts through `world.GetPhysics()`.
 
 ## Layout
 
@@ -77,12 +89,12 @@ move the fields over and delete ours.
 |---|---|
 | `Source/Match` | Match config and state, crew seating, Lobby -> Countdown -> Racing -> Results, delivery and score |
 | `Source/LifeSupport` | Cargo tanks, crew resources, the colony clock and the log readout |
-| `Source/Truck` | Truck handling, boost and the chase camera |
+| `Source/Driver` | The Driver's game, kept exactly as written on `game/driver-player` |
+| `Source/Bridge` | Joins the Driver's game to the match, cargo tanks and crews |
 | `Source/Crew` | The Defender on foot: movement, look, and the laser's vaporize and repair modes |
 | `Source/Audio` | Sound cues |
 | `Source/Enemies` | The Siphon pool, spawning (`Siphons::Spawn` is what solar flare surges will call) and Mite behavior |
-| `Source/Physics` | Colliders, bodies and the queries Jolt will answer |
-| `Content/Scenes/Main.scene` | Depot, colony, asteroids, cargo bay spots and the networked crew template. Tuning lives on its `Match` entity, real constants on `Real Data` |
+| `Content/Scenes/Main.scene` | The Driver's truck, cab, colony and camera, plus the cargo bays and the networked crew template. Tuning lives on its `Match` entity, real constants on `Real Data` |
 | `Content/Data` | Real world data with sources. Every value is a placeholder marked `"verified": false` until checked |
 
 ## Status
@@ -92,4 +104,6 @@ move the fields over and delete ours.
   Runs on each machine on its own until crew state is shared over the network.
 - [x] M3: the Defender moves and shoots in the bay, Mites seek and drain tanks, kills return oxygen,
   missed shots puncture tanks, repair mode patches them
-- M4 (cab and helm) is being built separately with the driving code
+- [x] Merged with `game/driver-player`: the Driver's cab, flight, tickets, live space weather and
+  asteroid flybys, sharing cargo with the bay
+- [ ] Multiplayer for the Driver's truck and the shared cargo

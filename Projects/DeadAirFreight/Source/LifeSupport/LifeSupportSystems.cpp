@@ -2,7 +2,6 @@
 #include "LifeSupport/Cargo.h"
 #include "Enemies/SiphonSystems.h"
 #include "Match/MatchQueries.h"
-#include "Physics/PhysicsComponents.h"
 
 #include <algorithm>
 #include <cmath>
@@ -88,8 +87,8 @@ void LifeSupportSystem::SpawnTanks(World& world, int32 crew)
 
 		world.Add<MeshComponent>(entity).Mesh = "Cube";
 		world.Add<MaterialComponent>(entity).Material = GetTankMaterial(tank);
-		ColliderComponent& collider = world.Add<ColliderComponent>(entity);
-		collider.Layer = "Cargo";
+		// A solid box the size of the tank, so shots and walkers stop at it.
+		world.Add<ColliderComponent>(entity);
 	}
 }
 
@@ -104,6 +103,9 @@ void LifeSupportSystem::Update(World& world, float deltaTime)
 
 	for (auto [entity, resources] : world.View<TruckResourcesComponent>().each())
 	{
+		if (resources.DriverCab)
+			continue;
+
 		// Power: the generator charges the battery as well as its health allows, and the scrubber
 		// and recycler run off it.
 		const bool powered = resources.Power > 0;

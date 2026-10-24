@@ -1,9 +1,9 @@
 #include "Crew/OnFootSystem.h"
 #include "Audio/Sounds.h"
+#include "Engine/Physics/Physics.h"
 #include "Enemies/SiphonSystems.h"
 #include "LifeSupport/Cargo.h"
 #include "Match/MatchQueries.h"
-#include "Physics/PhysicsQueries.h"
 
 #include <algorithm>
 #include <cmath>
@@ -89,26 +89,26 @@ namespace
 
 		const float feet = body.Position.Y - body.Scale.Y * 0.5f;
 		const float head = body.Position.Y + body.Scale.Y * 0.5f;
-		const PhysicsLayerMask solid = LayerBit(PhysicsLayer::Static) | LayerBit(PhysicsLayer::Cargo);
 		for (auto [entity, transform, collider] : world.View<TransformComponent, ColliderComponent>().each())
 		{
-			if (collider.Shape != "Box" || !(solid & LayerBit(ParsePhysicsLayer(collider.Layer))))
+			if (collider.Shape != "Box" || collider.Trigger)
 				continue;
-			const Vec3 half = collider.HalfExtents * Vec3{ std::abs(transform.Scale.X), std::abs(transform.Scale.Y), std::abs(transform.Scale.Z) };
+			const Vec3 half = collider.Size * Vec3{ std::abs(transform.Scale.X), std::abs(transform.Scale.Y), std::abs(transform.Scale.Z) } * 0.5f;
+			const Vec3 center = transform.Position + collider.Offset;
 			// Floors and anything above or below the walker do not block.
-			if (transform.Position.Y + half.Y <= feet + 0.05f || transform.Position.Y - half.Y >= head)
+			if (center.Y + half.Y <= feet + 0.05f || center.Y - half.Y >= head)
 				continue;
 			const float halfX = half.X + radius;
 			const float halfZ = half.Z + radius;
-			const float dx = body.Position.X - transform.Position.X;
-			const float dz = body.Position.Z - transform.Position.Z;
+			const float dx = body.Position.X - center.X;
+			const float dz = body.Position.Z - center.Z;
 			if (std::abs(dx) >= halfX || std::abs(dz) >= halfZ)
 				continue;
 			// Out along the shallower side.
 			if (halfX - std::abs(dx) < halfZ - std::abs(dz))
-				body.Position.X = transform.Position.X + (dx < 0 ? -halfX : halfX);
+				body.Position.X = center.X + (dx < 0 ? -halfX : halfX);
 			else
-				body.Position.Z = transform.Position.Z + (dz < 0 ? -halfZ : halfZ);
+				body.Position.Z = center.Z + (dz < 0 ? -halfZ : halfZ);
 		}
 	}
 
@@ -117,25 +117,25 @@ namespace
 		Vec3 Muzzle;
 		Vec3 End;
 		bool Hit = false;
-		PhysicsQueries::RayHit RayHit;
+		RaycastHit RayHit;
 	};
 
-	Aim Trace(World& world, const OnFootConfigComponent& config, const TransformComponent& eye)
+	// The first thing the laser meets, through the engine's Jolt world. Skips the shooter.
+	Aim Trace(World& world, const OnFootConfigComponent& config, const TransformComponent& eye, Entity shooter)
 	{
 		Aim aim;
 		const Vec3 forward = eye.GetForward();
 		aim.Muzzle = eye.Position + eye.GetRight() * MuzzleOffset.X + eye.GetUp() * MuzzleOffset.Y;
 		aim.End = eye.Position + forward * config.LaserRange;
-		const PhysicsLayerMask mask = LayerBit(PhysicsLayer::Siphon) | LayerBit(PhysicsLayer::Cargo) | LayerBit(PhysicsLayer::Static);
-		aim.Hit = PhysicsQueries::Raycast(world, eye.Position, forward, config.LaserRange, mask, aim.RayHit);
+		aim.Hit = world.GetPhysics().Raycast(eye.Position, forward, config.LaserRange, aim.RayHit, shooter);
 		if (aim.Hit)
 			aim.End = aim.RayHit.Point;
 		return aim;
 	}
 
-	void Vaporize(World& world, const OnFootConfigComponent& config, OnFootComponent& onFoot, const TransformComponent& eye)
+	void Vaporize(World& world, const OnFootConfigComponent& config, OnFootComponent& onFoot, const TransformComponent& eye, Entity shooter)
 	{
-		const Aim aim = Trace(world, config, eye);
+		const Aim aim = Trace(world, config, eye, shooter);
 		if (aim.Hit)
 		{
 			if (SiphonComponent* siphon = world.TryGet<SiphonComponent>(aim.RayHit.Entity); siphon && siphon->Active)
@@ -160,9 +160,9 @@ namespace
 		onFoot.Cooldown = config.FireInterval;
 	}
 
-	void Repair(World& world, const OnFootConfigComponent& config, OnFootComponent& onFoot, const TransformComponent& eye, float deltaTime)
+	void Repair(World& world, const OnFootConfigComponent& config, OnFootComponent& onFoot, const TransformComponent& eye, Entity shooter, float deltaTime)
 	{
-		const Aim aim = Trace(world, config, eye);
+		const Aim aim = Trace(world, config, eye, shooter);
 		if (aim.Hit)
 		{
 			if (CargoTankComponent* tank = world.TryGet<CargoTankComponent>(aim.RayHit.Entity); tank && tank->Holes > 0)
@@ -272,9 +272,9 @@ void OnFootSystem::Update(World& world, float deltaTime)
 	if (racing && Input::IsMouseDown(MouseButton::Left))
 	{
 		if (onFoot.Mode == LaserMode::Repair)
-			Repair(world, config, onFoot, eye, deltaTime);
+			Repair(world, config, onFoot, eye, walker, deltaTime);
 		else if (onFoot.Cooldown <= 0)
-			Vaporize(world, config, onFoot, eye);
+			Vaporize(world, config, onFoot, eye, walker);
 	}
 
 	if (onFoot.BeamTimeLeft > 0)

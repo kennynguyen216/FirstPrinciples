@@ -1,6 +1,294 @@
 # FirstPrinciples scene
 version 2
 
+entity 90825acd-6016-4f14-ab67-987f9d2b7921
+component Name
+  Name "Truck"
+component Transform
+  Position 0 0 -60
+  Rotation 0 0 0
+  Scale 2.5 2.5 7
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Gold.material"
+
+entity aae47f15-856b-4c5b-b5e1-8010acd59eba
+component Name
+  Name "TravelMarker"
+component Transform
+  Position 0 0 -85
+  Rotation 0 0 0
+  Scale 0.8 0.8 0.8
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Plastic.material"
+
+entity 498ad1e0-20b3-43f7-8c15-2f066b7eb746
+component Name
+  Name "DriverCamera"
+component Transform
+  Position 0 4 -44
+  Rotation 0 0 0
+  Scale 1 1 1
+component Camera
+  Perspective true
+  Zoom 64
+  FieldOfView 70
+  NearClip 0.2
+  FarClip 20000
+  Primary true
+  Background 0.01 0.01 0.02 1
+  Exposure 1
+  Tonemap true
+
+entity 1107143b-bfc8-412c-849c-93b43425188f
+component Name
+  Name "Depot"
+component Transform
+  Position 0 -15 0
+  Rotation 0 0 0
+  Scale 60 20 60
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Plastic.material"
+
+entity 569ab3bc-7e96-464b-bf53-ecd63b81cd9f
+component Name
+  Name "Colony"
+component Transform
+  Position 0 0 -8400
+  Rotation 0 0 0
+  Scale 400 400 400
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Jelly.material"
+
+entity f1cadbee-b97a-4fe2-b44e-7314d17e6df1
+component Name
+  Name "Ambient Light"
+component Transform
+  Position 0 0 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component AmbientLight
+  Color 0.6 0.7 1 1
+  Intensity 0.4
+
+entity d1152cec-641f-4782-955e-f165d0e027eb
+component Name
+  Name "Sun"
+component Transform
+  Position 0 0 0
+  Rotation -30 120 0
+  Scale 1 1 1
+component DirectionalLight
+  Color 1 0.95 0.85 1
+  Intensity 2
+
+entity 38899efd-5ab4-4418-84ee-3b2f23ab4f23
+component Name
+  Name "CabFloor"
+component Transform
+  Position 0 -5000 0
+  Rotation 0 0 0
+  Scale 8 1 12
+component Mesh
+  Mesh "Plane"
+component Material
+  Material "Materials/Plastic.material"
+
+entity f2803974-3bee-4257-a3b5-e5c1ab4195f5
+component Name
+  Name "CabWallLeft"
+component Transform
+  Position -4.1 -4999.25 0
+  Rotation 0 0 0
+  Scale 0.2 1.5 12.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Plastic.material"
+
+entity 6b9fa0a5-8427-4d60-b7f3-0c54c6f2b5d7
+component Name
+  Name "CabWallLeftTop"
+component Transform
+  Position -4.1 -4996.25 0
+  Rotation 0 0 0
+  Scale 0.2 0.5 12.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Plastic.material"
+
+entity 9dd11169-704d-48b5-86f4-4a28ecf6178c
+component Name
+  Name "CabWallLeftBack"
+component Transform
+  Position -4.1 -4997.5 4.1
+  Rotation 0 0 0
+  Scale 0.2 2 4.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Plastic.material"
+
+entity d6f84fc6-ea62-4caf-836c-9967e714db4d
+component Name
+  Name "CabWindowLeft"
+component Transform
+  Position -4.1 -4997.5 -2.1
+  Rotation 0 0 0
+  Scale 0.2 2 8.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Windshield.material"
+
+entity bcaf6ff6-cfb9-4822-ab56-cfed4c86a4a0
+component Name
+  Name "CabWallRight"
+component Transform
+  Position 4.1 -4999.25 0
+  Rotation 0 0 0
+  Scale 0.2 1.5 12.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Plastic.material"
+
+entity 2eba3cc9-3a5b-4ecc-afa3-5fc1e7dcffe7
+component Name
+  Name "CabWallRightTop"
+component Transform
+  Position 4.1 -4996.25 0
+  Rotation 0 0 0
+  Scale 0.2 0.5 12.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Plastic.material"
+
+entity 9086ea9c-0a7b-4c5e-a371-5ddf40910887
+component Name
+  Name "CabWallRightBack"
+component Transform
+  Position 4.1 -4997.5 4.1
+  Rotation 0 0 0
+  Scale 0.2 2 4.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Plastic.material"
+
+entity cc50ad78-e944-431d-8c41-21a2a4ad4c1b
+component Name
+  Name "CabWindowRight"
+component Transform
+  Position 4.1 -4997.5 -2.1
+  Rotation 0 0 0
+  Scale 0.2 2 8.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Windshield.material"
+
+entity 95f69f6e-20c7-41a2-8875-5eb62cb87f22
+component Name
+  Name "CabWallBack"
+component Transform
+  Position 0 -4998 6.1
+  Rotation 0 0 0
+  Scale 8.4 4 0.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Plastic.material"
+
+entity 565a6181-de90-4ade-b8a9-72ed20af35c2
+component Name
+  Name "CabWindshield"
+component Transform
+  Position 0 -4998 -6.1
+  Rotation 0 0 0
+  Scale 8.4 4 0.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Windshield.material"
+
+entity 1d0a1a06-bd5b-41e1-acc1-b936fb2423c7
+component Name
+  Name "CabConsole"
+component Transform
+  Position 0 -4999.5 -5.3
+  Rotation 0 0 0
+  Scale 6 1 1.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Gold.material"
+
+entity c07e2c6c-5d11-4125-99c1-c91d68693178
+component Name
+  Name "Wheel"
+component Transform
+  Position 0 -4998.7 -4.6
+  Rotation -35 0 0
+  Scale 0.9 0.9 0.12
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Gold.material"
+
+entity 06646036-efa4-4e6f-8306-4bb99df05aa3
+component Name
+  Name "CabSeat"
+component Transform
+  Position 0 -4999.6 -3.4
+  Rotation 0 0 0
+  Scale 1 0.8 1
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Plastic.material"
+
+entity 3b182f8f-a2b7-48c3-bc15-21d5a7313d31
+component Name
+  Name "Driver"
+component Transform
+  Position 0 -5000 3
+  Rotation 0 0 0
+  Scale 1 1 1
+
+entity 799b9a90-6a75-4107-b6a4-5011c89e842e
+component Name
+  Name "CabLight"
+component Transform
+  Position 0 -4996.5 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component PointLight
+  Color 1 0.9 0.75 1
+  Intensity 3
+  Range 12
+
+entity e5830ee6-f161-4288-8ea5-6d5eda6c53a5
+component Name
+  Name "Scrubber"
+component Transform
+  Position 0 -4999 5.5
+  Rotation 0 0 0
+  Scale 2.4 2 0.8
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Jelly.material"
+
 entity 2213412e-22ca-40a1-bd02-1eab87632991
 component Name
   Name "Match"
@@ -69,61 +357,6 @@ component SiphonConfig
   MiteBellyKg 4
   MiteBiteHoleSeconds 4
   MiteTrickleSeconds 6
-component TruckConfig
-  Thrust 30
-  MaxSpeed 45
-  BoostMultiplier 2
-  TurnRate 80
-  Drag 0.5
-  Size 3 2 6
-
-entity 396c14f6-8395-4f89-ad84-441ac0bb656a
-component Name
-  Name "Camera"
-component Transform
-  Position 0 6 18
-  Rotation -10 0 0
-  Scale 1 1 1
-component Camera
-  Perspective true
-  Zoom 64
-  FieldOfView 65
-  NearClip 0.2
-  FarClip 4000
-  Primary true
-  Background 0.01 0.01 0.03 1
-  Exposure 1
-  Tonemap true
-component ChaseCamera
-  Distance 18
-  Height 6
-  Smoothing 6
-
-entity 2af83a7e-fa20-48d0-bdd7-e8d17143dc33
-component Name
-  Name "Ambient Light"
-component Transform
-  Position 0 0 0
-  Rotation 0 0 0
-  Scale 1 1 1
-component AmbientLight
-  Color 0.6 0.7 1 1
-  Intensity 0.25
-
-entity d3213e75-3099-4ea8-b1ba-9185887a4e6a
-component Name
-  Name "Sun"
-component Transform
-  Position 0 0 0
-  Rotation -35 60 0
-  Scale 1 1 1
-component DirectionalLight
-  Color 1 0.95 0.85 1
-  Intensity 1.8
-  CastShadows true
-  ShadowResolution 1024
-  ShadowDistance 80
-  ShadowStrength 0.8
 
 entity dc96e6bd-8d42-46d0-87f5-c0c256822a49
 component Name
@@ -135,87 +368,15 @@ component Transform
 component Mesh
   Mesh "Cube"
 component CrewMember
-component Collider
-  Shape "Box"
-  HalfExtents 0.5 0.5 0.5
-  Radius 0.5
-  HalfHeight 0.5
-  Layer "Truck"
-component RigidBody
-  Motion "Kinematic"
-  Mass 20000
-  LinearDamping 0
-  AngularDamping 0.5
-  GravityFactor 0
 component Network
   OnePerPeer true
   SendRate 20
-
-entity 0e76a270-5e42-4c8c-9ff7-2e9c008efb95
-component Name
-  Name "Depot"
-component Transform
-  Position 0 0 0
-  Rotation 0 0 0
-  Scale 1 1 1
-component Depot
-  StartSpacing 12
-
-entity 57e473f2-9586-4bda-9ee8-56631854cafe
-component Name
-  Name "Depot Station"
-component Transform
-  Position 0 -4 16
-  Rotation 0 0 0
-  Scale 40 4 10
-component Mesh
-  Mesh "Cube"
-component Material
-  Material "Materials/Depot.material"
-component Collider
-  Shape "Box"
-  HalfExtents 0.5 0.5 0.5
-  Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
-
-entity e2109692-05f8-4406-95f3-9c67173049de
-component Name
-  Name "Colony"
-component Transform
-  Position 0 0 -900
-  Rotation 0 0 0
-  Scale 40 40 40
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "Materials/Colony.material"
-component Colony
-  ArrivalRadius 40
-component Collider
-  Shape "Sphere"
-  HalfExtents 0.5 0.5 0.5
-  Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
-
-entity 33107633-b080-4a9b-a35c-0ce99343b9d6
-component Name
-  Name "Colony Light"
-component Transform
-  Position 0 60 -860
-  Rotation 0 0 0
-  Scale 1 1 1
-component PointLight
-  Color 0.4 1 0.6 1
-  Intensity 4
-  Range 200
 
 entity de0625f3-69a7-4527-b4f7-ed7242d65279
 component Name
   Name "Cargo Bay A"
 component Transform
-  Position -3000 -500 0
+  Position -3000 -3000 0
   Rotation 0 0 0
   Scale 1 1 1
 component Interior
@@ -228,25 +389,26 @@ entity 534af3e0-f41f-424b-901b-28bd0edcad87
 component Name
   Name "Cargo Bay A Floor"
 component Transform
-  Position -3000 -500 0
+  Position -3000 -3000 0
   Rotation 0 0 0
   Scale 20 1 40
 component Mesh
   Mesh "Plane"
 component Material
-  Material "Materials/Rock.material"
+  Material "Materials/BayFloor.material"
 component Collider
   Shape "Box"
-  HalfExtents 0.5 0.01 0.5
+  Size 1 0.02 1
   Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
+  Height 2
+  Offset 0 0 0
+  Trigger false
 
 entity 8211627f-b35c-42e9-83e0-f5e627f8f39a
 component Name
   Name "Cargo Bay B"
 component Transform
-  Position 3000 -500 0
+  Position 3000 -3000 0
   Rotation 0 0 0
   Scale 1 1 1
 component Interior
@@ -259,344 +421,20 @@ entity d39f6e37-b33b-47ff-b198-5c75f7ea79c9
 component Name
   Name "Cargo Bay B Floor"
 component Transform
-  Position 3000 -500 0
+  Position 3000 -3000 0
   Rotation 0 0 0
   Scale 20 1 40
 component Mesh
   Mesh "Plane"
 component Material
-  Material "Materials/Rock.material"
+  Material "Materials/BayFloor.material"
 component Collider
   Shape "Box"
-  HalfExtents 0.5 0.01 0.5
+  Size 1 0.02 1
   Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
-
-entity bc95f82f-5c3e-474f-9dba-573c8591aa56
-component Name
-  Name "Asteroid 1"
-component Transform
-  Position -78.3 -18.1 -65.3
-  Rotation 34 210 0
-  Scale 12.2 11.8 12.2
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "Materials/Rock.material"
-component Collider
-  Shape "Sphere"
-  HalfExtents 0.5 0.5 0.5
-  Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
-
-entity 86f5299e-6e45-4767-b101-542d2fccb3ff
-component Name
-  Name "Asteroid 2"
-component Transform
-  Position -83.5 -17.2 -113.6
-  Rotation 153 298 0
-  Scale 4.9 3.2 4.9
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "Materials/Rock.material"
-component Collider
-  Shape "Sphere"
-  HalfExtents 0.5 0.5 0.5
-  Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
-
-entity e58018a8-8db0-4cf0-9182-2f346d3041bb
-component Name
-  Name "Asteroid 3"
-component Transform
-  Position -102.9 -4.1 -158.3
-  Rotation 17 309 0
-  Scale 13.8 9.9 13.8
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "Materials/Rock.material"
-component Collider
-  Shape "Sphere"
-  HalfExtents 0.5 0.5 0.5
-  Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
-
-entity 1b2b4b96-7f50-40a7-a091-378ba77166bb
-component Name
-  Name "Asteroid 4"
-component Transform
-  Position -102.1 2.4 -205.7
-  Rotation 37 206 0
-  Scale 10.8 7.3 10.8
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "Materials/Rock.material"
-component Collider
-  Shape "Sphere"
-  HalfExtents 0.5 0.5 0.5
-  Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
-
-entity 8d316fce-c8f2-412f-a47b-f5e96a59d591
-component Name
-  Name "Asteroid 5"
-component Transform
-  Position -101.2 4.8 -252.1
-  Rotation 191 280 0
-  Scale 9 7 9
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "Materials/Rock.material"
-component Collider
-  Shape "Sphere"
-  HalfExtents 0.5 0.5 0.5
-  Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
-
-entity b236c69b-9fad-457f-aed9-cd67ff8091e8
-component Name
-  Name "Asteroid 6"
-component Transform
-  Position 65.5 11.8 -272.3
-  Rotation 88 207 0
-  Scale 11 8.9 11
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "Materials/Rock.material"
-component Collider
-  Shape "Sphere"
-  HalfExtents 0.5 0.5 0.5
-  Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
-
-entity 24a7cc59-2f40-4cf9-8291-edbd14608792
-component Name
-  Name "Asteroid 7"
-component Transform
-  Position 63.9 19.2 -318.7
-  Rotation 151 273 0
-  Scale 5.2 3.4 5.2
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "Materials/Rock.material"
-component Collider
-  Shape "Sphere"
-  HalfExtents 0.5 0.5 0.5
-  Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
-
-entity a9ffdb24-fff5-4ce7-8145-1a4931561a38
-component Name
-  Name "Asteroid 8"
-component Transform
-  Position -154.9 -16.9 -375.3
-  Rotation 284 295 0
-  Scale 9.6 7.1 9.6
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "Materials/Rock.material"
-component Collider
-  Shape "Sphere"
-  HalfExtents 0.5 0.5 0.5
-  Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
-
-entity dcbcb1c3-b102-4662-b673-aff2ae37f5b1
-component Name
-  Name "Asteroid 9"
-component Transform
-  Position 103.3 -1.8 -424.5
-  Rotation 340 171 0
-  Scale 12.4 10.7 12.4
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "Materials/Rock.material"
-component Collider
-  Shape "Sphere"
-  HalfExtents 0.5 0.5 0.5
-  Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
-
-entity 50af2bbc-da85-4c37-aa2f-108807a730db
-component Name
-  Name "Asteroid 10"
-component Transform
-  Position 112.4 19.7 -478.2
-  Rotation 102 139 0
-  Scale 12.2 10.6 12.2
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "Materials/Rock.material"
-component Collider
-  Shape "Sphere"
-  HalfExtents 0.5 0.5 0.5
-  Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
-
-entity 43483eda-df49-4925-a57b-9ed7392bc10a
-component Name
-  Name "Asteroid 11"
-component Transform
-  Position 73 4.4 -524.3
-  Rotation 79 103 0
-  Scale 8.9 8 8.9
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "Materials/Rock.material"
-component Collider
-  Shape "Sphere"
-  HalfExtents 0.5 0.5 0.5
-  Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
-
-entity 03ef3330-3af1-4c91-af59-542127335606
-component Name
-  Name "Asteroid 12"
-component Transform
-  Position 35.9 -2 -558.1
-  Rotation 318 295 0
-  Scale 9.5 9 9.5
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "Materials/Rock.material"
-component Collider
-  Shape "Sphere"
-  HalfExtents 0.5 0.5 0.5
-  Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
-
-entity 8e34ab68-bc74-4bbe-81c1-b1ad12dfc32b
-component Name
-  Name "Asteroid 13"
-component Transform
-  Position 158.2 7.3 -606.6
-  Rotation 83 30 0
-  Scale 7.8 5.2 7.8
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "Materials/Rock.material"
-component Collider
-  Shape "Sphere"
-  HalfExtents 0.5 0.5 0.5
-  Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
-
-entity 53965c33-24ad-473b-8fbc-cd4ff83cd376
-component Name
-  Name "Asteroid 14"
-component Transform
-  Position -90.5 3.6 -640.2
-  Rotation 1 151 0
-  Scale 6.6 5 6.6
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "Materials/Rock.material"
-component Collider
-  Shape "Sphere"
-  HalfExtents 0.5 0.5 0.5
-  Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
-
-entity 9d1b9eec-a75f-486e-938c-c83798667e4f
-component Name
-  Name "Asteroid 15"
-component Transform
-  Position -118.2 0.6 -688
-  Rotation 243 19 0
-  Scale 10.2 9.8 10.2
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "Materials/Rock.material"
-component Collider
-  Shape "Sphere"
-  HalfExtents 0.5 0.5 0.5
-  Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
-
-entity 50f1f7c5-ac69-4bf3-83e7-5f72d49dd747
-component Name
-  Name "Asteroid 16"
-component Transform
-  Position 78.7 -4.2 -726.6
-  Rotation 144 69 0
-  Scale 8.8 8.8 8.8
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "Materials/Rock.material"
-component Collider
-  Shape "Sphere"
-  HalfExtents 0.5 0.5 0.5
-  Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
-
-entity ad4e5315-c60d-4920-be64-05da3fedb976
-component Name
-  Name "Asteroid 17"
-component Transform
-  Position -70.9 -17.9 -781.8
-  Rotation 54 37 0
-  Scale 4 3 4
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "Materials/Rock.material"
-component Collider
-  Shape "Sphere"
-  HalfExtents 0.5 0.5 0.5
-  Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
-
-entity acd6cb49-a002-4d2d-80c4-80e4365b05c1
-component Name
-  Name "Asteroid 18"
-component Transform
-  Position -107.9 -14.1 -839.2
-  Rotation 125 131 0
-  Scale 6.5 4.2 6.5
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "Materials/Rock.material"
-
-component Collider
-  Shape "Sphere"
-  HalfExtents 0.5 0.5 0.5
-  Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
+  Height 2
+  Offset 0 0 0
+  Trigger false
 
 entity 3b204613-f314-4a1c-9713-cd90a0d509ea
 component Name
@@ -617,7 +455,7 @@ entity 3f84c030-329b-41e4-8a90-a769647d9492
 component Name
   Name "Cargo Bay A Wall Left"
 component Transform
-  Position -3010.25 -497 0
+  Position -3010.25 -2997 0
   Rotation 0 0 0
   Scale 0.5 6 41
 component Mesh
@@ -626,16 +464,17 @@ component Material
   Material "Materials/BayWall.material"
 component Collider
   Shape "Box"
-  HalfExtents 0.5 0.5 0.5
+  Size 1 1 1
   Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
+  Height 2
+  Offset 0 0 0
+  Trigger false
 
 entity 88825ea6-6150-4437-b8e4-4a1eee676611
 component Name
   Name "Cargo Bay A Wall Right"
 component Transform
-  Position -2989.75 -497 0
+  Position -2989.75 -2997 0
   Rotation 0 0 0
   Scale 0.5 6 41
 component Mesh
@@ -644,16 +483,17 @@ component Material
   Material "Materials/BayWall.material"
 component Collider
   Shape "Box"
-  HalfExtents 0.5 0.5 0.5
+  Size 1 1 1
   Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
+  Height 2
+  Offset 0 0 0
+  Trigger false
 
 entity 0fbd390e-9183-4851-a0b9-771db9993de1
 component Name
   Name "Cargo Bay A Wall Front"
 component Transform
-  Position -3000 -497 -20.25
+  Position -3000 -2997 -20.25
   Rotation 0 0 0
   Scale 21 6 0.5
 component Mesh
@@ -662,16 +502,17 @@ component Material
   Material "Materials/BayWall.material"
 component Collider
   Shape "Box"
-  HalfExtents 0.5 0.5 0.5
+  Size 1 1 1
   Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
+  Height 2
+  Offset 0 0 0
+  Trigger false
 
 entity ea45ff27-f931-45fd-8f95-7dfc2f46e033
 component Name
   Name "Cargo Bay A Wall Back"
 component Transform
-  Position -3000 -497 20.25
+  Position -3000 -2997 20.25
   Rotation 0 0 0
   Scale 21 6 0.5
 component Mesh
@@ -680,16 +521,17 @@ component Material
   Material "Materials/BayWall.material"
 component Collider
   Shape "Box"
-  HalfExtents 0.5 0.5 0.5
+  Size 1 1 1
   Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
+  Height 2
+  Offset 0 0 0
+  Trigger false
 
 entity 4e86e7da-4ece-440a-9c26-23739f2581eb
 component Name
   Name "Cargo Bay A Light"
 component Transform
-  Position -3000 -494 0
+  Position -3000 -2994 0
   Rotation 0 0 0
   Scale 1 1 1
 component PointLight
@@ -701,7 +543,7 @@ entity 48ff0b67-dd9a-4155-a5c2-54180c48ad42
 component Name
   Name "Cargo Bay B Wall Left"
 component Transform
-  Position 2989.75 -497 0
+  Position 2989.75 -2997 0
   Rotation 0 0 0
   Scale 0.5 6 41
 component Mesh
@@ -710,16 +552,17 @@ component Material
   Material "Materials/BayWall.material"
 component Collider
   Shape "Box"
-  HalfExtents 0.5 0.5 0.5
+  Size 1 1 1
   Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
+  Height 2
+  Offset 0 0 0
+  Trigger false
 
 entity 081572cd-a997-43c6-9f4c-a7283aeb9160
 component Name
   Name "Cargo Bay B Wall Right"
 component Transform
-  Position 3010.25 -497 0
+  Position 3010.25 -2997 0
   Rotation 0 0 0
   Scale 0.5 6 41
 component Mesh
@@ -728,16 +571,17 @@ component Material
   Material "Materials/BayWall.material"
 component Collider
   Shape "Box"
-  HalfExtents 0.5 0.5 0.5
+  Size 1 1 1
   Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
+  Height 2
+  Offset 0 0 0
+  Trigger false
 
 entity 82e0e07d-1691-4262-bff7-321d472921bf
 component Name
   Name "Cargo Bay B Wall Front"
 component Transform
-  Position 3000 -497 -20.25
+  Position 3000 -2997 -20.25
   Rotation 0 0 0
   Scale 21 6 0.5
 component Mesh
@@ -746,16 +590,17 @@ component Material
   Material "Materials/BayWall.material"
 component Collider
   Shape "Box"
-  HalfExtents 0.5 0.5 0.5
+  Size 1 1 1
   Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
+  Height 2
+  Offset 0 0 0
+  Trigger false
 
 entity e40259b0-7910-4b73-b52e-b439d74a90b1
 component Name
   Name "Cargo Bay B Wall Back"
 component Transform
-  Position 3000 -497 20.25
+  Position 3000 -2997 20.25
   Rotation 0 0 0
   Scale 21 6 0.5
 component Mesh
@@ -764,16 +609,17 @@ component Material
   Material "Materials/BayWall.material"
 component Collider
   Shape "Box"
-  HalfExtents 0.5 0.5 0.5
+  Size 1 1 1
   Radius 0.5
-  HalfHeight 0.5
-  Layer "Static"
+  Height 2
+  Offset 0 0 0
+  Trigger false
 
 entity acbf90e2-1142-4661-a9e9-605658b75080
 component Name
   Name "Cargo Bay B Light"
 component Transform
-  Position 3000 -494 0
+  Position 3000 -2994 0
   Rotation 0 0 0
   Scale 1 1 1
 component PointLight

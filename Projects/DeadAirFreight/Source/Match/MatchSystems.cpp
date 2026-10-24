@@ -2,8 +2,6 @@
 #include "Audio/Sounds.h"
 #include "Match/MatchQueries.h"
 #include "LifeSupport/Cargo.h"
-#include "Physics/PhysicsComponents.h"
-#include "Truck/TruckComponents.h"
 
 #include <algorithm>
 #include <cmath>
@@ -23,7 +21,8 @@ namespace
 
 	// Placeholder looks until the real models are in: a box in the crew's color for a truck and a
 	// white post for a Defender. Every peer works these out for every player, so nothing is sent.
-	void ApplyLook(World& world, Entity entity, const CrewMemberComponent& member, const TruckConfigComponent& truck)
+	// A local Driver flies the Driver scene's own truck, so their crew entity stays hidden.
+	void ApplyLook(World& world, Entity entity, const CrewMemberComponent& member)
 	{
 		const bool driver = member.Slot >= 0 && member.Role == CrewRole::Driver;
 		const char* material = driver ? TruckMaterials[member.Crew] : "Materials/Defender.material";
@@ -33,17 +32,11 @@ namespace
 		if (look->Material != material)
 			look->Material = material;
 
-		// Trucks hit things in space. Defenders are people in the bay.
-		ColliderComponent* collider = world.TryGet<ColliderComponent>(entity);
-		if (!collider)
-			collider = &world.Add<ColliderComponent>(entity);
-		collider->Layer = driver ? "Truck" : "Player";
-
 		// Scale is shared over the network, so only the owner sets it.
 		if (!IsRemote(world, entity))
 		{
 			TransformComponent& transform = world.Get<TransformComponent>(entity);
-			transform.Scale = driver ? truck.Size : member.Slot >= 0 ? Vec3{ 0.8f, 1.8f, 0.8f } : Vec3{ 0.3f, 0.3f, 0.3f };
+			transform.Scale = driver ? Vec3{} : member.Slot >= 0 ? Vec3{ 0.8f, 1.8f, 0.8f } : Vec3{ 0.3f, 0.3f, 0.3f };
 		}
 	}
 }
@@ -97,11 +90,8 @@ void CrewSystem::Update(World& world, float)
 		}
 	}
 
-	const Entity match = FindMatch(world);
-	const TruckConfigComponent* truck = match == NullEntity ? nullptr : world.TryGet<TruckConfigComponent>(match);
-	const TruckConfigComponent defaults;
 	for (auto [entity, member] : world.View<CrewMemberComponent>().each())
-		ApplyLook(world, entity, member, truck ? *truck : defaults);
+		ApplyLook(world, entity, member);
 }
 
 void MatchSystem::OnStart(World& world)

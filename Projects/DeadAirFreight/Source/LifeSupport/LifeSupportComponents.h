@@ -97,6 +97,9 @@ struct TruckResourcesComponent
 	bool TappingCargo = false;
 	// No oxygen left anywhere. The truck can no longer be flown.
 	bool OutOfAir = false;
+	// The Driver's own cab model (Source/Driver) breathes for this crew, so LifeSupportSystem
+	// leaves its cab alone. Set by the driver bridge.
+	bool DriverCab = false;
 
 	// For the results screen.
 	float OxygenBreathedKg = 0;

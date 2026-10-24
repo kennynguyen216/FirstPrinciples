@@ -2,7 +2,6 @@
 #include "Audio/Sounds.h"
 #include "LifeSupport/Cargo.h"
 #include "Match/MatchQueries.h"
-#include "Physics/PhysicsComponents.h"
 
 #include <algorithm>
 #include <cmath>
@@ -12,9 +11,9 @@ using namespace MatchQueries;
 
 namespace
 {
-	// Pooled creatures wait this far under their bay, shrunk to nothing.
+	// Pooled creatures wait this far under their bay, out of sight. They keep their size, since a
+	// body's collider is sized from its scale when physics first sees it.
 	constexpr float ParkDepth = 200;
-	constexpr float ParkedScale = 0.001f;
 	// Mite size empty, and how much bigger a full belly makes it.
 	constexpr float MiteScale = 0.7f;
 	constexpr float MiteFullGrowth = 0.4f;
@@ -67,7 +66,7 @@ namespace
 		InteriorComponent info;
 		FindBay(world, siphon.Crew, bay, info);
 		transform.Position = bay - Vec3{ 0, ParkDepth, 0 };
-		transform.Scale = { ParkedScale, ParkedScale, ParkedScale };
+		transform.Scale = { MiteScale, MiteScale, MiteScale };
 	}
 
 	bool IsFeedable(World& world, Entity tankEntity, int32 crew)
@@ -169,9 +168,9 @@ void SiphonSpawnerSystem::OnStart(World& world)
 			siphon.Kind = SiphonKind::Mite;
 			world.Add<MeshComponent>(entity).Mesh = "Sphere";
 			world.Add<MaterialComponent>(entity).Material = "Materials/Mite.material";
-			ColliderComponent& collider = world.Add<ColliderComponent>(entity);
-			collider.Shape = "Sphere";
-			collider.Layer = "Siphon";
+			// A kinematic sphere: it follows the Mite's transform and the laser can hit it.
+			world.Add<ColliderComponent>(entity).Shape = "Sphere";
+			world.Add<RigidBodyComponent>(entity).Motion = "Kinematic";
 			if (!chitter.IsEmpty())
 			{
 				// A positioned loop, so the Defender can hear where Mites are before seeing them.

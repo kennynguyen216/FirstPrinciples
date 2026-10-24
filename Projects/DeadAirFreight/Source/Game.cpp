@@ -4,8 +4,7 @@
 #include "Enemies/SiphonSystems.h"
 #include "LifeSupport/LifeSupportSystems.h"
 #include "Match/MatchSystems.h"
-#include "Physics/PhysicsComponents.h"
-#include "Truck/TruckSystems.h"
+#include "Bridge/DriverBridge.h"
 
 using namespace FP;
 
@@ -59,28 +58,6 @@ namespace Game
 			.Field("Spacing", &TankConfigComponent::Spacing)
 			.Field("PerRow", &TankConfigComponent::PerRow);
 
-		registry.Register<ColliderComponent>("Collider")
-			.Field("Shape", &ColliderComponent::Shape).Choices(GetColliderShapeNames())
-			.Field("HalfExtents", &ColliderComponent::HalfExtents)
-			.Field("Radius", &ColliderComponent::Radius)
-			.Field("HalfHeight", &ColliderComponent::HalfHeight)
-			.Field("Layer", &ColliderComponent::Layer).Choices(GetPhysicsLayerNames());
-
-		registry.Register<RigidBodyComponent>("RigidBody")
-			.Field("Motion", &RigidBodyComponent::Motion).Choices(GetMotionTypeNames())
-			.Field("Mass", &RigidBodyComponent::Mass)
-			.Field("LinearDamping", &RigidBodyComponent::LinearDamping)
-			.Field("AngularDamping", &RigidBodyComponent::AngularDamping)
-			.Field("GravityFactor", &RigidBodyComponent::GravityFactor);
-
-		registry.Register<TruckConfigComponent>("TruckConfig")
-			.Field("Thrust", &TruckConfigComponent::Thrust)
-			.Field("MaxSpeed", &TruckConfigComponent::MaxSpeed)
-			.Field("BoostMultiplier", &TruckConfigComponent::BoostMultiplier)
-			.Field("TurnRate", &TruckConfigComponent::TurnRate)
-			.Field("Drag", &TruckConfigComponent::Drag)
-			.Field("Size", &TruckConfigComponent::Size);
-
 		registry.Register<CrewMemberComponent>("CrewMember");
 
 		registry.Register<DepotComponent>("Depot")
@@ -129,11 +106,6 @@ namespace Game
 			.Field("Boost", &SoundCuesComponent::Boost).AssetPath(wav)
 			.Field("Countdown", &SoundCuesComponent::Countdown).AssetPath(wav)
 			.Field("Go", &SoundCuesComponent::Go).AssetPath(wav);
-
-		registry.Register<ChaseCameraComponent>("ChaseCamera")
-			.Field("Distance", &ChaseCameraComponent::Distance)
-			.Field("Height", &ChaseCameraComponent::Height)
-			.Field("Smoothing", &ChaseCameraComponent::Smoothing);
 	}
 
 	void AddSystems(World& world)
@@ -147,9 +119,9 @@ namespace Game
 		world.AddSystem<CargoTankSystem>();
 		world.AddSystem<SiphonSpawnerSystem>();
 		world.AddSystem<SiphonSystem>();
-		world.AddSystem<TruckSystem>();
 		world.AddSystem<OnFootSystem>();
-		world.AddSystem<ChaseCameraSystem>();
+		// Starts the Driver's own systems at GO for a seated Driver.
+		world.AddSystem<DriverLauncherSystem>();
 		world.AddSystem<LifeSupportReadoutSystem>();
 	}
 }
