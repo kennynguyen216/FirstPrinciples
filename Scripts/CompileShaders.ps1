@@ -4,7 +4,7 @@
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $Src = Join-Path $Root "src/Engine/Shaders"
-$Out = Join-Path $Root "Content/Engine/Shaders"
+$Out = Join-Path $Root "Engine/Content/Shaders"
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 Get-ChildItem -Path $Src -Include *.vert, *.frag -File -Recurse | ForEach-Object {
     $spv = Join-Path $Out ($_.Name + ".spv")

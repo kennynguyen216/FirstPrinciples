@@ -1,0 +1,3 @@
+# FirstPrinciples project
+Name "Sample"
+StartScene "Scenes/Main.scene"
