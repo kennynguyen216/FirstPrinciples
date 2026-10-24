@@ -221,8 +221,8 @@ every material type.
 
 ### 3D
 
-Add a **Mesh** component to draw a `Cube`, `Sphere`, `Plane` or `Quad`, or pick an `.obj` file from
-`Content` with the `...` button. Meshes use the same materials as sprites and default to `Lit`.
+Add a **Mesh** component to draw a `Cube`, `Sphere`, `Plane` or `Quad`, or pick an `.obj`, `.gltf` or
+`.glb` file from `Content` with the `...` button. Meshes use the same materials as sprites and default to `Lit`.
 For a 3D game turn on `Perspective` on the camera and give it a position and rotation.
 The editor opens in 3D. Press Ctrl+3 or the Perspective pill to switch to the flat 2D view. Sample's `Content/Scenes/Showcase3D.scene`
 shows every material on meshes, including a refracting glass sphere.
@@ -235,6 +235,49 @@ The `Lantern` in `Showcase3D.scene` has bricks, glass, gold and a neon core in o
 
 `Transform.Rotation` is euler degrees as pitch (X), yaw (Y) and roll (Z). Cameras and lights point
 down their local -Z axis.
+
+### Skeletal meshes and animation
+
+A **SkeletalMesh** component draws a `.gltf` or `.glb` with a skin. Its bones bend the mesh on the GPU,
+up to 128 bones and four per vertex. glTF primitives become mesh sections named after their glTF
+materials, so the Material component's slots work the same as for `.obj` files. Dropping a skinned
+glTF into the viewport makes a skeletal mesh with an **Animator** that loops its first clip.
+
+The Animator loops its `Clip` while the game plays, at `Speed`. The Details panel lists the clips the
+mesh has. For anything more, build a state machine from a C++ script:
+
+```cpp
+void OnStart() override
+{
+	Animator* animator = GetAnimator();
+	animator->AddState("Idle", "Idle");
+	animator->AddState("Walk", "Walk");
+	animator->AddState("Jump", "Jump", false); // plays once and holds its last frame
+	animator->AddTransition("Idle", "Walk", 0.2f).When("Speed", AnimCompare::Greater, 0.1f);
+	animator->AddTransition("Walk", "Idle", 0.25f).When("Speed", AnimCompare::Less, 0.1f);
+	animator->AddTransition("", "Jump", 0.1f).When("Jump", AnimCompare::Triggered); // from any state
+	animator->AddTransition("Jump", "Idle").AfterExitTime(1);
+}
+
+void OnUpdate(float) override
+{
+	GetAnimator()->SetFloat("Speed", speed);
+	if (Input::WasKeyPressed(SDL_SCANCODE_SPACE))
+		GetAnimator()->SetTrigger("Jump");
+}
+```
+
+- The first state added plays first. Each transition blends over its time in seconds.
+- Parameters are floats. `SetBool` stores 1 or 0. A trigger stays set until a transition uses it.
+- All of a transition's conditions must pass. `AfterExitTime(fraction)` also waits for that much of
+  the clip, so `1` leaves at the end.
+- `Play(state)` jumps straight to a state. `IsInState`, `GetNormalizedTime` and `GetClipLength` read back.
+- Adding a state or transition that already exists replaces it, so `OnStart` can run again after a
+  hot reload. Animators live while the game plays and reset when it stops. The editor shows the
+  bind pose.
+
+The `Noodle` in `Showcase3D.scene` uses `Source/Scripts/NoodleController.cpp`: WASD or the arrows walk it
+and Space jumps. `Scripts/GenerateSampleCharacter.py` writes its `Characters/Noodle.gltf`.
 
 ### Editor layout
 
