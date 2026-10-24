@@ -634,6 +634,9 @@ namespace FP::Editor
 		m_Selected = entity;
 		m_SelectedGuid = entity != NullEntity ? m_World->Get<IdComponent>(entity).Id : Guid();
 		m_Viewport->SetSelected(entity);
+		// Undo brings back what was selected before the edit, so only track it between edits.
+		if (!m_EditPending)
+			m_History->SetSelection(m_SelectedGuid);
 
 		// Keep the hierarchy row in sync without feeding back into Select.
 		const QString key = ToQString(m_SelectedGuid.ToString());
@@ -873,9 +876,10 @@ namespace FP::Editor
 	{
 		if (!m_World->IsValid(m_Selected))
 			return;
+		// Mark first so undo remembers the deleted entity as the selection.
+		MarkDirty();
 		m_World->DestroyEntity(m_Selected);
 		Select(NullEntity);
-		MarkDirty();
 		RefreshHierarchy();
 	}
 
