@@ -60,6 +60,7 @@ namespace FP
 	// in the order the names first show up. Returns false on a parse failure.
 	bool ParseObj(std::string_view text, MeshData& out);
 
-	// A built in primitive or an .obj relative to Content. False when it cannot be loaded.
+	// A built in primitive, or an .obj, .gltf or .glb relative to Content. glTF meshes come in
+	// their bind pose. False when it cannot be loaded.
 	bool LoadMesh(std::string_view nameOrPath, MeshData& out);
 }

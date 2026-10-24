@@ -1,4 +1,5 @@
 #include "Engine/Render/MeshData.h"
+#include "Engine/Animation/SkeletalModel.h"
 #include "Engine/Paths.h"
 #include "Core/Misc/File.h"
 
@@ -344,6 +345,13 @@ namespace FP
 	{
 		if (Primitives::Create(nameOrPath, out))
 			return true;
+		if (IsGltfPath(nameOrPath))
+		{
+			const SkeletalModel* model = SkeletalModelLibrary::Get().Load(String(nameOrPath));
+			if (model)
+				out = model->Mesh;
+			return model != nullptr;
+		}
 		String text;
 		const String fullPath = Paths::Content(nameOrPath);
 		return File::ReadAllText(fullPath.CStr(), text) && ParseObj(text.View(), out);

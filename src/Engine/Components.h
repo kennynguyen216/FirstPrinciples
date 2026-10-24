@@ -63,7 +63,7 @@ namespace FP
 		int32 Layer = 0; // higher draws on top
 	};
 
-	// A built in shape (Cube, Sphere, Plane, Quad) or a .obj file relative to Content.
+	// A built in shape (Cube, Sphere, Plane, Quad), or an .obj, .gltf or .glb file relative to Content.
 	// Uses the entity's MaterialComponent for shading, one material per mesh section.
 	struct MeshComponent
 	{

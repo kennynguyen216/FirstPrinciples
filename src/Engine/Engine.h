@@ -17,6 +17,9 @@ namespace FP::Engine
 	// File picker filter for texture fields.
 	extern const char* const ImageFilter;
 
+	// File picker filter for mesh fields.
+	extern const char* const MeshFilter;
+
 	// Registers the built in components. Call once before loading scenes.
 	void RegisterEngineComponents();
 }
