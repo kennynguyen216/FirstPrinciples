@@ -165,3 +165,18 @@ component PointLight
   Color 0.3 0.9 1 1
   Intensity 6
   Range 7
+
+entity 3d00000d-000d-400d-800d-00000000000d
+component Name
+  Name "Lantern"
+component Transform
+  Position -0.3 0.86 -3.3
+  Rotation 0 30 0
+  Scale 1.8 1.8 1.8
+component Mesh
+  Mesh "Meshes/Lantern.obj"
+component Material
+  Material "Materials/Bricks.material"
+  Slot 1 "Materials/Glass.material"
+  Slot 2 "Materials/Gold.material"
+  Slot 3 "Materials/Neon.material"

@@ -4,6 +4,7 @@
 #include "Engine/ComponentRegistry.h"
 #include "Engine/Material.h"
 #include "Engine/Paths.h"
+#include "Engine/Render/MeshData.h"
 #include "Engine/Scripting/ScriptRuntime.h"
 #include "Editor/ContentBrowser.h"
 #include "Editor/EditorIcons.h"
@@ -677,6 +678,38 @@ namespace FP::Editor
 		AddMaterialEditor(path, QString("Material Asset: %1").arg(ToQString(path)));
 	}
 
+	void InspectorPanel::AddMaterialSlots(QFormLayout* form)
+	{
+		const MeshComponent* meshComponent = m_World->TryGet<MeshComponent>(m_Entity);
+		MeshData mesh;
+		if (!meshComponent || !LoadMesh(meshComponent->Mesh.View(), mesh) || mesh.Sections.Num() < 2)
+			return;
+
+		// One row per section. An empty slot falls back to the Material above.
+		for (int32 i = 0; i < mesh.Sections.Num(); ++i)
+		{
+			m_SlotLabels.push_back(std::to_string(i) + ": " + mesh.Sections[i].Name.CStr());
+			FieldInfo field;
+			field.Name = m_SlotLabels.back().c_str();
+			field.Type = FieldType::String;
+			field.AssetFilter = "Materials (*.material)";
+			auto data = [this, i]() -> void* {
+				MaterialComponent* material = m_World && m_World->IsValid(m_Entity) ? m_World->TryGet<MaterialComponent>(m_Entity) : nullptr;
+				if (!material)
+					return nullptr;
+				if (material->Slots.Num() <= i)
+					material->Slots.Resize(i + 1);
+				return &material->Slots[i];
+			};
+			AddFieldEditor(form, field, data, [this]() { emit Modified(); });
+			if (QWidget* row = form->itemAt(form->rowCount() - 1, QFormLayout::FieldRole)->widget())
+			{
+				if (QLineEdit* edit = row->findChild<QLineEdit*>())
+					edit->setPlaceholderText("Uses Material");
+			}
+		}
+	}
+
 	void InspectorPanel::AddMaterialEditor(const String& path, const QString& title)
 	{
 		// Edits change the shared asset, so every entity using it updates at once.
@@ -723,6 +756,7 @@ namespace FP::Editor
 			delete item->widget();
 			delete item;
 		}
+		m_SlotLabels.clear();
 
 		// The old menu belongs to the Add button, so replace it each time.
 		delete m_AddButton->menu();
@@ -777,6 +811,9 @@ namespace FP::Editor
 					if (info == ComponentRegistry::Get().Find<AudioSourceComponent>())
 						StopPreview();
 					emit Modified();
+					// A new mesh can have different sections, so the material slots change too.
+					if (info == ComponentRegistry::Get().Find<MeshComponent>())
+						RebuildLater();
 				});
 				if (info == ComponentRegistry::Get().Find<AudioSourceComponent>())
 				{
@@ -796,6 +833,9 @@ namespace FP::Editor
 					}
 				}
 			}
+
+			if (info == ComponentRegistry::Get().Find<MaterialComponent>())
+				AddMaterialSlots(form);
 
 			QToolButton* remove = group->AddAction(EditorIcons::Get(EditorIcon::Close), "", "Remove component");
 			connect(remove, &QToolButton::clicked, this, [this, info]() {

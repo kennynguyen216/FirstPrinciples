@@ -8,7 +8,9 @@
 
 #include <QWidget>
 
+#include <deque>
 #include <functional>
+#include <string>
 #include <vector>
 
 class QFormLayout;
@@ -62,6 +64,7 @@ namespace FP::Editor
 		void SetTitle(const QString& text, EditorIcon icon);
 		void ApplyFilter();
 		void AddMaterialSection();
+		void AddMaterialSlots(QFormLayout* form);
 		void AddAudioSection();
 		void AddMaterialEditor(const String& contentPath, const QString& title);
 		void AddAssetView();
@@ -80,6 +83,7 @@ namespace FP::Editor
 		QLineEdit* m_Filter = nullptr;
 		QVBoxLayout* m_Layout = nullptr;
 		std::vector<std::function<void()>> m_Refreshers;
+		std::deque<std::string> m_SlotLabels; // deque so the label pointers stay put
 		VoiceHandle m_Preview;
 
 		struct EditScript

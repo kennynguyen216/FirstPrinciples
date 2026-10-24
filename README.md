@@ -227,6 +227,12 @@ For a 3D game turn on `Perspective` on the camera and give it a position and rot
 The editor opens in 3D. Press Ctrl+3 or the Perspective pill to switch to the flat 2D view. Sample's `Content/Scenes/Showcase3D.scene`
 shows every material on meshes, including a refracting glass sphere.
 
+An `.obj` can hold several materials. Each `usemtl` name becomes a mesh section, and the Material
+component shows one slot per section, named after it. A slot left empty uses the component's
+`Material`, so one material still covers a whole mesh. Each section draws with its own shader, so one
+mesh can mix lit, unlit and glass parts. In a scene file a slot is a line like `Slot 1 "Materials/Glass.material"`.
+The `Lantern` in `Showcase3D.scene` has bricks, glass, gold and a neon core in one mesh.
+
 `Transform.Rotation` is euler degrees as pitch (X), yaw (Y) and roll (Z). Cameras and lights point
 down their local -Z axis.
 

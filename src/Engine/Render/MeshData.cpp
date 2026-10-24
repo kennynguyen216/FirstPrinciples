@@ -1,4 +1,6 @@
 #include "Engine/Render/MeshData.h"
+#include "Engine/Paths.h"
+#include "Core/Misc/File.h"
 
 #include <cstdlib>
 
@@ -178,6 +180,7 @@ namespace FP
 			else if (name == "Plane") out = Plane();
 			else if (name == "Quad") out = Quad();
 			else return false;
+			out.Sections = { { "Default", 0, static_cast<uint32>(out.Indices.Num()) } };
 			return true;
 		}
 	}
@@ -218,6 +221,12 @@ namespace FP
 		HashMap<ObjCorner, uint32> lookup;
 		bool hasNormals = true;
 
+		// Triangles per material name, joined at the end so each name is one run.
+		Array<String> sectionNames = { "Default" };
+		Array<Array<uint32>> sectionIndices;
+		sectionIndices.Emplace();
+		int32 section = 0;
+
 		usize start = 0;
 		while (start < text.size())
 		{
@@ -239,6 +248,17 @@ namespace FP
 				uvs.Add({ num(1), 1.0f - num(2) }); // OBJ v points up, ours points down
 			else if (kind == "vn")
 				normals.Add(Vec3(num(1), num(2), num(3)).Normalized());
+			else if (kind == "usemtl")
+			{
+				const String name = tokens.Num() > 1 ? tokens[1] : String("Default");
+				section = sectionNames.Find(name);
+				if (section < 0)
+				{
+					section = sectionNames.Num();
+					sectionNames.Add(name);
+					sectionIndices.Emplace();
+				}
+			}
 			else if (kind == "f" && tokens.Num() >= 4)
 			{
 				Array<uint32> face;
@@ -273,13 +293,24 @@ namespace FP
 					}
 					face.Add(index);
 				}
+				Array<uint32>& indices = sectionIndices[section];
 				for (int32 i = 1; i + 1 < face.Num(); ++i)
 				{
-					out.Indices.Add(face[0]);
-					out.Indices.Add(face[i]);
-					out.Indices.Add(face[i + 1]);
+					indices.Add(face[0]);
+					indices.Add(face[i]);
+					indices.Add(face[i + 1]);
 				}
 			}
+		}
+
+		// Sections that never got a face are dropped, like an unused Default.
+		for (int32 i = 0; i < sectionNames.Num(); ++i)
+		{
+			if (sectionIndices[i].IsEmpty())
+				continue;
+			out.Sections.Add({ sectionNames[i], static_cast<uint32>(out.Indices.Num()), static_cast<uint32>(sectionIndices[i].Num()) });
+			for (uint32 index : sectionIndices[i])
+				out.Indices.Add(index);
 		}
 
 		if (out.Indices.IsEmpty())
@@ -307,5 +338,14 @@ namespace FP
 		out.ComputeTangents();
 		out.ComputeBounds();
 		return true;
+	}
+
+	bool LoadMesh(std::string_view nameOrPath, MeshData& out)
+	{
+		if (Primitives::Create(nameOrPath, out))
+			return true;
+		String text;
+		const String fullPath = Paths::Content(nameOrPath);
+		return File::ReadAllText(fullPath.CStr(), text) && ParseObj(text.View(), out);
 	}
 }

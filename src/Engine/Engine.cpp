@@ -1,4 +1,5 @@
 #include "Engine/Engine.h"
+#include "Engine/FieldSerializer.h"
 #include "Engine/Net/NetworkComponent.h"
 #include "Engine/Render/MeshData.h"
 #include "Engine/Scripting/ScriptComponent.h"
@@ -6,6 +7,44 @@
 namespace FP::Engine
 {
 	const char* const ImageFilter = "Images (*.png *.jpg *.jpeg *.tga *.bmp)";
+
+	namespace
+	{
+		// Slots are written only when set, as "Slot index path", so one material stays one line.
+		constexpr int32 MaxMaterialSlots = 256;
+
+		void WriteMaterialComponent(String& out, const void* component)
+		{
+			const MaterialComponent& material = *static_cast<const MaterialComponent*>(component);
+			out += "  Material ";
+			FieldSerializer::AppendQuoted(out, material.Material);
+			out += '\n';
+			for (int32 i = 0; i < material.Slots.Num(); ++i)
+			{
+				if (material.Slots[i].IsEmpty())
+					continue;
+				out.Appendf("  Slot %d ", i);
+				FieldSerializer::AppendQuoted(out, material.Slots[i]);
+				out += '\n';
+			}
+		}
+
+		void ReadMaterialComponent(void* component, const Array<String>& tokens, std::string_view)
+		{
+			MaterialComponent& material = *static_cast<MaterialComponent*>(component);
+			int64 index = 0;
+			if (tokens[0] == "Material" && tokens.Num() > 1)
+				material.Material = tokens[1];
+			else if (tokens[0] == "Slot" && tokens.Num() > 2 && tokens[1].ToInt(index) && index >= 0 && index < MaxMaterialSlots)
+			{
+				if (material.Slots.Num() <= index)
+					material.Slots.Resize(static_cast<int32>(index) + 1);
+				material.Slots[static_cast<int32>(index)] = tokens[2];
+			}
+			else
+				FP_LOG_WARN("Material component has no field %s", tokens[0].CStr());
+		}
+	}
 
 	void RegisterEngineComponents()
 	{
@@ -60,7 +99,8 @@ namespace FP::Engine
 			.Field("Mesh", &MeshComponent::Mesh).Choices(Primitives::GetNames(), true).AssetPath("Meshes (*.obj)");
 
 		registry.Register<MaterialComponent>("Material")
-			.Field("Material", &MaterialComponent::Material).AssetPath("Materials (*.material)");
+			.Field("Material", &MaterialComponent::Material).AssetPath("Materials (*.material)")
+			.CustomSerializer(&WriteMaterialComponent, &ReadMaterialComponent);
 
 		registry.Register<ScriptComponent>("Scripts")
 			.CustomSerializer(&ScriptComponentFormat::Write, &ScriptComponentFormat::Read)

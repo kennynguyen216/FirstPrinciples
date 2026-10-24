@@ -98,6 +98,8 @@ namespace FP
 			Surface Type;
 			const Material* Mat;
 			const GPUMesh* Mesh;
+			uint32 FirstIndex;
+			uint32 IndexCount;
 		};
 
 		void CreatePipelines();
