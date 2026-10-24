@@ -97,7 +97,7 @@ namespace FP
 		};
 
 		void CreatePipelines();
-		SDL_GPUGraphicsPipeline* CreateMeshPipeline(const char* fragment, uint32 numSamplers, uint32 numUniforms, Surface surface, bool glass);
+		SDL_GPUGraphicsPipeline* CreateMeshPipeline(const char* fragment, uint32 numSamplers, uint32 numUniforms, Surface surface, bool glass, bool wireframe = false);
 		SDL_GPUGraphicsPipeline* GetPipeline(const Draw& draw) const;
 		void EnsureTargets(uint32 width, uint32 height);
 		void UploadLines(SDL_GPUCommandBuffer* cmd, const DebugLines& lines);
@@ -113,6 +113,11 @@ namespace FP
 
 		// Indexed by ShaderKind then Surface.
 		SDL_GPUGraphicsPipeline* m_ScenePipelines[3][2] = {};
+
+		// Line fill versions of Unlit for the wireframe view mode, indexed by Surface.
+		// Optional so a GPU without line fill still renders the other modes.
+		SDL_GPUGraphicsPipeline* m_WirePipelines[2] = {};
+		ViewMode m_Mode = ViewMode::Lit;
 		SDL_GPUGraphicsPipeline* m_PresentPipeline = nullptr;
 		SDL_GPUGraphicsPipeline* m_LinePipeline = nullptr;
 

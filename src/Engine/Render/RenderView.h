@@ -13,6 +13,14 @@ namespace FP
 		bool IntersectZPlane(float planeZ, Vec3& outPoint) const;
 	};
 
+	// How surfaces are shaded. Editors switch this to inspect a scene.
+	enum class ViewMode : uint8
+	{
+		Lit,       // full materials and lights
+		Unlit,     // base color times tint, no lights
+		Wireframe, // triangle edges only
+	};
+
 	// Everything the renderer needs to know about the camera for one frame.
 	struct RenderView
 	{
@@ -27,6 +35,7 @@ namespace FP
 		float PixelsPerUnit = 64; // orthographic only
 		float Exposure = 1;
 		bool Tonemap = true;
+		ViewMode Mode = ViewMode::Lit;
 		uint32 Width = 1;
 		uint32 Height = 1;
 

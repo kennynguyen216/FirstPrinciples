@@ -13,6 +13,7 @@
 #include <SDL3/SDL_timer.h>
 
 #include <QCloseEvent>
+#include <QComboBox>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -177,6 +178,25 @@ namespace FP::Editor
 		m_View3DAction->setCheckable(true);
 		m_View3DAction->setShortcut(QKeySequence("Ctrl+3"));
 		connect(m_View3DAction, &QAction::toggled, this, [this](bool on) { m_Viewport->Set3D(on); });
+
+		// View mode picker. The order matches ViewMode so the index converts directly.
+		m_ViewModeBox = new QComboBox();
+		m_ViewModeBox->addItems({ "Lit", "Unlit", "Wireframe" });
+		m_ViewModeBox->setToolTip("View mode (Alt+4 Lit, Alt+3 Unlit, Alt+2 Wireframe)");
+		toolbar->addWidget(m_ViewModeBox);
+		connect(m_ViewModeBox, &QComboBox::currentIndexChanged, this, [this](int index) {
+			m_Viewport->SetViewMode(static_cast<ViewMode>(index));
+		});
+		// Same keys as Unreal so muscle memory carries over.
+		const std::pair<const char*, ViewMode> modeKeys[] = { { "Alt+4", ViewMode::Lit }, { "Alt+3", ViewMode::Unlit }, { "Alt+2", ViewMode::Wireframe } };
+		for (const auto& [keys, mode] : modeKeys)
+		{
+			QAction* action = new QAction(this);
+			action->setShortcut(QKeySequence(keys));
+			const ViewMode chosen = mode;
+			connect(action, &QAction::triggered, this, [this, chosen]() { SetViewMode(chosen); });
+			addAction(action);
+		}
 		toolbar->addSeparator();
 		toolbar->addAction("Collect Garbage", this, []() {
 			const GarbageCollectionStats stats = GarbageCollector::Get().Collect();
@@ -189,6 +209,11 @@ namespace FP::Editor
 	void EditorWindow::Set3DView(bool enabled)
 	{
 		m_View3DAction->setChecked(enabled);
+	}
+
+	void EditorWindow::SetViewMode(ViewMode mode)
+	{
+		m_ViewModeBox->setCurrentIndex(static_cast<int>(mode));
 	}
 
 	void EditorWindow::Tick()

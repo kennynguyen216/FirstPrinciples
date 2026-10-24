@@ -29,6 +29,10 @@ namespace FP::Editor
 		void Set3D(bool enabled) { m_3D = enabled; }
 		bool Is3D() const { return m_3D; }
 
+		// Lit, Unlit or Wireframe. Applies in edit and play so the game can be inspected while it runs.
+		void SetViewMode(ViewMode mode) { m_ViewMode = mode; }
+		ViewMode GetViewMode() const { return m_ViewMode; }
+
 		// Centers the editor camera on the selected entity.
 		void FocusSelected();
 
@@ -75,6 +79,7 @@ namespace FP::Editor
 		World* m_World = nullptr;
 		Entity m_Selected = NullEntity;
 		bool m_Playing = false;
+		ViewMode m_ViewMode = ViewMode::Lit;
 
 		// 2D editor camera.
 		Vec2 m_CameraCenter;

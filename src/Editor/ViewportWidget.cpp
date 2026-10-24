@@ -88,7 +88,11 @@ namespace FP::Editor
 		const uint32 width = m_Target ? m_Target->GetWidth() : 1;
 		const uint32 height = m_Target ? m_Target->GetHeight() : 1;
 		if (m_Playing && m_World)
-			return RenderView::FromWorld(*m_World, width, height);
+		{
+			RenderView game = RenderView::FromWorld(*m_World, width, height);
+			game.Mode = m_ViewMode;
+			return game;
+		}
 
 		RenderView view;
 		if (m_3D)
@@ -108,6 +112,7 @@ namespace FP::Editor
 			view = RenderView::Orthographic2D(m_CameraCenter, m_PixelsPerUnit * static_cast<float>(devicePixelRatioF()), width, height);
 		}
 		view.Background = { 0.12f, 0.12f, 0.14f, 1 };
+		view.Mode = m_ViewMode;
 		return view;
 	}
 

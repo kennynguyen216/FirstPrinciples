@@ -127,6 +127,7 @@ down their local -Z axis.
 | Zoom | Mouse wheel |
 | Orbit (3D) | Right drag or Alt left drag |
 | Toggle 3D view | Ctrl+3 |
+| View mode | Toolbar dropdown, or Alt+4 Lit, Alt+3 Unlit, Alt+2 Wireframe |
 | Focus selection | F |
 | Select / move | Left click / left drag along the view plane (hold Shift to snap) |
 | Create sprite | Ctrl+Shift+A |
@@ -141,7 +142,7 @@ Binaries/Debug/Tests
 Binaries/Debug/Runtime --screenshot runtime.bmp
 Binaries/Debug/Editor --play --screenshot editor.png
 Binaries/Debug/Editor --scene Scenes/Lighting2D.scene --select "Glass Pane" --screenshot lit.png
-Binaries/Debug/Editor --scene Scenes/Showcase3D.scene --3d --screenshot 3d.png
+Binaries/Debug/Editor --scene Scenes/Showcase3D.scene --3d --viewmode wireframe --screenshot 3d.png
 ```
 
 ## Rendering

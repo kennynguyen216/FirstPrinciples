@@ -76,7 +76,7 @@ namespace FP
 					SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
 			}
 		}
-		for (SDL_GPUGraphicsPipeline* pipeline : { m_PresentPipeline, m_LinePipeline })
+		for (SDL_GPUGraphicsPipeline* pipeline : { m_PresentPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1] })
 		{
 			if (pipeline)
 				SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
@@ -98,10 +98,12 @@ namespace FP
 
 	SDL_GPUGraphicsPipeline* Renderer::GetPipeline(const Draw& draw) const
 	{
+		if (m_Mode == ViewMode::Wireframe && m_WirePipelines[static_cast<int>(draw.Type)])
+			return m_WirePipelines[static_cast<int>(draw.Type)];
 		return m_ScenePipelines[static_cast<int>(draw.Kind)][static_cast<int>(draw.Type)];
 	}
 
-	SDL_GPUGraphicsPipeline* Renderer::CreateMeshPipeline(const char* fragment, uint32 numSamplers, uint32 numUniforms, Surface surface, bool glass)
+	SDL_GPUGraphicsPipeline* Renderer::CreateMeshPipeline(const char* fragment, uint32 numSamplers, uint32 numUniforms, Surface surface, bool glass, bool wireframe)
 	{
 		SDL_GPUDevice* gpu = m_Device.GetHandle();
 		SDL_GPUShader* vert = m_Device.LoadShader("Mesh.vert", 0, 1);
@@ -114,7 +116,7 @@ namespace FP
 			const bool isMesh = surface == Surface::Mesh;
 			SDL_GPUColorTargetDescription colorTarget = {};
 			colorTarget.format = SceneFormat;
-			if (!isMesh && !glass)
+			if (!isMesh && !glass && !wireframe)
 				colorTarget.blend_state = AlphaBlend();
 
 			SDL_GPUVertexBufferDescription buffer = {};
@@ -136,8 +138,9 @@ namespace FP
 			info.vertex_input_state.vertex_attributes = attributes;
 			info.vertex_input_state.num_vertex_attributes = 4;
 			info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
-			info.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
-			info.rasterizer_state.cull_mode = isMesh ? SDL_GPU_CULLMODE_BACK : SDL_GPU_CULLMODE_NONE;
+			// Wireframe shows back edges too, so it never culls.
+			info.rasterizer_state.fill_mode = wireframe ? SDL_GPU_FILLMODE_LINE : SDL_GPU_FILLMODE_FILL;
+			info.rasterizer_state.cull_mode = isMesh && !wireframe ? SDL_GPU_CULLMODE_BACK : SDL_GPU_CULLMODE_NONE;
 			info.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
 			info.depth_stencil_state.enable_depth_test = true;
 			info.depth_stencil_state.enable_depth_write = isMesh && !glass;
@@ -166,7 +169,10 @@ namespace FP
 			m_ScenePipelines[static_cast<int>(ShaderKind::Unlit)][column] = CreateMeshPipeline("Unlit.frag", 1, 1, surface, false);
 			m_ScenePipelines[static_cast<int>(ShaderKind::Lit)][column] = CreateMeshPipeline("Lit.frag", 8, 2, surface, false);
 			m_ScenePipelines[static_cast<int>(ShaderKind::Glass)][column] = CreateMeshPipeline("Glass.frag", 4, 2, surface, true);
+			m_WirePipelines[column] = CreateMeshPipeline("Unlit.frag", 1, 1, surface, false, true);
 		}
+		if (!m_WirePipelines[0] || !m_WirePipelines[1])
+			FP_LOG_WARN("This GPU cannot draw wireframes. The wireframe view mode will show normal shading.");
 
 		SDL_GPUColorTargetDescription colorTarget = {};
 		colorTarget.format = m_TargetFormat;
@@ -300,9 +306,17 @@ namespace FP
 		object.NormalMatrix = object.Model.Inverse().Transposed();
 		object.UVTransform = { data.Tiling.X, data.Tiling.Y, data.Offset.X, data.Offset.Y };
 		object.Tint = sprite ? ToLinear(sprite->Tint) : Vec4(1, 1, 1, 1);
-		SDL_PushGPUVertexUniformData(cmd, 0, &object, sizeof(object));
 
-		const MaterialUniforms material = MakeMaterialUniforms(data);
+		MaterialUniforms material = MakeMaterialUniforms(data);
+		const bool wireframe = m_Mode == ViewMode::Wireframe && m_WirePipelines[static_cast<int>(draw.Type)];
+		if (wireframe)
+		{
+			// One flat color per surface type. Sprites are tinted blue so they stand out from meshes.
+			object.Tint = sprite ? Vec4(0.35f, 0.65f, 1.0f, 1) : Vec4(0.85f, 0.85f, 0.85f, 1);
+			material = MaterialUniforms();
+			material.Params2.Y = 0; // no alpha cutoff
+		}
+		SDL_PushGPUVertexUniformData(cmd, 0, &object, sizeof(object));
 		SDL_PushGPUFragmentUniformData(cmd, 0, &material, sizeof(material));
 
 		if (sprite)
@@ -329,7 +343,7 @@ namespace FP
 		uint32 count = 0;
 		auto bind = [&](GPUTexture* texture, SDL_GPUSampler* s = nullptr) { bindings[count++] = { texture->GetHandle(), s ? s : sampler }; };
 
-		bind(Texture(baseMap, true, white));
+		bind(wireframe ? white : Texture(baseMap, true, white));
 		if (draw.Kind == ShaderKind::Lit)
 		{
 			bind(Texture(data.NormalMap, false, m_Device.GetFlatNormalTexture()));
@@ -355,6 +369,7 @@ namespace FP
 	{
 		if (!IsValid() || width == 0 || height == 0)
 			return;
+		m_Mode = view.Mode;
 		EnsureTargets(width, height);
 		BuildFrameUniforms(world, view, width, height);
 
@@ -375,6 +390,9 @@ namespace FP
 				const String& shader = material->GetData().Shader;
 				kind = shader == "Glass" ? ShaderKind::Glass : shader == "Unlit" ? ShaderKind::Unlit : ShaderKind::Lit;
 			}
+			// Unlit and wireframe views flatten every material, glass included, to the unlit shader.
+			if (m_Mode != ViewMode::Lit)
+				kind = ShaderKind::Unlit;
 			hasGlass |= kind == ShaderKind::Glass;
 			draws.Add({ layer, Vec3::Dot(transform.Position - view.CameraPosition, view.CameraForward), entity, kind, type, material, mesh });
 		};

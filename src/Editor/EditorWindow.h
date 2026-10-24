@@ -1,10 +1,12 @@
 #pragma once
 
+#include "Engine/Render/RenderView.h"
 #include "Engine/World.h"
 
 #include <QMainWindow>
 
 class QAction;
+class QComboBox;
 class QListWidget;
 class QPlainTextEdit;
 class QTimer;
@@ -30,6 +32,7 @@ namespace FP::Editor
 		void OpenScene(const QString& path);
 		World& GetWorld() { return *m_World.Get(); }
 		void Set3DView(bool enabled);
+		void SetViewMode(ViewMode mode);
 		void Play();
 		void Stop();
 		void Select(Entity entity);
@@ -74,6 +77,7 @@ namespace FP::Editor
 		QAction* m_PlayAction = nullptr;
 		QAction* m_StopAction = nullptr;
 		QAction* m_View3DAction = nullptr;
+		QComboBox* m_ViewModeBox = nullptr;
 
 		uint64 m_LastTicks = 0;
 		int32 m_HierarchyCount = -1;

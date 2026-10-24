@@ -37,6 +37,7 @@ int main(int argc, char** argv)
 		window.show();
 
 		// Smoke test flags. --scene path opens a scene relative to Content, --3d switches the view,
+		// --viewmode lit, unlit or wireframe picks the shading,
 		// --select Name picks an entity, --play starts play mode and --screenshot out.png grabs the
 		// window after a second and quits.
 		const QStringList args = QApplication::arguments();
@@ -45,6 +46,12 @@ int main(int argc, char** argv)
 			window.OpenScene(QString::fromUtf8(FP::Paths::Content(args[sceneIndex + 1].toUtf8().constData()).CStr()));
 		if (args.contains("--3d"))
 			window.Set3DView(true);
+		const int modeIndex = static_cast<int>(args.indexOf("--viewmode"));
+		if (modeIndex >= 0 && modeIndex + 1 < args.size())
+		{
+			const QString mode = args[modeIndex + 1].toLower();
+			window.SetViewMode(mode == "unlit" ? FP::ViewMode::Unlit : mode == "wireframe" ? FP::ViewMode::Wireframe : FP::ViewMode::Lit);
+		}
 		const int selectIndex = static_cast<int>(args.indexOf("--select"));
 		if (selectIndex >= 0 && selectIndex + 1 < args.size())
 			window.Select(window.GetWorld().FindEntityByName(args[selectIndex + 1].toUtf8().constData()));
