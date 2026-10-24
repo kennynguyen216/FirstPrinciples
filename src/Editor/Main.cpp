@@ -1,3 +1,4 @@
+#include "Editor/ContentBrowser.h"
 #include "Editor/EditorWindow.h"
 #include "Editor/ScriptBuilder.h"
 #include "Engine/Engine.h"
@@ -58,6 +59,16 @@ int main(int argc, char** argv)
 			const QString mode = args[modeIndex + 1].toLower();
 			window.SetViewMode(mode == "unlit" ? FP::ViewMode::Unlit : mode == "wireframe" ? FP::ViewMode::Wireframe : FP::ViewMode::Lit);
 		}
+		// --browse folder shows a folder in the content browser, relative to Content.
+		const int browseIndex = static_cast<int>(args.indexOf("--browse"));
+		if (browseIndex >= 0 && browseIndex + 1 < args.size())
+			window.GetContentBrowser()->ShowFolder(QString::fromUtf8(FP::Paths::Content(args[browseIndex + 1].toUtf8().constData()).CStr()));
+
+		// --asset path shows an asset in the inspector, relative to Content.
+		const int assetIndex = static_cast<int>(args.indexOf("--asset"));
+		if (assetIndex >= 0 && assetIndex + 1 < args.size())
+			window.ShowAsset(QString::fromUtf8(FP::Paths::Content(args[assetIndex + 1].toUtf8().constData()).CStr()));
+
 		// --open-script path opens a script tab, relative to the project.
 		const int openIndex = static_cast<int>(args.indexOf("--open-script"));
 		if (openIndex >= 0 && openIndex + 1 < args.size())
@@ -76,8 +87,19 @@ int main(int argc, char** argv)
 		// --build-scripts builds GameScripts and exits with 0 on success.
 		if (args.contains("--build-scripts"))
 		{
-			QObject::connect(window.GetScriptBuilder(), &FP::Editor::ScriptBuilder::Finished, &app, [](bool ok) { QApplication::exit(ok ? 0 : 1); });
+			QObject::connect(window.GetScriptBuilder(), &FP::Editor::ScriptBuilder::Finished, &app, [&window](bool ok) {
+				window.DiscardUnsavedChanges();
+				QApplication::exit(ok ? 0 : 1);
+			});
 			window.GetScriptBuilder()->Build();
+		}
+
+		// --drop path drops an asset at the origin onto the selected entity, like a drag from the browser.
+		const int dropIndex = static_cast<int>(args.indexOf("--drop"));
+		if (dropIndex >= 0 && dropIndex + 1 < args.size())
+		{
+			const FP::Entity target = window.GetWorld().FindEntityByName(selectIndex >= 0 && selectIndex + 1 < args.size() ? args[selectIndex + 1].toUtf8().constData() : "");
+			window.DropAsset(QString::fromUtf8(FP::Paths::Content(args[dropIndex + 1].toUtf8().constData()).CStr()), {}, target);
 		}
 
 		const int shotIndex = static_cast<int>(args.indexOf("--screenshot"));
@@ -90,6 +112,8 @@ int main(int argc, char** argv)
 			QTimer::singleShot(waitMs, &window, [&window, path]() {
 				window.grab().save(path);
 				FP_LOG("Saved screenshot %s", path.toUtf8().constData());
+				// Quitting closes the window, which would offer to save. Test runs must never save.
+				window.DiscardUnsavedChanges();
 				QApplication::quit();
 			});
 		}

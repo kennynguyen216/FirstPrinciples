@@ -9,6 +9,7 @@ class QAction;
 class QComboBox;
 class QFileSystemWatcher;
 class QTabWidget;
+class QDockWidget;
 class QListWidget;
 class QPlainTextEdit;
 class QTimer;
@@ -21,6 +22,7 @@ namespace FP
 namespace FP::Editor
 {
 	class CodeEditor;
+	class ContentBrowser;
 	class InspectorPanel;
 	class ScriptBuilder;
 	class ViewportWidget;
@@ -47,6 +49,18 @@ namespace FP::Editor
 
 		// Creates Game/Scripts/<className>.cpp and opens it. Returns false and explains why on failure.
 		bool NewScript(const QString& className);
+
+		ContentBrowser* GetContentBrowser() const { return m_ContentBrowser; }
+
+		// Creates or changes entities for a file dropped onto the viewport. Absolute path.
+		void DropAsset(const QString& path, Vec3 point, Entity target);
+
+		// Forgets unsaved scene and script edits so closing never prompts or saves.
+		// Smoke test runs call this so they can never write to the project.
+		void DiscardUnsavedChanges();
+
+		// Shows an asset file in the inspector, clearing the entity selection. Absolute path.
+		void ShowAsset(const QString& path);
 
 	protected:
 		void closeEvent(QCloseEvent* event) override;
@@ -110,6 +124,8 @@ namespace FP::Editor
 		QComboBox* m_ViewModeBox = nullptr;
 		ScriptBuilder* m_ScriptBuilder = nullptr;
 		QTabWidget* m_CentralTabs = nullptr;
+		ContentBrowser* m_ContentBrowser = nullptr;
+		QDockWidget* m_ConsoleDock = nullptr;
 		QFileSystemWatcher* m_ScriptWatcher = nullptr;
 		QTimer* m_ScriptDebounce = nullptr;
 		bool m_AutoReloadScripts = true;

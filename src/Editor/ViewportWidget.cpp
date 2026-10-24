@@ -3,7 +3,10 @@
 
 #include <SDL3/SDL.h>
 
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QKeyEvent>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QWheelEvent>
@@ -50,6 +53,7 @@ namespace FP::Editor
 		setMouseTracking(true);
 		setMinimumSize(320, 240);
 		setAttribute(Qt::WA_OpaquePaintEvent);
+		setAcceptDrops(true);
 
 		// RGBA sRGB is a valid render target everywhere and matches QImage::Format_RGBA8888.
 		m_Renderer = new Renderer(device, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB);
@@ -537,6 +541,44 @@ namespace FP::Editor
 			Input::SetKey(ToScancode(event->key()), false);
 		else
 			QWidget::keyReleaseEvent(event);
+	}
+
+	void ViewportWidget::dragEnterEvent(QDragEnterEvent* event)
+	{
+		if (!m_Playing && event->mimeData()->hasUrls())
+			event->acceptProposedAction();
+	}
+
+	void ViewportWidget::dropEvent(QDropEvent* event)
+	{
+		if (m_Playing || !m_World)
+			return;
+		const Vec2 pixel = ToPixels(event->position());
+		const Ray ray = CurrentView().ScreenToRay(pixel);
+
+		// 2D drops land on the sprite plane, 3D drops on the ground.
+		Vec3 point = ray.Origin;
+		if (m_3D)
+		{
+			if (std::fabs(ray.Direction.Y) > 1e-6f)
+			{
+				const float t = -ray.Origin.Y / ray.Direction.Y;
+				if (t > 0)
+					point = ray.Origin + ray.Direction * t;
+			}
+		}
+		else
+		{
+			ray.IntersectZPlane(0, point);
+		}
+
+		const Entity target = Pick(pixel);
+		for (const QUrl& url : event->mimeData()->urls())
+		{
+			if (url.isLocalFile())
+				emit AssetDropped(url.toLocalFile(), point, target);
+		}
+		event->acceptProposedAction();
 	}
 
 	void ViewportWidget::focusOutEvent(QFocusEvent* event)

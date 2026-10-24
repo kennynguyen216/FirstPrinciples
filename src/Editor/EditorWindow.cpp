@@ -1,5 +1,6 @@
 #include "Editor/EditorWindow.h"
 #include "Editor/CodeEditor.h"
+#include "Editor/ContentBrowser.h"
 #include "Editor/InspectorPanel.h"
 #include "Editor/ScriptBuilder.h"
 #include "Editor/ViewportWidget.h"
@@ -75,6 +76,7 @@ namespace FP::Editor
 
 		connect(m_Viewport, &ViewportWidget::EntityPicked, this, [this](Entity entity) { Select(entity); });
 		connect(m_Viewport, &ViewportWidget::EntityMoved, this, [this](Entity) { MarkDirty(); });
+		connect(m_Viewport, &ViewportWidget::AssetDropped, this, &EditorWindow::DropAsset);
 
 		// Drives the world and the viewport at about 60 fps.
 		m_Timer = new QTimer(this);
@@ -143,7 +145,48 @@ namespace FP::Editor
 		consoleDock->setObjectName("Console");
 		consoleDock->setWidget(m_Console);
 		addDockWidget(Qt::BottomDockWidgetArea, consoleDock);
-		resizeDocks({ consoleDock }, { 160 }, Qt::Vertical);
+		m_ConsoleDock = consoleDock;
+
+		// The content browser shares the bottom area with the console as a tab.
+		m_ContentBrowser = new ContentBrowser();
+		QDockWidget* contentDock = new QDockWidget("Content", this);
+		contentDock->setObjectName("Content");
+		contentDock->setWidget(m_ContentBrowser);
+		tabifyDockWidget(consoleDock, contentDock);
+		contentDock->raise();
+		resizeDocks({ consoleDock }, { 220 }, Qt::Vertical);
+
+		connect(m_ContentBrowser, &ContentBrowser::AssetSelected, this, &EditorWindow::ShowAsset);
+		connect(m_ContentBrowser, &ContentBrowser::NewScriptRequested, this, [this]() {
+			const QString name = QInputDialog::getText(this, "New Script", "Class name:");
+			if (!name.isEmpty())
+				NewScript(name.trimmed());
+		});
+		connect(m_ContentBrowser, &ContentBrowser::ReferencesChanged, this, [this]() {
+			// Rename rewrote paths on disk. Reload the open scene so it sees them, unless that would lose edits.
+			if (m_ScenePath.isEmpty() || m_World->IsPlaying())
+				return;
+			if (m_Dirty)
+				FP_LOG_WARN("Assets were renamed. Save and reopen the scene to pick up the new paths.");
+			else
+				OpenScene(m_ScenePath);
+		});
+		connect(m_ContentBrowser, &ContentBrowser::AssetActivated, this, [this](const QString& path) {
+			const QString kind = ContentBrowser::AssetKind(path);
+			if (kind == "Scene")
+			{
+				if (ConfirmDiscard())
+					OpenScene(path);
+			}
+			else if (kind == "Script")
+			{
+				OpenScript(path);
+			}
+			else
+			{
+				ShowAsset(path);
+			}
+		});
 	}
 
 	void EditorWindow::BuildMenus()
@@ -253,6 +296,74 @@ namespace FP::Editor
 	void EditorWindow::SetViewMode(ViewMode mode)
 	{
 		m_ViewModeBox->setCurrentIndex(static_cast<int>(mode));
+	}
+
+	void EditorWindow::DropAsset(const QString& path, Vec3 point, Entity target)
+	{
+		const QString relative = QDir(ToQString(Paths::GetContentDir())).relativeFilePath(path);
+		if (relative.startsWith(".."))
+		{
+			FP_LOG_WARN("Only assets inside Content can be dropped");
+			return;
+		}
+		const QString kind = ContentBrowser::AssetKind(path);
+		const String name = ToString(QFileInfo(path).completeBaseName());
+
+		Entity changed = NullEntity;
+		if (kind == "Texture")
+		{
+			changed = m_World->CreateEntity(name);
+			m_World->Get<TransformComponent>(changed).Position = point;
+			m_World->Add<SpriteComponent>(changed).Texture = ToString(relative);
+		}
+		else if (kind == "Mesh")
+		{
+			changed = m_World->CreateEntity(name);
+			m_World->Get<TransformComponent>(changed).Position = point;
+			m_World->Add<MeshComponent>(changed).Mesh = ToString(relative);
+		}
+		else if (kind == "Material")
+		{
+			if (!m_World->IsValid(target))
+			{
+				FP_LOG_WARN("Drop a material onto a sprite or mesh");
+				return;
+			}
+			changed = target;
+			m_World->Add<MaterialComponent>(changed).Material = ToString(relative);
+		}
+		else if (kind == "Scene")
+		{
+			if (ConfirmDiscard())
+				OpenScene(path);
+			return;
+		}
+		else
+		{
+			FP_LOG_WARN("%s files cannot be dropped into the scene", kind.toUtf8().constData());
+			return;
+		}
+
+		MarkDirty();
+		RefreshHierarchy();
+		m_Selected = NullEntity; // force the inspector to rebuild with the new component
+		Select(changed);
+	}
+
+	void EditorWindow::DiscardUnsavedChanges()
+	{
+		m_Dirty = false;
+		for (int i = 0; i < m_CentralTabs->count(); ++i)
+		{
+			if (CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->widget(i)))
+				editor->document()->setModified(false);
+		}
+	}
+
+	void EditorWindow::ShowAsset(const QString& path)
+	{
+		Select(NullEntity);
+		m_Inspector->SetAsset(path);
 	}
 
 	void EditorWindow::OpenScript(const QString& path)
@@ -444,7 +555,11 @@ namespace FP::Editor
 	void EditorWindow::OnScriptsBuilt(bool success)
 	{
 		if (!success)
+		{
+			// Build errors live in the console, so bring it forward.
+			m_ConsoleDock->raise();
 			return;
+		}
 		// Running scripts move to the new code with their field values.
 		if (ScriptRuntime::Get().Reload())
 			FP_LOG("Scripts reloaded%s", m_World->IsPlaying() ? " while playing" : "");

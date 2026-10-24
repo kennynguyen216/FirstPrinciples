@@ -27,6 +27,9 @@ namespace FP::Editor
 		// Rebuilds the widgets. Call when the selection or the set of components changes.
 		void SetTarget(World* world, Entity entity);
 
+		// Shows an asset file from the content browser instead of an entity. Absolute path.
+		void SetAsset(const QString& path);
+
 		// Pulls current values into the widgets. Skips the widget being edited.
 		void RefreshValues();
 
@@ -50,6 +53,8 @@ namespace FP::Editor
 		void Rebuild();
 		void RebuildLater();
 		void AddMaterialSection();
+		void AddMaterialEditor(const String& contentPath, const QString& title);
+		void AddAssetView();
 		void AddScriptsSection(QVBoxLayout* layout);
 		ScriptSlot* SlotAt(int32 index) const;
 
@@ -70,5 +75,6 @@ namespace FP::Editor
 		std::vector<EditScript> m_EditScripts;
 		int32 m_RuntimeListener = 0;
 		bool m_ScriptsUnloaded = false;
+		QString m_AssetPath;
 	};
 }

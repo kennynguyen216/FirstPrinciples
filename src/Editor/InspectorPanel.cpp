@@ -3,6 +3,7 @@
 #include "Engine/Material.h"
 #include "Engine/Paths.h"
 #include "Engine/Scripting/ScriptRuntime.h"
+#include "Editor/ContentBrowser.h"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -12,10 +13,15 @@
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFormLayout>
+#include <QImage>
+#include <QFileInfo>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QLineEdit>
+#include <QMimeData>
 #include <QMenu>
 #include <QPushButton>
 #include <QScrollArea>
@@ -62,6 +68,45 @@ namespace FP::Editor
 			const QByteArray utf8 = text.toUtf8();
 			return String(utf8.constData(), static_cast<int32>(utf8.size()));
 		}
+
+		// Line edit for asset paths that takes files dropped from the content browser and stores
+		// them relative to Content.
+		class AssetLineEdit : public QLineEdit
+		{
+		public:
+			using QLineEdit::QLineEdit;
+
+		protected:
+			void dragEnterEvent(QDragEnterEvent* event) override
+			{
+				if (RelativePath(event->mimeData()).isEmpty())
+					QLineEdit::dragEnterEvent(event);
+				else
+					event->acceptProposedAction();
+			}
+
+			void dropEvent(QDropEvent* event) override
+			{
+				const QString relative = RelativePath(event->mimeData());
+				if (relative.isEmpty())
+				{
+					QLineEdit::dropEvent(event);
+					return;
+				}
+				setText(relative);
+				emit editingFinished();
+				event->acceptProposedAction();
+			}
+
+		private:
+			static QString RelativePath(const QMimeData* data)
+			{
+				if (!data->hasUrls() || data->urls().isEmpty() || !data->urls().first().isLocalFile())
+					return {};
+				const QString relative = QDir(ToQString(Paths::GetContentDir())).relativeFilePath(data->urls().first().toLocalFile());
+				return relative.startsWith("..") ? QString() : relative;
+			}
+		};
 
 		// Spin boxes for Vec2 and Vec3 share this so every axis behaves the same.
 		QWidget* MakeVectorRow(int count, QDoubleSpinBox** boxes)
@@ -246,7 +291,51 @@ namespace FP::Editor
 	{
 		m_World = world;
 		m_Entity = entity;
+		m_AssetPath.clear();
 		Rebuild();
+	}
+
+	void InspectorPanel::SetAsset(const QString& path)
+	{
+		m_Entity = NullEntity;
+		m_AssetPath = path;
+		Rebuild();
+	}
+
+	void InspectorPanel::AddAssetView()
+	{
+		const QFileInfo info(m_AssetPath);
+		const QString kind = ContentBrowser::AssetKind(m_AssetPath);
+		const QDir content(ToQString(Paths::GetContentDir()));
+		const QString relative = content.relativeFilePath(m_AssetPath);
+
+		if (kind == "Material" && !relative.startsWith(".."))
+		{
+			AddMaterialEditor(ToString(relative), QString("Material: %1").arg(info.completeBaseName()));
+			return;
+		}
+
+		QGroupBox* group = new QGroupBox(QString("%1: %2").arg(kind, info.fileName()));
+		QVBoxLayout* layout = new QVBoxLayout(group);
+		QFormLayout* form = new QFormLayout();
+		layout->addLayout(form);
+		form->addRow("Path", new QLabel(QDir(ToQString(Paths::GetProjectDir())).relativeFilePath(m_AssetPath)));
+		form->addRow("Size", new QLabel(QString("%1 KB").arg(QString::number(info.size() / 1024.0, 'f', 1))));
+
+		if (kind == "Texture")
+		{
+			const QImage image(m_AssetPath);
+			if (!image.isNull())
+			{
+				form->addRow("Pixels", new QLabel(QString("%1 x %2").arg(image.width()).arg(image.height())));
+				form->addRow("Alpha", new QLabel(image.hasAlphaChannel() ? "Yes" : "No"));
+				QLabel* preview = new QLabel();
+				preview->setPixmap(QPixmap::fromImage(image.scaled(320, 320, Qt::KeepAspectRatio, Qt::SmoothTransformation)));
+				preview->setAlignment(Qt::AlignCenter);
+				layout->addWidget(preview);
+			}
+		}
+		m_Layout->addWidget(group);
 	}
 
 	void InspectorPanel::AddMaterialSection()
@@ -283,8 +372,13 @@ namespace FP::Editor
 			return;
 		}
 
+		AddMaterialEditor(path, QString("Material Asset: %1").arg(ToQString(path)));
+	}
+
+	void InspectorPanel::AddMaterialEditor(const String& path, const QString& title)
+	{
 		// Edits change the shared asset, so every entity using it updates at once.
-		QGroupBox* group = new QGroupBox(QString("Material Asset: %1").arg(ToQString(path)));
+		QGroupBox* group = new QGroupBox(title);
 		QVBoxLayout* groupLayout = new QVBoxLayout(group);
 		QFormLayout* form = new QFormLayout();
 		form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
@@ -314,7 +408,8 @@ namespace FP::Editor
 
 	void InspectorPanel::RefreshValues()
 	{
-		if (!m_World || !m_World->IsValid(m_Entity))
+		// Assets have no entity but their rows still need values.
+		if (m_AssetPath.isEmpty() && (!m_World || !m_World->IsValid(m_Entity)))
 			return;
 		for (auto& refresh : m_Refreshers)
 			refresh();
@@ -328,6 +423,13 @@ namespace FP::Editor
 		{
 			delete item->widget();
 			delete item;
+		}
+
+		if (!m_AssetPath.isEmpty())
+		{
+			AddAssetView();
+			RefreshValues();
+			return;
 		}
 
 		if (!m_World || !m_World->IsValid(m_Entity))
@@ -532,6 +634,7 @@ namespace FP::Editor
 					// Editable list: pick a built in name or type a path.
 					combo = new QComboBox();
 					combo->setEditable(true);
+					combo->setLineEdit(new AssetLineEdit());
 					combo->setInsertPolicy(QComboBox::NoInsert);
 					for (const char* choice : *field.Choices)
 						combo->addItem(choice);
@@ -541,7 +644,7 @@ namespace FP::Editor
 				}
 				else
 				{
-					edit = new QLineEdit();
+					edit = field.AssetFilter ? new AssetLineEdit() : new QLineEdit();
 					layout->addWidget(edit, 1);
 				}
 				connect(edit, &QLineEdit::editingFinished, this, [=]() { apply(edit->text()); });
