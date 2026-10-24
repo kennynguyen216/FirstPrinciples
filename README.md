@@ -4,6 +4,14 @@ A small C++20 game engine with an ECS, a Qt editor and SDL3 rendering. Runs on m
 
 ## Setup
 
+Clone with submodules so EnTT comes along:
+
+```bash
+git clone --recursive https://github.com/kennynguyen216/FirstPrinciples.git
+```
+
+In an existing clone run `git submodule update --init`.
+
 ### macOS
 
 ```bash
@@ -39,3 +47,11 @@ Scripts\GenerateProjects.bat
 | Editor | Qt editor |
 | Runtime | Standalone player for a scene |
 | Tests | Unit tests. Run `Binaries/Debug/Tests [filter]` |
+
+## Third party
+
+| Library | Use | How it gets here |
+|---|---|---|
+| [SDL3](https://libsdl.org) | Windowing, input, 2D rendering | Homebrew on macOS, `Scripts/Setup.ps1` on Windows |
+| [Qt 6](https://qt.io) | Editor UI | Homebrew on macOS, Qt installer + `QT_DIR` on Windows |
+| [EnTT](https://github.com/skypjack/entt) | ECS | Git submodule in `ThirdParty/entt` |

@@ -17,6 +17,12 @@ end
 
 local SdlDir = IsWindows and (Root .. "/ThirdParty/SDL3") or (BrewPrefix .. "/opt/sdl3")
 
+-- Header only, pulled in as a git submodule.
+local EnttInclude = Root .. "/ThirdParty/entt/src"
+if not os.isdir(EnttInclude) then
+	premake.warn("EnTT is missing. Run: git submodule update --init")
+end
+
 local QtDir = os.getenv("QT_DIR")
 if not QtDir and IsMac then QtDir = BrewPrefix .. "/opt/qt" end
 if QtDir then QtDir = QtDir:gsub("\\", "/") end
@@ -36,8 +42,12 @@ local QtModules = { "Core", "Gui", "Widgets" }
 
 -- Helpers --------------------------------------------------------------------
 
+-- Include paths every project that touches engine headers needs.
+local function EngineIncludes()
+	externalincludedirs { SdlDir .. "/include", EnttInclude }
+end
+
 local function UseSDL()
-	externalincludedirs { SdlDir .. "/include" }
 	if IsWindows then
 		libdirs { SdlDir .. "/lib/x64" }
 		links { "SDL3" }
@@ -139,6 +149,16 @@ workspace "FirstPrinciples"
 
 	filter {}
 
+-- Apps link the engine through this so static lib dependencies stay in one place.
+local function UseEngine(withGame)
+	EngineIncludes()
+	if withGame then
+		links { "Game" }
+	end
+	links { "Engine" }
+	UseSDL()
+end
+
 -- Engine: HAL, Core, CoreObject and Engine in one static lib.
 project "Engine"
 	kind "StaticLib"
@@ -148,25 +168,23 @@ project "Engine"
 		"src/CoreObject/**.h", "src/CoreObject/**.cpp",
 		"src/Engine/**.h", "src/Engine/**.cpp",
 	}
-	externalincludedirs { SdlDir .. "/include" }
+	EngineIncludes()
 
 -- Game: the team's code, linked into Editor and Runtime.
 project "Game"
 	kind "StaticLib"
 	files { "Game/**.h", "Game/**.cpp" }
-	externalincludedirs { SdlDir .. "/include" }
+	EngineIncludes()
 
 project "Runtime"
 	kind "ConsoleApp"
 	files { "src/Runtime/**.h", "src/Runtime/**.cpp" }
-	links { "Game", "Engine" }
-	UseSDL()
+	UseEngine(true)
 
 project "Editor"
 	kind "WindowedApp"
 	files { "src/Editor/**.h", "src/Editor/**.cpp" }
-	links { "Game", "Engine" }
-	UseSDL()
+	UseEngine(true)
 	UseQt()
 	AddMocRules("src/Editor")
 	filter "system:windows"
@@ -176,5 +194,4 @@ project "Editor"
 project "Tests"
 	kind "ConsoleApp"
 	files { "src/Tests/**.h", "src/Tests/**.cpp" }
-	links { "Engine" }
-	UseSDL()
+	UseEngine(false)

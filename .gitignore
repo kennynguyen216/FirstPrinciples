@@ -4,7 +4,8 @@ Binaries/
 Intermediate/
 
 # Downloaded by Scripts/Setup.ps1
-ThirdParty/
+ThirdParty/SDL3/
+ThirdParty/premake/
 
 # Tools and OS
 .claude/

@@ -1,9 +1,11 @@
-# Downloads premake and the SDL3 dev package into ThirdParty/.
+# Fetches submodules and downloads premake and the SDL3 dev package into ThirdParty/.
 # Qt is installed separately and found through QT_DIR (see README.md).
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $ThirdParty = Join-Path $Root "ThirdParty"
 New-Item -ItemType Directory -Force -Path $ThirdParty | Out-Null
+
+git -C $Root submodule update --init
 
 $PremakeVersion = "5.0.0"
 $SdlVersion = "3.4.18"
