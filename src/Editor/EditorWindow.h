@@ -1,0 +1,75 @@
+#pragma once
+
+#include "Engine/World.h"
+
+#include <QMainWindow>
+
+class QAction;
+class QListWidget;
+class QPlainTextEdit;
+class QTimer;
+
+namespace FP::Editor
+{
+	class InspectorPanel;
+	class ViewportWidget;
+
+	class EditorWindow : public QMainWindow
+	{
+		Q_OBJECT
+
+	public:
+		EditorWindow();
+		~EditorWindow() override;
+
+		void OpenScene(const QString& path);
+		World& GetWorld() { return *m_World.Get(); }
+		void Play();
+		void Stop();
+		void Select(Entity entity);
+
+	protected:
+		void closeEvent(QCloseEvent* event) override;
+
+	private:
+		void BuildMenus();
+		void BuildDocks();
+
+		void Tick();
+		void RefreshHierarchy();
+		void MarkDirty();
+		void UpdateTitle();
+		bool ConfirmDiscard();
+
+		void NewScene();
+		void OpenSceneDialog();
+		bool SaveScene();
+		bool SaveSceneAs();
+
+		void CreateEntity(bool withSprite);
+		void DuplicateSelected();
+		void DeleteSelected();
+
+		static void LogSink(LogLevel level, const char* message, void* userData);
+
+		StrongObjectPtr<World> m_World;
+		Entity m_Selected = NullEntity;
+		Guid m_SelectedGuid;
+
+		QString m_ScenePath;
+		bool m_Dirty = false;
+		String m_PlaySnapshot;
+
+		ViewportWidget* m_Viewport = nullptr;
+		InspectorPanel* m_Inspector = nullptr;
+		QListWidget* m_Hierarchy = nullptr;
+		QPlainTextEdit* m_Console = nullptr;
+		QTimer* m_Timer = nullptr;
+		QAction* m_PlayAction = nullptr;
+		QAction* m_StopAction = nullptr;
+
+		uint64 m_LastTicks = 0;
+		int32 m_HierarchyCount = -1;
+		int32 m_Frame = 0;
+	};
+}

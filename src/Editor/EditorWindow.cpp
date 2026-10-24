@@ -1,0 +1,418 @@
+#include "Editor/EditorWindow.h"
+#include "Editor/InspectorPanel.h"
+#include "Editor/ViewportWidget.h"
+#include "Engine/ComponentRegistry.h"
+#include "Engine/Input.h"
+#include "Engine/Paths.h"
+#include "Engine/SceneSerializer.h"
+#include "Game/Game.h"
+
+#include <SDL3/SDL_timer.h>
+
+#include <QCloseEvent>
+#include <QDockWidget>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QKeySequence>
+#include <QListWidget>
+#include <QMenuBar>
+#include <QMessageBox>
+#include <QPlainTextEdit>
+#include <QStatusBar>
+#include <QTimer>
+#include <QToolBar>
+
+namespace FP::Editor
+{
+	namespace
+	{
+		constexpr int GuidRole = Qt::UserRole + 1;
+
+		QString ToQString(const String& text) { return QString::fromUtf8(text.CStr(), text.Length()); }
+
+		String ToString(const QString& text)
+		{
+			const QByteArray utf8 = text.toUtf8();
+			return String(utf8.constData(), static_cast<int32>(utf8.size()));
+		}
+	}
+
+	EditorWindow::EditorWindow()
+	{
+		m_World.Reset(NewObject<World>(nullptr, "EditorWorld"));
+
+		m_Viewport = new ViewportWidget(this);
+		m_Viewport->SetWorld(m_World.Get());
+		setCentralWidget(m_Viewport);
+
+		BuildDocks();
+		BuildMenus();
+		Log::AddSink(&EditorWindow::LogSink, this);
+
+		connect(m_Viewport, &ViewportWidget::EntityPicked, this, [this](Entity entity) { Select(entity); });
+		connect(m_Viewport, &ViewportWidget::EntityMoved, this, [this](Entity) { MarkDirty(); });
+
+		// Drives the world and the viewport at about 60 fps.
+		m_Timer = new QTimer(this);
+		m_Timer->setTimerType(Qt::PreciseTimer);
+		connect(m_Timer, &QTimer::timeout, this, &EditorWindow::Tick);
+		m_LastTicks = SDL_GetTicksNS();
+		m_Timer->start(16);
+
+		resize(1600, 900);
+		const QString startScene = ToQString(Paths::Content(Game::StartScene));
+		if (QFileInfo::exists(startScene))
+			OpenScene(startScene);
+		else
+			NewScene();
+	}
+
+	EditorWindow::~EditorWindow()
+	{
+		Log::RemoveSink(&EditorWindow::LogSink, this);
+	}
+
+	void EditorWindow::LogSink(LogLevel level, const char* message, void* userData)
+	{
+		EditorWindow* self = static_cast<EditorWindow*>(userData);
+		const QString text = QString::fromUtf8(message);
+		const QString color = level >= LogLevel::Error ? "#ff6b6b" : level == LogLevel::Warning ? "#f5c542" : "#cccccc";
+		// Logs can come from any thread so hop to the UI thread.
+		QMetaObject::invokeMethod(self, [self, text, color]() {
+			self->m_Console->appendHtml(QString("<span style='color:%1; white-space:pre'>%2</span>").arg(color, text.toHtmlEscaped()));
+		}, Qt::QueuedConnection);
+	}
+
+	void EditorWindow::BuildDocks()
+	{
+		m_Hierarchy = new QListWidget();
+		connect(m_Hierarchy, &QListWidget::currentItemChanged, this, [this](QListWidgetItem* item) {
+			if (!item)
+				return;
+			Guid id;
+			if (Guid::Parse(ToString(item->data(GuidRole).toString()), id))
+				Select(m_World->FindEntityByGuid(id));
+		});
+		QDockWidget* hierarchyDock = new QDockWidget("Hierarchy", this);
+		hierarchyDock->setObjectName("Hierarchy");
+		hierarchyDock->setWidget(m_Hierarchy);
+		addDockWidget(Qt::LeftDockWidgetArea, hierarchyDock);
+
+		m_Inspector = new InspectorPanel();
+		connect(m_Inspector, &InspectorPanel::Modified, this, [this]() {
+			MarkDirty();
+			RefreshHierarchy();
+		});
+		QDockWidget* inspectorDock = new QDockWidget("Inspector", this);
+		inspectorDock->setObjectName("Inspector");
+		inspectorDock->setWidget(m_Inspector);
+		inspectorDock->setMinimumWidth(320);
+		addDockWidget(Qt::RightDockWidgetArea, inspectorDock);
+
+		m_Console = new QPlainTextEdit();
+		m_Console->setReadOnly(true);
+		m_Console->setMaximumBlockCount(2000);
+		QDockWidget* consoleDock = new QDockWidget("Console", this);
+		consoleDock->setObjectName("Console");
+		consoleDock->setWidget(m_Console);
+		addDockWidget(Qt::BottomDockWidgetArea, consoleDock);
+		resizeDocks({ consoleDock }, { 160 }, Qt::Vertical);
+	}
+
+	void EditorWindow::BuildMenus()
+	{
+		QMenu* file = menuBar()->addMenu("&File");
+		file->addAction("&New Scene", QKeySequence::New, this, &EditorWindow::NewScene);
+		file->addAction("&Open Scene...", QKeySequence::Open, this, &EditorWindow::OpenSceneDialog);
+		file->addAction("&Save Scene", QKeySequence::Save, this, &EditorWindow::SaveScene);
+		file->addAction("Save Scene &As...", QKeySequence::SaveAs, this, &EditorWindow::SaveSceneAs);
+		file->addSeparator();
+		file->addAction("E&xit", QKeySequence::Quit, this, &QWidget::close);
+
+		QMenu* entity = menuBar()->addMenu("&Entity");
+		entity->addAction("Create &Empty", QKeySequence("Ctrl+Shift+N"), this, [this]() { CreateEntity(false); });
+		entity->addAction("Create &Sprite", QKeySequence("Ctrl+Shift+S"), this, [this]() { CreateEntity(true); });
+		entity->addAction("&Duplicate", QKeySequence("Ctrl+D"), this, &EditorWindow::DuplicateSelected);
+		entity->addAction("De&lete", QKeySequence::Delete, this, &EditorWindow::DeleteSelected);
+
+		QToolBar* toolbar = addToolBar("Play");
+		toolbar->setObjectName("PlayToolbar");
+		m_PlayAction = toolbar->addAction("Play", this, &EditorWindow::Play);
+		m_PlayAction->setShortcut(QKeySequence("Ctrl+P"));
+		m_StopAction = toolbar->addAction("Stop", this, &EditorWindow::Stop);
+		m_StopAction->setEnabled(false);
+		toolbar->addSeparator();
+		toolbar->addAction("Collect Garbage", this, []() {
+			const GarbageCollectionStats stats = GarbageCollector::Get().Collect();
+			FP_LOG("GC freed %d objects, %d alive, %.3f ms", stats.NumFreed, stats.NumAlive, stats.Milliseconds);
+		});
+
+		statusBar()->showMessage("Right drag to pan, wheel to zoom, left drag to move, shift snaps");
+	}
+
+	void EditorWindow::Tick()
+	{
+		const uint64 now = SDL_GetTicksNS();
+		float deltaTime = static_cast<float>(now - m_LastTicks) / 1e9f;
+		m_LastTicks = now;
+		if (deltaTime > 0.1f)
+			deltaTime = 0.1f;
+
+		m_World->Update(deltaTime);
+		Input::EndFrame();
+
+		// Systems can create or destroy entities while playing.
+		if (m_World->IsPlaying())
+		{
+			if (!m_World->IsValid(m_Selected))
+				Select(NullEntity);
+			if (m_World->GetRegistry().view<IdComponent>().size() != static_cast<usize>(m_HierarchyCount))
+				RefreshHierarchy();
+			m_Inspector->RefreshValues();
+		}
+		else if (m_Frame % 10 == 0)
+		{
+			// Picks up viewport drags without rebuilding every frame.
+			m_Inspector->RefreshValues();
+		}
+
+		m_Viewport->RenderFrame();
+		if (++m_Frame % 120 == 0)
+			GarbageCollector::Get().Collect();
+	}
+
+	void EditorWindow::Select(Entity entity)
+	{
+		if (!m_World->IsValid(entity))
+			entity = NullEntity;
+		const bool changed = entity != m_Selected;
+		m_Selected = entity;
+		m_SelectedGuid = entity != NullEntity ? m_World->Get<IdComponent>(entity).Id : Guid();
+		m_Viewport->SetSelected(entity);
+
+		// Keep the hierarchy row in sync without feeding back into Select.
+		const QString key = ToQString(m_SelectedGuid.ToString());
+		QSignalBlocker block(m_Hierarchy);
+		m_Hierarchy->setCurrentItem(nullptr);
+		for (int i = 0; i < m_Hierarchy->count(); ++i)
+		{
+			if (m_Hierarchy->item(i)->data(GuidRole).toString() == key)
+				m_Hierarchy->setCurrentRow(i);
+		}
+
+		if (changed)
+			m_Inspector->SetTarget(m_World.Get(), entity);
+	}
+
+	void EditorWindow::RefreshHierarchy()
+	{
+		QSignalBlocker block(m_Hierarchy);
+		m_Hierarchy->clear();
+		const Array<Entity> entities = m_World->GetEntities();
+		for (Entity entity : entities)
+		{
+			QListWidgetItem* item = new QListWidgetItem(ToQString(m_World->GetEntityName(entity)));
+			item->setData(GuidRole, ToQString(m_World->Get<IdComponent>(entity).Id.ToString()));
+			m_Hierarchy->addItem(item);
+			if (entity == m_Selected)
+				m_Hierarchy->setCurrentItem(item);
+		}
+		m_HierarchyCount = entities.Num();
+	}
+
+	void EditorWindow::MarkDirty()
+	{
+		if (m_World->IsPlaying() || m_Dirty)
+			return;
+		m_Dirty = true;
+		UpdateTitle();
+	}
+
+	void EditorWindow::UpdateTitle()
+	{
+		const QString name = m_ScenePath.isEmpty() ? "Untitled" : QFileInfo(m_ScenePath).fileName();
+		setWindowTitle(QString("%1%2 - FirstPrinciples%3").arg(name, m_Dirty ? "*" : "", m_World->IsPlaying() ? " [Playing]" : ""));
+	}
+
+	bool EditorWindow::ConfirmDiscard()
+	{
+		if (!m_Dirty)
+			return true;
+		const auto answer = QMessageBox::question(this, "Unsaved changes", "Save changes to the current scene?",
+			QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+		if (answer == QMessageBox::Save)
+			return SaveScene();
+		return answer == QMessageBox::Discard;
+	}
+
+	void EditorWindow::NewScene()
+	{
+		Stop();
+		if (!ConfirmDiscard())
+			return;
+		m_World->Clear();
+		Entity camera = m_World->CreateEntity("Main Camera");
+		m_World->Add<CameraComponent>(camera);
+		m_ScenePath.clear();
+		m_Dirty = false;
+		Select(NullEntity);
+		RefreshHierarchy();
+		UpdateTitle();
+	}
+
+	void EditorWindow::OpenScene(const QString& path)
+	{
+		Stop();
+		if (SceneSerializer::LoadFromFile(*m_World.Get(), ToString(path).CStr()))
+		{
+			m_ScenePath = path;
+			m_Dirty = false;
+			FP_LOG("Opened %s", ToString(path).CStr());
+		}
+		m_Selected = NullEntity;
+		Select(NullEntity);
+		m_Inspector->SetTarget(m_World.Get(), NullEntity);
+		RefreshHierarchy();
+		UpdateTitle();
+	}
+
+	void EditorWindow::OpenSceneDialog()
+	{
+		if (!ConfirmDiscard())
+			return;
+		const QString path = QFileDialog::getOpenFileName(this, "Open Scene", ToQString(Paths::Content("Scenes")), "Scenes (*.scene)");
+		if (!path.isEmpty())
+			OpenScene(path);
+	}
+
+	bool EditorWindow::SaveScene()
+	{
+		Stop();
+		if (m_ScenePath.isEmpty())
+			return SaveSceneAs();
+		if (!SceneSerializer::SaveToFile(*m_World.Get(), ToString(m_ScenePath).CStr()))
+			return false;
+		m_Dirty = false;
+		UpdateTitle();
+		return true;
+	}
+
+	bool EditorWindow::SaveSceneAs()
+	{
+		Stop();
+		const QString path = QFileDialog::getSaveFileName(this, "Save Scene", ToQString(Paths::Content("Scenes")), "Scenes (*.scene)");
+		if (path.isEmpty())
+			return false;
+		m_ScenePath = path.endsWith(".scene") ? path : path + ".scene";
+		return SaveScene();
+	}
+
+	void EditorWindow::CreateEntity(bool withSprite)
+	{
+		Entity entity = m_World->CreateEntity(withSprite ? "Sprite" : "Entity");
+		if (withSprite)
+			m_World->Add<SpriteComponent>(entity);
+		MarkDirty();
+		RefreshHierarchy();
+		Select(entity);
+	}
+
+	void EditorWindow::DuplicateSelected()
+	{
+		if (!m_World->IsValid(m_Selected))
+			return;
+		// Copies every registered component field by field so new components work with no extra code.
+		entt::registry& registry = m_World->GetRegistry();
+		const Entity source = m_Selected;
+		const Entity copy = m_World->CreateEmptyEntity();
+		for (const ComponentInfo* info : ComponentRegistry::Get().GetAll())
+		{
+			if (info->TypeId == entt::type_hash<IdComponent>::value())
+				continue;
+			if (!info->TryGet(registry, source))
+				continue;
+			// Add can move existing storage so fetch the source after it.
+			void* dst = info->Add(registry, copy);
+			void* src = info->TryGet(registry, source);
+			for (const FieldInfo& field : info->Fields)
+			{
+				switch (field.Type)
+				{
+					case FieldType::Bool: field.Get<bool>(dst) = field.Get<bool>(src); break;
+					case FieldType::Int: field.Get<int32>(dst) = field.Get<int32>(src); break;
+					case FieldType::Float: field.Get<float>(dst) = field.Get<float>(src); break;
+					case FieldType::Vec2: field.Get<Vec2>(dst) = field.Get<Vec2>(src); break;
+					case FieldType::Color: field.Get<Color>(dst) = field.Get<Color>(src); break;
+					case FieldType::String: field.Get<String>(dst) = field.Get<String>(src); break;
+				}
+			}
+		}
+		if (NameComponent* name = m_World->TryGet<NameComponent>(copy))
+			name->Name += " Copy";
+		if (TransformComponent* transform = m_World->TryGet<TransformComponent>(copy))
+			transform->Position += Vec2(0.5f, -0.5f);
+		MarkDirty();
+		RefreshHierarchy();
+		Select(copy);
+	}
+
+	void EditorWindow::DeleteSelected()
+	{
+		if (!m_World->IsValid(m_Selected))
+			return;
+		m_World->DestroyEntity(m_Selected);
+		Select(NullEntity);
+		MarkDirty();
+		RefreshHierarchy();
+	}
+
+	void EditorWindow::Play()
+	{
+		if (m_World->IsPlaying())
+			return;
+		// Snapshot the scene so Stop can put everything back.
+		m_PlaySnapshot = SceneSerializer::SaveToString(*m_World.Get());
+		Game::AddSystems(*m_World.Get());
+		m_World->BeginPlay();
+		m_Viewport->SetPlaying(true);
+		m_PlayAction->setEnabled(false);
+		m_StopAction->setEnabled(true);
+		UpdateTitle();
+		FP_LOG("Play");
+	}
+
+	void EditorWindow::Stop()
+	{
+		if (!m_World->IsPlaying())
+			return;
+		m_World->EndPlay();
+		m_World->ClearSystems();
+		m_Viewport->SetPlaying(false);
+		SceneSerializer::LoadFromString(*m_World.Get(), m_PlaySnapshot.View());
+		m_PlaySnapshot.Clear();
+
+		const Guid selected = m_SelectedGuid;
+		m_Selected = NullEntity;
+		RefreshHierarchy();
+		Select(m_World->FindEntityByGuid(selected));
+		m_Inspector->SetTarget(m_World.Get(), m_Selected);
+		m_PlayAction->setEnabled(true);
+		m_StopAction->setEnabled(false);
+		UpdateTitle();
+		FP_LOG("Stop");
+	}
+
+	void EditorWindow::closeEvent(QCloseEvent* event)
+	{
+		Stop();
+		if (ConfirmDiscard())
+		{
+			m_Timer->stop();
+			event->accept();
+		}
+		else
+		{
+			event->ignore();
+		}
+	}
+}

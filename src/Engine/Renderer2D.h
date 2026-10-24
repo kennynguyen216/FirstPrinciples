@@ -47,11 +47,12 @@ namespace FP
 		// View from the world's primary camera, or a default view when it has none.
 		static ViewParams GetCameraView(World& world, int32 width, int32 height);
 
-		void Render(World& world, const ViewParams& view);
+		// drawGrid puts the editor grid under the sprites.
+		void Render(World& world, const ViewParams& view, bool drawGrid = false);
 
 		// Editor helpers.
 		void DrawGrid(const ViewParams& view);
-		void DrawRectOutline(Vec2 center, Vec2 size, float rotation, Color color, const ViewParams& view);
+		void DrawRectOutline(Vec2 center, Vec2 size, float rotation, Color color, const ViewParams& view, int32 thickness = 1);
 
 		// Loads a .bmp relative to Content. Cached per path. Returns null if it fails.
 		RefPtr<Texture> LoadTexture(const String& path);

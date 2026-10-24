@@ -41,10 +41,12 @@ namespace FP
 		return view;
 	}
 
-	void Renderer2D::Render(World& world, const ViewParams& view)
+	void Renderer2D::Render(World& world, const ViewParams& view, bool drawGrid)
 	{
 		SDL_SetRenderDrawColorFloat(m_Renderer, view.Background.R, view.Background.G, view.Background.B, 1);
 		SDL_RenderClear(m_Renderer);
+		if (drawGrid)
+			DrawGrid(view);
 
 		struct DrawItem
 		{
@@ -110,18 +112,22 @@ namespace FP
 		}
 	}
 
-	void Renderer2D::DrawRectOutline(Vec2 center, Vec2 size, float rotation, Color color, const ViewParams& view)
+	void Renderer2D::DrawRectOutline(Vec2 center, Vec2 size, float rotation, Color color, const ViewParams& view, int32 thickness)
 	{
-		const Vec2 half = size * 0.5f;
-		const Vec2 corners[4] = { { -half.X, half.Y }, { half.X, half.Y }, { half.X, -half.Y }, { -half.X, -half.Y } };
-		SDL_FPoint points[5];
-		for (int i = 0; i < 5; ++i)
-		{
-			const Vec2 screen = view.WorldToScreen(center + corners[i % 4].Rotated(rotation));
-			points[i] = { screen.X, screen.Y };
-		}
 		SDL_SetRenderDrawColorFloat(m_Renderer, color.R, color.G, color.B, color.A);
-		SDL_RenderLines(m_Renderer, points, 5);
+		// Each ring grows by one pixel outward so the outline never covers the sprite.
+		for (int32 ring = 1; ring <= thickness; ++ring)
+		{
+			const Vec2 half = size * 0.5f + Vec2(1, 1) * (static_cast<float>(ring) / view.PixelsPerUnit);
+			const Vec2 corners[4] = { { -half.X, half.Y }, { half.X, half.Y }, { half.X, -half.Y }, { -half.X, -half.Y } };
+			SDL_FPoint points[5];
+			for (int i = 0; i < 5; ++i)
+			{
+				const Vec2 screen = view.WorldToScreen(center + corners[i % 4].Rotated(rotation));
+				points[i] = { screen.X, screen.Y };
+			}
+			SDL_RenderLines(m_Renderer, points, 5);
+		}
 	}
 
 	RefPtr<Texture> Renderer2D::LoadTexture(const String& path)

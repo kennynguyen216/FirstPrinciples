@@ -99,10 +99,14 @@ local function AddMocRules(dir)
 		if text and text:find("Q_OBJECT") then
 			local name = path.getbasename(header)
 			local includeName = path.getrelative(Root .. "/src", path.getabsolute(header))
-			local output = "%{cfg.objdir}/moc_" .. name .. ".cpp"
+			-- moc output is the same for every configuration so it lives in one shared folder.
+			local output = Root .. "/Intermediate/Moc/moc_" .. name .. ".cpp"
 			filter { "files:" .. header }
 				buildmessage("moc " .. includeName)
-				buildcommands { '"' .. MocPath .. '" "%{file.abspath}" -f"' .. includeName .. '" -o "' .. output .. '"' }
+				buildcommands {
+					'{MKDIR} "' .. Root .. '/Intermediate/Moc"',
+					'"' .. MocPath .. '" "%{file.abspath}" -f"' .. includeName .. '" -o "' .. output .. '"',
+				}
 				buildoutputs { output }
 				compilebuildoutputs "On"
 			filter {}

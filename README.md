@@ -38,6 +38,67 @@ Scripts\GenerateProjects.bat
 
 5. Open `Build\FirstPrinciples.sln`, set `Editor` as the startup project and build.
 
+## Making your game
+
+Game code lives in `Game/`. The editor and the runtime both link it.
+
+1. **Components** are plain structs. Fields can be `bool`, `int32`, `float`, `Vec2`, `Color` or `String`.
+
+   ```cpp
+   struct HealthComponent
+   {
+       int32 Value = 100;
+   };
+   ```
+
+2. **Register** them in `Game::RegisterComponents` (`Game/Game.cpp`) so the inspector and scene files see them.
+
+   ```cpp
+   registry.Register<HealthComponent>("Health")
+       .Field("Value", &HealthComponent::Value);
+   ```
+
+3. **Systems** hold the logic. Subclass `FP::System`, loop over a view and add it in `Game::AddSystems`.
+
+   ```cpp
+   void Update(FP::World& world, float deltaTime) override
+   {
+       for (auto [entity, transform, health] : world.View<FP::TransformComponent, HealthComponent>().each())
+       {
+           if (health.Value <= 0)
+               world.DestroyEntity(entity);
+       }
+   }
+   ```
+
+4. **Input** works the same in the editor and the runtime. Use `FP::Input::IsKeyDown(SDL_SCANCODE_SPACE)`
+   or `FP::Input::GetMoveAxis()`.
+
+5. **Scenes** live in `Content/Scenes`. Build them in the editor and press Play to run your systems.
+   Stop restores the scene. `Runtime` plays `Game::StartScene` or a scene passed on the command line.
+
+Sprite textures are `.bmp` files under `Content/`.
+
+### Editor controls
+
+| Action | Control |
+|---|---|
+| Pan | Right or middle drag |
+| Zoom | Mouse wheel |
+| Select / move | Left click / left drag (hold Shift to snap) |
+| Create sprite | Ctrl+Shift+S |
+| Duplicate / delete | Ctrl+D / Delete |
+| Play | Ctrl+P |
+| Save | Ctrl+S |
+
+### Smoke tests
+
+```bash
+Binaries/Debug/Tests
+Binaries/Debug/Runtime --screenshot runtime.bmp
+Binaries/Debug/Editor --play --screenshot editor.png
+```
+
 ## Projects
 
 | Project | What it is |
@@ -55,3 +116,10 @@ Scripts\GenerateProjects.bat
 | [SDL3](https://libsdl.org) | Windowing, input, 2D rendering | Homebrew on macOS, `Scripts/Setup.ps1` on Windows |
 | [Qt 6](https://qt.io) | Editor UI | Homebrew on macOS, Qt installer + `QT_DIR` on Windows |
 | [EnTT](https://github.com/skypjack/entt) | ECS | Git submodule in `ThirdParty/entt` |
+
+## Known limitations
+
+- Textures load `.bmp` only. PNG needs SDL_image.
+- The editor viewport uses the software renderer, so rotated sprites can show faint seams there.
+- File paths go through `fopen`, so non ASCII paths on Windows are not supported yet.
+- No undo yet.
