@@ -25,9 +25,19 @@ local StbInclude = Root .. "/ThirdParty/stb"
 local MonocypherDir = Root .. "/ThirdParty/monocypher/src"
 -- Logging backend, header only.
 local SpdlogInclude = Root .. "/ThirdParty/spdlog/include"
+-- Rigid body physics. Built from source as its own static library.
+local JoltDir = Root .. "/ThirdParty/JoltPhysics"
 -- glTF parser for skeletal meshes and animations. One header, built once by CgltfImpl.cpp.
 local CgltfInclude = Root .. "/ThirdParty/cgltf"
-if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) or not os.isdir(SpdlogInclude) or not os.isdir(CgltfInclude) then
+-- Game UI in HTML, CSS and JavaScript. A binary SDK fetched by Scripts/GetUltralight, so it is
+-- optional: without it everything builds and UI components draw nothing.
+local UltralightDir = Root .. "/ThirdParty/Ultralight"
+local HasUltralight = os.isdir(UltralightDir .. "/include/Ultralight")
+if not HasUltralight then
+	premake.warn("Ultralight is missing, so game UI will not draw. Run Scripts/GetUltralight to get it.")
+end
+local ImGuiDir = Root .. "/ThirdParty/imgui"
+if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) or not os.isdir(SpdlogInclude) or not os.isdir(CgltfInclude) or not os.isfile(ImGuiDir .. "/imgui.h") or not os.isdir(JoltDir .. "/Jolt") then
 	premake.warn("Submodules are missing. Run: git submodule update --init")
 end
 
@@ -81,7 +91,32 @@ local ProjectName = io.readfile(ProjectFile):match('Name%s+"?([%w_]+)"?') or pat
 
 -- Include paths every project that touches engine headers needs.
 local function EngineIncludes()
-	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir, SpdlogInclude, CgltfInclude }
+	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir, SpdlogInclude, CgltfInclude, ImGuiDir, JoltDir }
+	if HasUltralight then
+		externalincludedirs { UltralightDir .. "/include" }
+		defines { "FP_WITH_ULTRALIGHT=1" }
+	end
+end
+
+-- Links Ultralight and copies its libraries and resources next to the binary that needs them.
+local function UseUltralight()
+	if not HasUltralight then return end
+	links { "Ultralight", "UltralightCore", "WebCore", "AppCore" }
+	if IsWindows then
+		libdirs { UltralightDir .. "/lib" }
+		postbuildcommands {
+			'{COPYFILE} "' .. UltralightDir .. '/bin/*.dll" "%{cfg.targetdir}"',
+			'{COPYDIR} "' .. UltralightDir .. '/resources" "%{cfg.targetdir}/UltralightResources"',
+		}
+	else
+		libdirs { UltralightDir .. "/bin" }
+		-- The libraries use @rpath, so look next to whatever binary loads them.
+		linkoptions { "-Wl,-rpath,@loader_path" }
+		postbuildcommands {
+			'cp -f "' .. UltralightDir .. '"/bin/*.dylib "%{cfg.targetdir}/"',
+			'mkdir -p "%{cfg.targetdir}/UltralightResources" && cp -Rf "' .. UltralightDir .. '/resources/." "%{cfg.targetdir}/UltralightResources/"',
+		}
+	end
 end
 
 local function UseSDL()
@@ -197,9 +232,27 @@ local function UseEngine(withGame)
 	if withGame then
 		links { "Game" }
 	end
-	links { "Engine" }
+	links { "Engine", "Jolt", "ImGui" }
 	UseSDL()
+	UseUltralight()
 end
+
+-- Jolt: physics. Every optional Jolt define stays off here and in the engine, since the
+-- library and its users must agree on them. GPU compute back ends are left out.
+project "Jolt"
+	kind "StaticLib"
+	files { JoltDir .. "/Jolt/**.h", JoltDir .. "/Jolt/**.cpp", JoltDir .. "/Jolt/**.inl" }
+	removefiles { JoltDir .. "/Jolt/Compute/CPU/**", JoltDir .. "/Jolt/Compute/DX12/**", JoltDir .. "/Jolt/Compute/MTL/**", JoltDir .. "/Jolt/Compute/VK/**", JoltDir .. "/Jolt/Shaders/**" }
+	includedirs { JoltDir }
+	warnings "Off"
+	-- Physics is slow unoptimised, so even Debug builds optimise it.
+	filter "configurations:Debug"
+		optimize "Speed"
+	filter {}
+
+project "ImGui"
+	kind "StaticLib"
+	files { ImGuiDir .. "/*.h", ImGuiDir .. "/*.cpp" }
 
 -- Engine: HAL, Core, CoreObject and Engine in one static lib.
 project "Engine"
@@ -231,12 +284,25 @@ project "Game"
 	removefiles { ProjectDir .. "/Source/Scripts/**" }
 	EngineIncludes()
 
+-- HeaderTool: reads FPCLASS, FPPROPERTY and FPFUNCTION out of the scripts, like Unreal's header tool.
+-- Plain standard C++ with no engine code so it builds in seconds.
+project "HeaderTool"
+	kind "ConsoleApp"
+	files { "src/Tools/HeaderTool/**.h", "src/Tools/HeaderTool/**.cpp" }
+
+local ReflectionHeader = ProjectDir .. "/Intermediate/Generated/ScriptReflection.gen.h"
+
 -- GameScripts: C++ scripts in the project's Source/Scripts, built as a shared library the editor can hot reload.
 project "GameScripts"
 	kind "SharedLib"
 	targetprefix ""
 	files { ProjectDir .. "/Source/Scripts/**.h", ProjectDir .. "/Source/Scripts/**.cpp", "src/Engine/Scripting/Module/**.cpp" }
 	UseEngine(true)
+	-- Every build regenerates the reflection first, and every script sees it without an include.
+	dependson { "HeaderTool" }
+	prebuildmessage "Reflecting scripts"
+	prebuildcommands { '"%{wks.location}/../Binaries/%{cfg.buildcfg}/HeaderTool" "' .. ProjectDir .. '/Source/Scripts" "' .. ReflectionHeader .. '"' }
+	forceincludes { ReflectionHeader }
 	filter "system:windows"
 		-- A new PDB name per build so a debugger holding the old one never blocks a rebuild.
 		linkoptions { '/PDB:"$(OutDir)GameScripts_$([System.DateTime]::Now.Ticks).pdb"' }
@@ -263,5 +329,6 @@ project "Tests"
 	kind "ConsoleApp"
 	files { "src/Tests/**.h", "src/Tests/**.cpp" }
 	files { "src/Editor/AudioImport.h", "src/Editor/AudioImport.cpp" }
+	files { "src/Tools/HeaderTool/HeaderParser.h", "src/Tools/HeaderTool/HeaderParser.cpp" }
 	UseEngine(false)
 	dependson { "GameScripts" }

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="HUD.css">
+</head>
+<body>
+	<div class="card">
+		<div class="title">Noodle</div>
+		<div class="row">
+			<span class="label">State</span>
+			<span class="badge" data-bind="state">Idle</span>
+		</div>
+		<div class="row">
+			<span class="label">Speed</span>
+			<progress max="2.5" value="0" data-bind="speed"></progress>
+		</div>
+		<div class="row">
+			<span class="label">Playing for</span>
+			<span id="clock">0:00</span>
+		</div>
+	</div>
+
+	<div class="toolbar">
+		<button id="jump">Jump</button>
+		<label>Animation speed
+			<input id="animationSpeed" type="range" min="0.25" max="2" step="0.05" value="1">
+			<span id="animationSpeedValue">1.00x</span>
+		</label>
+		<label class="toggle"><input id="shadows" type="checkbox" checked> Shadows</label>
+	</div>
+
+	<div class="hint">WASD or the arrows walk, Space jumps</div>
+
+	<script src="HUD.js"></script>
+</body>
+</html>

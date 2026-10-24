@@ -27,7 +27,10 @@ namespace FP
 			}
 		}
 		for (Script* script : instances)
+		{
+			script->TickTimers(deltaTime);
 			script->OnUpdate(deltaTime);
+		}
 	}
 
 	void ScriptSystem::OnStop(World& world)

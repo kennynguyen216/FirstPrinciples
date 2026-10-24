@@ -4,7 +4,7 @@ A small C++20 game engine with an ECS, a Qt editor and SDL3 rendering. Runs on m
 
 ## Setup
 
-Clone with submodules so EnTT, stb, Monocypher, spdlog and cgltf come along:
+Clone with submodules so the third party libraries come along:
 
 ```bash
 git clone --recursive https://github.com/kennynguyen216/FirstPrinciples.git
@@ -19,7 +19,8 @@ Scripts/Setup.sh
 Scripts/Build.sh
 ```
 
-`Setup.sh` installs premake, SDL3 and Qt with Homebrew. `Build.sh` builds the Sample project: makefiles
+`Setup.sh` installs premake, SDL3, Qt and 7-Zip with Homebrew, then downloads the Ultralight SDK used
+for game UI (`Scripts/GetUltralight.sh` does just that part). `Build.sh` builds the Sample project: makefiles
 go in `Projects/Sample/Build` and everything builds into `Projects/Sample/Binaries/Debug`. Pass `release`
 for an optimised build, and a project folder to build another one, like `Scripts/Build.sh debug Projects/MyGame`.
 For Xcode run `Scripts/GenerateXcode.sh` instead.
@@ -165,38 +166,191 @@ restarting, even in the middle of play.
 
 using namespace FP;
 
+// Turns the entity every frame. This comment shows in the editor.
+FPCLASS(Category = "Movement")
 class Rotator : public Script
 {
 public:
-    Vec3 DegreesPerSecond{ 0, 90, 0 };
+    FPPROPERTY(Range = "0, 720")
+    float Speed = 90; // degrees per second, shown as the tooltip
+
+    FPFUNCTION()
+    void Reverse() { Speed = -Speed; }
 
     void OnUpdate(float deltaTime) override
     {
-        GetTransform().Rotation += DegreesPerSecond * deltaTime;
+        GetTransform().Rotation.Y += Speed * deltaTime;
     }
 };
 
-FP_SCRIPT(Rotator)
-{
-    fields.Field("DegreesPerSecond", &Rotator::DegreesPerSecond);
-}
+FP_SCRIPT(Rotator);
 ```
 
-- **Scripts > New Script...** writes a starter file and opens it in a tab next to the viewport.
-- Add a **Scripts** component to an entity, then **Add Script**. An entity can have any number.
-- Fields listed in `FP_SCRIPT` show in the Details panel, save with the scene and keep their values
-  across hot reloads. Other members reset when scripts reload.
+**Making and attaching scripts**
+
+- In the Details panel, **Add > Script** lists every script, grouped by category, with
+  **New Script...** at the bottom. A new script opens in a tab and attaches itself to the entity as
+  soon as it compiles. **Scripts > New Script...** and the Content Browser make one without attaching it.
+- Drag a script from the Content Browser onto an entity in the viewport to attach it.
+- An entity can have any number of scripts. Each shows what it does (the comment above the class),
+  which callbacks it runs, its fields and its function buttons.
 - Saving a script rebuilds and reloads it (turn this off with **Scripts > Auto Reload**).
   **Scripts > Reload Scripts** (Ctrl+R) forces it. Build output goes to the console, and double
   clicking an error opens the file at that line.
-- Overrides: `OnStart`, `OnUpdate`, `OnStop` and `OnHotReload` (defaults to calling `OnStart`).
-  Helpers: `GetTransform()`, `Get<T>()`, `TryGet<T>()`, `Add<T>()`, `FindEntity(name)`, `DestroySelf()`.
-- Components still live in `Source` and are registered in `Game::RegisterComponents`. Keep new
-  component types out of `Source/Scripts`, since data owned by the scripts library would vanish
-  when it reloads.
+
+**Reflection**
+
+A header tool, like Unreal's, reads the scripts before every build and generates the reflection
+that `FP_SCRIPT` registers. There is nothing to list by hand.
+
+- `FPPROPERTY` exposes a field. It shows in the Details panel, saves with the scene and keeps its
+  value across hot reloads. Other members reset when scripts reload. Options: `Tooltip = "..."`,
+  `Category = "..."` (fields are grouped under it), `Range = "min, max"` (clamps, and short ranges
+  get a slider), `ReadOnly` and `Asset = "Scenes (*.scene)"` (a file picker). A comment on the line
+  above or at the end of the line becomes the tooltip.
+- `FPFUNCTION` on a function with no arguments adds a button that calls it while playing.
+- `FPCLASS` is optional and takes `Category` and `Description`. Without a description, the comment
+  right above the class is used.
+- Marked members must be public, or put `FP_BODY()` in the class to reflect private ones.
+- Mistakes such as a missing declaration, a function with arguments or a private field without
+  `FP_BODY()` fail the build with the file and line, like a compiler error.
+- Field types: `bool`, `int32`, `float`, `Vec2`, `Vec3`, `Color` and `String`.
+- Code the tool does not see can list fields by hand with
+  `FP_SCRIPT_FIELDS(Name) { fields.Field("Speed", &Name::Speed).Range(0, 10); }`.
+
+**Helpers**
+
+| | |
+|---|---|
+| Callbacks | `OnStart`, `OnUpdate(deltaTime)`, `OnStop`, `OnHotReload` (calls `OnStart` by default) |
+| This entity | `GetEntity()`, `GetTransform()`, `Get<T>()`, `TryGet<T>()`, `Has<T>()`, `Add<T>()`, `Remove<T>()`, `GetAnimator()`, `GetTime()` |
+| Other entities | `FindEntity(name)`, `FindEntities(name)`, `TryGet<T>(entity)`, `IsValid(entity)`, `GetName(entity)` |
+| Other scripts | `GetScript<T>(entity)` on an entity (this one by default), `FindScript<T>()` anywhere |
+| Spawning | `Spawn(name, position)`, `SpawnScene("Prefabs/Enemy.scene", position)`, `Destroy(entity)`, `DestroySelf()` |
+| Scenes | `LoadScene("Scenes/Level2.scene")` switches at the end of the frame. `GetSceneEntity()` |
+| Parents | `GetParent()`, `GetChildren()`, `FindChild(name, recursive)`, `SetParent(entity)`, `AddChild(entity)` |
+| World space | `GetWorldPosition()`, `SetWorldPosition(position)`, `GetWorldRotation()` |
+| Timers | `After(seconds, fn)`, `Every(seconds, fn)`, `CancelTimer(id)`, `CancelAllTimers()` |
+| Physics | `AddForce(force)`, `AddImpulse(impulse)`, `GetVelocity()`, `SetVelocity(velocity)`, `Raycast(origin, direction, distance, hit)`, `GetPhysics()` for the rest |
+| Physics events | `OnCollisionEnter(other, collision)`, `OnCollisionExit(other)`, `OnTriggerEnter(other)`, `OnTriggerExit(other)` |
+| Math | `Clamp`, `Lerp`, `InverseLerp`, `MoveTowards`, `Damp`, `Random::Range`, `Random::Chance`, `Random::Direction` |
+| Input and logs | `Input::IsKeyDown(SDL_SCANCODE_SPACE)`, `Input::GetMoveAxis()`, `FP_LOG("...")` |
+
+`SpawnScene` copies every entity in a scene file with new ids, so any scene works as a prefab and
+can be spawned many times. Timers stop when the script stops or reloads.
+
+**Scene scripts**
+
+Click the scene's row at the top of the Hierarchy to edit the scene itself. Scripts added there
+run for the whole scene, which suits game rules, waves of enemies or score. They live on a hidden
+**Scene** entity that saves with the scene, so `FindScript<GameRules>()` reaches them from anywhere.
+
+Components still live in `Source` and are registered in `Game::RegisterComponents`. Keep new
+component types out of `Source/Scripts`, since data owned by the scripts library would vanish
+when it reloads.
 
 The runtime loads the same library at startup. Building from the command line works as before,
-and the `GameScripts` project builds along with the editor.
+and the `GameScripts` project builds along with the editor, running the header tool first.
+
+### Physics
+
+Physics runs on [Jolt](https://github.com/jrouwe/JoltPhysics) while the game plays.
+
+- A **Collider** gives an entity a shape: `Box` (`Size`), `Sphere` (`Radius`), `Capsule` (`Radius` and
+  `Height`, standing along Y) or `Mesh` (the entity's own mesh). Sizes scale with the transform and
+  `Offset` moves the shape. On its own a collider is a solid, unmoving part of the level.
+- A **RigidBody** makes it move. `Dynamic` bodies fall, bounce and get pushed. `Kinematic` bodies
+  follow their transform, so scripts or animation move them, and they shove dynamic bodies aside.
+  `Static` never moves. `Mass` is in kilograms, `Restitution` is bounciness, `LockRotation` keeps
+  characters upright and `Continuous` stops fast, small bodies tunnelling through thin walls.
+- A collider with `Trigger` on reports overlaps instead of blocking.
+- Moving a dynamic body's transform by hand teleports it. Changing its collider or rigid body
+  rebuilds it. Dynamic mesh colliders use the mesh's convex hull, static ones use every triangle.
+- Physics steps at a fixed 60 times a second whatever the frame rate. Children of other entities
+  work too, and their bodies sit at their world position.
+- The editor outlines colliders in green, and triggers in amber.
+
+Scripts push bodies and hear about contacts:
+
+```cpp
+void OnUpdate(float) override
+{
+    if (Input::WasKeyPressed(SDL_SCANCODE_SPACE))
+        AddImpulse({ 0, 5, 0 });
+    RaycastHit hit;
+    if (Raycast(GetWorldPosition(), { 0, -1, 0 }, 1.1f, hit))
+        FP_LOG("Standing on %s", GetName(hit.Entity).CStr());
+}
+
+void OnCollisionEnter(Entity other, const Collision& collision) override { /* collision.Point, collision.Normal */ }
+void OnTriggerEnter(Entity other) override { ++Score; }
+```
+
+`GetPhysics()` also has `AddTorque`, angular velocity, `OverlapSphere(center, radius)` and gravity.
+`Content/Scenes/Physics.scene` drops balls down a ramp, through a goal that counts them, and into a
+pyramid of crates. Space kicks every ball.
+
+### Game UI
+
+Game UI is written in HTML, CSS and JavaScript and drawn by [Ultralight](https://ultralig.ht).
+`Scripts/Setup.sh` fetches its SDK (or run `Scripts/GetUltralight.sh`, `.ps1` on Windows). Without it
+everything still builds and UI simply does not draw.
+
+Add a **UI** component and pick a page from `Content`, or drag an `.html` file onto an entity in the
+viewport (onto empty space puts it on the primary camera). Like a Unity canvas, a UI on a camera
+draws over that camera's view, and a UI on any other entity draws over every view. `Order` stacks
+several pages and `Input` lets a page take the mouse and keyboard. Pages show while the game plays.
+
+**In the page**, a global `engine` object talks to the game:
+
+```html
+Score: <b data-bind="score">0</b> <span id="result"></span>
+<button onclick="engine.send('jump', { height: 2 })">Jump</button>
+<script>
+    engine.on("gameOver", function (data) { document.getElementById("result").textContent = data.won ? "You won" : "You lost"; });
+    engine.watch("health", function (value) { document.body.classList.toggle("low", value < 20); });
+</script>
+```
+
+- `data-bind="key"` elements show `engine.state[key]` and update by themselves.
+- `engine.watch(key, fn)` runs whenever a script sets the key. `engine.on(name, fn)` hears events.
+- `engine.send(name, data)` reaches scripts. Any JSON value works as data.
+- `console.log` and page errors go to the Output Log. Saving the page, its CSS or its JS while
+  playing reloads it, keeping the values scripts set.
+
+**In a C++ script** on the same entity, or a scene script:
+
+```cpp
+void OnUpdate(float) override
+{
+    GetUI()->Set("score", Score);                 // numbers, bools and text
+    if (Lives == 0)
+        GetUI()->Emit("gameOver", "{\"won\":false}");
+}
+
+void OnUIEvent(std::string_view name, const Json& data) override
+{
+    if (name == "jump")
+        Jump(data["height"].AsNumber(1));
+}
+```
+
+`GetUI(entity)` reaches another entity's page. `RunScript(js)` runs JavaScript in the page and
+`LoadPage(path)` swaps pages. `Json` reads what pages send: `data["player"]["name"].AsString()`.
+**Add > New UI Page...** in the Content Browser writes a starter page, and double clicking pages,
+CSS and JS opens them in a code tab. The 3D showcase camera has a HUD (`Content/UI/HUD.html` and
+`Source/Scripts/ShowcaseHUD.cpp`) with live state, a Jump button, a speed slider and a shadow switch.
+
+Ultralight's free license covers commercial use for teams under US$200K in revenue and in funding.
+The free edition caps pages at 60 frames per second, runs JavaScript without a JIT and has no video.
+Pages render on the CPU and only changed frames upload to the GPU.
+
+### Parents and children
+
+Drag an entity onto another in the Hierarchy to make it a child, or onto the scene row to make it
+top level again. Right click for **Create Child** and **Detach from Parent**. A child's Transform
+is relative to its parent, so it moves, turns and scales along with it. The gizmo still works in
+world space. Deleting, copying and duplicating an entity takes its children with it.
 
 ### Materials and lighting
 
@@ -304,7 +458,7 @@ The editor follows Unreal Engine 5's layout and dark theme, using this engine's 
   Perspective and Top (2D), pick Lit, Unlit or Wireframe, and turn grid snap on with a grid size.
 - **Details** and **Hierarchy** share the panel on the right as tabs. Details shows the selection's components in collapsible sections. Add components with the Add
   button, remove one with the x on its header, and filter fields with the search box.
-- **Hierarchy** lists every entity under the scene with its type, plus a search box.
+- **Hierarchy** lists every entity nested under its parent with its type, plus a search box. The scene row at the top holds scene scripts.
 - Drag a panel by its title to move it, or drop it on another panel to share a spot as tabs. Pull a tab
   out to separate it again. **Window** reopens closed panels and **Reset Layout** puts everything back.
 - **Content Browser** and **Output Log** share the bottom. The status bar has buttons for both and a
@@ -478,7 +632,8 @@ FP::JobSystem::ParallelFor(enemyCount, 32, [&](int32 i) { UpdateEnemy(i); });
 | World or local axes | Globe button next to the gizmo buttons |
 | Grid snap | Grid pill over the viewport. Snaps moves to the grid and turns to 15 degrees. Shift flips snapping while dragging |
 | Create sprite | Ctrl+Shift+A |
-| Duplicate / delete | Ctrl+D / Delete |
+| Copy / paste / duplicate | Ctrl+C / Ctrl+V / Ctrl+D, children included |
+| Delete | Delete or Backspace |
 | Undo / redo | Ctrl+Z / Ctrl+Shift+Z |
 | Play | Ctrl+P |
 | New script / reload scripts | Scripts menu / Ctrl+R |
@@ -490,6 +645,7 @@ FP::JobSystem::ParallelFor(enemyCount, 32, [&](int32 i) { UpdateEnemy(i); });
 Projects/Sample/Binaries/Debug/Tests
 Projects/Sample/Binaries/Debug/Runtime --screenshot runtime.bmp
 Projects/Sample/Binaries/Debug/Runtime --host 7777 --screenshot host.bmp
+Projects/Sample/Binaries/Debug/Runtime Scenes/Physics.scene --wait 5 --screenshot physics.bmp
 Projects/Sample/Binaries/Debug/Editor --play --screenshot editor.png
 Projects/Sample/Binaries/Debug/Editor --scene Scenes/Lighting2D.scene --select "Glass Pane" --screenshot lit.png
 Projects/Sample/Binaries/Debug/Editor --scene Scenes/Showcase3D.scene --3d --viewmode wireframe --screenshot 3d.png
@@ -525,6 +681,7 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 | Target | What it is |
 |---|---|
 | Engine | Static lib with `src/HAL`, `src/Core`, `src/CoreObject` and `src/Engine` |
+| ImGui | Dear ImGui core, widgets, tables, drawing and demo from the docking branch |
 | Game | The project's components and systems (`Source`) |
 | Editor | Qt editor |
 | Runtime | Standalone player for a scene |
@@ -542,6 +699,17 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 | [Monocypher](https://monocypher.org) | Key exchange and encryption for network packets | Git submodule in `ThirdParty/monocypher` |
 | [spdlog](https://github.com/gabime/spdlog) | Logging to the console, files and the editor | Git submodule in `ThirdParty/spdlog` |
 | [cgltf](https://github.com/jkuhlmann/cgltf) | glTF loading for skeletal meshes and animations | Git submodule in `ThirdParty/cgltf` |
+| [Jolt Physics](https://github.com/jrouwe/JoltPhysics) 5.6 | Rigid body physics, collisions and raycasts | Git submodule in `ThirdParty/JoltPhysics`, built as the `Jolt` project |
+| [Ultralight](https://ultralig.ht) 2.0 beta | Game UI in HTML, CSS and JavaScript | Binary SDK downloaded by `Scripts/GetUltralight.sh` or `.ps1` into `ThirdParty/Ultralight`. Optional: without it game UI draws nothing |
+| [Dear ImGui](https://github.com/ocornut/imgui/tree/docking) | Immediate mode UI with docking and multi-viewport support | Git submodule in `ThirdParty/imgui`, tracking upstream `docking` |
+
+The ImGui submodule includes the complete upstream repository: core, demo, backends, examples,
+fonts, documentation and MIT license. Its commit is pinned by this repository. The `ImGui` static
+library builds every core source including `imgui_demo.cpp` and is linked through `UseEngine`;
+engine and game targets can include `imgui.h`. Backends and examples remain available in the
+submodule but are not compiled into the engine. Window, input and renderer integration is still
+required before displaying ImGui in an application. The editor currently uses Qt.
+Run `Projects/Sample/Binaries/Debug/Tests ImGui` for the headless docking and demo smoke test.
 
 ## Known limitations
 

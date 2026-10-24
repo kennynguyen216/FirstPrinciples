@@ -98,6 +98,8 @@ namespace FP
 		constexpr Vec3 XYZ() const { return { X, Y, Z }; }
 	};
 
+	struct Mat4;
+
 	// Unit quaternion rotation.
 	struct Quat
 	{
@@ -158,6 +160,9 @@ namespace FP
 			const Vec3 t = Vec3::Cross(q, v) * 2.0f;
 			return v + t * W + Vec3::Cross(q, t);
 		}
+
+		// The rotation part of a matrix with no scale.
+		static Quat FromMatrix(const Mat4& m);
 
 		static float Dot(const Quat& a, const Quat& b) { return a.X * b.X + a.Y * b.Y + a.Z * b.Z + a.W * b.W; }
 
@@ -308,6 +313,34 @@ namespace FP
 		}
 	};
 
+	inline Quat Quat::FromMatrix(const Mat4& m)
+	{
+		// Shepperd's method, picking the largest term so the square root stays accurate.
+		const float trace = m.At(0, 0) + m.At(1, 1) + m.At(2, 2);
+		Quat q;
+		if (trace > 0)
+		{
+			const float s = std::sqrt(trace + 1) * 2;
+			q = { (m.At(1, 2) - m.At(2, 1)) / s, (m.At(2, 0) - m.At(0, 2)) / s, (m.At(0, 1) - m.At(1, 0)) / s, s / 4 };
+		}
+		else if (m.At(0, 0) > m.At(1, 1) && m.At(0, 0) > m.At(2, 2))
+		{
+			const float s = std::sqrt(1 + m.At(0, 0) - m.At(1, 1) - m.At(2, 2)) * 2;
+			q = { s / 4, (m.At(1, 0) + m.At(0, 1)) / s, (m.At(2, 0) + m.At(0, 2)) / s, (m.At(1, 2) - m.At(2, 1)) / s };
+		}
+		else if (m.At(1, 1) > m.At(2, 2))
+		{
+			const float s = std::sqrt(1 + m.At(1, 1) - m.At(0, 0) - m.At(2, 2)) * 2;
+			q = { (m.At(1, 0) + m.At(0, 1)) / s, s / 4, (m.At(2, 1) + m.At(1, 2)) / s, (m.At(2, 0) - m.At(0, 2)) / s };
+		}
+		else
+		{
+			const float s = std::sqrt(1 + m.At(2, 2) - m.At(0, 0) - m.At(1, 1)) * 2;
+			q = { (m.At(2, 0) + m.At(0, 2)) / s, (m.At(2, 1) + m.At(1, 2)) / s, s / 4, (m.At(0, 1) - m.At(1, 0)) / s };
+		}
+		return q.Normalized();
+	}
+
 	inline Mat4 Mat4::Inverse() const
 	{
 		const float* m = M;
@@ -351,4 +384,41 @@ namespace FP
 		static constexpr Color White() { return { 1, 1, 1, 1 }; }
 		static constexpr Color Black() { return { 0, 0, 0, 1 }; }
 	};
+
+	// ---- Helpers for gameplay code ----------------------------------------
+
+	inline float Clamp(float value, float min, float max) { return value < min ? min : value > max ? max : value; }
+	inline float Clamp01(float value) { return Clamp(value, 0, 1); }
+
+	// t is 0 at a and 1 at b, and is not clamped.
+	inline float Lerp(float a, float b, float t) { return a + (b - a) * t; }
+	inline Vec2 Lerp(Vec2 a, Vec2 b, float t) { return a + (b - a) * t; }
+	inline Vec3 Lerp(Vec3 a, Vec3 b, float t) { return a + (b - a) * t; }
+	inline Color Lerp(const Color& a, const Color& b, float t)
+	{
+		return { Lerp(a.R, b.R, t), Lerp(a.G, b.G, t), Lerp(a.B, b.B, t), Lerp(a.A, b.A, t) };
+	}
+
+	// Where value sits between a and b, 0 at a and 1 at b. 0 when a equals b.
+	inline float InverseLerp(float a, float b, float value) { return a == b ? 0 : (value - a) / (b - a); }
+
+	// Steps toward target by at most maxStep without passing it. Good for steady movement:
+	// position = MoveTowards(position, goal, speed * deltaTime)
+	inline float MoveTowards(float current, float target, float maxStep)
+	{
+		const float delta = target - current;
+		return std::fabs(delta) <= maxStep ? target : current + (delta > 0 ? maxStep : -maxStep);
+	}
+
+	inline Vec3 MoveTowards(Vec3 current, Vec3 target, float maxStep)
+	{
+		const Vec3 delta = target - current;
+		const float distance = delta.Length();
+		return distance <= maxStep || distance < 1e-8f ? target : current + delta * (maxStep / distance);
+	}
+
+	// Frame rate independent smoothing: value = Damp(value, goal, 8, deltaTime) closes the same
+	// share of the gap every second however fast frames come.
+	inline float Damp(float current, float target, float speed, float deltaTime) { return Lerp(current, target, 1 - std::exp(-speed * deltaTime)); }
+	inline Vec3 Damp(Vec3 current, Vec3 target, float speed, float deltaTime) { return Lerp(current, target, 1 - std::exp(-speed * deltaTime)); }
 }

@@ -2,6 +2,7 @@
 // Usage: Runtime [scene relative to Content] [--screenshot out.bmp] [--host [port]] [--join address:port]
 //                [--password text]
 // --screenshot saves a frame after half a second and quits, handy as a smoke test.
+// --wait seconds takes it later instead, for scenes that need time to play out.
 // --host starts a peer to peer session on a port (7777 by default) that others can join.
 // --join connects to a peer already in a session, for example --join 192.168.1.20:7777.
 // --password lets in only peers started with the same one. Traffic is encrypted either way.
@@ -9,6 +10,8 @@
 #include "Engine/Engine.h"
 #include "Engine/Net/NetworkSystem.h"
 #include "Engine/Animation/AnimationSystem.h"
+#include "Engine/Physics/PhysicsSystem.h"
+#include "Engine/UI/UISystem.h"
 #include "Engine/Audio/AudioDevice.h"
 #include "Engine/Project.h"
 #include "Core/Jobs/JobSystem.h"
@@ -21,16 +24,26 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
+#include <cstdlib>
+
 using namespace FP;
 
 namespace
 {
 	// Renders one frame offscreen and writes it as a BMP.
-	void SaveScreenshot(GPUDevice& device, Renderer& renderer, SDL_GPUTextureFormat format, World& world, uint32 width, uint32 height, const char* path)
+	// The primary camera's view, with the window's pixel density so UI pages keep their size.
+	RenderView GameView(World& world, SDL_Window* window, uint32 width, uint32 height)
+	{
+		RenderView view = RenderView::FromWorld(world, width, height);
+		view.PixelScale = SDL_GetWindowPixelDensity(window);
+		return view;
+	}
+
+	void SaveScreenshot(GPUDevice& device, Renderer& renderer, SDL_GPUTextureFormat format, World& world, SDL_Window* window, uint32 width, uint32 height, const char* path)
 	{
 		RefPtr<GPUTexture> target = device.CreateRenderTarget(format, width, height, false);
 		SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device.GetHandle());
-		renderer.Render(cmd, target->GetHandle(), width, height, world, RenderView::FromWorld(world, width, height));
+		renderer.Render(cmd, target->GetHandle(), width, height, world, GameView(world, window, width, height));
 		SDL_SubmitGPUCommandBuffer(cmd);
 
 		Array<uint8> pixels;
@@ -60,6 +73,7 @@ int main(int argc, char** argv)
 
 	String scene = Paths::GetProject().StartScene;
 	const char* screenshotPath = nullptr;
+	double screenshotDelay = 0.5;
 	bool host = false;
 	uint16 hostPort = 7777;
 	const char* joinAddress = nullptr;
@@ -69,6 +83,8 @@ int main(int argc, char** argv)
 		const String arg = argv[i];
 		if (arg == "--screenshot" && i + 1 < argc)
 			screenshotPath = argv[++i];
+		else if (arg == "--wait" && i + 1 < argc)
+			screenshotDelay = std::atof(argv[++i]);
 		else if (arg == "--host")
 		{
 			host = true;
@@ -138,7 +154,9 @@ int main(int argc, char** argv)
 	// Scripts are optional. The game still runs its built in systems without them.
 	ScriptRuntime::Get().LoadModule(ScriptRuntime::GetDefaultModulePath());
 	world->AddSystem<ScriptSystem>();
+	world->AddSystem<PhysicsSystem>();
 	world->AddSystem<AnimationSystem>();
+	world->AddSystem<UISystem>();
 	Game::AddSystems(*world.Get());
 	world->BeginPlay();
 
@@ -148,6 +166,8 @@ int main(int argc, char** argv)
 		uint64 lastTicks = SDL_GetTicksNS();
 		int32 frame = 0;
 		bool running = renderer.IsValid();
+		// Typed text reaches Input so UI text boxes work.
+		SDL_StartTextInput(window);
 		while (running)
 		{
 			SDL_Event event;
@@ -156,6 +176,13 @@ int main(int argc, char** argv)
 				audio.ProcessEvent(event);
 				if (event.type == SDL_EVENT_QUIT)
 					running = false;
+				// SDL reports the mouse in window points. The game view and UI work in pixels.
+				const float density = SDL_GetWindowPixelDensity(window);
+				if (event.type == SDL_EVENT_MOUSE_MOTION)
+				{
+					event.motion.x *= density;
+					event.motion.y *= density;
+				}
 				Input::ProcessEvent(event);
 			}
 
@@ -174,12 +201,12 @@ int main(int argc, char** argv)
 			uint32 width = 0;
 			uint32 height = 0;
 			if (SDL_WaitAndAcquireGPUSwapchainTexture(cmd, window, &swapchain, &width, &height) && swapchain)
-				renderer.Render(cmd, swapchain, width, height, *world.Get(), RenderView::FromWorld(*world.Get(), width, height));
+				renderer.Render(cmd, swapchain, width, height, *world.Get(), GameView(*world.Get(), window, width, height));
 			SDL_SubmitGPUCommandBuffer(cmd);
 
-			if (screenshotPath && world->GetTime() > 0.5 && width > 0)
+			if (screenshotPath && world->GetTime() > screenshotDelay && width > 0)
 			{
-				SaveScreenshot(*device, renderer, swapchainFormat, *world.Get(), width, height, screenshotPath);
+				SaveScreenshot(*device, renderer, swapchainFormat, *world.Get(), window, width, height, screenshotPath);
 				running = false;
 			}
 
@@ -194,6 +221,7 @@ int main(int argc, char** argv)
 	GarbageCollector::Get().Collect();
 	audio.Shutdown();
 	ScriptRuntime::Get().UnloadModule();
+	UIRuntime::Get().Shutdown();
 	SDL_ReleaseWindowFromGPUDevice(device->GetHandle(), window);
 	SDL_DestroyWindow(window);
 	delete device;

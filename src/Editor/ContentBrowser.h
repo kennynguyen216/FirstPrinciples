@@ -65,6 +65,7 @@ namespace FP::Editor
 		void NewFolder();
 		void NewMaterial();
 		void NewScene();
+		void NewPage();
 		void RenameSelected();
 		void DuplicateSelected();
 		void DeleteSelected();

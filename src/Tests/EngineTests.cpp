@@ -409,3 +409,64 @@ FP_TEST(SceneHistory_UndoesMaterialEdits)
 	// Put it back so nothing in the test can write the edit to disk.
 	material->Load();
 }
+
+#include "Engine/Random.h"
+
+FP_TEST(Math_GameplayHelpers)
+{
+	FP_EXPECT(Clamp(5, 0, 2) == 2 && Clamp01(-1) == 0);
+	FP_EXPECT(Lerp(2.0f, 4.0f, 0.5f) == 3 && InverseLerp(2, 4, 3) == 0.5f && InverseLerp(1, 1, 3) == 0);
+	FP_EXPECT(Near(Lerp(Vec3(0, 0, 0), Vec3(2, 4, 6), 0.5f), { 1, 2, 3 }));
+	FP_EXPECT(MoveTowards(0, 10, 3) == 3 && MoveTowards(9, 10, 3) == 10 && MoveTowards(0, -10, 3) == -3);
+	FP_EXPECT(Near(MoveTowards(Vec3(0, 0, 0), Vec3(0, 10, 0), 4), { 0, 4, 0 }));
+	FP_EXPECT(Near(MoveTowards(Vec3(0, 0, 0), Vec3(0, 1, 0), 4), { 0, 1, 0 }));
+	// Two half steps of damping land where one full step does.
+	const float once = Damp(0, 1, 3, 1.0f);
+	FP_EXPECT(std::fabs(Damp(Damp(0, 1, 3, 0.5f), 1, 3, 0.5f) - once) < 1e-5f);
+
+	Random::Seed(7);
+	const float first = Random::Range(0.0f, 1.0f);
+	Random::Seed(7);
+	FP_EXPECT(Random::Range(0.0f, 1.0f) == first);
+	for (int i = 0; i < 200; ++i)
+	{
+		const int32 roll = Random::Range(1, 6);
+		FP_EXPECT(roll >= 1 && roll <= 6);
+		FP_EXPECT(std::fabs(Random::Direction().Length() - 1) < 1e-4f);
+	}
+	FP_EXPECT(!Random::Chance(0) && Random::Chance(1));
+}
+
+FP_TEST(Input_TextAndScrollLastOneFrame)
+{
+	Input::AddTypedText("hi");
+	Input::AddTypedText(" there");
+	Input::AddScroll({ 0, 1 });
+	Input::AddScroll({ 0, 2 });
+	FP_EXPECT(Input::GetTypedText() == "hi there");
+	FP_EXPECT(Input::GetScroll().Y == 3);
+	Input::EndFrame();
+	FP_EXPECT(Input::GetTypedText().empty() && Input::GetScroll().Y == 0);
+}
+
+#include "Engine/Json.h"
+
+FP_TEST(Json_ReadsWhatPagesSend)
+{
+	const Json data = Json::Parse(R"({"volume":0.5,"muted":false,"player":{"name":"Noodle \"N\" é"},"items":[1,2,3],"nothing":null})");
+	FP_EXPECT(data.IsObject());
+	FP_EXPECT(data["volume"].AsNumber() == 0.5 && !data["muted"].AsBool(true));
+	FP_EXPECT(data["player"]["name"].AsString() == "Noodle \"N\" \xc3\xa9");
+	FP_EXPECT(data["items"].Num() == 3 && data["items"][2].AsNumber() == 3);
+	FP_EXPECT(data.Has("nothing") && data["nothing"].IsNull() && !data.Has("missing"));
+
+	// Wrong types and missing keys fall back quietly.
+	FP_EXPECT(data["missing"]["deeper"].AsNumber(7) == 7 && data["volume"].AsString("x") == "x" && data["items"][9].IsNull());
+
+	// Plain values work at the top too, the way engine.send("jump", 2) arrives.
+	FP_EXPECT(Json::Parse("2").AsNumber() == 2 && Json::Parse("\"go\"").AsString() == "go" && Json::Parse("true").AsBool());
+
+	// Broken text is null rather than half read.
+	FP_EXPECT(Json::Parse("{\"a\":1,").IsNull() && Json::Parse("[1 2]").IsNull() && Json::Parse("").IsNull() && Json::Parse("1 2").IsNull());
+	FP_EXPECT(Json::Parse(std::string(200, '[') + std::string(200, ']')).IsNull());
+}

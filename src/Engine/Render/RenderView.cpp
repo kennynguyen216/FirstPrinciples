@@ -84,7 +84,11 @@ namespace FP
 		for (auto [entity, transform, camera] : world.View<TransformComponent, CameraComponent>().each())
 		{
 			if (camera.Primary)
-				return FromCamera(transform, camera, width, height);
+			{
+				RenderView view = FromCamera(world.GetWorldTransform(entity), camera, width, height);
+				view.Camera = entity;
+				return view;
+			}
 		}
 		return Orthographic2D({}, 64, width, height);
 	}

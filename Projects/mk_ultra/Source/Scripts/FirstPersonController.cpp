@@ -4,19 +4,16 @@
 
 using namespace FP;
 
-// First person camera. WASD or the arrows walk relative to where you look, Shift sprints.
-// Hold the right mouse button and move the mouse to look around. Space jumps.
-// Gravity pulls you down onto the Floor entity's plane while you stand over it; walk off its edge and you fall.
 class FirstPersonController : public Script
 {
 public:
 	float MoveSpeed = 4;
 	float SprintMultiplier = 2;
-	float LookSensitivity = 0.2f; // degrees per pixel
+	float LookSensitivity = 0.2f;
 	float Gravity = 20;
 	float JumpSpeed = 6;
-	float EyeHeight = 1.7f; // camera height above the floor
-	String Floor = "Plane"; // name of an entity with a Plane mesh to stand on
+	float EyeHeight = 1.7f;
+	String Floor = "Plane";
 
 	void OnStart() override
 	{
@@ -38,7 +35,6 @@ public:
 		}
 		m_LastMouse = mouse;
 
-		// Walk on the ground plane, so looking up or down doesn't make you fly.
 		const float yaw = transform.Rotation.Y * DegToRad;
 		const Vec3 forward{ -std::sin(yaw), 0, -std::cos(yaw) };
 		const Vec3 right{ std::cos(yaw), 0, -std::sin(yaw) };
@@ -65,8 +61,6 @@ private:
 	Vec2 m_LastMouse;
 	float m_VerticalSpeed = 0;
 
-	// The floor's height under position, when position is inside the plane's square.
-	// ponytail: treats the floor as a flat Plane mesh (1x1 scaled by the transform); swap for real colliders once the engine has physics.
 	bool GetFloorHeight(Vec3 position, float& height) const
 	{
 		const Entity floor = FindEntity(Floor.CStr());

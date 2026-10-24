@@ -8,8 +8,11 @@ using namespace FP;
 class LightFlicker : public Script
 {
 public:
-	float Amount = 0.35f;
-	float Speed = 9;
+	FPPROPERTY(Range = "0, 1")
+	float Amount = 0.35f; // how far the brightness swings, as a fraction of its starting intensity
+
+	FPPROPERTY(Range = "0, 30")
+	float Speed = 9; // how fast it flickers
 
 	void OnStart() override
 	{
@@ -41,8 +44,4 @@ private:
 	float m_Time = 0;
 };
 
-FP_SCRIPT(LightFlicker)
-{
-	fields.Field("Amount", &LightFlicker::Amount);
-	fields.Field("Speed", &LightFlicker::Speed);
-}
+FP_SCRIPT(LightFlicker);
