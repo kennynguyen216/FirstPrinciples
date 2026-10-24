@@ -83,7 +83,7 @@ namespace FP::Editor
 		m_CentralTabs->setDocumentMode(true);
 		m_CentralTabs->setTabsClosable(true);
 		m_CentralTabs->setMovable(true);
-		m_CentralTabs->addTab(m_Viewport, "Viewport");
+		m_CentralTabs->addTab(m_Viewport, EditorIcons::Get(EditorIcon::Level), "Viewport");
 		m_CentralTabs->tabBar()->setTabButton(0, QTabBar::RightSide, nullptr);
 		m_CentralTabs->tabBar()->setTabButton(0, QTabBar::LeftSide, nullptr);
 		connect(m_CentralTabs, &QTabWidget::tabCloseRequested, this, [this](int index) { CloseScriptTab(index); });
@@ -776,6 +776,8 @@ namespace FP::Editor
 	{
 		const QString name = m_ScenePath.isEmpty() ? "Untitled" : QFileInfo(m_ScenePath).fileName();
 		setWindowTitle(QString("%1%2 - FirstPrinciples%3").arg(name, m_Dirty ? "*" : "", m_World->IsPlaying() ? " [Playing]" : ""));
+		// The viewport tab is the open scene, like UE's level tab.
+		m_CentralTabs->setTabText(m_CentralTabs->indexOf(m_Viewport), QFileInfo(name).completeBaseName() + (m_Dirty ? "*" : ""));
 	}
 
 	bool EditorWindow::ConfirmDiscard()
