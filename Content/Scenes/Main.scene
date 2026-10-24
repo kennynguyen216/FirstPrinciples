@@ -1,0 +1,74 @@
+# FirstPrinciples scene
+version 1
+
+entity 3f2a9c1e-7b4d-4e8a-9c3f-1a2b3c4d5e6f
+component Name
+  Name "Main Camera"
+component Transform
+  Position 0 0
+  Rotation 0
+  Scale 1 1
+component Camera
+  Zoom 64
+  Primary true
+  Background 0.08 0.08 0.1 1
+component CameraFollow
+  Smoothing 5
+
+entity 8d1e2f3a-4b5c-4d6e-8f7a-9b0c1d2e3f4a
+component Name
+  Name "Player"
+component Transform
+  Position 0 0
+  Rotation 0
+  Scale 1 1
+component Sprite
+  Tint 0.35 0.75 1 1
+  Size 1 1
+  Texture ""
+  Layer 10
+component Player
+  Speed 6
+
+entity 1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f
+component Name
+  Name "Spinner A"
+component Transform
+  Position -4 2
+  Rotation 0
+  Scale 1 1
+component Sprite
+  Tint 1 0.55 0.25 1
+  Size 1.5 1.5
+  Texture ""
+  Layer 0
+component Spinner
+  DegreesPerSecond 90
+
+entity 9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d
+component Name
+  Name "Spinner B"
+component Transform
+  Position 4 -2
+  Rotation 45
+  Scale 1 1
+component Sprite
+  Tint 0.6 1 0.4 1
+  Size 1 2
+  Texture ""
+  Layer 0
+component Spinner
+  DegreesPerSecond -45
+
+entity 5f6e7d8c-9b0a-4f1e-8d2c-3b4a5f6e7d8c
+component Name
+  Name "Ground"
+component Transform
+  Position 0 -5
+  Rotation 0
+  Scale 1 1
+component Sprite
+  Tint 0.25 0.25 0.3 1
+  Size 20 1
+  Texture ""
+  Layer -1
