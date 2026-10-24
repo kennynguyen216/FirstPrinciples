@@ -25,6 +25,24 @@ namespace FP::SceneSerializer
 		}
 	}
 
+	static void WriteEntity(String& out, World& world, Entity entity)
+	{
+		entt::registry& registry = world.GetRegistry();
+		out.Appendf("entity %s\n", world.Get<IdComponent>(entity).Id.ToString().CStr());
+		for (const ComponentInfo* info : ComponentRegistry::Get().GetAll())
+		{
+			void* component = info->TryGet(registry, entity);
+			if (!component || info->TypeId == entt::type_hash<IdComponent>::value())
+				continue;
+			out.Appendf("component %s\n", info->Name);
+			if (info->WriteCustom)
+				info->WriteCustom(out, component);
+			else
+				for (const FieldInfo& field : info->Fields)
+					FieldSerializer::Write(out, field, component);
+		}
+	}
+
 	bool Validate(World& world)
 	{
 		auto color = [](const Color& c) { return std::isfinite(c.R) && std::isfinite(c.G) && std::isfinite(c.B) && std::isfinite(c.A) && c.R >= 0 && c.G >= 0 && c.B >= 0 && c.A >= 0 && c.A <= 1; };
@@ -56,24 +74,18 @@ namespace FP::SceneSerializer
 		String out;
 		out.Appendf("# FirstPrinciples scene\nversion %d\n", FormatVersion);
 
-		const Array<ComponentInfo*>& components = ComponentRegistry::Get().GetAll();
-		entt::registry& registry = world.GetRegistry();
 		for (Entity entity : world.GetEntities())
 		{
-			out.Appendf("\nentity %s\n", world.Get<IdComponent>(entity).Id.ToString().CStr());
-			for (const ComponentInfo* info : components)
-			{
-				void* component = info->TryGet(registry, entity);
-				if (!component || info->TypeId == entt::type_hash<IdComponent>::value())
-					continue;
-				out.Appendf("component %s\n", info->Name);
-				if (info->WriteCustom)
-					info->WriteCustom(out, component);
-				else
-					for (const FieldInfo& field : info->Fields)
-						FieldSerializer::Write(out, field, component);
-			}
+			out += "\n";
+			WriteEntity(out, world, entity);
 		}
+		return out;
+	}
+
+	String SaveEntityToString(World& world, Entity entity)
+	{
+		String out;
+		WriteEntity(out, world, entity);
 		return out;
 	}
 
@@ -157,6 +169,18 @@ namespace FP::SceneSerializer
 			return false;
 		world.ReplaceScene(*candidate.Get());
 		return true;
+	}
+
+	Entity LoadEntityFromString(World& world, std::string_view text)
+	{
+		// Checked in a scratch world first so a broken entity never half lands in the real one.
+		StrongObjectPtr<World> candidate(NewObject<World>());
+		if (!ParseScene(*candidate.Get(), text) || !Validate(*candidate.Get()) || candidate->GetEntities().Num() != 1)
+			return NullEntity;
+		const Guid id = candidate->Get<IdComponent>(candidate->GetEntities()[0]).Id;
+		if (world.FindEntityByGuid(id) != NullEntity || !ParseScene(world, text))
+			return NullEntity;
+		return world.FindEntityByGuid(id);
 	}
 
 	bool SaveToFile(World& world, const char* path)
