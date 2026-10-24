@@ -33,6 +33,17 @@ namespace FP
 		const Array<const char*>* Choices = nullptr;
 		bool ChoicesEditable = false;
 
+		// Shown when hovering the field in the editor.
+		const char* Tooltip = nullptr;
+		// Fields with the same category are grouped under a heading.
+		const char* Category = nullptr;
+		// Numbers are kept between Min and Max, and floats get a slider.
+		bool HasRange = false;
+		float Min = 0;
+		float Max = 0;
+		// Shown but not editable, for values a script works out itself.
+		bool ReadOnly = false;
+
 		template <typename T>
 		T& Get(void* component) const { return *reinterpret_cast<T*>(static_cast<uint8*>(component) + Offset); }
 	};
@@ -173,6 +184,33 @@ namespace FP
 			return *this;
 		}
 
+		// Text arguments below must outlive the field. String literals do.
+		FieldListBuilder& Tooltip(const char* text)
+		{
+			m_Fields.Last().Tooltip = text;
+			return *this;
+		}
+
+		FieldListBuilder& Category(const char* name)
+		{
+			m_Fields.Last().Category = name;
+			return *this;
+		}
+
+		FieldListBuilder& Range(float min, float max)
+		{
+			m_Fields.Last().HasRange = true;
+			m_Fields.Last().Min = min;
+			m_Fields.Last().Max = max;
+			return *this;
+		}
+
+		FieldListBuilder& ReadOnly()
+		{
+			m_Fields.Last().ReadOnly = true;
+			return *this;
+		}
+
 	private:
 		Array<FieldInfo>& m_Fields;
 	};
@@ -199,6 +237,18 @@ namespace FP
 		ComponentBuilder& Choices(const Array<const char*>& choices, bool editable = false)
 		{
 			m_Fields.Choices(choices, editable);
+			return *this;
+		}
+
+		ComponentBuilder& Tooltip(const char* text)
+		{
+			m_Fields.Tooltip(text);
+			return *this;
+		}
+
+		ComponentBuilder& Range(float min, float max)
+		{
+			m_Fields.Range(min, max);
 			return *this;
 		}
 

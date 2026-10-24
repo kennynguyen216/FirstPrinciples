@@ -81,15 +81,15 @@ namespace FP::Engine
 		registry.Register<AudioSourceComponent>("AudioSource")
 			.Field("Clip", &AudioSourceComponent::Clip).AssetPath("Audio (*.wav)")
 			.Field("Enabled", &AudioSourceComponent::Enabled)
-			.Field("Volume", &AudioSourceComponent::Volume)
-			.Field("Pitch", &AudioSourceComponent::Pitch)
+			.Field("Volume", &AudioSourceComponent::Volume).Range(0, 1)
+			.Field("Pitch", &AudioSourceComponent::Pitch).Range(0.25f, 4)
 			.Field("Loop", &AudioSourceComponent::Loop)
 			.Field("PlayOnStart", &AudioSourceComponent::PlayOnStart)
 			.Field("Bus", &AudioSourceComponent::Bus).Choices(audioBuses)
 			.Field("Spatial", &AudioSourceComponent::Spatial)
-			.Field("MinDistance", &AudioSourceComponent::MinDistance)
-			.Field("MaxDistance", &AudioSourceComponent::MaxDistance)
-			.Field("Priority", &AudioSourceComponent::Priority);
+			.Field("MinDistance", &AudioSourceComponent::MinDistance).Range(0.001f, 1e9f)
+			.Field("MaxDistance", &AudioSourceComponent::MaxDistance).Range(0.001f, 1e9f)
+			.Field("Priority", &AudioSourceComponent::Priority).Range(0, 255).Tooltip("Higher priority voices keep playing when too many sounds play at once");
 		registry.Register<AudioListenerComponent>("AudioListener")
 			.Field("Enabled", &AudioListenerComponent::Enabled);
 
@@ -107,7 +107,7 @@ namespace FP::Engine
 		registry.Register<CameraComponent>("Camera")
 			.Field("Perspective", &CameraComponent::Perspective)
 			.Field("Zoom", &CameraComponent::Zoom)
-			.Field("FieldOfView", &CameraComponent::FieldOfView)
+			.Field("FieldOfView", &CameraComponent::FieldOfView).Range(1, 179).Tooltip("Vertical angle in degrees for perspective cameras")
 			.Field("NearClip", &CameraComponent::NearClip)
 			.Field("FarClip", &CameraComponent::FarClip)
 			.Field("Primary", &CameraComponent::Primary)
@@ -147,9 +147,9 @@ namespace FP::Engine
 			.Field("Color", &DirectionalLightComponent::Color)
 			.Field("Intensity", &DirectionalLightComponent::Intensity)
 			.Field("CastShadows", &DirectionalLightComponent::CastShadows)
-			.Field("ShadowResolution", &DirectionalLightComponent::ShadowResolution)
+			.Field("ShadowResolution", &DirectionalLightComponent::ShadowResolution).Range(64, 4096).Tooltip("Pixels per side. Lower is faster and softer")
 			.Field("ShadowDistance", &DirectionalLightComponent::ShadowDistance)
-			.Field("ShadowStrength", &DirectionalLightComponent::ShadowStrength);
+			.Field("ShadowStrength", &DirectionalLightComponent::ShadowStrength).Range(0, 1);
 
 		registry.Register<AmbientLightComponent>("AmbientLight")
 			.Field("Color", &AmbientLightComponent::Color)
