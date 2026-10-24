@@ -117,7 +117,10 @@ namespace FP::Editor
 		bool SaveScene();
 		bool SaveSceneAs();
 
+		void CopySelected();
+		void Paste();
 		void DuplicateSelected();
+		void PasteEntities(const String& text, const char* nameSuffix);
 		void DeleteSelected();
 		void ImportAudio(bool assign);
 		void ShowAudioSettings();

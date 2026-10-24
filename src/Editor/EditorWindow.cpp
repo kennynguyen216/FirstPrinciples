@@ -29,6 +29,8 @@
 #include <SDL3/SDL_timer.h>
 #include <SDL3/SDL_events.h>
 
+#include <QApplication>
+#include <QClipboard>
 #include <QCloseEvent>
 #include <QCheckBox>
 #include <QDialog>
@@ -321,8 +323,13 @@ namespace FP::Editor
 		}
 		entity->addAction("Create &Point Light", this, [this]() { CreateEntity("Point Light"); });
 		entity->addAction("Create &Directional Light", this, [this]() { CreateEntity("Directional Light"); });
+		// Text fields take these keys first, so they still copy, paste and erase text there.
+		entity->addAction("&Copy", QKeySequence::Copy, this, &EditorWindow::CopySelected);
+		entity->addAction("&Paste", QKeySequence::Paste, this, &EditorWindow::Paste);
 		entity->addAction("&Duplicate", QKeySequence("Ctrl+D"), this, &EditorWindow::DuplicateSelected);
-		entity->addAction("De&lete", QKeySequence::Delete, this, &EditorWindow::DeleteSelected);
+		// Explicit keys, since the platform Delete sequence on macOS also holds Ctrl+D.
+		QAction* deleteAction = entity->addAction("De&lete", this, &EditorWindow::DeleteSelected);
+		deleteAction->setShortcuts({ QKeySequence(Qt::Key_Delete), QKeySequence(Qt::Key_Backspace) });
 
 		// Closed panels come back from here, and Reset Layout undoes any docking.
 		QMenu* window = menuBar()->addMenu("&Window");
@@ -1195,32 +1202,49 @@ namespace FP::Editor
 		return entity;
 	}
 
+	namespace
+	{
+		// First line of entities on the clipboard, so pasting ignores any other text.
+		constexpr const char* ClipboardHeader = "# FirstPrinciples entities\n";
+	}
+
+	void EditorWindow::CopySelected()
+	{
+		if (!m_World->IsValid(m_Selected))
+			return;
+		const String text = SceneSerializer::SaveEntityTreeToString(*m_World.Get(), m_Selected);
+		QApplication::clipboard()->setText(QString(ClipboardHeader) + ToQString(text));
+	}
+
+	void EditorWindow::Paste()
+	{
+		const QString text = QApplication::clipboard()->text();
+		if (!text.startsWith(ClipboardHeader))
+			return;
+		PasteEntities(ToString(text), "");
+	}
+
 	void EditorWindow::DuplicateSelected()
 	{
 		if (!m_World->IsValid(m_Selected))
 			return;
-		// Copies every registered component through its copy hook so new components work with no extra code.
-		entt::registry& registry = m_World->GetRegistry();
-		const Entity source = m_Selected;
-		const Entity copy = m_World->CreateEmptyEntity();
-		for (const ComponentInfo* info : ComponentRegistry::Get().GetAll())
-		{
-			if (info->TypeId == entt::type_hash<IdComponent>::value())
-				continue;
-			if (!info->TryGet(registry, source))
-				continue;
-			// Add can move existing storage so fetch the source after it.
-			void* dst = info->Add(registry, copy);
-			void* src = info->TryGet(registry, source);
-			info->Copy(dst, src);
-		}
-		if (NameComponent* name = m_World->TryGet<NameComponent>(copy))
-			name->Name += " Copy";
-		if (TransformComponent* transform = m_World->TryGet<TransformComponent>(copy))
+		PasteEntities(SceneSerializer::SaveEntityTreeToString(*m_World.Get(), m_Selected), " Copy");
+	}
+
+	void EditorWindow::PasteEntities(const String& text, const char* nameSuffix)
+	{
+		// Copies get new ids, keep their children and land next to the original.
+		const Array<Entity> copies = SceneSerializer::LoadEntitiesAsCopies(*m_World.Get(), text.View());
+		if (copies.IsEmpty())
+			return;
+		const Entity root = copies[0];
+		if (NameComponent* name = m_World->TryGet<NameComponent>(root))
+			name->Name += nameSuffix;
+		if (TransformComponent* transform = m_World->TryGet<TransformComponent>(root))
 			transform->Position += Vec3(0.5f, -0.5f, 0);
 		MarkDirty();
 		RefreshHierarchy();
-		Select(copy);
+		Select(root);
 	}
 
 	void EditorWindow::DeleteSelected()
