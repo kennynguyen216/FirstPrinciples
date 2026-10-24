@@ -1,6 +1,8 @@
 #include "Engine/Net/NetSession.h"
 #include "HAL/PlatformMisc.h"
 
+#include <cstdio>
+
 namespace FP
 {
 	namespace
