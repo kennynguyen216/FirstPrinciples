@@ -541,6 +541,7 @@ namespace FP::Editor
 			if (IsHidden(dir.fileName()))
 				continue;
 			QTreeWidgetItem* item = new QTreeWidgetItem(parent, { dir.fileName() });
+			item->setIcon(0, EditorIcons::Get(EditorIcon::Folder));
 			item->setData(0, PathRole, dir.absoluteFilePath());
 			AddFolderItems(item, dir.absoluteFilePath());
 		}
@@ -553,6 +554,7 @@ namespace FP::Editor
 		for (const auto& [label, path] : { std::pair{ QString("Content"), m_ContentRoot }, std::pair{ QString("Scripts"), m_ScriptsRoot } })
 		{
 			QTreeWidgetItem* root = new QTreeWidgetItem(m_Folders, { label });
+			root->setIcon(0, EditorIcons::Get(EditorIcon::FolderOpen));
 			root->setData(0, PathRole, path);
 			AddFolderItems(root, path);
 			root->setExpanded(true);
@@ -697,21 +699,23 @@ namespace FP::Editor
 		m_Watcher->addPaths(dirs);
 	}
 
-	QIcon ContentBrowser::BadgeIcon(const QString& text, const QColor& color) const
+	QIcon ContentBrowser::TileIcon(EditorIcon icon, const QColor& color) const
 	{
-		QPixmap pixmap(IconSize, IconSize);
+		// UE style asset tile: a dark card with the type's icon and a colored strip along the bottom.
+		QPixmap pixmap(IconSize * 2, IconSize * 2);
+		pixmap.setDevicePixelRatio(2);
 		pixmap.fill(Qt::transparent);
 		QPainter painter(&pixmap);
 		painter.setRenderHint(QPainter::Antialiasing);
-		painter.setBrush(color);
-		painter.setPen(Qt::NoPen);
-		painter.drawRoundedRect(QRectF(6, 10, IconSize - 12, IconSize - 20), 8, 8);
-		painter.setPen(Qt::white);
-		QFont font = painter.font();
-		font.setBold(true);
-		font.setPixelSize(13);
-		painter.setFont(font);
-		painter.drawText(pixmap.rect(), Qt::AlignCenter, text);
+		const QRectF card(4, 4, IconSize - 8, IconSize - 8);
+		QPainterPath shape;
+		shape.addRoundedRect(card, 4, 4);
+		painter.fillPath(shape, QColor(0x2a, 0x2a, 0x2a));
+		painter.setClipPath(shape);
+		painter.fillRect(QRectF(card.left(), card.bottom() - 4, card.width(), 4), color);
+		painter.setClipping(false);
+		const int glyph = IconSize / 2;
+		EditorIcons::Get(icon, color.lighter(130)).paint(&painter, QRect(IconSize / 2 - glyph / 2, IconSize / 2 - glyph / 2 - 2, glyph, glyph));
 		return QIcon(pixmap);
 	}
 
@@ -719,7 +723,7 @@ namespace FP::Editor
 	{
 		const QFileInfo info(path);
 		if (info.isDir())
-			return BadgeIcon("DIR", QColor(90, 90, 100));
+			return EditorIcons::Get(EditorIcon::Folder);
 
 		const QString key = path + "|" + QString::number(info.lastModified().toMSecsSinceEpoch());
 		if (const auto cached = m_IconCache.find(key); cached != m_IconCache.end())
@@ -735,7 +739,7 @@ namespace FP::Editor
 			if (size.isValid())
 				reader.setScaledSize(size.scaled(IconSize, IconSize, Qt::KeepAspectRatio));
 			const QImage image = reader.read();
-			icon = image.isNull() ? BadgeIcon("IMG", QColor(120, 80, 160)) : QIcon(QPixmap::fromImage(image));
+			icon = image.isNull() ? TileIcon(EditorIcon::Texture, QColor(0xd0, 0x5a, 0x5a)) : QIcon(QPixmap::fromImage(image));
 		}
 		else if (kind == "Material")
 		{
@@ -767,10 +771,10 @@ namespace FP::Editor
 			painter.drawEllipse(QRectF(6, 6, IconSize - 12, IconSize - 12));
 			icon = QIcon(pixmap);
 		}
-		else if (kind == "Scene") icon = BadgeIcon("SCENE", QColor(40, 120, 200));
-		else if (kind == "Mesh") icon = BadgeIcon("MESH", QColor(200, 130, 40));
-		else if (kind == "Script") icon = BadgeIcon(info.suffix().toLower() == "h" ? ".H" : "C++", QColor(70, 150, 80));
-		else icon = BadgeIcon(info.suffix().toUpper().left(4), QColor(100, 100, 100));
+		else if (kind == "Scene") icon = TileIcon(EditorIcon::Scene, QColor(0xf0, 0xa0, 0x30));
+		else if (kind == "Mesh") icon = TileIcon(EditorIcon::Mesh, QColor(0x3a, 0xa0, 0xd0));
+		else if (kind == "Script") icon = TileIcon(EditorIcon::Script, QColor(0x4f, 0xa3, 0xe0));
+		else icon = TileIcon(EditorIcon::OutputLog, QColor(0x80, 0x80, 0x80));
 
 		m_IconCache.insert(key, icon);
 		return icon;

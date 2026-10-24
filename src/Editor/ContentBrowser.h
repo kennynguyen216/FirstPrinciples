@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Editor/EditorIcons.h"
+
 #include <QHash>
 #include <QIcon>
 #include <QWidget>
@@ -80,7 +82,7 @@ namespace FP::Editor
 		void AddFolderItems(QTreeWidgetItem* parent, const QString& path);
 		void WatchFolders();
 		QIcon IconFor(const QString& path);
-		QIcon BadgeIcon(const QString& text, const QColor& color) const;
+		QIcon TileIcon(EditorIcon icon, const QColor& color) const;
 		bool IsHidden(const QString& name) const;
 
 		QTreeWidget* m_Folders = nullptr;
