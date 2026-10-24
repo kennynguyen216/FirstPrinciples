@@ -284,7 +284,8 @@ Projects/Sample/Binaries/Debug/Runtime --host 7777
 Projects/Sample/Binaries/Debug/Runtime --join 127.0.0.1:7777
 ```
 
-`--host` listens on a port (7777 by default). `--join` connects to any peer already playing. That peer
+`--host` listens on a port (7777 by default). `--join` connects to any peer already playing. Add
+`--password something` on every peer to keep strangers out. That peer
 introduces the newcomer to everyone else, so it does not matter whom you join. Try the Sample: start
 two runtimes, click into each window and move with WASD.
 
@@ -326,13 +327,23 @@ How it works, bottom to top:
   loss.
 - `NetSession` runs the peers: handshakes, introductions, keepalives, timeouts and goodbyes. Both
   sides of a new pair say hello at once, which also gets through most home routers.
+- `NetCrypto` encrypts. Each session makes fresh X25519 keys, and every pair of peers swaps public
+  keys in its handshake. Each pair derives one key per direction, and every packet after that is
+  sealed with XChaCha20-Poly1305 ([Monocypher](https://monocypher.org)). Packets that were changed,
+  forged or recorded and played back are dropped. A peer only counts as joined once its packets
+  decrypt.
 - `NetworkSystem` replicates entities on top.
 
 Limits:
 
 - A message holds about 1000 bytes. Spawns of larger entities are split automatically, but your
   own messages are not.
-- No encryption or cheat protection. Peers trust each other.
+- Without a password, encryption stops anyone listening in or tampering, but not someone who sits
+  in the middle from the very first packet. With `SetPassword` (or `--password`), only peers that
+  know the password can connect.
+- No cheat protection. Peers that are in a session trust each other.
+- The handshake itself is not encrypted, so anyone can see that two addresses are talking, and their
+  peer ids and public keys.
 - No relay server, so peers behind strict NATs cannot reach each other.
 - At most 16 peers.
 
