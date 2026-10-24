@@ -291,7 +291,7 @@ namespace FP
 				m_ShadowCaster = entity;
 				m_ShadowLight = count;
 			}
-			m_Frame.LightPosition[count] = { transform.GetForward(), 0 };
+			m_Frame.LightPosition[count] = { world.GetWorldRotation(entity).Rotate({ 0, 0, -1 }), 0 };
 			m_Frame.LightColor[count] = { ToLinear(light.Color).XYZ() * light.Intensity, 0 };
 			++count;
 		}
@@ -299,7 +299,7 @@ namespace FP
 		{
 			if (count == MaxLights)
 				break;
-			m_Frame.LightPosition[count] = { transform.Position, 1 };
+			m_Frame.LightPosition[count] = { world.GetWorldPosition(entity), 1 };
 			m_Frame.LightColor[count] = { ToLinear(light.Color).XYZ() * light.Intensity, light.Range };
 			++count;
 		}
@@ -342,14 +342,14 @@ namespace FP
 
 	void Renderer::DrawObject(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, World& world, const Draw& draw, const Mat4& viewProjection)
 	{
-		const TransformComponent& transform = world.Get<TransformComponent>(draw.Value);
 		const SpriteComponent* sprite = draw.Type == Surface::Sprite ? &world.Get<SpriteComponent>(draw.Value) : nullptr;
 		const MaterialData defaults;
 		const MaterialData& data = draw.Mat ? draw.Mat->GetData() : defaults;
 
 		ObjectUniforms object;
 		object.ViewProjection = viewProjection;
-		object.Model = sprite ? transform.GetMatrix() * Mat4::Scale({ sprite->Size, 1 }) : transform.GetMatrix();
+		const Mat4 model = world.GetWorldMatrix(draw.Value);
+		object.Model = sprite ? model * Mat4::Scale({ sprite->Size, 1 }) : model;
 		object.NormalMatrix = object.Model.Inverse().Transposed();
 		object.UVTransform = { data.Tiling.X, data.Tiling.Y, data.Offset.X, data.Offset.Y };
 		object.Tint = sprite ? ToLinear(sprite->Tint) : Vec4(1, 1, 1, 1);
@@ -509,17 +509,17 @@ namespace FP
 			return;
 		}
 
-		const TransformComponent& lightTransform = world.Get<TransformComponent>(m_ShadowCaster);
-		const ShadowView shadow = FitShadowView(view, lightTransform.GetRotation(), light->ShadowDistance, static_cast<int32>(size));
+		const ShadowView shadow = FitShadowView(view, world.GetWorldRotation(m_ShadowCaster), light->ShadowDistance, static_cast<int32>(size));
 		const float texel = shadow.Radius * 2 / static_cast<float>(size);
 		m_Frame.ShadowMatrix = shadow.ToTexture;
 		m_Frame.ShadowParams = { light->ShadowStrength > 1 ? 1 : light->ShadowStrength, 1.0f / static_cast<float>(size), texel * 1.5f, static_cast<float>(m_ShadowLight) };
 
 		// Every section that is not glass casts. Meshes outside the box are skipped.
-		auto cast = [&](Entity entity, const TransformComponent& transform, const GPUMesh* mesh, int32 pipeline, const Array<Mat4>* skin, float reach) {
-			const Mat4 model = transform.GetMatrix();
-			const Vec3 scale{ std::fabs(transform.Scale.X), std::fabs(transform.Scale.Y), std::fabs(transform.Scale.Z) };
-			const float largest = std::fmax(scale.X, std::fmax(scale.Y, scale.Z));
+		auto cast = [&](Entity entity, const GPUMesh* mesh, int32 pipeline, const Array<Mat4>* skin, float reach) {
+			const Mat4 model = world.GetWorldMatrix(entity);
+			float largest = 0;
+			for (int c = 0; c < 3; ++c)
+				largest = std::fmax(largest, Vec3(model.At(c, 0), model.At(c, 1), model.At(c, 2)).Length());
 			const Vec3 center = model.TransformPoint((mesh->BoundsMin + mesh->BoundsMax) * 0.5f);
 			if (!shadow.Touches(center, (mesh->BoundsMax - mesh->BoundsMin).Length() * 0.5f * largest * reach))
 				return;
@@ -548,14 +548,14 @@ namespace FP
 		for (auto [entity, transform, meshComponent] : world.View<TransformComponent, MeshComponent>().each())
 		{
 			if (const GPUMesh* mesh = m_Meshes.Get(meshComponent.Mesh))
-				cast(entity, transform, mesh, 0, nullptr, 1);
+				cast(entity, mesh, 0, nullptr, 1);
 		}
 		for (auto [entity, transform, skeletal] : world.View<TransformComponent, SkeletalMeshComponent>().each())
 		{
 			// Animation can reach past the bind pose bounds, so cull them loosely.
 			const SkeletalPoseComponent* pose = world.TryGet<SkeletalPoseComponent>(entity);
 			if (const GPUMesh* mesh = m_Meshes.GetSkinned(skeletal.Mesh))
-				cast(entity, transform, mesh, 1, pose ? &pose->Skin : nullptr, 1.5f);
+				cast(entity, mesh, 1, pose ? &pose->Skin : nullptr, 1.5f);
 		}
 		SDL_EndGPURenderPass(pass);
 	}
@@ -577,7 +577,7 @@ namespace FP
 		// Collect everything visible with its shader and surface.
 		Array<Draw> draws;
 		bool hasGlass = false;
-		auto resolve = [&](Entity entity, const TransformComponent& transform, Surface type, int32 layer, const GPUMesh* mesh, int32 section) {
+		auto resolve = [&](Entity entity, Surface type, int32 layer, const GPUMesh* mesh, int32 section) {
 			const MaterialComponent* materialComponent = world.TryGet<MaterialComponent>(entity);
 			const Material* material = materialComponent ? MaterialLibrary::Get().Load(materialComponent->GetForSection(section)) : nullptr;
 			// Meshes default to lit so they have shape. Sprites default to unlit so plain 2D games need no lights.
@@ -593,18 +593,18 @@ namespace FP
 			hasGlass |= kind == ShaderKind::Glass;
 			const MeshSection* part = mesh ? &mesh->Sections[section] : nullptr;
 			const SkeletalPoseComponent* pose = type == Surface::SkinnedMesh ? world.TryGet<SkeletalPoseComponent>(entity) : nullptr;
-			draws.Add({ layer, Vec3::Dot(transform.Position - view.CameraPosition, view.CameraForward), entity, kind, type, material, mesh,
+			draws.Add({ layer, Vec3::Dot(world.GetWorldPosition(entity) - view.CameraPosition, view.CameraForward), entity, kind, type, material, mesh,
 				part ? part->FirstIndex : 0, part ? part->IndexCount : 6, pose ? &pose->Skin : nullptr });
 		};
 		for (auto [entity, transform, sprite] : world.View<TransformComponent, SpriteComponent>().each())
-			resolve(entity, transform, Surface::Sprite, sprite.Layer, nullptr, 0);
+			resolve(entity, Surface::Sprite, sprite.Layer, nullptr, 0);
 		// One draw per section so each can use its own material and shader.
 		for (auto [entity, transform, meshComponent] : world.View<TransformComponent, MeshComponent>().each())
 		{
 			if (const GPUMesh* mesh = m_Meshes.Get(meshComponent.Mesh))
 			{
 				for (int32 section = 0; section < mesh->Sections.Num(); ++section)
-					resolve(entity, transform, Surface::Mesh, 0, mesh, section);
+					resolve(entity, Surface::Mesh, 0, mesh, section);
 			}
 		}
 		for (auto [entity, transform, skeletal] : world.View<TransformComponent, SkeletalMeshComponent>().each())
@@ -612,7 +612,7 @@ namespace FP
 			if (const GPUMesh* mesh = m_Meshes.GetSkinned(skeletal.Mesh))
 			{
 				for (int32 section = 0; section < mesh->Sections.Num(); ++section)
-					resolve(entity, transform, Surface::SkinnedMesh, 0, mesh, section);
+					resolve(entity, Surface::SkinnedMesh, 0, mesh, section);
 			}
 		}
 
