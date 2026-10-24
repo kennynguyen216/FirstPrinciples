@@ -66,6 +66,10 @@ namespace FP
 		void Render(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* target, uint32 width, uint32 height,
 			World& world, const RenderView& view, const DebugLines* lines = nullptr);
 
+		// Loads every texture the world's sprites and materials use, decoding them in parallel.
+		// Call after loading a scene so the first frame does not stall on image decoding.
+		void PreloadTextures(World& world);
+
 		TextureCache& GetTextures() { return m_Textures; }
 		MeshLibrary& GetMeshes() { return m_Meshes; }
 		GPUDevice& GetDevice() { return m_Device; }

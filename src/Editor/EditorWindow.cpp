@@ -682,6 +682,8 @@ namespace FP::Editor
 		Stop();
 		if (SceneSerializer::LoadFromFile(*m_World.Get(), ToString(path).CStr()))
 		{
+			if (Renderer* renderer = m_Viewport->GetRenderer())
+				renderer->PreloadTextures(*m_World.Get());
 			m_ScenePath = path;
 			m_Dirty = false;
 			FP_LOG("Opened %s", ToString(path).CStr());
