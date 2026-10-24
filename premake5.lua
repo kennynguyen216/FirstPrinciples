@@ -55,6 +55,9 @@ end
 
 local QtModules = { "Core", "Gui", "Widgets" }
 
+-- The game being built. Its Source folder becomes the Game and GameScripts projects.
+local ProjectDir = Root .. "/Projects/Sample"
+
 -- Helpers --------------------------------------------------------------------
 
 -- Include paths every project that touches engine headers needs.
@@ -145,7 +148,7 @@ workspace "FirstPrinciples"
 	objdir (Root .. "/Intermediate/%{cfg.buildcfg}/%{prj.name}")
 	debugdir (Root)
 
-	includedirs { Root .. "/src", Root }
+	includedirs { Root .. "/src", ProjectDir .. "/Source" }
 
 	filter "configurations:Debug"
 		defines { "FP_DEBUG" }
@@ -193,22 +196,25 @@ project "Engine"
 	files { "src/Engine/Shaders/**" }
 	filter "files:src/Engine/Shaders/**"
 		buildaction "None"
+	-- Lets the engine find this project when nothing else points it at one.
+	filter "files:src/Engine/Paths.cpp"
+		defines { 'FP_PROJECT_DIR="' .. ProjectDir .. '"' }
 	filter {}
 	EngineIncludes()
 
--- Game: the team's code, linked into Editor and Runtime.
+-- Game: the project's code, linked into Editor and Runtime.
 project "Game"
 	kind "StaticLib"
-	files { "Game/**.h", "Game/**.cpp" }
+	files { ProjectDir .. "/Source/**.h", ProjectDir .. "/Source/**.cpp" }
 	-- Scripts build into the GameScripts library instead.
-	removefiles { "Game/Scripts/**" }
+	removefiles { ProjectDir .. "/Source/Scripts/**" }
 	EngineIncludes()
 
--- GameScripts: C++ scripts in Game/Scripts, built as a shared library the editor can hot reload.
+-- GameScripts: C++ scripts in the project's Source/Scripts, built as a shared library the editor can hot reload.
 project "GameScripts"
 	kind "SharedLib"
 	targetprefix ""
-	files { "Game/Scripts/**.h", "Game/Scripts/**.cpp", "src/Engine/Scripting/Module/**.cpp" }
+	files { ProjectDir .. "/Source/Scripts/**.h", ProjectDir .. "/Source/Scripts/**.cpp", "src/Engine/Scripting/Module/**.cpp" }
 	UseEngine(true)
 	filter "system:windows"
 		-- A new PDB name per build so a debugger holding the old one never blocks a rebuild.

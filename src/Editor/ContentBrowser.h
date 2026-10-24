@@ -18,7 +18,7 @@ class QTreeWidgetItem;
 
 namespace FP::Editor
 {
-	// Browses the project's assets: everything in Content plus the C++ scripts in Game/Scripts.
+	// Browses the project's assets: everything in Content plus the C++ scripts in Source/Scripts.
 	// Folders on the left, the selected folder's files on the right with thumbnails for images
 	// and color swatches for materials. Refreshes by itself when files change on disk.
 	class ContentBrowser : public QWidget

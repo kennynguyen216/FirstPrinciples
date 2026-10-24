@@ -20,11 +20,11 @@ namespace FP::Editor
 		void Build();
 		bool IsBuilding() const { return m_Process != nullptr; }
 
-		// Every .h and .cpp under Game/Scripts, relative to the project.
+		// Every .h and .cpp under Source/Scripts, relative to the project.
 		static QStringList ListScriptFiles();
 		static QString ScriptsDirectory();
 
-		// Writes Game/Scripts/<className>.cpp from the starter template. Returns the path or empty on failure.
+		// Writes Source/Scripts/<className>.cpp from the starter template. Returns the path or empty on failure.
 		static QString CreateScriptFile(const QString& className, QString& error);
 
 		// Compilers record source paths relative to where they ran. Returns an absolute path.

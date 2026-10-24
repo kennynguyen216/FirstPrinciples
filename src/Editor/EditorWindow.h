@@ -57,7 +57,7 @@ namespace FP::Editor
 		// Opens a script source file for editing.
 		void OpenScript(const QString& path);
 
-		// Creates Game/Scripts/<className>.cpp and opens it. Returns false and explains why on failure.
+		// Creates Source/Scripts/<className>.cpp and opens it. Returns false and explains why on failure.
 		bool NewScript(const QString& className);
 
 		ContentBrowser* GetContentBrowser() const { return m_ContentBrowser; }
@@ -113,7 +113,7 @@ namespace FP::Editor
 
 		static void LogSink(LogLevel level, const char* message, void* userData);
 
-		// Watches Game/Scripts and rebuilds after edits settle when auto reload is on.
+		// Watches Source/Scripts and rebuilds after edits settle when auto reload is on.
 		void WatchScripts();
 		void OnScriptsChanged();
 		void OnScriptsBuilt(bool success);

@@ -1,6 +1,7 @@
 #include "Editor/ContentBrowser.h"
 #include "Editor/EditorIcons.h"
 #include "Editor/EditorStyle.h"
+#include "Engine/Project.h"
 #include "Engine/Material.h"
 #include "Engine/Paths.h"
 #include "Core/Misc/Guid.h"
@@ -65,7 +66,7 @@ namespace FP::Editor
 	ContentBrowser::ContentBrowser(QWidget* parent) : QWidget(parent)
 	{
 		m_ContentRoot = QDir::cleanPath(QString::fromUtf8(Paths::GetContentDir().CStr()));
-		m_ScriptsRoot = QDir::cleanPath(ProjectDir() + "/Game/Scripts");
+		m_ScriptsRoot = QDir::cleanPath(QString::fromUtf8(Paths::GetProject().GetScriptsDir().CStr()));
 
 		QVBoxLayout* layout = new QVBoxLayout(this);
 		layout->setContentsMargins(4, 4, 4, 4);

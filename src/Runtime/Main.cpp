@@ -2,13 +2,14 @@
 // Usage: Runtime [scene relative to Content] [--screenshot out.bmp]
 // --screenshot saves a frame after half a second and quits, handy as a smoke test.
 
+#include "Engine/Project.h"
 #include "Engine/Engine.h"
 #include "Core/Jobs/JobSystem.h"
 #include "Engine/Render/Renderer.h"
 #include "Engine/SceneSerializer.h"
 #include "Engine/Scripting/ScriptRuntime.h"
 #include "Engine/Scripting/ScriptSystem.h"
-#include "Game/Game.h"
+#include "Game.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -48,7 +49,7 @@ int main(int argc, char** argv)
 
 	JobSystem::Initialize();
 
-	const char* scene = Game::StartScene;
+	String scene = Paths::GetProject().StartScene;
 	const char* screenshotPath = nullptr;
 	for (int i = 1; i < argc; ++i)
 	{

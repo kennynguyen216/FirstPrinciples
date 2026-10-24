@@ -1,4 +1,5 @@
 #include "Editor/ScriptBuilder.h"
+#include "Engine/Project.h"
 #include "Engine/Paths.h"
 #include "Engine/Scripting/ScriptRuntime.h"
 #include "Core/Log.h"
@@ -18,8 +19,11 @@ namespace FP::Editor
 	{
 		QString ProjectDir() { return QString::fromUtf8(Paths::GetProjectDir().CStr()); }
 
+		// Folder with premake5.lua and the generated Build folder.
+		QString RootDir() { return QFileInfo(QString::fromUtf8(Paths::GetEngineDir().CStr())).absolutePath(); }
+
 		// Records which script files the projects were generated with.
-		QString StampPath() { return ProjectDir() + "/Build/ScriptFiles.txt"; }
+		QString StampPath() { return RootDir() + "/Build/ScriptFiles.txt"; }
 
 		// GUI apps on macOS do not inherit the shell PATH, so add the usual Homebrew locations.
 		QProcessEnvironment BuildEnvironment()
@@ -58,7 +62,7 @@ namespace FP::Editor
 
 	QString ScriptBuilder::ScriptsDirectory()
 	{
-		return ProjectDir() + "/Game/Scripts";
+		return QString::fromUtf8(Paths::GetProject().GetScriptsDir().CStr());
 	}
 
 	QString ScriptBuilder::CreateScriptFile(const QString& className, QString& error)
@@ -120,7 +124,7 @@ FP_SCRIPT(NAME)
 		if (QFileInfo(path).isAbsolute())
 			return QDir::cleanPath(path);
 		// Makefiles compile from Build, so relative paths start there.
-		for (const QString& base : { ProjectDir() + "/Build", ProjectDir() })
+		for (const QString& base : { RootDir() + "/Build", RootDir() })
 		{
 			const QString candidate = QDir(base).absoluteFilePath(path);
 			if (QFileInfo::exists(candidate))
@@ -142,7 +146,7 @@ FP_SCRIPT(NAME)
 
 	bool ScriptBuilder::PlanSteps(QList<Step>& steps) const
 	{
-		const QString root = ProjectDir();
+		const QString root = RootDir();
 		const QString files = ListScriptFiles().join('\n');
 		QFile stamp(StampPath());
 		const bool regenerate = !stamp.open(QIODevice::ReadOnly) || QString::fromUtf8(stamp.readAll()) != files;
@@ -200,7 +204,7 @@ FP_SCRIPT(NAME)
 		const Step step = m_Steps.takeFirst();
 		m_Process = new QProcess(this);
 		m_Process->setProcessEnvironment(BuildEnvironment());
-		m_Process->setWorkingDirectory(ProjectDir());
+		m_Process->setWorkingDirectory(RootDir());
 		m_Process->setProcessChannelMode(QProcess::MergedChannels);
 		connect(m_Process, &QProcess::readyReadStandardOutput, this, &ScriptBuilder::OnOutput);
 		connect(m_Process, &QProcess::finished, this, &ScriptBuilder::OnStepFinished);

@@ -10,6 +10,7 @@
 #include "Editor/ScriptBuilder.h"
 #include "Editor/ViewportToolbar.h"
 #include "Editor/ViewportWidget.h"
+#include "Engine/Project.h"
 #include "Engine/ComponentRegistry.h"
 #include "Engine/Input.h"
 #include "Engine/Material.h"
@@ -18,7 +19,7 @@
 #include "Engine/SceneSerializer.h"
 #include "Engine/Scripting/ScriptRuntime.h"
 #include "Engine/Scripting/ScriptSystem.h"
-#include "Game/Game.h"
+#include "Game.h"
 
 #include <SDL3/SDL_timer.h>
 
@@ -115,7 +116,7 @@ namespace FP::Editor
 		m_Timer->start(16);
 
 		resize(1600, 900);
-		const QString startScene = ToQString(Paths::Content(Game::StartScene));
+		const QString startScene = ToQString(Paths::Content(Paths::GetProject().StartScene));
 		if (QFileInfo::exists(startScene))
 			OpenScene(startScene);
 		else

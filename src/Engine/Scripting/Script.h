@@ -10,7 +10,7 @@ namespace FP
 	// Base for C++ gameplay scripts. Attach scripts to entities with a ScriptComponent.
 	// Derive from Script, override the On functions you need, then register the class with
 	// FP_SCRIPT(ClassName) followed by a block that calls fields.Field for each member to expose.
-	// See Game/Scripts for examples.
+	// See Source/Scripts in a project for examples.
 	//
 	// Exposed fields show in the inspector, save with the scene and survive hot reloads.
 	// Anything else is reset when scripts reload.
