@@ -1,5 +1,6 @@
 #include "Editor/EditorWindow.h"
 #include "Engine/Engine.h"
+#include "Core/Jobs/JobSystem.h"
 #include "Engine/Render/GPUDevice.h"
 #include "Game/Game.h"
 
@@ -26,6 +27,8 @@ int main(int argc, char** argv)
 
 	FP::Engine::RegisterEngineComponents();
 	Game::RegisterComponents();
+
+	FP::JobSystem::Initialize();
 
 	FP::GPUDevice* device = FP::GPUDevice::Create();
 	if (!device)
@@ -72,6 +75,7 @@ int main(int argc, char** argv)
 
 	FP::GarbageCollector::Get().Collect();
 	delete device;
+	FP::JobSystem::Shutdown();
 	SDL_Quit();
 	return result;
 }

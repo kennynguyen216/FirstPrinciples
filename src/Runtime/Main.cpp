@@ -3,6 +3,7 @@
 // --screenshot saves a frame after half a second and quits, handy as a smoke test.
 
 #include "Engine/Engine.h"
+#include "Core/Jobs/JobSystem.h"
 #include "Engine/Render/Renderer.h"
 #include "Engine/SceneSerializer.h"
 #include "Game/Game.h"
@@ -42,6 +43,8 @@ int main(int argc, char** argv)
 		FP_LOG_ERROR("SDL_Init failed: %s", SDL_GetError());
 		return 1;
 	}
+
+	JobSystem::Initialize();
 
 	const char* scene = Game::StartScene;
 	const char* screenshotPath = nullptr;
@@ -129,6 +132,7 @@ int main(int argc, char** argv)
 	SDL_ReleaseWindowFromGPUDevice(device->GetHandle(), window);
 	SDL_DestroyWindow(window);
 	delete device;
+	JobSystem::Shutdown();
 	SDL_Quit();
 	return 0;
 }
