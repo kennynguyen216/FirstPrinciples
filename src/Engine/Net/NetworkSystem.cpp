@@ -198,6 +198,7 @@ namespace FP
 					network = &world.Add<NetworkComponent>(entity);
 				network->Owner = owner;
 				network->Remote = true;
+				FP_LOG_VERBOSE("Peer %016llx spawned %s", static_cast<unsigned long long>(owner), world.GetEntityName(entity).CStr());
 				break;
 			}
 			case MessageType::Despawn:
