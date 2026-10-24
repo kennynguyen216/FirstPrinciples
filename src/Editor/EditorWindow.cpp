@@ -3,7 +3,6 @@
 #include "Editor/ScriptBuilder.h"
 #include "Editor/ViewportWidget.h"
 #include "Engine/ComponentRegistry.h"
-#include "Engine/FieldSerializer.h"
 #include "Engine/Input.h"
 #include "Engine/Material.h"
 #include "Engine/Render/MeshData.h"
@@ -446,7 +445,7 @@ namespace FP::Editor
 	{
 		if (!m_World->IsValid(m_Selected))
 			return;
-		// Copies every registered component field by field so new components work with no extra code.
+		// Copies every registered component through its copy hook so new components work with no extra code.
 		entt::registry& registry = m_World->GetRegistry();
 		const Entity source = m_Selected;
 		const Entity copy = m_World->CreateEmptyEntity();
@@ -459,8 +458,7 @@ namespace FP::Editor
 			// Add can move existing storage so fetch the source after it.
 			void* dst = info->Add(registry, copy);
 			void* src = info->TryGet(registry, source);
-			for (const FieldInfo& field : info->Fields)
-				FieldSerializer::Copy(field, dst, src);
+			info->Copy(dst, src);
 		}
 		if (NameComponent* name = m_World->TryGet<NameComponent>(copy))
 			name->Name += " Copy";
