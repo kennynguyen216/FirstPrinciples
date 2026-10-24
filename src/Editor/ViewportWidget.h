@@ -108,6 +108,8 @@ namespace FP::Editor
 
 		void AddGizmos(const RenderView& view);
 		void AddSelection(const RenderView& view);
+		// Outlines every collider's shape, the selected one brighter.
+		void AddColliders();
 
 		GPUDevice& m_Device;
 		Renderer* m_Renderer = nullptr;
