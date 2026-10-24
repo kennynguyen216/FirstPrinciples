@@ -25,10 +25,11 @@ For Xcode run `Scripts/GenerateXcode.sh` instead.
 
 ### Windows
 
-1. Install Visual Studio 2022 with the "Desktop development with C++" workload.
+1. Install Visual Studio 2022 or 2026 (the IDE or Build Tools) with the "Desktop development with C++" workload.
 2. Install Qt 6 with the [Qt online installer](https://www.qt.io/download-qt-installer) and pick the
    `MSVC 2022 64-bit` kit.
-3. Set `QT_DIR` to that kit, for example `C:\Qt\6.8.3\msvc2022_64`, and reopen your terminal.
+3. MSVC 64-bit kits under `C:\Qt` are detected automatically. For another location, set `QT_DIR`
+   to the kit directory and reopen your terminal. MinGW kits cannot link with this MSVC build.
 4. Run:
 
 ```powershell
@@ -36,7 +37,13 @@ powershell -ExecutionPolicy Bypass -File Scripts\Setup.ps1
 Scripts\GenerateProjects.bat
 ```
 
-5. Open `Build\FirstPrinciples.sln`, set `Editor` as the startup project and build.
+5. Open the generated solution in `Build` (`FirstPrinciples.sln` for VS 2022 or
+   `FirstPrinciples.slnx` for VS 2026), set `Editor` as the startup project and build.
+
+`GenerateProjects.bat` selects the installed VS 2022 or VS 2026 C++ toolset. With Build Tools only,
+run `msbuild Build\FirstPrinciples.slnx /m /p:Configuration=Debug /p:Platform=x64` from its Developer
+PowerShell or Developer Command Prompt (use `.sln` for VS 2022). Use `Configuration=Release` for an optimised build.
+Run `powershell -ExecutionPolicy Bypass -File Scripts\TestGenerateProjects.ps1` to check Windows project generation.
 
 ## Making your game
 

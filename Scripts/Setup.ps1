@@ -31,8 +31,5 @@ if (-not (Test-Path (Join-Path $SdlDir "include"))) {
     Remove-Item $tmp -Recurse
 }
 
-if (-not $env:QT_DIR) {
-    Write-Warning "QT_DIR is not set. Set it to your Qt kit, for example C:\Qt\6.8.3\msvc2022_64"
-}
-
+Write-Host "Qt must be an MSVC 64-bit kit. Kits under C:\Qt are detected automatically; otherwise set QT_DIR."
 Write-Host "Done. Run Scripts\GenerateProjects.bat"

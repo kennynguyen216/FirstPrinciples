@@ -1,5 +1,5 @@
 -- FirstPrinciples workspace.
--- macOS: premake5 gmake (or xcode4). Windows: premake5 vs2022. See README.md.
+-- macOS: premake5 gmake (or xcode4). Windows: Scripts/GenerateProjects.bat. See README.md.
 
 local Root = path.getabsolute(".")
 local IsWindows = os.target() == "windows"
@@ -8,7 +8,7 @@ local IsMac = os.target() == "macosx"
 -- Third party locations ------------------------------------------------------
 
 -- On macOS everything comes from Homebrew. On Windows SDL comes from Scripts/Setup.ps1
--- and Qt from the official installer, found through the QT_DIR environment variable.
+-- and Qt from the official installer, found through QT_DIR or C:/Qt.
 local BrewPrefix = "/opt/homebrew"
 if IsMac then
 	local out = os.outputof("brew --prefix")
@@ -24,8 +24,22 @@ if not os.isdir(EnttInclude) then
 end
 
 local QtDir = os.getenv("QT_DIR")
+if not QtDir and IsWindows then
+	for _, dir in ipairs(os.matchdirs("C:/Qt/*/msvc*_64")) do
+		if os.isfile(dir .. "/lib/Qt6Core.lib") and os.isfile(dir .. "/lib/Qt6Cored.lib") then
+			QtDir = dir
+			break
+		end
+	end
+end
 if not QtDir and IsMac then QtDir = BrewPrefix .. "/opt/qt" end
 if QtDir then QtDir = QtDir:gsub("\\", "/") end
+if IsWindows and QtDir then
+	if not os.isfile(QtDir .. "/lib/Qt6Core.lib") or not os.isfile(QtDir .. "/lib/Qt6Cored.lib") then
+		error("QT_DIR must point to a 64-bit MSVC Qt kit with Debug and Release libraries (not MinGW): " .. QtDir)
+	end
+	print("Using Qt: " .. QtDir)
+end
 
 local MocPath = nil
 if QtDir then
@@ -61,7 +75,7 @@ end
 
 local function UseQt()
 	if not QtDir then
-		premake.warn("QT_DIR is not set. The Editor project will not build until it points at your Qt install.")
+		premake.warn("Qt was not found. Install a 64-bit MSVC Qt kit on Windows and set QT_DIR if it is outside C:/Qt. The Editor project will not build without Qt.")
 		return
 	end
 
