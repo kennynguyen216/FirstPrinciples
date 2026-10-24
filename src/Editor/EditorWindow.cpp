@@ -368,6 +368,8 @@ namespace FP::Editor
 			m_ViewportToolbar->Set3D(on);
 		});
 		connect(m_ViewportToolbar, &ViewportToolbar::ProjectionChanged, m_View3DAction, &QAction::setChecked);
+		// Opens in perspective, which is what the projection pill shows before anything is picked.
+		m_View3DAction->setChecked(true);
 		connect(m_ViewportToolbar, &ViewportToolbar::ViewModeChanged, this, &EditorWindow::SetViewMode);
 		connect(m_ViewportToolbar, &ViewportToolbar::SnapChanged, this, [this](bool on, float size) { m_Viewport->SetSnap(on, size); });
 		connect(m_ViewportToolbar, &ViewportToolbar::GizmoModeChanged, m_Viewport, &ViewportWidget::SetGizmoMode);
