@@ -6,10 +6,12 @@
 #include <entt/entt.hpp>
 
 #include <type_traits>
+#include <memory>
 
 namespace FP
 {
 	class World;
+	class AudioWorld;
 
 	using Entity = entt::entity;
 	inline constexpr entt::null_t NullEntity = entt::null;
@@ -31,6 +33,9 @@ namespace FP
 		FP_OBJECT(World, Object)
 
 	public:
+		World();
+		~World() override;
+		AudioWorld& GetAudio();
 		// ---- Entities ------------------------------------------------------
 
 		// New entity with an id, a name and a transform.
@@ -53,6 +58,7 @@ namespace FP
 
 		// Removes every entity.
 		void Clear();
+		void ReplaceScene(World& candidate);
 
 		// ---- Components ----------------------------------------------------
 
@@ -116,5 +122,6 @@ namespace FP
 		uint64 m_NextCreationIndex = 0;
 		double m_Time = 0;
 		bool m_Playing = false;
+		std::unique_ptr<AudioWorld> m_Audio;
 	};
 }

@@ -18,6 +18,26 @@ namespace FP
 		String Name;
 	};
 
+	struct AudioSourceComponent
+	{
+		String Clip; // WAV relative to Content
+		bool Enabled = true;
+		float Volume = 1;
+		float Pitch = 1;
+		bool Loop = false;
+		bool PlayOnStart = false;
+		String Bus = "SFX";
+		bool Spatial = false;
+		float MinDistance = 1;
+		float MaxDistance = 25;
+		int32 Priority = 128;
+	};
+
+	struct AudioListenerComponent
+	{
+		bool Enabled = true;
+	};
+
 	// 2D games use X and Y with Rotation.Z as the spin. 3D uses all three axes.
 	struct TransformComponent
 	{

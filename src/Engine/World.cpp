@@ -1,4 +1,5 @@
 #include "Engine/World.h"
+#include "Engine/Audio/AudioWorld.h"
 
 namespace FP
 {
@@ -9,6 +10,15 @@ namespace FP
 		{
 			uint64 Index = 0;
 		};
+	}
+
+	World::World() = default;
+	World::~World() = default;
+
+	AudioWorld& World::GetAudio()
+	{
+		if (!m_Audio) m_Audio = std::make_unique<AudioWorld>(*this);
+		return *m_Audio;
 	}
 
 	Entity World::CreateEntity(String name, const Guid& id)
@@ -84,9 +94,22 @@ namespace FP
 
 	void World::Clear()
 	{
+		if (m_Audio) m_Audio->ResetScene();
 		m_Registry.clear();
 		m_PendingDestroy.Clear();
 		m_NextCreationIndex = 0;
+	}
+
+	void World::ReplaceScene(World& candidate)
+	{
+		if (&candidate == this) return;
+		if (m_Audio) { m_Audio->ResetScene(); m_Audio->DisconnectRegistry(); }
+		if (candidate.m_Audio) { candidate.m_Audio->ResetScene(); candidate.m_Audio->DisconnectRegistry(); }
+		m_Registry.swap(candidate.m_Registry);
+		std::swap(m_NextCreationIndex, candidate.m_NextCreationIndex);
+		m_PendingDestroy.Clear();
+		if (m_Audio) m_Audio->ConnectRegistry();
+		if (candidate.m_Audio) candidate.m_Audio->ConnectRegistry();
 	}
 
 	void World::ClearSystems()
@@ -105,9 +128,11 @@ namespace FP
 			return;
 		m_Playing = true;
 		m_Time = 0;
+		GetAudio().BeginPlay();
 		for (int32 i = 0; i < m_Systems.Num(); ++i)
 			m_Systems[i]->OnStart(*this);
 		FlushDestroyed();
+		GetAudio().Update();
 	}
 
 	void World::EndPlay()
@@ -116,6 +141,7 @@ namespace FP
 			return;
 		for (RefPtr<System>& system : m_Systems)
 			system->OnStop(*this);
+		if (m_Audio) m_Audio->EndPlay();
 		m_Playing = false;
 		FlushDestroyed();
 	}
@@ -129,6 +155,7 @@ namespace FP
 				m_Systems[i]->Update(*this, deltaTime);
 		}
 		FlushDestroyed();
+		if (m_Playing && m_Audio) m_Audio->Update();
 	}
 
 	void World::FlushDestroyed()
@@ -144,6 +171,7 @@ namespace FP
 	void World::OnDestroy()
 	{
 		EndPlay();
+		if (m_Audio) m_Audio->EndPlay();
 		m_Systems.Clear();
 		m_Registry.clear();
 	}

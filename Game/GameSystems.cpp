@@ -41,3 +41,23 @@ void FollowPlayerSystem::Update(World& world, float deltaTime)
 		transform.Position += (goal - transform.Position) * t;
 	}
 }
+
+void AudioDemoSystem::OnStart(World& world)
+{
+	for (auto [entity, demo] : world.View<AudioDemoComponent>().each())
+	{
+		const AudioResult loaded = world.GetAudio().Preload(demo.Clip);
+		if (!loaded) FP_LOG_WARN("Audio demo: %s", loaded.Message.CStr());
+	}
+}
+
+void AudioDemoSystem::Update(World& world, float)
+{
+	if (!Input::WasKeyPressed(SDL_SCANCODE_SPACE))
+		return;
+	for (auto [entity, demo] : world.View<AudioDemoComponent>().each())
+	{
+		const AudioPlayResult played = world.GetAudio().PlayOneShot(demo.Clip);
+		if (!played) FP_LOG_WARN("Audio demo: %s", played.Result.Message.CStr());
+	}
+}

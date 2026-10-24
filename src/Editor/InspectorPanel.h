@@ -2,6 +2,7 @@
 
 #include "Engine/ComponentRegistry.h"
 #include "Engine/World.h"
+#include "Engine/Audio/AudioTypes.h"
 
 #include <QWidget>
 
@@ -27,10 +28,12 @@ namespace FP::Editor
 
 		// Pulls current values into the widgets. Skips the widget being edited.
 		void RefreshValues();
+		void StopPreview();
 
 	signals:
 		// A field was edited. Name changes matter to the hierarchy.
 		void Modified();
+		void ImportAudioRequested();
 
 	public:
 		using DataFn = std::function<void*()>;
@@ -44,11 +47,13 @@ namespace FP::Editor
 	private:
 		void Rebuild();
 		void AddMaterialSection();
+		void AddAudioSection();
 
 		World* m_World = nullptr;
 		Entity m_Entity = NullEntity;
 		QWidget* m_Content = nullptr;
 		QVBoxLayout* m_Layout = nullptr;
 		std::vector<std::function<void()>> m_Refreshers;
+		VoiceHandle m_Preview;
 	};
 }

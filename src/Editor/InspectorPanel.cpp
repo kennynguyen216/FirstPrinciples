@@ -2,6 +2,8 @@
 #include "Engine/ComponentRegistry.h"
 #include "Engine/Material.h"
 #include "Engine/Paths.h"
+#include "Engine/Audio/AudioDevice.h"
+#include "Engine/Audio/AudioWorld.h"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -23,6 +25,7 @@
 #include <QToolButton>
 
 #include <cfloat>
+#include <filesystem>
 
 namespace FP::Editor
 {
@@ -99,9 +102,172 @@ namespace FP::Editor
 
 	void InspectorPanel::SetTarget(World* world, Entity entity)
 	{
+		StopPreview();
 		m_World = world;
 		m_Entity = entity;
 		Rebuild();
+	}
+
+	void InspectorPanel::StopPreview()
+	{
+		if (m_World && m_World->GetAudio().GetDevice())
+			m_World->GetAudio().GetDevice()->Stop(m_Preview);
+		m_Preview = {};
+	}
+
+	void InspectorPanel::AddAudioSection()
+	{
+		QGroupBox* group = new QGroupBox("Audio clip and playback");
+		QVBoxLayout* layout = new QVBoxLayout(group);
+		QLabel* status = new QLabel();
+		status->setWordWrap(true);
+		status->setTextInteractionFlags(Qt::TextSelectableByMouse);
+		status->setAccessibleName("Audio clip status");
+		layout->addWidget(status);
+		QHBoxLayout* assets = new QHBoxLayout();
+		QPushButton* import = new QPushButton("Import Audio...");
+		QPushButton* reload = new QPushButton("Reload Clip");
+		QPushButton* preview = new QPushButton("Preview");
+		assets->addWidget(import);
+		assets->addWidget(reload);
+		assets->addWidget(preview);
+		layout->addLayout(assets);
+		QHBoxLayout* playback = new QHBoxLayout();
+		QPushButton* play = new QPushButton("Play Source");
+		QPushButton* pause = new QPushButton("Pause Source");
+		QPushButton* stop = new QPushButton("Stop Source");
+		playback->addWidget(play);
+		playback->addWidget(pause);
+		playback->addWidget(stop);
+		layout->addLayout(playback);
+		struct ClipStatus
+		{
+			String Path;
+			AudioClipResult Loaded;
+			QString Metadata;
+			int Channels = 0;
+			uint64 ClippedSamples = 0;
+			String ActionError;
+			int64 Modified = 0;
+			uint64 Size = 0;
+		};
+		auto state = std::make_shared<ClipStatus>();
+		auto load = [this, state](bool force) {
+			if (!m_World || !m_World->IsValid(m_Entity))
+				return;
+			const AudioSourceComponent* source = m_World->TryGet<AudioSourceComponent>(m_Entity);
+			AudioDevice* device = m_World->GetAudio().GetDevice();
+			if (!source || !device)
+				return;
+			state->Path = source->Clip;
+			if (m_World->IsPlaying())
+			{
+				state->Loaded = { { AudioError::NotReady, "Stop the scene to inspect clip metadata." }, {} };
+				state->Metadata.clear();
+				return;
+			}
+			state->Loaded = device->GetClipCache().Load(source->Clip, force);
+			state->Metadata.clear();
+			if (state->Loaded.Clip)
+			{
+				const AudioClip& clip = *state->Loaded.Clip;
+				state->Metadata = QString("\n%1, %2 channel(s), %3 Hz, %4 s, %5 MiB, revision %6")
+					.arg(ToQString(clip.Encoding)).arg(clip.Channels).arg(clip.SampleRate).arg(clip.Duration, 0, 'f', 3)
+					.arg(clip.Samples.size() * sizeof(float) / (1024.0 * 1024.0), 0, 'f', 2).arg(clip.Revision);
+				state->Channels = clip.Channels;
+				state->ClippedSamples = clip.ClippedSamples;
+				state->Modified = clip.LastWriteTicks;
+				state->Size = clip.SourceBytes;
+			}
+			state->ActionError.Clear();
+		};
+		connect(import, &QPushButton::clicked, this, &InspectorPanel::ImportAudioRequested);
+		connect(reload, &QPushButton::clicked, this, [this, load]() { load(true); RefreshValues(); });
+		connect(preview, &QPushButton::clicked, this, [this, state, load]() {
+			AudioDevice* device = m_World->GetAudio().GetDevice();
+			if (!device || m_World->IsPlaying())
+				return;
+			if (device->GetState(m_Preview) != VoiceState::Invalid)
+				StopPreview();
+			else
+			{
+				load(false);
+				if (!state->Loaded)
+					return;
+				AudioPlaybackParams params;
+				params.Preview = true;
+				const auto result = device->Play(std::numeric_limits<uint64>::max(), state->Loaded.Clip, params);
+				m_Preview = result.Voice;
+				state->ActionError = result.Result.Message;
+			}
+			RefreshValues();
+		});
+		connect(play, &QPushButton::clicked, this, [this, state]() {
+			state->ActionError = m_World->GetAudio().Play(m_Entity).Result.Message;
+			RefreshValues();
+		});
+		connect(pause, &QPushButton::clicked, this, [this]() {
+			AudioWorld& audio = m_World->GetAudio();
+			const VoiceHandle voice = audio.GetSourceVoice(m_Entity);
+			if (audio.GetState(voice) == VoiceState::Paused) audio.Resume(voice);
+			else audio.Pause(voice);
+			RefreshValues();
+		});
+		connect(stop, &QPushButton::clicked, this, [this]() {
+			m_World->GetAudio().StopSource(m_Entity);
+			RefreshValues();
+		});
+		m_Refreshers.push_back([=, this]() {
+			const AudioSourceComponent* source = m_World->TryGet<AudioSourceComponent>(m_Entity);
+			if (!source)
+				return;
+			AudioWorld& audio = m_World->GetAudio();
+			AudioDevice* device = audio.GetDevice();
+			if (source->Clip != state->Path)
+			{
+				StopPreview();
+				load(false);
+			}
+			const bool editing = !m_World->IsPlaying();
+			const bool ready = device && device->IsReady();
+			import->setEnabled(editing);
+			reload->setEnabled(editing && device && !source->Clip.IsEmpty());
+			preview->setEnabled(editing && ready && !source->Clip.IsEmpty());
+			preview->setText(device && device->GetState(m_Preview) != VoiceState::Invalid ? "Stop Preview" : "Preview");
+			const VoiceState voice = audio.GetState(audio.GetSourceVoice(m_Entity));
+			play->setEnabled(!editing && ready && source->Enabled && !source->Clip.IsEmpty());
+			pause->setEnabled(!editing && voice != VoiceState::Invalid);
+			stop->setEnabled(!editing && voice != VoiceState::Invalid);
+			pause->setText(voice == VoiceState::Paused ? "Resume Source" : "Pause Source");
+			QString text = source->Clip.IsEmpty() ? "No clip assigned. Import or pick a WAV inside Content." : ToQString(source->Clip);
+			if (!state->Metadata.isEmpty())
+			{
+				text += state->Metadata;
+				if (source->Spatial && state->Channels != 1)
+					text += "\nSpatial audio requires a mono clip. Disable Spatial or choose a mono WAV.";
+				if (state->ClippedSamples)
+					text += QString("\n%1 out-of-range samples were clamped.").arg(state->ClippedSamples);
+				const String path = Paths::Content(source->Clip.View());
+				const std::filesystem::path file(reinterpret_cast<const char8_t*>(path.CStr()));
+				std::error_code ec;
+				const uint64 size = std::filesystem::file_size(file, ec);
+				const auto modified = std::filesystem::last_write_time(file, ec);
+				if (ec) text += "\nFile is missing or inaccessible. Repair the path or restore the file.";
+				else if (modified.time_since_epoch().count() != state->Modified || size != state->Size)
+					text += "\nFile changed on disk. Stop and choose Reload Clip to use the new version.";
+			}
+			if (!state->Loaded.Result && !source->Clip.IsEmpty())
+			{
+				text += "\n" + ToQString(state->Loaded.Result.Message);
+				if (state->Loaded.Result.Code != AudioError::NotReady)
+					text += "\nRepair the file/path and choose Reload Clip.";
+			}
+			if (!state->ActionError.IsEmpty()) text += "\n" + ToQString(state->ActionError);
+			if (!ready) text += "\nAudio output unavailable. Use Retry Audio in the status bar.";
+			status->setText(text);
+			state->Loaded.Clip.reset(); // Metadata alone must not pin resident samples in the cache.
+		});
+		m_Layout->addWidget(group);
 	}
 
 	void InspectorPanel::AddMaterialSection()
@@ -177,6 +343,7 @@ namespace FP::Editor
 
 	void InspectorPanel::Rebuild()
 	{
+		StopPreview();
 		m_Refreshers.clear();
 		while (QLayoutItem* item = m_Layout->takeAt(0))
 		{
@@ -219,7 +386,30 @@ namespace FP::Editor
 				return m_World && m_World->IsValid(m_Entity) ? info->TryGet(m_World->GetRegistry(), m_Entity) : nullptr;
 			};
 			for (const FieldInfo& field : info->Fields)
-				AddFieldEditor(form, field, data, [this]() { emit Modified(); });
+			{
+				AddFieldEditor(form, field, data, [this, info]() {
+					if (info == ComponentRegistry::Get().Find<AudioSourceComponent>())
+						StopPreview();
+					emit Modified();
+				});
+				if (info == ComponentRegistry::Get().Find<AudioSourceComponent>())
+				{
+					QWidget* editor = form->itemAt(form->rowCount() - 1, QFormLayout::FieldRole)->widget();
+					if (QDoubleSpinBox* box = qobject_cast<QDoubleSpinBox*>(editor))
+					{
+						QSignalBlocker block(box);
+						const std::string_view name(field.Name);
+						if (name == "Volume") box->setRange(0, 1);
+						else if (name == "Pitch") box->setRange(0.25, 4);
+						else if (name == "MinDistance" || name == "MaxDistance") box->setRange(0.001, 1e9);
+					}
+					if (QSpinBox* box = qobject_cast<QSpinBox*>(editor))
+					{
+						QSignalBlocker block(box);
+						box->setRange(0, 255);
+					}
+				}
+			}
 
 			QPushButton* remove = new QPushButton("Remove");
 			remove->setFlat(true);
@@ -233,6 +423,8 @@ namespace FP::Editor
 
 			if (info == ComponentRegistry::Get().Find<MaterialComponent>())
 				AddMaterialSection();
+			if (info == ComponentRegistry::Get().Find<AudioSourceComponent>())
+				AddAudioSection();
 		}
 
 		QToolButton* add = new QToolButton();

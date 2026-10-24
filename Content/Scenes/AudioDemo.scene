@@ -1,0 +1,58 @@
+# FirstPrinciples scene
+version 2
+
+entity 89f704d0-a001-4000-8000-000000000001
+component Name
+  Name "Main Camera"
+component Transform
+  Position 0 0 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component Camera
+  Zoom 48
+  Primary true
+component FollowPlayer
+  Smoothing 5
+
+entity 89f704d0-a001-4000-8000-000000000002
+component Name
+  Name "Listener - WASD to move, Space for clicks"
+component Transform
+  Position -4 0 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component Sprite
+  Tint 0.2 0.8 1 1
+  Size 0.75 0.75
+component Player
+  Speed 4
+component AudioListener
+  Enabled true
+component AudioDemo
+  Clip "Audio/Click.wav"
+
+entity 89f704d0-a001-4000-8000-000000000003
+component Name
+  Name "Looping hum - approach to hear"
+component Transform
+  Position 3 0 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component Sprite
+  Tint 1 0.65 0.15 1
+  Size 1 1
+component Spinner
+  DegreesPerSecond 30
+  Axis 0 0 1
+component AudioSource
+  Clip "Audio/Hum.wav"
+  Enabled true
+  Volume 0.6
+  Pitch 1
+  Loop true
+  PlayOnStart true
+  Bus "SFX"
+  Spatial true
+  MinDistance 1
+  MaxDistance 15
+  Priority 128

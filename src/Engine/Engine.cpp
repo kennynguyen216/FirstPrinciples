@@ -16,6 +16,22 @@ namespace FP::Engine
 		registry.Register<NameComponent>("Name")
 			.Field("Name", &NameComponent::Name);
 
+		static const Array<const char*> audioBuses{ "SFX", "Music", "UI" };
+		registry.Register<AudioSourceComponent>("AudioSource")
+			.Field("Clip", &AudioSourceComponent::Clip).AssetPath("Audio (*.wav)")
+			.Field("Enabled", &AudioSourceComponent::Enabled)
+			.Field("Volume", &AudioSourceComponent::Volume)
+			.Field("Pitch", &AudioSourceComponent::Pitch)
+			.Field("Loop", &AudioSourceComponent::Loop)
+			.Field("PlayOnStart", &AudioSourceComponent::PlayOnStart)
+			.Field("Bus", &AudioSourceComponent::Bus).Choices(audioBuses)
+			.Field("Spatial", &AudioSourceComponent::Spatial)
+			.Field("MinDistance", &AudioSourceComponent::MinDistance)
+			.Field("MaxDistance", &AudioSourceComponent::MaxDistance)
+			.Field("Priority", &AudioSourceComponent::Priority);
+		registry.Register<AudioListenerComponent>("AudioListener")
+			.Field("Enabled", &AudioListenerComponent::Enabled);
+
 		registry.Register<TransformComponent>("Transform")
 			.Field("Position", &TransformComponent::Position)
 			.Field("Rotation", &TransformComponent::Rotation)
@@ -56,5 +72,6 @@ namespace FP::Engine
 		registry.Register<AmbientLightComponent>("AmbientLight")
 			.Field("Color", &AmbientLightComponent::Color)
 			.Field("Intensity", &AmbientLightComponent::Intensity);
+
 	}
 }

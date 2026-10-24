@@ -218,4 +218,5 @@ project "Editor"
 project "Tests"
 	kind "ConsoleApp"
 	files { "src/Tests/**.h", "src/Tests/**.cpp" }
+	files { "src/Editor/AudioImport.h", "src/Editor/AudioImport.cpp" }
 	UseEngine(false)

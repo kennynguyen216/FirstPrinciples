@@ -1,5 +1,6 @@
 #include "Editor/EditorWindow.h"
 #include "Engine/Engine.h"
+#include "Engine/Audio/AudioDevice.h"
 #include "Engine/Render/GPUDevice.h"
 #include "Game/Game.h"
 
@@ -31,9 +32,13 @@ int main(int argc, char** argv)
 	if (!device)
 		return 1;
 
+	FP::AudioDevice audio;
+	if (const FP::AudioResult initialized = audio.Initialize(); !initialized)
+		FP_LOG_WARN("Audio unavailable: %s", initialized.Message.CStr());
+
 	int result = 0;
 	{
-		FP::Editor::EditorWindow window(*device);
+		FP::Editor::EditorWindow window(*device, audio);
 		window.show();
 
 		// Smoke test flags. --scene path opens a scene relative to Content, --3d switches the view,
@@ -71,6 +76,7 @@ int main(int argc, char** argv)
 	}
 
 	FP::GarbageCollector::Get().Collect();
+	audio.Shutdown();
 	delete device;
 	SDL_Quit();
 	return result;

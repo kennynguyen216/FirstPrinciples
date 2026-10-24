@@ -20,6 +20,9 @@ namespace Game
 
 		registry.Register<FollowPlayerComponent>("FollowPlayer")
 			.Field("Smoothing", &FollowPlayerComponent::Smoothing);
+
+		registry.Register<AudioDemoComponent>("AudioDemo")
+			.Field("Clip", &AudioDemoComponent::Clip).AssetPath("Audio (*.wav)");
 	}
 
 	void AddSystems(World& world)
@@ -27,5 +30,6 @@ namespace Game
 		world.AddSystem<PlayerSystem>();
 		world.AddSystem<SpinnerSystem>();
 		world.AddSystem<FollowPlayerSystem>();
+		world.AddSystem<AudioDemoSystem>();
 	}
 }
