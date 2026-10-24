@@ -3,6 +3,7 @@
 #include "Engine/FieldSerializer.h"
 #include "Engine/Paths.h"
 #include "Core/Misc/File.h"
+#include "Core/Misc/ModuleContext.h"
 
 namespace FP
 {
@@ -52,10 +53,16 @@ namespace FP
 		const String fullPath = Paths::Content(m_Path);
 		if (!File::ReadAllText(fullPath.CStr(), text))
 			return false;
+		LoadFromString(text.View());
+		m_Dirty = false;
+		return true;
+	}
 
+	void Material::LoadFromString(std::string_view text)
+	{
 		m_Data = MaterialData();
 		const Array<FieldInfo>& fields = GetFields();
-		FieldSerializer::ForEachLine(text.View(), [&](int32 lineNumber, const Array<String>& tokens) {
+		FieldSerializer::ForEachLine(text, [&](int32 lineNumber, const Array<String>& tokens) {
 			const FieldInfo* match = nullptr;
 			for (const FieldInfo& field : fields)
 			{
@@ -68,16 +75,19 @@ namespace FP
 				FP_LOG_WARN("%s line %d: unknown field %s", m_Path.CStr(), lineNumber, tokens[0].CStr());
 			return true;
 		});
-		m_Dirty = false;
-		return true;
 	}
 
-	bool Material::Save()
+	String Material::SaveToString() const
 	{
 		String out = "# FirstPrinciples material\n";
 		for (const FieldInfo& field : GetFields())
 			FieldSerializer::Write(out, field, &m_Data, "");
+		return out;
+	}
 
+	bool Material::Save()
+	{
+		const String out = SaveToString();
 		const String fullPath = Paths::Content(m_Path);
 		if (!File::WriteAllText(fullPath.CStr(), out.View()))
 		{
@@ -92,7 +102,7 @@ namespace FP
 	MaterialLibrary& MaterialLibrary::Get()
 	{
 		static MaterialLibrary library;
-		return library;
+		return ResolveShared(&ModuleContext::MaterialLibrary, library);
 	}
 
 	Material* MaterialLibrary::Load(const String& path)
@@ -134,6 +144,14 @@ namespace FP
 				++saved;
 		}
 		return saved;
+	}
+
+	Array<Material*> MaterialLibrary::GetLoaded() const
+	{
+		Array<Material*> loaded;
+		for (const auto& pair : m_Materials)
+			loaded.Add(pair.Value.Get());
+		return loaded;
 	}
 
 	void MaterialLibrary::Clear()

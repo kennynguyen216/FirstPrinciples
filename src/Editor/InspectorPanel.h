@@ -1,8 +1,10 @@
 #pragma once
 
+#include "Editor/EditorIcons.h"
 #include "Engine/ComponentRegistry.h"
 #include "Engine/World.h"
 #include "Engine/Audio/AudioTypes.h"
+#include "Engine/Scripting/ScriptComponent.h"
 
 #include <QWidget>
 
@@ -10,6 +12,9 @@
 #include <vector>
 
 class QFormLayout;
+class QLabel;
+class QLineEdit;
+class QToolButton;
 class QVBoxLayout;
 
 namespace FP::Editor
@@ -22,9 +27,13 @@ namespace FP::Editor
 
 	public:
 		explicit InspectorPanel(QWidget* parent = nullptr);
+		~InspectorPanel() override;
 
 		// Rebuilds the widgets. Call when the selection or the set of components changes.
 		void SetTarget(World* world, Entity entity);
+
+		// Shows an asset file from the content browser instead of an entity. Absolute path.
+		void SetAsset(const QString& path);
 
 		// Pulls current values into the widgets. Skips the widget being edited.
 		void RefreshValues();
@@ -34,6 +43,9 @@ namespace FP::Editor
 		// A field was edited. Name changes matter to the hierarchy.
 		void Modified();
 		void ImportAudioRequested();
+
+		// The user asked to edit a script's source file.
+		void OpenScriptRequested(const QString& path);
 
 	public:
 		using DataFn = std::function<void*()>;
@@ -46,14 +58,38 @@ namespace FP::Editor
 
 	private:
 		void Rebuild();
+		void RebuildLater();
+		void SetTitle(const QString& text, EditorIcon icon);
+		void ApplyFilter();
 		void AddMaterialSection();
 		void AddAudioSection();
+		void AddMaterialEditor(const String& contentPath, const QString& title);
+		void AddAssetView();
+		void AddScriptsSection(QVBoxLayout* layout);
+		ScriptSlot* SlotAt(int32 index) const;
+
+		// Throwaway instances that hold a script's field values while editing outside play.
+		void ClearEditScripts();
 
 		World* m_World = nullptr;
 		Entity m_Entity = NullEntity;
 		QWidget* m_Content = nullptr;
+		QLabel* m_TitleIcon = nullptr;
+		QLabel* m_Title = nullptr;
+		QToolButton* m_AddButton = nullptr;
+		QLineEdit* m_Filter = nullptr;
 		QVBoxLayout* m_Layout = nullptr;
 		std::vector<std::function<void()>> m_Refreshers;
 		VoiceHandle m_Preview;
+
+		struct EditScript
+		{
+			const ScriptType* Type;
+			Script* Instance;
+		};
+		std::vector<EditScript> m_EditScripts;
+		int32 m_RuntimeListener = 0;
+		bool m_ScriptsUnloaded = false;
+		QString m_AssetPath;
 	};
 }

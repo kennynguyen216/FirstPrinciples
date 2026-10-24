@@ -187,6 +187,8 @@ project "Engine"
 		"src/CoreObject/**.h", "src/CoreObject/**.cpp",
 		"src/Engine/**.h", "src/Engine/**.cpp",
 	}
+	-- Module entry points belong to the scripts library only.
+	removefiles { "src/Engine/Scripting/Module/**" }
 	-- Shader sources are compiled by Scripts/CompileShaders, not by the C++ build.
 	files { "src/Engine/Shaders/**" }
 	filter "files:src/Engine/Shaders/**"
@@ -198,17 +200,32 @@ project "Engine"
 project "Game"
 	kind "StaticLib"
 	files { "Game/**.h", "Game/**.cpp" }
+	-- Scripts build into the GameScripts library instead.
+	removefiles { "Game/Scripts/**" }
 	EngineIncludes()
+
+-- GameScripts: C++ scripts in Game/Scripts, built as a shared library the editor can hot reload.
+project "GameScripts"
+	kind "SharedLib"
+	targetprefix ""
+	files { "Game/Scripts/**.h", "Game/Scripts/**.cpp", "src/Engine/Scripting/Module/**.cpp" }
+	UseEngine(true)
+	filter "system:windows"
+		-- A new PDB name per build so a debugger holding the old one never blocks a rebuild.
+		linkoptions { '/PDB:"$(OutDir)GameScripts_$([System.DateTime]::Now.Ticks).pdb"' }
+	filter {}
 
 project "Runtime"
 	kind "ConsoleApp"
 	files { "src/Runtime/**.h", "src/Runtime/**.cpp" }
 	UseEngine(true)
+	dependson { "GameScripts" }
 
 project "Editor"
 	kind "WindowedApp"
 	files { "src/Editor/**.h", "src/Editor/**.cpp" }
 	UseEngine(true)
+	dependson { "GameScripts" }
 	UseQt()
 	AddMocRules("src/Editor")
 	filter "system:windows"
@@ -220,3 +237,4 @@ project "Tests"
 	files { "src/Tests/**.h", "src/Tests/**.cpp" }
 	files { "src/Editor/AudioImport.h", "src/Editor/AudioImport.cpp" }
 	UseEngine(false)
+	dependson { "GameScripts" }

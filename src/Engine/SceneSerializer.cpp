@@ -67,8 +67,11 @@ namespace FP::SceneSerializer
 				if (!component || info->TypeId == entt::type_hash<IdComponent>::value())
 					continue;
 				out.Appendf("component %s\n", info->Name);
-				for (const FieldInfo& field : info->Fields)
-					FieldSerializer::Write(out, field, component);
+				if (info->WriteCustom)
+					info->WriteCustom(out, component);
+				else
+					for (const FieldInfo& field : info->Fields)
+						FieldSerializer::Write(out, field, component);
 			}
 		}
 		return out;
@@ -84,7 +87,7 @@ namespace FP::SceneSerializer
 		int32 version = 1;
 		bool ok = true;
 
-		const bool parsed = FieldSerializer::ForEachLine(text, [&](int32 lineNumber, const Array<String>& tokens) {
+		const bool parsed = FieldSerializer::ForEachLine(text, [&](int32 lineNumber, const Array<String>& tokens, std::string_view line) {
 			const String& keyword = tokens[0];
 			if (keyword == "version")
 			{
@@ -119,9 +122,14 @@ namespace FP::SceneSerializer
 				return true;
 			}
 
-			// Anything else is a field of the current component.
+			// Anything else belongs to the current component.
 			if (!component)
 				return true;
+			if (info->ReadCustom)
+			{
+				info->ReadCustom(component, tokens, line);
+				return true;
+			}
 			if (const FieldInfo* field = info->FindField(keyword))
 			{
 				Array<String> values = tokens;

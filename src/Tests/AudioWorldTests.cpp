@@ -44,6 +44,35 @@ namespace
 		}
 		~DummyAudio() { Device.Shutdown(); SDL_ResetHint(SDL_HINT_AUDIO_DRIVER); }
 	};
+
+	struct AudioOnRemoval
+	{
+		World* Owner;
+		VoiceHandle Started;
+		void OnRemoved(entt::registry&, Entity)
+		{
+			Started = Owner->GetAudio().PlayOneShot("Audio/Hum.wav").Voice;
+		}
+	};
+}
+
+FP_TEST(AudioWorld_ClearStopsSoundsStartedByDestructionCallbacks)
+{
+	Engine::RegisterEngineComponents();
+	DummyAudio audio;
+	StrongObjectPtr<World> world(NewObject<World>());
+	world->GetAudio().Attach(&audio.Device);
+	const Entity entity = AddLoop(*world.Get());
+	world->Add<AudioListenerComponent>(entity);
+	world->BeginPlay();
+	AudioOnRemoval callback{ world.Get() };
+	world->GetRegistry().on_destroy<AudioListenerComponent>().connect<&AudioOnRemoval::OnRemoved>(callback);
+	world->Clear();
+	FP_EXPECT(bool(callback.Started));
+	FP_EXPECT(world->GetAudio().GetState(callback.Started) == VoiceState::Invalid);
+	FP_EXPECT(world->IsPlaying());
+	world->GetRegistry().on_destroy<AudioListenerComponent>().disconnect<&AudioOnRemoval::OnRemoved>(callback);
+	world->EndPlay();
 }
 
 FP_TEST(AudioWorld_SpatialGains)

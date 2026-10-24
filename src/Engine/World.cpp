@@ -1,5 +1,6 @@
 #include "Engine/World.h"
 #include "Engine/Audio/AudioWorld.h"
+#include "Engine/ComponentRegistry.h"
 
 namespace FP
 {
@@ -12,7 +13,14 @@ namespace FP
 		};
 	}
 
-	World::World() = default;
+	World::World()
+	{
+		// Make every storage here in engine code so none is first created inside a script module.
+		(void)m_Registry.storage<CreationOrderComponent>();
+		for (const ComponentInfo* info : ComponentRegistry::Get().GetAll())
+			info->EnsureStorage(m_Registry);
+	}
+
 	World::~World() = default;
 
 	AudioWorld& World::GetAudio()
@@ -94,8 +102,8 @@ namespace FP
 
 	void World::Clear()
 	{
-		if (m_Audio) m_Audio->ResetScene();
 		m_Registry.clear();
+		if (m_Audio) m_Audio->ResetScene();
 		m_PendingDestroy.Clear();
 		m_NextCreationIndex = 0;
 	}
@@ -103,6 +111,8 @@ namespace FP
 	void World::ReplaceScene(World& candidate)
 	{
 		if (&candidate == this) return;
+		const bool wasPlaying = m_Playing;
+		if (wasPlaying) EndPlay();
 		if (m_Audio) { m_Audio->ResetScene(); m_Audio->DisconnectRegistry(); }
 		if (candidate.m_Audio) { candidate.m_Audio->ResetScene(); candidate.m_Audio->DisconnectRegistry(); }
 		m_Registry.swap(candidate.m_Registry);
@@ -110,6 +120,7 @@ namespace FP
 		m_PendingDestroy.Clear();
 		if (m_Audio) m_Audio->ConnectRegistry();
 		if (candidate.m_Audio) candidate.m_Audio->ConnectRegistry();
+		if (wasPlaying) BeginPlay();
 	}
 
 	void World::ClearSystems()

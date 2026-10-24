@@ -58,7 +58,7 @@ Game code lives in `Game/`. The editor and the runtime both link it.
    };
    ```
 
-2. **Register** them in `Game::RegisterComponents` (`Game/Game.cpp`) so the inspector and scene files see them.
+2. **Register** them in `Game::RegisterComponents` (`Game/Game.cpp`) so the Details panel and scene files see them.
 
    ```cpp
    registry.Register<HealthComponent>("Health")
@@ -129,10 +129,54 @@ The first version uses resident WAVs and simple stereo panning. Compressed/strea
 occlusion, Doppler and effects are deferred. Dense mixes can hard-clip, and an immediate Stop can
 click.
 
+### C++ scripts
+
+Scripts are per entity behaviour written in C++ in `Game/Scripts`. They build into a separate
+`GameScripts` library that the editor reloads while it runs, so you can change code without
+restarting, even in the middle of play.
+
+```cpp
+#include "Engine/Scripting/Script.h"
+
+using namespace FP;
+
+class Rotator : public Script
+{
+public:
+    Vec3 DegreesPerSecond{ 0, 90, 0 };
+
+    void OnUpdate(float deltaTime) override
+    {
+        GetTransform().Rotation += DegreesPerSecond * deltaTime;
+    }
+};
+
+FP_SCRIPT(Rotator)
+{
+    fields.Field("DegreesPerSecond", &Rotator::DegreesPerSecond);
+}
+```
+
+- **Scripts > New Script...** writes a starter file and opens it in a tab next to the viewport.
+- Add a **Scripts** component to an entity, then **Add Script**. An entity can have any number.
+- Fields listed in `FP_SCRIPT` show in the Details panel, save with the scene and keep their values
+  across hot reloads. Other members reset when scripts reload.
+- Saving a script rebuilds and reloads it (turn this off with **Scripts > Auto Reload**).
+  **Scripts > Reload Scripts** (Ctrl+R) forces it. Build output goes to the console, and double
+  clicking an error opens the file at that line.
+- Overrides: `OnStart`, `OnUpdate`, `OnStop` and `OnHotReload` (defaults to calling `OnStart`).
+  Helpers: `GetTransform()`, `Get<T>()`, `TryGet<T>()`, `Add<T>()`, `FindEntity(name)`, `DestroySelf()`.
+- Components still live in `Game/` and are registered in `Game::RegisterComponents`. Keep new
+  component types out of `Game/Scripts`, since data owned by the scripts library would vanish
+  when it reloads.
+
+The runtime loads the same library at startup. Building from the command line works as before,
+and the `GameScripts` project builds along with the editor.
+
 ### Materials and lighting
 
 A sprite draws unlit with its `Tint` and `Texture` until it gets a **Material** component. That points
-at a shared `.material` file in `Content/Materials`. Select the entity and the inspector shows the
+at a shared `.material` file in `Content/Materials`. Select the entity and the Details panel shows the
 material's values below the component, or a **Create Material...** button when it has none. Edits apply
 to every entity using that material. **Save Material** or Ctrl+S writes them.
 
@@ -161,6 +205,76 @@ shows every material on meshes, including a refracting glass sphere.
 `Transform.Rotation` is euler degrees as pitch (X), yaw (Y) and roll (Z). Cameras and lights point
 down their local -Z axis.
 
+### Editor layout
+
+The editor follows Unreal Engine 5's layout and dark theme, using this engine's own terms.
+
+- **Place Entities** on the left: click an entry to create it, or drag it into the viewport to place it
+  under the mouse. The icons on top filter by category.
+- **Viewport** in the middle, in a tab named after the open scene. The pills over it switch between
+  Perspective and Top (2D), pick Lit, Unlit or Wireframe, and turn grid snap on with a grid size.
+- **Details** shows the selection's components in collapsible sections. Add components with the Add
+  button, remove one with the x on its header, and filter fields with the search box.
+- **Outliner** lists every entity under the scene with its type, plus a search box.
+- **Content Browser** and **Output Log** share the bottom. The status bar has buttons for both and a
+  console box: type `help` for the commands (play, stop, save, undo, redo, gc, 2d, 3d, viewmode,
+  select, create).
+
+### Content browser
+
+The **Content Browser** tab next to the **Output Log** at the bottom of the editor shows everything in
+`Content` plus the scripts in `Game/Scripts`. Textures show thumbnails and materials show their color.
+
+- Double click a scene to open it or a script to edit it in a tab. Click a material to edit it in
+  the Details panel, or a texture to preview it.
+- Drag a texture into the viewport to make a sprite, an `.obj` to make a mesh, or a material onto a
+  sprite or mesh to assign it. Drag any asset onto a matching Details field to fill it in.
+- **Add** or a right click makes a New Folder, Material, Scene or Script. **Import** copies files in,
+  and **Save All** saves the scene, materials and script tabs. Back, forward and the folder path
+  above the files move between folders.
+- Right click an asset to Rename (F2), Duplicate, Delete, Copy Path or Show in Finder or Explorer.
+- Renaming rewrites references in every scene and material. Delete moves files to the system Trash.
+- The browser refreshes on its own when files change, and the Output Log comes forward when a script
+  build fails.
+
+### Undo and redo
+
+Ctrl+Z undoes and Ctrl+Shift+Z redoes (Cmd on macOS, and Ctrl+Y also redoes on Windows). Both are in the
+**Edit** menu too.
+
+- Every scene edit can be undone: moving, creating, duplicating, deleting, dropping assets, Details
+  fields, components, scripts and material values. The selection comes back with each step.
+- A drag or a burst of typing becomes one step once the mouse comes up and edits pause briefly.
+- Script tabs and text fields keep their own text undo while they have focus.
+- History holds the last 100 steps and starts over when a scene is opened. Play mode changes are not
+  recorded since Stop puts the scene back anyway.
+
+### Jobs
+
+`FP::JobSystem` spreads work over one worker thread per core. Jobs run on fibers, small stacks the
+engine switches between in user space, so a job that waits on other jobs parks its fiber and the
+thread moves on instead of blocking. A fiber switch costs tens of nanoseconds where starting an OS
+thread costs tens of microseconds.
+
+```cpp
+#include "Core/Jobs/JobSystem.h"
+
+FP::JobCounter counter;
+for (int32 i = 0; i < chunkCount; ++i)
+    FP::JobSystem::Run([i]() { ProcessChunk(i); }, &counter);
+FP::JobSystem::Wait(counter);
+
+FP::JobSystem::ParallelFor(enemyCount, 32, [&](int32 i) { UpdateEnemy(i); });
+```
+
+- Jobs can run and wait on more jobs. Waiting inside a job never ties up a thread.
+- The editor and runtime start the system for you. The main thread helps run jobs while it waits.
+- Job lambdas hold up to 48 bytes of captures. Capture large data by reference.
+- A job can resume on a different thread after a wait, so avoid `thread_local` inside jobs.
+- Never spin inside a job waiting for the main thread. It may be the thread running that job.
+- Systems update on the main thread. Use jobs for work that does not touch the world from many
+  jobs at once, such as math over arrays or loading.
+
 ### Editor controls
 
 | Action | Control |
@@ -168,13 +282,17 @@ down their local -Z axis.
 | Pan | 2D: right or middle drag. 3D: middle drag or Shift right drag |
 | Zoom | Mouse wheel |
 | Orbit (3D) | Right drag or Alt left drag |
-| Toggle 3D view | Ctrl+3 |
-| View mode | Toolbar dropdown, or Alt+4 Lit, Alt+3 Unlit, Alt+2 Wireframe |
+| Toggle 3D view | Ctrl+3 or the Perspective pill |
+| View mode | Viewport pill, or Alt+4 Lit, Alt+3 Unlit, Alt+2 Wireframe |
+| Rename / delete asset | F2 / Delete in the content browser |
 | Focus selection | F |
-| Select / move | Left click / left drag along the view plane (hold Shift to snap) |
+| Select / move | Left click / left drag along the view plane |
+| Grid snap | Grid pill over the viewport. Shift flips snapping while dragging |
 | Create sprite | Ctrl+Shift+A |
 | Duplicate / delete | Ctrl+D / Delete |
+| Undo / redo | Ctrl+Z / Ctrl+Shift+Z |
 | Play | Ctrl+P |
+| New script / reload scripts | Scripts menu / Ctrl+R |
 | Save | Ctrl+S |
 
 ### Smoke tests
@@ -185,6 +303,9 @@ Binaries/Debug/Runtime --screenshot runtime.bmp
 Binaries/Debug/Editor --play --screenshot editor.png
 Binaries/Debug/Editor --scene Scenes/Lighting2D.scene --select "Glass Pane" --screenshot lit.png
 Binaries/Debug/Editor --scene Scenes/Showcase3D.scene --3d --viewmode wireframe --screenshot 3d.png
+Binaries/Debug/Editor --build-scripts
+Binaries/Debug/Editor --browse Materials --asset Materials/Bricks.material --screenshot browser.png
+Binaries/Debug/Editor --drop Textures/Bricks_AO.png --undo --redo --screenshot undo.png
 ```
 
 ## Rendering
@@ -216,6 +337,7 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 | Game | The game's components and systems (`Game/`) |
 | Editor | Qt editor |
 | Runtime | Standalone player for a scene |
+| GameScripts | Hot reloadable C++ scripts (`Game/Scripts`) |
 | Tests | Unit tests. Run `Binaries/Debug/Tests [filter]` |
 
 ## Third party
@@ -232,6 +354,7 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 - The editor viewport renders offscreen and copies each frame back to Qt. Fine for editing, but slower than a native view.
 - File paths go through `fopen`, so non ASCII paths on Windows are not supported yet.
 - No undo yet.
+- The job queue uses a lock. A lock free queue will help when many tiny jobs are queued at once.
 - Glass draws after everything else, so glass behind glass is not refracted twice.
 - No shadows yet.
 - Editor grid and gizmo lines draw on top of everything.

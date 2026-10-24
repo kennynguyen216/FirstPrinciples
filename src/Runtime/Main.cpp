@@ -4,8 +4,11 @@
 
 #include "Engine/Engine.h"
 #include "Engine/Audio/AudioDevice.h"
+#include "Core/Jobs/JobSystem.h"
 #include "Engine/Render/Renderer.h"
 #include "Engine/SceneSerializer.h"
+#include "Engine/Scripting/ScriptRuntime.h"
+#include "Engine/Scripting/ScriptSystem.h"
 #include "Game/Game.h"
 
 #include <SDL3/SDL.h>
@@ -43,6 +46,8 @@ int main(int argc, char** argv)
 		FP_LOG_ERROR("SDL_Init failed: %s", SDL_GetError());
 		return 1;
 	}
+
+	JobSystem::Initialize();
 
 	const char* scene = Game::StartScene;
 	const char* screenshotPath = nullptr;
@@ -82,11 +87,15 @@ int main(int argc, char** argv)
 	if (!SceneSerializer::LoadFromFile(*world.Get(), scenePath.CStr()))
 		FP_LOG_WARN("Starting with an empty world");
 
+	// Scripts are optional. The game still runs its built in systems without them.
+	ScriptRuntime::Get().LoadModule(ScriptRuntime::GetDefaultModulePath());
+	world->AddSystem<ScriptSystem>();
 	Game::AddSystems(*world.Get());
 	world->BeginPlay();
 
 	{
 		Renderer renderer(*device, swapchainFormat);
+		renderer.PreloadTextures(*world.Get());
 		uint64 lastTicks = SDL_GetTicksNS();
 		int32 frame = 0;
 		bool running = renderer.IsValid();
@@ -135,9 +144,11 @@ int main(int argc, char** argv)
 	world.Reset();
 	GarbageCollector::Get().Collect();
 	audio.Shutdown();
+	ScriptRuntime::Get().UnloadModule();
 	SDL_ReleaseWindowFromGPUDevice(device->GetHandle(), window);
 	SDL_DestroyWindow(window);
 	delete device;
+	JobSystem::Shutdown();
 	SDL_Quit();
 	return 0;
 }

@@ -35,7 +35,9 @@ namespace FP
 	public:
 		World();
 		~World() override;
-		AudioWorld& GetAudio();
+		// Scripts dispatch into the host so audio state never retains code from a reloadable module.
+		virtual AudioWorld& GetAudio();
+
 		// ---- Entities ------------------------------------------------------
 
 		// New entity with an id, a name and a transform.

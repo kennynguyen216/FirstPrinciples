@@ -19,26 +19,26 @@ namespace FP
 	{
 	public:
 		explicit AudioWorld(World& world);
-		~AudioWorld();
+		virtual ~AudioWorld();
 		AudioWorld(const AudioWorld&) = delete;
 		AudioWorld& operator=(const AudioWorld&) = delete;
 
-		bool Attach(AudioDevice* device);
-		AudioDevice* GetDevice() const;
-		void BeginPlay();
-		void EndPlay();
-		void Update();
-		AudioResult Preload(const String& clip);
-		AudioPlayResult Play(Entity source);
-		AudioPlayResult PlayOneShot(const String& clip, const OneShotParams& params = {});
-		bool Stop(VoiceHandle voice);
-		bool Pause(VoiceHandle voice);
-		bool Resume(VoiceHandle voice);
-		VoiceState GetState(VoiceHandle voice) const;
-		VoiceHandle GetSourceVoice(Entity source) const;
-		void StopSource(Entity source);
-		void StopAll();
-		Entity GetListenerEntity() const { return m_ListenerEntity; }
+		virtual bool Attach(AudioDevice* device);
+		virtual AudioDevice* GetDevice() const;
+		virtual void BeginPlay();
+		virtual void EndPlay();
+		virtual void Update();
+		virtual AudioResult Preload(const String& clip);
+		virtual AudioPlayResult Play(Entity source);
+		virtual AudioPlayResult PlayOneShot(const String& clip, const OneShotParams& params = {});
+		virtual bool Stop(VoiceHandle voice);
+		virtual bool Pause(VoiceHandle voice);
+		virtual bool Resume(VoiceHandle voice);
+		virtual VoiceState GetState(VoiceHandle voice) const;
+		virtual VoiceHandle GetSourceVoice(Entity source) const;
+		virtual void StopSource(Entity source);
+		virtual void StopAll();
+		virtual Entity GetListenerEntity() const { return m_ListenerEntity; }
 
 	private:
 		friend class World;

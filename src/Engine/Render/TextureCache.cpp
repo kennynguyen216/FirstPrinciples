@@ -1,5 +1,6 @@
 #include "Engine/Render/TextureCache.h"
 #include "Engine/Paths.h"
+#include "Engine/Render/ImageDecoder.h"
 
 #include <stb_image.h>
 
@@ -38,6 +39,45 @@ namespace FP
 		}
 		m_Textures.Add(key, texture);
 		return texture.Get();
+	}
+
+	int32 TextureCache::Preload(const Array<Request>& requests)
+	{
+		// Decode each file once even when it is used as both color and data.
+		Array<String> toDecode;
+		for (const Request& request : requests)
+		{
+			const String key = request.Srgb ? request.Path + "|srgb" : request.Path;
+			if (request.Path.IsEmpty() || m_Textures.Contains(key) || m_Failed.Contains(key))
+				continue;
+			toDecode.AddUnique(request.Path);
+		}
+		if (toDecode.IsEmpty())
+			return 0;
+
+		const Array<DecodedImage> images = DecodeImages(toDecode);
+		int32 loaded = 0;
+		for (const Request& request : requests)
+		{
+			const String key = request.Srgb ? request.Path + "|srgb" : request.Path;
+			const int32 index = toDecode.Find(request.Path);
+			if (index == INDEX_NONE || m_Textures.Contains(key) || m_Failed.Contains(key))
+				continue;
+			const DecodedImage& image = images[index];
+			RefPtr<GPUTexture> texture = image.Pixels
+				? m_Device.CreateTexture(image.Pixels, static_cast<uint32>(image.Width), static_cast<uint32>(image.Height), request.Srgb, true)
+				: nullptr;
+			if (texture)
+			{
+				m_Textures.Add(key, texture);
+				++loaded;
+			}
+			else
+			{
+				m_Failed.Add(key);
+			}
+		}
+		return loaded;
 	}
 
 	void TextureCache::Clear()

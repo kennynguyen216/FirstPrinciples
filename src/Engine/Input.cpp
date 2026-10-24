@@ -1,4 +1,5 @@
 #include "Engine/Input.h"
+#include "Core/Misc/ModuleContext.h"
 
 #include <cstring>
 
@@ -16,18 +17,23 @@ namespace FP::Input
 			Vec2 MousePosition;
 		};
 
-		State GState;
+		// The host's state when running inside a loaded module, so scripts read real input.
+		State& GetState()
+		{
+			static State state;
+			return ResolveShared(&ModuleContext::Input, state);
+		}
 
 		bool InRange(Key key) { return key > SDL_SCANCODE_UNKNOWN && key < SDL_SCANCODE_COUNT; }
 	}
 
-	bool IsKeyDown(Key key) { return InRange(key) && GState.Down[key]; }
-	bool WasKeyPressed(Key key) { return InRange(key) && GState.Pressed[key]; }
-	bool WasKeyReleased(Key key) { return InRange(key) && GState.Released[key]; }
+	bool IsKeyDown(Key key) { return InRange(key) && GetState().Down[key]; }
+	bool WasKeyPressed(Key key) { return InRange(key) && GetState().Pressed[key]; }
+	bool WasKeyReleased(Key key) { return InRange(key) && GetState().Released[key]; }
 
-	bool IsMouseDown(MouseButton button) { return GState.MouseDown[static_cast<int>(button)]; }
-	bool WasMousePressed(MouseButton button) { return GState.MousePressed[static_cast<int>(button)]; }
-	Vec2 GetMousePosition() { return GState.MousePosition; }
+	bool IsMouseDown(MouseButton button) { return GetState().MouseDown[static_cast<int>(button)]; }
+	bool WasMousePressed(MouseButton button) { return GetState().MousePressed[static_cast<int>(button)]; }
+	Vec2 GetMousePosition() { return GetState().MousePosition; }
 
 	Vec2 GetMoveAxis()
 	{
@@ -41,21 +47,21 @@ namespace FP::Input
 
 	void SetKey(Key key, bool down)
 	{
-		if (!InRange(key) || GState.Down[key] == down)
+		if (!InRange(key) || GetState().Down[key] == down)
 			return;
-		GState.Down[key] = down;
-		(down ? GState.Pressed : GState.Released)[key] = true;
+		GetState().Down[key] = down;
+		(down ? GetState().Pressed : GetState().Released)[key] = true;
 	}
 
 	void SetMouseButton(MouseButton button, bool down)
 	{
 		const int index = static_cast<int>(button);
-		if (down && !GState.MouseDown[index])
-			GState.MousePressed[index] = true;
-		GState.MouseDown[index] = down;
+		if (down && !GetState().MouseDown[index])
+			GetState().MousePressed[index] = true;
+		GetState().MouseDown[index] = down;
 	}
 
-	void SetMousePosition(Vec2 position) { GState.MousePosition = position; }
+	void SetMousePosition(Vec2 position) { GetState().MousePosition = position; }
 
 	void ProcessEvent(const SDL_Event& event)
 	{
@@ -88,15 +94,20 @@ namespace FP::Input
 
 	void EndFrame()
 	{
-		std::memset(GState.Pressed, 0, sizeof(GState.Pressed));
-		std::memset(GState.Released, 0, sizeof(GState.Released));
-		std::memset(GState.MousePressed, 0, sizeof(GState.MousePressed));
+		std::memset(GetState().Pressed, 0, sizeof(GetState().Pressed));
+		std::memset(GetState().Released, 0, sizeof(GetState().Released));
+		std::memset(GetState().MousePressed, 0, sizeof(GetState().MousePressed));
 	}
 
 	void Reset()
 	{
-		const Vec2 mouse = GState.MousePosition;
-		GState = State();
-		GState.MousePosition = mouse;
+		const Vec2 mouse = GetState().MousePosition;
+		GetState() = State();
+		GetState().MousePosition = mouse;
+	}
+
+	void* GetSharedState()
+	{
+		return &GetState();
 	}
 }

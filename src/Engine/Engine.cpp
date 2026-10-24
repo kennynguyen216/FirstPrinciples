@@ -1,5 +1,6 @@
 #include "Engine/Engine.h"
 #include "Engine/Render/MeshData.h"
+#include "Engine/Scripting/ScriptComponent.h"
 
 namespace FP::Engine
 {
@@ -59,6 +60,10 @@ namespace FP::Engine
 
 		registry.Register<MaterialComponent>("Material")
 			.Field("Material", &MaterialComponent::Material).AssetPath("Materials (*.material)");
+
+		registry.Register<ScriptComponent>("Scripts")
+			.CustomSerializer(&ScriptComponentFormat::Write, &ScriptComponentFormat::Read)
+			.CustomInspector();
 
 		registry.Register<PointLightComponent>("PointLight")
 			.Field("Color", &PointLightComponent::Color)

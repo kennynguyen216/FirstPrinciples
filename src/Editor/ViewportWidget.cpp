@@ -1,9 +1,13 @@
 #include "Editor/ViewportWidget.h"
+#include "Editor/PlaceEntitiesPanel.h"
 #include "Engine/Input.h"
 
 #include <SDL3/SDL.h>
 
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QKeyEvent>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QWheelEvent>
@@ -50,6 +54,7 @@ namespace FP::Editor
 		setMouseTracking(true);
 		setMinimumSize(320, 240);
 		setAttribute(Qt::WA_OpaquePaintEvent);
+		setAcceptDrops(true);
 
 		// RGBA sRGB is a valid render target everywhere and matches QImage::Format_RGBA8888.
 		m_Renderer = new Renderer(device, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB);
@@ -384,7 +389,17 @@ namespace FP::Editor
 
 	void ViewportWidget::resizeEvent(QResizeEvent*)
 	{
+		if (m_Overlay)
+			m_Overlay->setGeometry(0, 0, width(), m_Overlay->sizeHint().height());
 		RenderFrame();
+	}
+
+	void ViewportWidget::SetOverlay(QWidget* overlay)
+	{
+		m_Overlay = overlay;
+		overlay->setParent(this);
+		overlay->setGeometry(0, 0, width(), overlay->sizeHint().height());
+		overlay->show();
 	}
 
 	void ViewportWidget::mousePressEvent(QMouseEvent* event)
@@ -488,10 +503,11 @@ namespace FP::Editor
 			{
 				const float t = Vec3::Dot(m_DragPlanePoint - ray.Origin, m_DragPlaneNormal) / denom;
 				Vec3 target = ray.Origin + ray.Direction * t + m_DragOffset;
-				// Hold shift to snap to a quarter unit grid. Axes facing the camera are left alone.
-				if (event->modifiers() & Qt::ShiftModifier)
+				// Snap to the grid when snapping is on, or off with Shift held. Axes facing the camera are left alone.
+				const bool shift = event->modifiers() & Qt::ShiftModifier;
+				if (m_SnapEnabled != shift && m_SnapSize > 0)
 				{
-					auto snap = [](float value) { return std::round(value * 4) / 4; };
+					auto snap = [this](float value) { return std::round(value / m_SnapSize) * m_SnapSize; };
 					if (std::fabs(m_DragPlaneNormal.X) < 0.9f) target.X = snap(target.X);
 					if (std::fabs(m_DragPlaneNormal.Y) < 0.9f) target.Y = snap(target.Y);
 					if (std::fabs(m_DragPlaneNormal.Z) < 0.9f) target.Z = snap(target.Z);
@@ -537,6 +553,51 @@ namespace FP::Editor
 			Input::SetKey(ToScancode(event->key()), false);
 		else
 			QWidget::keyReleaseEvent(event);
+	}
+
+	void ViewportWidget::dragEnterEvent(QDragEnterEvent* event)
+	{
+		if (!m_Playing && (event->mimeData()->hasUrls() || event->mimeData()->hasFormat(PlaceEntitiesPanel::MimeType)))
+			event->acceptProposedAction();
+	}
+
+	void ViewportWidget::dropEvent(QDropEvent* event)
+	{
+		if (m_Playing || !m_World)
+			return;
+		const Vec2 pixel = ToPixels(event->position());
+		const Ray ray = CurrentView().ScreenToRay(pixel);
+
+		// 2D drops land on the sprite plane, 3D drops on the ground.
+		Vec3 point = ray.Origin;
+		if (m_3D)
+		{
+			if (std::fabs(ray.Direction.Y) > 1e-6f)
+			{
+				const float t = -ray.Origin.Y / ray.Direction.Y;
+				if (t > 0)
+					point = ray.Origin + ray.Direction * t;
+			}
+		}
+		else
+		{
+			ray.IntersectZPlane(0, point);
+		}
+
+		if (event->mimeData()->hasFormat(PlaceEntitiesPanel::MimeType))
+		{
+			emit EntityDropped(QString::fromUtf8(event->mimeData()->data(PlaceEntitiesPanel::MimeType)), point);
+			event->acceptProposedAction();
+			return;
+		}
+
+		const Entity target = Pick(pixel);
+		for (const QUrl& url : event->mimeData()->urls())
+		{
+			if (url.isLocalFile())
+				emit AssetDropped(url.toLocalFile(), point, target);
+		}
+		event->acceptProposedAction();
 	}
 
 	void ViewportWidget::focusOutEvent(QFocusEvent* event)

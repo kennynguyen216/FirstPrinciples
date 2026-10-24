@@ -1,9 +1,13 @@
 #include "Editor/InspectorPanel.h"
+#include "Engine/Audio/AudioDevice.h"
+#include "Engine/Audio/AudioWorld.h"
 #include "Engine/ComponentRegistry.h"
 #include "Engine/Material.h"
 #include "Engine/Paths.h"
-#include "Engine/Audio/AudioDevice.h"
-#include "Engine/Audio/AudioWorld.h"
+#include "Engine/Scripting/ScriptRuntime.h"
+#include "Editor/ContentBrowser.h"
+#include "Editor/EditorIcons.h"
+#include "Editor/EditorStyle.h"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -13,10 +17,15 @@
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFormLayout>
-#include <QGroupBox>
+#include <QImage>
+#include <QFileInfo>
+#include <QSet>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QLineEdit>
+#include <QMimeData>
 #include <QMenu>
 #include <QPushButton>
 #include <QScrollArea>
@@ -39,6 +48,9 @@ namespace FP::Editor
 			box->setSingleStep(0.1);
 			box->setKeyboardTracking(false);
 			box->setMinimumWidth(70);
+			// Style sheet padding does not reach the text inside a spin box, so set it on the editor itself.
+			if (QLineEdit* text = box->findChild<QLineEdit*>())
+				text->setTextMargins(4, 0, 2, 0);
 			return box;
 		}
 
@@ -65,10 +77,138 @@ namespace FP::Editor
 			return String(utf8.constData(), static_cast<int32>(utf8.size()));
 		}
 
+		// Line edit for asset paths that takes files dropped from the content browser and stores
+		// them relative to Content.
+		class AssetLineEdit : public QLineEdit
+		{
+		public:
+			using QLineEdit::QLineEdit;
+
+		protected:
+			void dragEnterEvent(QDragEnterEvent* event) override
+			{
+				if (RelativePath(event->mimeData()).isEmpty())
+					QLineEdit::dragEnterEvent(event);
+				else
+					event->acceptProposedAction();
+			}
+
+			void dropEvent(QDropEvent* event) override
+			{
+				const QString relative = RelativePath(event->mimeData());
+				if (relative.isEmpty())
+				{
+					QLineEdit::dropEvent(event);
+					return;
+				}
+				setText(relative);
+				emit editingFinished();
+				event->acceptProposedAction();
+			}
+
+		private:
+			static QString RelativePath(const QMimeData* data)
+			{
+				if (!data->hasUrls() || data->urls().isEmpty() || !data->urls().first().isLocalFile())
+					return {};
+				const QString relative = QDir(ToQString(Paths::GetContentDir())).relativeFilePath(data->urls().first().toLocalFile());
+				return relative.startsWith("..") ? QString() : relative;
+			}
+		};
+
+		// A collapsible category like UE's Details panel. The header holds the title and any actions.
+		// Collapsed titles are remembered so rebuilding after an edit keeps the layout.
+		class DetailsSection : public QWidget
+		{
+		public:
+			explicit DetailsSection(const QString& title)
+			{
+				QVBoxLayout* outer = new QVBoxLayout(this);
+				outer->setContentsMargins(0, 0, 0, 0);
+				outer->setSpacing(0);
+
+				QWidget* header = new QWidget();
+				header->setObjectName("SectionHeader");
+				header->setStyleSheet("#SectionHeader { background: #2f2f2f; border-radius: 3px; }");
+				m_Header = new QHBoxLayout(header);
+				m_Header->setContentsMargins(4, 2, 4, 2);
+				m_Toggle = new QToolButton();
+				m_Toggle->setCheckable(true);
+				m_Toggle->setText(title);
+				m_Toggle->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+				m_Toggle->setStyleSheet("QToolButton { background: transparent; border: none; font-weight: bold; color: #ffffff; padding: 3px; }");
+				m_Header->addWidget(m_Toggle, 1, Qt::AlignLeft);
+				outer->addWidget(header);
+
+				m_Body = new QWidget();
+				m_Body->setObjectName("SectionBody");
+				m_Body->setStyleSheet("#SectionBody { background: #1a1a1a; }");
+				m_Layout = new QVBoxLayout(m_Body);
+				m_Layout->setContentsMargins(10, 6, 6, 6);
+				outer->addWidget(m_Body);
+
+				const bool collapsed = Collapsed().contains(title);
+				m_Toggle->setChecked(!collapsed);
+				Update();
+				connect(m_Toggle, &QToolButton::toggled, this, [this, title](bool open) {
+					if (open)
+						Collapsed().remove(title);
+					else
+						Collapsed().insert(title);
+					Update();
+				});
+			}
+
+			QVBoxLayout* Body() const { return m_Layout; }
+
+			// Adds a small flat button on the right side of the header.
+			QToolButton* AddAction(const QIcon& icon, const QString& text, const QString& tip)
+			{
+				QToolButton* button = new QToolButton();
+				button->setIcon(icon);
+				button->setText(text);
+				button->setToolTip(tip);
+				button->setAutoRaise(true);
+				button->setToolButtonStyle(text.isEmpty() ? Qt::ToolButtonIconOnly : Qt::ToolButtonTextBesideIcon);
+				button->setStyleSheet("QToolButton { background: transparent; border: none; padding: 2px 4px; } QToolButton:hover { background: #575757; border-radius: 3px; }");
+				m_Header->addWidget(button);
+				return button;
+			}
+
+		private:
+			static QSet<QString>& Collapsed()
+			{
+				static QSet<QString> titles;
+				return titles;
+			}
+
+			void Update()
+			{
+				m_Body->setVisible(m_Toggle->isChecked());
+				m_Toggle->setArrowType(m_Toggle->isChecked() ? Qt::DownArrow : Qt::RightArrow);
+			}
+
+			QHBoxLayout* m_Header = nullptr;
+			QToolButton* m_Toggle = nullptr;
+			QWidget* m_Body = nullptr;
+			QVBoxLayout* m_Layout = nullptr;
+		};
+
+		QFormLayout* MakeForm(QVBoxLayout* body)
+		{
+			QFormLayout* form = new QFormLayout();
+			form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+			form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+			form->setHorizontalSpacing(12);
+			form->setVerticalSpacing(4);
+			body->addLayout(form);
+			return form;
+		}
+
 		// Spin boxes for Vec2 and Vec3 share this so every axis behaves the same.
 		QWidget* MakeVectorRow(int count, QDoubleSpinBox** boxes)
 		{
-			static const char* const labels[3] = { "X ", "Y ", "Z " };
+			static const char* const axisColors[3] = { "#c83a3a", "#5eb03a", "#3a7ae0" };
 			QWidget* row = new QWidget();
 			QHBoxLayout* layout = new QHBoxLayout(row);
 			layout->setContentsMargins(0, 0, 0, 0);
@@ -76,8 +216,8 @@ namespace FP::Editor
 			for (int i = 0; i < count; ++i)
 			{
 				boxes[i] = MakeFloatBox();
-				boxes[i]->setPrefix(labels[i]);
 				boxes[i]->setMinimumWidth(56);
+				boxes[i]->setStyleSheet(QString("QDoubleSpinBox { border-left: 3px solid %1; border-top-left-radius: 2px; border-bottom-left-radius: 2px; }").arg(axisColors[i]));
 				layout->addWidget(boxes[i]);
 			}
 			return row;
@@ -87,7 +227,33 @@ namespace FP::Editor
 	InspectorPanel::InspectorPanel(QWidget* parent) : QWidget(parent)
 	{
 		QVBoxLayout* outer = new QVBoxLayout(this);
-		outer->setContentsMargins(0, 0, 0, 0);
+		outer->setContentsMargins(6, 6, 6, 0);
+		outer->setSpacing(6);
+
+		// Header: what is shown, plus the Add button for components.
+		QHBoxLayout* header = new QHBoxLayout();
+		m_TitleIcon = new QLabel();
+		header->addWidget(m_TitleIcon);
+		m_Title = new QLabel();
+		m_Title->setStyleSheet("font-size: 14px; font-weight: bold; color: #ffffff;");
+		header->addWidget(m_Title, 1);
+		m_AddButton = new QToolButton();
+		m_AddButton->setText("Add");
+		m_AddButton->setIcon(EditorIcons::Get(EditorIcon::Add, EditorStyle::Play));
+		m_AddButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+		m_AddButton->setPopupMode(QToolButton::InstantPopup);
+		m_AddButton->setToolTip("Add a component");
+		header->addWidget(m_AddButton);
+		outer->addLayout(header);
+
+		m_Filter = new QLineEdit();
+		m_Filter->setPlaceholderText("Search");
+		m_Filter->setProperty("search", true);
+		m_Filter->addAction(EditorIcons::Get(EditorIcon::Search), QLineEdit::LeadingPosition);
+		m_Filter->setClearButtonEnabled(true);
+		connect(m_Filter, &QLineEdit::textChanged, this, &InspectorPanel::ApplyFilter);
+		outer->addWidget(m_Filter);
+
 		QScrollArea* scroll = new QScrollArea();
 		scroll->setWidgetResizable(true);
 		scroll->setFrameShape(QFrame::NoFrame);
@@ -96,16 +262,146 @@ namespace FP::Editor
 		m_Content = new QWidget();
 		m_Layout = new QVBoxLayout(m_Content);
 		m_Layout->setAlignment(Qt::AlignTop);
+		m_Layout->setContentsMargins(0, 0, 0, 6);
+		m_Layout->setSpacing(4);
 		scroll->setWidget(m_Content);
+
+		// Script field rows point into script code, so let go of them before the library unloads.
+		m_RuntimeListener = ScriptRuntime::Get().AddListener([this](bool loaded) {
+			m_ScriptsUnloaded = !loaded;
+			Rebuild();
+		});
 		Rebuild();
 	}
 
-	void InspectorPanel::SetTarget(World* world, Entity entity)
+	InspectorPanel::~InspectorPanel()
 	{
 		StopPreview();
-		m_World = world;
-		m_Entity = entity;
-		Rebuild();
+		ScriptRuntime::Get().RemoveListener(m_RuntimeListener);
+		m_Refreshers.clear();
+		ClearEditScripts();
+	}
+
+	void InspectorPanel::RebuildLater()
+	{
+		// Rebuilding deletes the button that was clicked, so wait until its click handler returns.
+		QMetaObject::invokeMethod(this, &InspectorPanel::Rebuild, Qt::QueuedConnection);
+	}
+
+	void InspectorPanel::ClearEditScripts()
+	{
+		for (const EditScript& edit : m_EditScripts)
+			ScriptRuntime::Get().DestroyInstance(*edit.Type, edit.Instance);
+		m_EditScripts.clear();
+	}
+
+	ScriptSlot* InspectorPanel::SlotAt(int32 index) const
+	{
+		if (!m_World || !m_World->IsValid(m_Entity))
+			return nullptr;
+		ScriptComponent* scripts = m_World->TryGet<ScriptComponent>(m_Entity);
+		return scripts && scripts->Scripts.IsValidIndex(index) ? &scripts->Scripts[index] : nullptr;
+	}
+
+	void InspectorPanel::AddScriptsSection(QVBoxLayout* layout)
+	{
+		if (m_ScriptsUnloaded)
+		{
+			QLabel* waiting = new QLabel("Scripts are reloading...");
+			waiting->setEnabled(false);
+			layout->addWidget(waiting);
+			return;
+		}
+
+		ScriptRuntime& runtime = ScriptRuntime::Get();
+		const ScriptComponent& component = m_World->Get<ScriptComponent>(m_Entity);
+		for (int32 index = 0; index < component.Scripts.Num(); ++index)
+		{
+			const ScriptSlot& slot = component.Scripts[index];
+			const ScriptType* type = runtime.FindType(slot.Name);
+
+			DetailsSection* box = new DetailsSection(ToQString(slot.Name));
+			QVBoxLayout* boxLayout = box->Body();
+			QFormLayout* form = MakeForm(boxLayout);
+			form->setRowWrapPolicy(QFormLayout::WrapLongRows); // script field names are often long
+
+			if (!type)
+			{
+				QLabel* missing = new QLabel("Not compiled. Its saved values are kept.");
+				missing->setEnabled(false);
+				boxLayout->addWidget(missing);
+			}
+			else
+			{
+				// While playing the live instance is shown. Otherwise edits go to a throwaway
+				// instance and are written back to the slot's saved text.
+				Script* edit = runtime.CreateInstance(*type, m_World, m_Entity, slot.Properties.View());
+				m_EditScripts.push_back({ type, edit });
+				auto data = [this, index, edit]() -> void* {
+					const ScriptSlot* current = SlotAt(index);
+					return current && current->Instance ? current->Instance : edit;
+				};
+				auto changed = [this, index, type, edit]() {
+					ScriptSlot* current = SlotAt(index);
+					if (current && !current->Instance)
+						current->Properties = ScriptRuntime::CaptureProperties(*type, edit);
+					emit Modified();
+				};
+				for (const FieldInfo& field : type->Fields)
+					AddFieldEditor(form, field, data, changed);
+				if (type->Fields.IsEmpty())
+				{
+					QLabel* none = new QLabel("No exposed fields");
+					none->setEnabled(false);
+					boxLayout->addWidget(none);
+				}
+			}
+
+			if (type && type->SourceFile)
+			{
+				QToolButton* editButton = box->AddAction(EditorIcons::Get(EditorIcon::Script), "Edit", "Open the script source");
+				const QString source = QString::fromUtf8(type->SourceFile);
+				connect(editButton, &QToolButton::clicked, this, [this, source]() { emit OpenScriptRequested(source); });
+			}
+			QToolButton* remove = box->AddAction(EditorIcons::Get(EditorIcon::Close), "", "Remove script");
+			connect(remove, &QToolButton::clicked, this, [this, index]() {
+				ScriptSlot* current = SlotAt(index);
+				if (!current)
+					return;
+				if (current->Instance)
+				{
+					current->Instance->OnStop();
+					ScriptRuntime::Get().DestroyInstance(*current->Type, current->Instance);
+					current->Instance = nullptr;
+				}
+				m_World->Get<ScriptComponent>(m_Entity).Scripts.RemoveAt(index);
+				emit Modified();
+				RebuildLater();
+			});
+			layout->addWidget(box);
+		}
+
+		QToolButton* add = new QToolButton();
+		add->setText("Add Script");
+		add->setPopupMode(QToolButton::InstantPopup);
+		QMenu* menu = new QMenu(add);
+		for (const ScriptType* type : runtime.GetTypes())
+		{
+			const String name = type->Name;
+			menu->addAction(ToQString(name), this, [this, name]() {
+				if (ScriptComponent* scripts = m_World->TryGet<ScriptComponent>(m_Entity))
+				{
+					scripts->Scripts.Emplace(name);
+					emit Modified();
+					RebuildLater();
+				}
+			});
+		}
+		add->setMenu(menu);
+		add->setEnabled(!menu->isEmpty());
+		if (menu->isEmpty())
+			add->setToolTip("No scripts are compiled. Use Scripts > New Script.");
+		layout->addWidget(add, 0, Qt::AlignLeft);
 	}
 
 	void InspectorPanel::StopPreview()
@@ -117,8 +413,8 @@ namespace FP::Editor
 
 	void InspectorPanel::AddAudioSection()
 	{
-		QGroupBox* group = new QGroupBox("Audio clip and playback");
-		QVBoxLayout* layout = new QVBoxLayout(group);
+		DetailsSection* group = new DetailsSection("Audio clip and playback");
+		QVBoxLayout* layout = group->Body();
 		QLabel* status = new QLabel();
 		status->setWordWrap(true);
 		status->setTextInteractionFlags(Qt::TextSelectableByMouse);
@@ -136,6 +432,9 @@ namespace FP::Editor
 		QPushButton* play = new QPushButton("Play Source");
 		QPushButton* pause = new QPushButton("Pause Source");
 		QPushButton* stop = new QPushButton("Stop Source");
+		play->setVisible(m_AssetPath.isEmpty());
+		pause->setVisible(m_AssetPath.isEmpty());
+		stop->setVisible(m_AssetPath.isEmpty());
 		playback->addWidget(play);
 		playback->addWidget(pause);
 		playback->addWidget(stop);
@@ -152,12 +451,24 @@ namespace FP::Editor
 			uint64 Size = 0;
 		};
 		auto state = std::make_shared<ClipStatus>();
-		auto load = [this, state](bool force) {
-			if (!m_World || !m_World->IsValid(m_Entity))
+		auto sourceData = [this]() {
+			AudioSourceComponent source;
+			if (!m_AssetPath.isEmpty())
+				source.Clip = ToString(QDir(ToQString(Paths::GetContentDir())).relativeFilePath(m_AssetPath));
+			else if (m_World && m_World->IsValid(m_Entity))
+			{
+				if (const AudioSourceComponent* authored = m_World->TryGet<AudioSourceComponent>(m_Entity))
+					source = *authored;
+			}
+			return source;
+		};
+		auto load = [this, state, sourceData](bool force) {
+			if (!m_World)
 				return;
-			const AudioSourceComponent* source = m_World->TryGet<AudioSourceComponent>(m_Entity);
+			const AudioSourceComponent authored = sourceData();
+			const AudioSourceComponent* source = &authored;
 			AudioDevice* device = m_World->GetAudio().GetDevice();
-			if (!source || !device)
+			if (!device)
 				return;
 			state->Path = source->Clip;
 			if (m_World->IsPlaying())
@@ -218,9 +529,10 @@ namespace FP::Editor
 			RefreshValues();
 		});
 		m_Refreshers.push_back([=, this]() {
-			const AudioSourceComponent* source = m_World->TryGet<AudioSourceComponent>(m_Entity);
-			if (!source)
+			if (!m_World)
 				return;
+			const AudioSourceComponent authored = sourceData();
+			const AudioSourceComponent* source = &authored;
 			AudioWorld& audio = m_World->GetAudio();
 			AudioDevice* device = audio.GetDevice();
 			if (source->Clip != state->Path)
@@ -235,7 +547,8 @@ namespace FP::Editor
 			preview->setEnabled(editing && ready && !source->Clip.IsEmpty());
 			preview->setText(device && device->GetState(m_Preview) != VoiceState::Invalid ? "Stop Preview" : "Preview");
 			const VoiceState voice = audio.GetState(audio.GetSourceVoice(m_Entity));
-			play->setEnabled(!editing && ready && source->Enabled && !source->Clip.IsEmpty());
+			const bool hasSource = m_AssetPath.isEmpty() && m_World->IsValid(m_Entity) && m_World->Has<AudioSourceComponent>(m_Entity);
+			play->setEnabled(hasSource && !editing && ready && source->Enabled && !source->Clip.IsEmpty());
 			pause->setEnabled(!editing && voice != VoiceState::Invalid);
 			stop->setEnabled(!editing && voice != VoiceState::Invalid);
 			pause->setText(voice == VoiceState::Paused ? "Resume Source" : "Pause Source");
@@ -270,6 +583,63 @@ namespace FP::Editor
 		m_Layout->addWidget(group);
 	}
 
+	void InspectorPanel::SetTarget(World* world, Entity entity)
+	{
+		StopPreview();
+		m_World = world;
+		m_Entity = entity;
+		m_AssetPath.clear();
+		Rebuild();
+	}
+
+	void InspectorPanel::SetAsset(const QString& path)
+	{
+		StopPreview();
+		m_Entity = NullEntity;
+		m_AssetPath = path;
+		Rebuild();
+	}
+
+	void InspectorPanel::AddAssetView()
+	{
+		const QFileInfo info(m_AssetPath);
+		if (info.suffix().compare("wav", Qt::CaseInsensitive) == 0)
+		{
+			AddAudioSection();
+			return;
+		}
+		const QString kind = ContentBrowser::AssetKind(m_AssetPath);
+		const QDir content(ToQString(Paths::GetContentDir()));
+		const QString relative = content.relativeFilePath(m_AssetPath);
+
+		if (kind == "Material" && !relative.startsWith(".."))
+		{
+			AddMaterialEditor(ToString(relative), QString("Material: %1").arg(info.completeBaseName()));
+			return;
+		}
+
+		DetailsSection* group = new DetailsSection(QString("%1: %2").arg(kind, info.fileName()));
+		QVBoxLayout* layout = group->Body();
+		QFormLayout* form = MakeForm(layout);
+		form->addRow("Path", new QLabel(QDir(ToQString(Paths::GetProjectDir())).relativeFilePath(m_AssetPath)));
+		form->addRow("Size", new QLabel(QString("%1 KB").arg(QString::number(info.size() / 1024.0, 'f', 1))));
+
+		if (kind == "Texture")
+		{
+			const QImage image(m_AssetPath);
+			if (!image.isNull())
+			{
+				form->addRow("Pixels", new QLabel(QString("%1 x %2").arg(image.width()).arg(image.height())));
+				form->addRow("Alpha", new QLabel(image.hasAlphaChannel() ? "Yes" : "No"));
+				QLabel* preview = new QLabel();
+				preview->setPixmap(QPixmap::fromImage(image.scaled(320, 320, Qt::KeepAspectRatio, Qt::SmoothTransformation)));
+				preview->setAlignment(Qt::AlignCenter);
+				layout->addWidget(preview);
+			}
+		}
+		m_Layout->addWidget(group);
+	}
+
 	void InspectorPanel::AddMaterialSection()
 	{
 		const String path = m_World->Get<MaterialComponent>(m_Entity).Material;
@@ -297,19 +667,21 @@ namespace FP::Editor
 				{
 					m_World->Get<MaterialComponent>(m_Entity).Material = ToString(relative);
 					emit Modified();
-					Rebuild();
+					RebuildLater();
 				}
 			});
 			m_Layout->addWidget(create);
 			return;
 		}
 
+		AddMaterialEditor(path, QString("Material Asset: %1").arg(ToQString(path)));
+	}
+
+	void InspectorPanel::AddMaterialEditor(const String& path, const QString& title)
+	{
 		// Edits change the shared asset, so every entity using it updates at once.
-		QGroupBox* group = new QGroupBox(QString("Material Asset: %1").arg(ToQString(path)));
-		QVBoxLayout* groupLayout = new QVBoxLayout(group);
-		QFormLayout* form = new QFormLayout();
-		form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-		groupLayout->addLayout(form);
+		DetailsSection* group = new DetailsSection(title);
+		QFormLayout* form = MakeForm(group->Body());
 
 		const String materialPath = path;
 		auto data = [materialPath]() -> void* {
@@ -324,18 +696,18 @@ namespace FP::Editor
 		for (const FieldInfo& field : Material::GetFields())
 			AddFieldEditor(form, field, data, changed);
 
-		QPushButton* save = new QPushButton("Save Material");
-		connect(save, &QPushButton::clicked, this, [materialPath]() {
+		QToolButton* save = group->AddAction(EditorIcons::Get(EditorIcon::Save), "Save", "Save the material asset");
+		connect(save, &QToolButton::clicked, this, [materialPath]() {
 			if (Material* m = MaterialLibrary::Get().Load(materialPath))
 				m->Save();
 		});
-		groupLayout->addWidget(save, 0, Qt::AlignRight);
 		m_Layout->addWidget(group);
 	}
 
 	void InspectorPanel::RefreshValues()
 	{
-		if (!m_World || !m_World->IsValid(m_Entity))
+		// Assets have no entity but their rows still need values.
+		if (m_AssetPath.isEmpty() && (!m_World || !m_World->IsValid(m_Entity)))
 			return;
 		for (auto& refresh : m_Refreshers)
 			refresh();
@@ -345,22 +717,36 @@ namespace FP::Editor
 	{
 		StopPreview();
 		m_Refreshers.clear();
+		ClearEditScripts();
 		while (QLayoutItem* item = m_Layout->takeAt(0))
 		{
 			delete item->widget();
 			delete item;
 		}
 
-		if (!m_World || !m_World->IsValid(m_Entity))
+		// The old menu belongs to the Add button, so replace it each time.
+		delete m_AddButton->menu();
+		m_AddButton->setMenu(nullptr);
+		m_AddButton->setEnabled(false);
+
+		if (!m_AssetPath.isEmpty())
 		{
-			QLabel* empty = new QLabel("Nothing selected");
-			empty->setEnabled(false);
-			m_Layout->addWidget(empty);
+			SetTitle(QFileInfo(m_AssetPath).completeBaseName(), EditorIcon::ContentBrowser);
+			AddAssetView();
+			RefreshValues();
+			ApplyFilter();
 			return;
 		}
 
+		if (!m_World || !m_World->IsValid(m_Entity))
+		{
+			SetTitle("Select an entity to see its details", EditorIcon::Details);
+			return;
+		}
+
+		SetTitle(ToQString(m_World->GetEntityName(m_Entity)), EditorIcon::Entity);
 		entt::registry& registry = m_World->GetRegistry();
-		QMenu* addMenu = new QMenu(this);
+		QMenu* addMenu = new QMenu(m_AddButton);
 
 		for (const ComponentInfo* info : ComponentRegistry::Get().GetAll())
 		{
@@ -371,20 +757,20 @@ namespace FP::Editor
 				addMenu->addAction(info->Name, this, [this, info]() {
 					info->Add(m_World->GetRegistry(), m_Entity);
 					emit Modified();
-					Rebuild();
+					RebuildLater();
 				});
 				continue;
 			}
 
-			QGroupBox* group = new QGroupBox(info->Name);
-			QVBoxLayout* groupLayout = new QVBoxLayout(group);
-			QFormLayout* form = new QFormLayout();
-			form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-			groupLayout->addLayout(form);
+			DetailsSection* group = new DetailsSection(info->Name);
+			QVBoxLayout* groupLayout = group->Body();
+			QFormLayout* form = MakeForm(groupLayout);
 			// Looks the component up every time because EnTT may move it when others are added.
 			auto data = [this, info]() -> void* {
 				return m_World && m_World->IsValid(m_Entity) ? info->TryGet(m_World->GetRegistry(), m_Entity) : nullptr;
 			};
+			if (info->CustomInspector && info == ComponentRegistry::Get().Find<ScriptComponent>())
+				AddScriptsSection(groupLayout);
 			for (const FieldInfo& field : info->Fields)
 			{
 				AddFieldEditor(form, field, data, [this, info]() {
@@ -411,14 +797,12 @@ namespace FP::Editor
 				}
 			}
 
-			QPushButton* remove = new QPushButton("Remove");
-			remove->setFlat(true);
-			connect(remove, &QPushButton::clicked, this, [this, info]() {
+			QToolButton* remove = group->AddAction(EditorIcons::Get(EditorIcon::Close), "", "Remove component");
+			connect(remove, &QToolButton::clicked, this, [this, info]() {
 				info->Remove(m_World->GetRegistry(), m_Entity);
 				emit Modified();
-				Rebuild();
+				RebuildLater();
 			});
-			groupLayout->addWidget(remove, 0, Qt::AlignRight);
 			m_Layout->addWidget(group);
 
 			if (info == ComponentRegistry::Get().Find<MaterialComponent>())
@@ -427,13 +811,31 @@ namespace FP::Editor
 				AddAudioSection();
 		}
 
-		QToolButton* add = new QToolButton();
-		add->setText("Add Component");
-		add->setPopupMode(QToolButton::InstantPopup);
-		add->setMenu(addMenu);
-		add->setEnabled(!addMenu->isEmpty());
-		m_Layout->addWidget(add);
+		m_AddButton->setMenu(addMenu);
+		m_AddButton->setEnabled(!addMenu->isEmpty());
 		RefreshValues();
+		ApplyFilter();
+	}
+
+	void InspectorPanel::SetTitle(const QString& text, EditorIcon icon)
+	{
+		m_Title->setText(text);
+		m_TitleIcon->setPixmap(EditorIcons::Get(icon).pixmap(18, 18));
+	}
+
+	void InspectorPanel::ApplyFilter()
+	{
+		// Hides rows whose field name does not match, like UE's details search.
+		const QString filter = m_Filter->text().trimmed();
+		for (QFormLayout* form : m_Content->findChildren<QFormLayout*>())
+		{
+			for (int row = 0; row < form->rowCount(); ++row)
+			{
+				QLayoutItem* label = form->itemAt(row, QFormLayout::LabelRole);
+				const QLabel* text = label ? qobject_cast<QLabel*>(label->widget()) : nullptr;
+				form->setRowVisible(row, filter.isEmpty() || !text || text->text().contains(filter, Qt::CaseInsensitive));
+			}
+		}
 	}
 
 	void InspectorPanel::AddFieldEditor(QFormLayout* form, const FieldInfo& field, DataFn data, ChangedFn changed)
@@ -459,6 +861,8 @@ namespace FP::Editor
 				QSpinBox* box = new QSpinBox();
 				box->setRange(INT32_MIN, INT32_MAX);
 				box->setKeyboardTracking(false);
+				if (QLineEdit* text = box->findChild<QLineEdit*>())
+					text->setTextMargins(4, 0, 2, 0);
 				connect(box, &QSpinBox::valueChanged, this, [=](int value) {
 					if (void* c = data()) { fieldCopy.Get<int32>(c) = value; changed(); }
 				});
@@ -576,6 +980,7 @@ namespace FP::Editor
 					// Editable list: pick a built in name or type a path.
 					combo = new QComboBox();
 					combo->setEditable(true);
+					combo->setLineEdit(new AssetLineEdit());
 					combo->setInsertPolicy(QComboBox::NoInsert);
 					for (const char* choice : *field.Choices)
 						combo->addItem(choice);
@@ -585,7 +990,7 @@ namespace FP::Editor
 				}
 				else
 				{
-					edit = new QLineEdit();
+					edit = field.AssetFilter ? new AssetLineEdit() : new QLineEdit();
 					layout->addWidget(edit, 1);
 				}
 				connect(edit, &QLineEdit::editingFinished, this, [=]() { apply(edit->text()); });

@@ -1,6 +1,7 @@
 #include "Core/Log.h"
 #include "Core/Assert.h"
 #include "HAL/PlatformMisc.h"
+#include "Core/Misc/ModuleContext.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -28,7 +29,7 @@ namespace FP::Log
 		LogState& GetState()
 		{
 			static LogState state;
-			return state;
+			return ResolveShared(&ModuleContext::Log, state);
 		}
 
 		const char* LevelPrefix(LogLevel level)
@@ -104,6 +105,11 @@ namespace FP::Log
 	void SetMinimumLevel(LogLevel level)
 	{
 		GetState().MinLevel = level;
+	}
+
+	void* GetSharedState()
+	{
+		return &GetState();
 	}
 }
 

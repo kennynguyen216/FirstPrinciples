@@ -1,11 +1,12 @@
 #include "Engine/ComponentRegistry.h"
+#include "Core/Misc/ModuleContext.h"
 
 namespace FP
 {
 	ComponentRegistry& ComponentRegistry::Get()
 	{
 		static ComponentRegistry registry;
-		return registry;
+		return ResolveShared(&ModuleContext::ComponentRegistry, registry);
 	}
 
 	const ComponentInfo* ComponentRegistry::Find(std::string_view name) const
