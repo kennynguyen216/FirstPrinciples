@@ -22,6 +22,7 @@
 #include <QFileDialog>
 #include <QDir>
 #include <QFileSystemWatcher>
+#include <QGuiApplication>
 #include <QInputDialog>
 #include <QMouseEvent>
 #include <QRegularExpression>
@@ -56,6 +57,17 @@ namespace FP::Editor
 	EditorWindow::EditorWindow(GPUDevice& device)
 	{
 		m_World.Reset(NewObject<World>(nullptr, "EditorWorld"));
+		m_History = std::make_unique<SceneHistory>(*m_World.Get());
+		m_HistoryTimer = new QTimer(this);
+		m_HistoryTimer->setSingleShot(true);
+		m_HistoryTimer->setInterval(300);
+		connect(m_HistoryTimer, &QTimer::timeout, this, [this]() {
+			// Still dragging, so the edit is not finished yet.
+			if (QGuiApplication::mouseButtons() != Qt::NoButton)
+				m_HistoryTimer->start();
+			else
+				CommitHistory();
+		});
 
 		m_Viewport = new ViewportWidget(device, this);
 		m_Viewport->SetWorld(m_World.Get());
@@ -68,6 +80,10 @@ namespace FP::Editor
 		m_CentralTabs->tabBar()->setTabButton(0, QTabBar::RightSide, nullptr);
 		m_CentralTabs->tabBar()->setTabButton(0, QTabBar::LeftSide, nullptr);
 		connect(m_CentralTabs, &QTabWidget::tabCloseRequested, this, [this](int index) { CloseScriptTab(index); });
+		connect(m_CentralTabs, &QTabWidget::currentChanged, this, [this]() {
+			if (m_UndoAction)
+				UpdateUndoActions();
+		});
 		setCentralWidget(m_CentralTabs);
 
 		BuildDocks();
@@ -198,6 +214,18 @@ namespace FP::Editor
 		file->addAction("Save Scene &As...", QKeySequence::SaveAs, this, &EditorWindow::SaveSceneAs);
 		file->addSeparator();
 		file->addAction("E&xit", QKeySequence::Quit, this, &QWidget::close);
+
+		QMenu* edit = menuBar()->addMenu("&Edit");
+		m_UndoAction = edit->addAction("&Undo", QKeySequence::Undo, this, &EditorWindow::Undo);
+		m_RedoAction = edit->addAction("&Redo", this, &EditorWindow::Redo);
+		// Ctrl+Shift+Z everywhere, plus the platform key (Ctrl+Y on Windows). Mac already uses Cmd+Shift+Z.
+		QList<QKeySequence> redoKeys = { QKeySequence("Ctrl+Shift+Z") };
+		for (const QKeySequence& key : QKeySequence::keyBindings(QKeySequence::Redo))
+		{
+			if (!redoKeys.contains(key))
+				redoKeys.append(key);
+		}
+		m_RedoAction->setShortcuts(redoKeys);
 
 		QMenu* entity = menuBar()->addMenu("&Entity");
 		entity->addAction("Create &Empty", QKeySequence("Ctrl+Shift+N"), this, [this]() { CreateEntity(false); });
@@ -606,6 +634,9 @@ namespace FP::Editor
 		m_Selected = entity;
 		m_SelectedGuid = entity != NullEntity ? m_World->Get<IdComponent>(entity).Id : Guid();
 		m_Viewport->SetSelected(entity);
+		// Undo brings back what was selected before the edit, so only track it between edits.
+		if (!m_EditPending)
+			m_History->SetSelection(m_SelectedGuid);
 
 		// Keep the hierarchy row in sync without feeding back into Select.
 		const QString key = ToQString(m_SelectedGuid.ToString());
@@ -639,10 +670,86 @@ namespace FP::Editor
 
 	void EditorWindow::MarkDirty()
 	{
-		if (m_World->IsPlaying() || m_Dirty)
+		if (m_World->IsPlaying())
+			return;
+		m_EditPending = true;
+		m_HistoryTimer->start();
+		UpdateUndoActions();
+		if (m_Dirty)
 			return;
 		m_Dirty = true;
 		UpdateTitle();
+	}
+
+	void EditorWindow::CommitHistory()
+	{
+		m_HistoryTimer->stop();
+		if (!m_EditPending)
+			return;
+		m_EditPending = false;
+		m_History->Commit(m_SelectedGuid);
+		UpdateUndoActions();
+	}
+
+	void EditorWindow::ResetHistory()
+	{
+		m_HistoryTimer->stop();
+		m_EditPending = false;
+		m_History->Reset(m_SelectedGuid);
+		UpdateUndoActions();
+	}
+
+	void EditorWindow::Undo()
+	{
+		if (CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->currentWidget()))
+		{
+			editor->undo();
+			return;
+		}
+		if (m_World->IsPlaying())
+			return;
+		CommitHistory();
+		if (m_History->Undo())
+			RestoreHistoryStep();
+	}
+
+	void EditorWindow::Redo()
+	{
+		if (CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->currentWidget()))
+		{
+			editor->redo();
+			return;
+		}
+		if (m_World->IsPlaying())
+			return;
+		CommitHistory();
+		if (m_History->Redo())
+			RestoreHistoryStep();
+	}
+
+	void EditorWindow::RestoreHistoryStep()
+	{
+		// The world was reloaded, so every entity handle is new.
+		m_Selected = NullEntity;
+		RefreshHierarchy();
+		Select(m_World->FindEntityByGuid(m_History->GetSelection()));
+		m_Inspector->SetTarget(m_World.Get(), m_Selected);
+		// Not an edit to record, but the scene no longer matches the file.
+		m_Dirty = true;
+		UpdateTitle();
+		UpdateUndoActions();
+	}
+
+	void EditorWindow::UpdateUndoActions()
+	{
+		if (qobject_cast<CodeEditor*>(m_CentralTabs->currentWidget()))
+		{
+			m_UndoAction->setEnabled(true);
+			m_RedoAction->setEnabled(true);
+			return;
+		}
+		m_UndoAction->setEnabled(m_EditPending || m_History->CanUndo());
+		m_RedoAction->setEnabled(!m_EditPending && m_History->CanRedo());
 	}
 
 	void EditorWindow::UpdateTitle()
@@ -674,6 +781,7 @@ namespace FP::Editor
 		m_Dirty = false;
 		Select(NullEntity);
 		RefreshHierarchy();
+		ResetHistory();
 		UpdateTitle();
 	}
 
@@ -692,6 +800,7 @@ namespace FP::Editor
 		Select(NullEntity);
 		m_Inspector->SetTarget(m_World.Get(), NullEntity);
 		RefreshHierarchy();
+		ResetHistory();
 		UpdateTitle();
 	}
 
@@ -769,9 +878,10 @@ namespace FP::Editor
 	{
 		if (!m_World->IsValid(m_Selected))
 			return;
+		// Mark first so undo remembers the deleted entity as the selection.
+		MarkDirty();
 		m_World->DestroyEntity(m_Selected);
 		Select(NullEntity);
-		MarkDirty();
 		RefreshHierarchy();
 	}
 
@@ -779,6 +889,7 @@ namespace FP::Editor
 	{
 		if (m_World->IsPlaying())
 			return;
+		CommitHistory();
 		// Snapshot the scene so Stop can put everything back.
 		m_PlaySnapshot = SceneSerializer::SaveToString(*m_World.Get());
 		m_World->AddSystem<ScriptSystem>();
