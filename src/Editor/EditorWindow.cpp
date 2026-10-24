@@ -1,8 +1,14 @@
 #include "Editor/EditorWindow.h"
 #include "Editor/CodeEditor.h"
 #include "Editor/ContentBrowser.h"
+#include "Editor/DockTab.h"
+#include "Editor/EditorIcons.h"
+#include "Editor/EditorStyle.h"
 #include "Editor/InspectorPanel.h"
+#include "Editor/OutlinerPanel.h"
+#include "Editor/PlaceEntitiesPanel.h"
 #include "Editor/ScriptBuilder.h"
+#include "Editor/ViewportToolbar.h"
 #include "Editor/ViewportWidget.h"
 #include "Engine/ComponentRegistry.h"
 #include "Engine/Input.h"
@@ -17,7 +23,6 @@
 #include <SDL3/SDL_timer.h>
 
 #include <QCloseEvent>
-#include <QComboBox>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QDir>
@@ -29,7 +34,8 @@
 #include <QTextBlock>
 #include <QFileInfo>
 #include <QKeySequence>
-#include <QListWidget>
+#include <QLabel>
+#include <QLineEdit>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPlainTextEdit>
@@ -38,12 +44,12 @@
 #include <QTabWidget>
 #include <QTimer>
 #include <QToolBar>
+#include <QToolButton>
 
 namespace FP::Editor
 {
 	namespace
 	{
-		constexpr int GuidRole = Qt::UserRole + 1;
 
 		QString ToQString(const String& text) { return QString::fromUtf8(text.CStr(), text.Length()); }
 
@@ -71,12 +77,14 @@ namespace FP::Editor
 
 		m_Viewport = new ViewportWidget(device, this);
 		m_Viewport->SetWorld(m_World.Get());
+		m_ViewportToolbar = new ViewportToolbar();
+		m_Viewport->SetOverlay(m_ViewportToolbar);
 		// The viewport is the first tab and scripts open beside it.
 		m_CentralTabs = new QTabWidget(this);
 		m_CentralTabs->setDocumentMode(true);
 		m_CentralTabs->setTabsClosable(true);
 		m_CentralTabs->setMovable(true);
-		m_CentralTabs->addTab(m_Viewport, "Viewport");
+		m_CentralTabs->addTab(m_Viewport, EditorIcons::Get(EditorIcon::Level), "Viewport");
 		m_CentralTabs->tabBar()->setTabButton(0, QTabBar::RightSide, nullptr);
 		m_CentralTabs->tabBar()->setTabButton(0, QTabBar::LeftSide, nullptr);
 		connect(m_CentralTabs, &QTabWidget::tabCloseRequested, this, [this](int index) { CloseScriptTab(index); });
@@ -93,6 +101,11 @@ namespace FP::Editor
 		connect(m_Viewport, &ViewportWidget::EntityPicked, this, [this](Entity entity) { Select(entity); });
 		connect(m_Viewport, &ViewportWidget::EntityMoved, this, [this](Entity) { MarkDirty(); });
 		connect(m_Viewport, &ViewportWidget::AssetDropped, this, &EditorWindow::DropAsset);
+		connect(m_Viewport, &ViewportWidget::EntityDropped, this, [this](const QString& kind, Vec3 point) {
+			const Entity entity = CreateEntity(kind);
+			if (entity != NullEntity)
+				m_World->Get<TransformComponent>(entity).Position = point;
+		});
 
 		// Drives the world and the viewport at about 60 fps.
 		m_Timer = new QTimer(this);
@@ -127,18 +140,15 @@ namespace FP::Editor
 
 	void EditorWindow::BuildDocks()
 	{
-		m_Hierarchy = new QListWidget();
-		connect(m_Hierarchy, &QListWidget::currentItemChanged, this, [this](QListWidgetItem* item) {
-			if (!item)
-				return;
-			Guid id;
-			if (Guid::Parse(ToString(item->data(GuidRole).toString()), id))
-				Select(m_World->FindEntityByGuid(id));
-		});
-		QDockWidget* hierarchyDock = new QDockWidget("Hierarchy", this);
-		hierarchyDock->setObjectName("Hierarchy");
-		hierarchyDock->setWidget(m_Hierarchy);
-		addDockWidget(Qt::LeftDockWidgetArea, hierarchyDock);
+		m_Outliner = new OutlinerPanel();
+		connect(m_Outliner, &OutlinerPanel::EntityClicked, this, [this](const Guid& id) { Select(m_World->FindEntityByGuid(id)); });
+		PlaceEntitiesPanel* placeEntities = new PlaceEntitiesPanel();
+		connect(placeEntities, &PlaceEntitiesPanel::CreateRequested, this, [this](const QString& kind) { CreateEntity(kind); });
+		QDockWidget* placeDock = DockTab::Create(this, "Place Entities", EditorIcon::PlaceEntities, placeEntities);
+		addDockWidget(Qt::LeftDockWidgetArea, placeDock);
+		resizeDocks({ placeDock }, { 250 }, Qt::Horizontal);
+
+		QDockWidget* outlinerDock = DockTab::Create(this, "Outliner", EditorIcon::Outliner, m_Outliner);
 
 		m_Inspector = new InspectorPanel();
 		connect(m_Inspector, &InspectorPanel::OpenScriptRequested, this, &EditorWindow::OpenScript);
@@ -146,33 +156,42 @@ namespace FP::Editor
 			MarkDirty();
 			RefreshHierarchy();
 		});
-		QDockWidget* inspectorDock = new QDockWidget("Inspector", this);
-		inspectorDock->setObjectName("Inspector");
-		inspectorDock->setWidget(m_Inspector);
-		inspectorDock->setMinimumWidth(400);
-		addDockWidget(Qt::RightDockWidgetArea, inspectorDock);
+		QDockWidget* detailsDock = DockTab::Create(this, "Details", EditorIcon::Details, m_Inspector);
+		detailsDock->setMinimumWidth(300);
+
+		// UE layout: Details then Outliner on the right, and the bottom panels run the full width.
+		setCorner(Qt::BottomLeftCorner, Qt::BottomDockWidgetArea);
+		setCorner(Qt::BottomRightCorner, Qt::BottomDockWidgetArea);
+		addDockWidget(Qt::RightDockWidgetArea, detailsDock);
+		splitDockWidget(detailsDock, outlinerDock, Qt::Horizontal);
+		resizeDocks({ detailsDock, outlinerDock }, { 370, 300 }, Qt::Horizontal);
 
 		m_Console = new QPlainTextEdit();
 		m_Console->setReadOnly(true);
 		m_Console->setToolTip("Double click a build error to open it");
 		m_Console->viewport()->installEventFilter(this);
 		m_Console->setMaximumBlockCount(2000);
-		QDockWidget* consoleDock = new QDockWidget("Console", this);
-		consoleDock->setObjectName("Console");
-		consoleDock->setWidget(m_Console);
-		addDockWidget(Qt::BottomDockWidgetArea, consoleDock);
+		QDockWidget* consoleDock = DockTab::Create(this, "Output Log", EditorIcon::OutputLog, m_Console);
 		m_ConsoleDock = consoleDock;
 
-		// The content browser shares the bottom area with the console as a tab.
+		// The content browser shares the bottom area with the log. Tabbed docks show Qt's tab bar,
+		// so they skip the custom title and use the tabs on top instead.
 		m_ContentBrowser = new ContentBrowser();
-		QDockWidget* contentDock = new QDockWidget("Content", this);
-		contentDock->setObjectName("Content");
-		contentDock->setWidget(m_ContentBrowser);
-		tabifyDockWidget(consoleDock, contentDock);
+		QDockWidget* contentDock = DockTab::Create(this, "Content Browser", EditorIcon::ContentBrowser, m_ContentBrowser);
+		m_ContentDock = contentDock;
+		for (QDockWidget* dock : { contentDock, consoleDock })
+		{
+			dock->setTitleBarWidget(new QWidget(dock));
+			dock->setWindowIcon(dock == contentDock ? EditorIcons::Get(EditorIcon::ContentBrowser) : EditorIcons::Get(EditorIcon::OutputLog));
+		}
+		setTabPosition(Qt::BottomDockWidgetArea, QTabWidget::North);
+		addDockWidget(Qt::BottomDockWidgetArea, contentDock);
+		tabifyDockWidget(contentDock, consoleDock);
 		contentDock->raise();
-		resizeDocks({ consoleDock }, { 220 }, Qt::Vertical);
+		resizeDocks({ contentDock }, { 280 }, Qt::Vertical);
 
 		connect(m_ContentBrowser, &ContentBrowser::AssetSelected, this, &EditorWindow::ShowAsset);
+		connect(m_ContentBrowser, &ContentBrowser::SaveAllRequested, this, &EditorWindow::SaveAll);
 		connect(m_ContentBrowser, &ContentBrowser::NewScriptRequested, this, [this]() {
 			const QString name = QInputDialog::getText(this, "New Script", "Class name:");
 			if (!name.isEmpty())
@@ -207,6 +226,12 @@ namespace FP::Editor
 
 	void EditorWindow::BuildMenus()
 	{
+		// The menu sits inside the window on every OS, like UE, with the project name on the right.
+		menuBar()->setNativeMenuBar(false);
+		QLabel* project = new QLabel(QFileInfo(ToQString(Paths::GetProjectDir())).fileName());
+		project->setStyleSheet("background: #0f0f0f; color: #c0c0c0; border-radius: 4px; padding: 3px 14px; margin: 2px 6px;");
+		menuBar()->setCornerWidget(project, Qt::TopRightCorner);
+
 		QMenu* file = menuBar()->addMenu("&File");
 		file->addAction("&New Scene", QKeySequence::New, this, &EditorWindow::NewScene);
 		file->addAction("&Open Scene...", QKeySequence::Open, this, &EditorWindow::OpenSceneDialog);
@@ -228,36 +253,16 @@ namespace FP::Editor
 		m_RedoAction->setShortcuts(redoKeys);
 
 		QMenu* entity = menuBar()->addMenu("&Entity");
-		entity->addAction("Create &Empty", QKeySequence("Ctrl+Shift+N"), this, [this]() { CreateEntity(false); });
-		entity->addAction("Create &Sprite", QKeySequence("Ctrl+Shift+A"), this, [this]() { CreateEntity(true); });
+		entity->addAction("Create &Empty", QKeySequence("Ctrl+Shift+N"), this, [this]() { CreateEntity("Empty Entity"); });
+		entity->addAction("Create &Sprite", QKeySequence("Ctrl+Shift+A"), this, [this]() { CreateEntity("Sprite"); });
 		QMenu* meshes = entity->addMenu("Create &Mesh");
 		for (const char* shape : Primitives::GetNames())
 		{
 			const QString name = shape;
-			meshes->addAction(name, this, [this, name]() {
-				Entity mesh = m_World->CreateEntity(ToString(name));
-				m_World->Add<MeshComponent>(mesh).Mesh = ToString(name);
-				MarkDirty();
-				RefreshHierarchy();
-				Select(mesh);
-			});
+			meshes->addAction(name, this, [this, name]() { CreateEntity(name); });
 		}
-		entity->addAction("Create &Point Light", this, [this]() {
-			Entity light = m_World->CreateEntity("Point Light");
-			m_World->Get<TransformComponent>(light).Position.Z = 1.5f; // above the sprites so it lights their faces
-			m_World->Add<PointLightComponent>(light);
-			MarkDirty();
-			RefreshHierarchy();
-			Select(light);
-		});
-		entity->addAction("Create &Directional Light", this, [this]() {
-			Entity light = m_World->CreateEntity("Directional Light");
-			m_World->Get<TransformComponent>(light).Rotation = { -40, 30, 0 };
-			m_World->Add<DirectionalLightComponent>(light);
-			MarkDirty();
-			RefreshHierarchy();
-			Select(light);
-		});
+		entity->addAction("Create &Point Light", this, [this]() { CreateEntity("Point Light"); });
+		entity->addAction("Create &Directional Light", this, [this]() { CreateEntity("Directional Light"); });
 		entity->addAction("&Duplicate", QKeySequence("Ctrl+D"), this, &EditorWindow::DuplicateSelected);
 		entity->addAction("De&lete", QKeySequence::Delete, this, &EditorWindow::DeleteSelected);
 
@@ -277,26 +282,63 @@ namespace FP::Editor
 		connect(autoReload, &QAction::toggled, this, [this](bool on) { m_AutoReloadScripts = on; });
 		WatchScripts();
 
-		QToolBar* toolbar = addToolBar("Play");
-		toolbar->setObjectName("PlayToolbar");
-		m_PlayAction = toolbar->addAction("Play", this, &EditorWindow::Play);
-		m_PlayAction->setShortcut(QKeySequence("Ctrl+P"));
-		m_StopAction = toolbar->addAction("Stop", this, &EditorWindow::Stop);
-		m_StopAction->setEnabled(false);
+		QToolBar* toolbar = addToolBar("Main");
+		toolbar->setObjectName("MainToolbar");
+		toolbar->setMovable(false);
+		toolbar->setIconSize({ 18, 18 });
+		QAction* save = toolbar->addAction(EditorIcons::Get(EditorIcon::Save), "Save", this, &EditorWindow::SaveCurrent);
+		save->setToolTip("Save (Ctrl+S)");
 		toolbar->addSeparator();
-		m_View3DAction = toolbar->addAction("3D View");
+
+		// Quick create, the same list as the Entity menu.
+		QToolButton* create = new QToolButton();
+		create->setIcon(EditorIcons::Get(EditorIcon::Add, EditorStyle::Play));
+		create->setText("Create");
+		create->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+		create->setPopupMode(QToolButton::InstantPopup);
+		create->setMenu(entity);
+		create->setToolTip("Create an entity");
+		toolbar->addWidget(create);
+		toolbar->addSeparator();
+
+		m_PlayAction = toolbar->addAction(EditorIcons::Get(EditorIcon::Play), "Play", this, &EditorWindow::Play);
+		m_PlayAction->setShortcut(QKeySequence("Ctrl+P"));
+		m_PlayAction->setToolTip("Play (Ctrl+P)");
+		m_StopAction = toolbar->addAction(EditorIcons::Get(EditorIcon::Stop, QColor(0xe0, 0x50, 0x50)), "Stop", this, &EditorWindow::Stop);
+		m_StopAction->setEnabled(false);
+		m_StopAction->setToolTip("Stop");
+
+		QWidget* spacer = new QWidget();
+		spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+		toolbar->addWidget(spacer);
+
+		QToolButton* settings = new QToolButton();
+		settings->setIcon(EditorIcons::Get(EditorIcon::Settings));
+		settings->setText("Settings");
+		settings->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+		settings->setPopupMode(QToolButton::InstantPopup);
+		QMenu* settingsMenu = new QMenu(settings);
+		settingsMenu->addAction(autoReload);
+		settingsMenu->addAction("Collect Garbage", this, []() {
+			const GarbageCollectionStats stats = GarbageCollector::Get().Collect();
+			FP_LOG("GC freed %d objects, %d alive, %.3f ms", stats.NumFreed, stats.NumAlive, stats.Milliseconds);
+		});
+		settings->setMenu(settingsMenu);
+		toolbar->addWidget(settings);
+
+		// The projection and view mode live on the viewport toolbar. Ctrl+3 still flips the projection.
+		m_View3DAction = new QAction(this);
 		m_View3DAction->setCheckable(true);
 		m_View3DAction->setShortcut(QKeySequence("Ctrl+3"));
-		connect(m_View3DAction, &QAction::toggled, this, [this](bool on) { m_Viewport->Set3D(on); });
-
-		// View mode picker. The order matches ViewMode so the index converts directly.
-		m_ViewModeBox = new QComboBox();
-		m_ViewModeBox->addItems({ "Lit", "Unlit", "Wireframe" });
-		m_ViewModeBox->setToolTip("View mode (Alt+4 Lit, Alt+3 Unlit, Alt+2 Wireframe)");
-		toolbar->addWidget(m_ViewModeBox);
-		connect(m_ViewModeBox, &QComboBox::currentIndexChanged, this, [this](int index) {
-			m_Viewport->SetViewMode(static_cast<ViewMode>(index));
+		addAction(m_View3DAction);
+		connect(m_View3DAction, &QAction::toggled, this, [this](bool on) {
+			m_Viewport->Set3D(on);
+			m_ViewportToolbar->Set3D(on);
 		});
+		connect(m_ViewportToolbar, &ViewportToolbar::ProjectionChanged, m_View3DAction, &QAction::setChecked);
+		connect(m_ViewportToolbar, &ViewportToolbar::ViewModeChanged, this, &EditorWindow::SetViewMode);
+		connect(m_ViewportToolbar, &ViewportToolbar::SnapChanged, this, [this](bool on, float size) { m_Viewport->SetSnap(on, size); });
+
 		// Same keys as Unreal so muscle memory carries over.
 		const std::pair<const char*, ViewMode> modeKeys[] = { { "Alt+4", ViewMode::Lit }, { "Alt+3", ViewMode::Unlit }, { "Alt+2", ViewMode::Wireframe } };
 		for (const auto& [keys, mode] : modeKeys)
@@ -307,13 +349,88 @@ namespace FP::Editor
 			connect(action, &QAction::triggered, this, [this, chosen]() { SetViewMode(chosen); });
 			addAction(action);
 		}
-		toolbar->addSeparator();
-		toolbar->addAction("Collect Garbage", this, []() {
+
+		BuildStatusBar();
+	}
+
+	void EditorWindow::BuildStatusBar()
+	{
+		// UE style bottom bar: buttons that bring panels forward, then a console command box.
+		auto addButton = [this](EditorIcon icon, const QString& text, QDockWidget* dock) {
+			QToolButton* button = new QToolButton();
+			button->setIcon(EditorIcons::Get(icon));
+			button->setText(text);
+			button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+			button->setAutoRaise(true);
+			connect(button, &QToolButton::clicked, this, [dock]() {
+				dock->show();
+				dock->raise();
+			});
+			statusBar()->addWidget(button);
+		};
+		addButton(EditorIcon::ContentBrowser, "Content Browser", m_ContentDock);
+		addButton(EditorIcon::OutputLog, "Output Log", m_ConsoleDock);
+
+		QLabel* cmd = new QLabel();
+		cmd->setPixmap(EditorIcons::Get(EditorIcon::Console).pixmap(16, 16));
+		cmd->setToolTip("Console command");
+		statusBar()->addWidget(cmd);
+		QLineEdit* command = new QLineEdit();
+		command->setPlaceholderText("Enter Console Command (help lists them)");
+		command->setMinimumWidth(320);
+		connect(command, &QLineEdit::returnPressed, this, [this, command]() {
+			RunCommand(command->text().trimmed());
+			command->clear();
+		});
+		statusBar()->addWidget(command);
+
+		QLabel* hint = new QLabel("Right drag orbits or pans, wheel zooms, left drag moves, F focuses");
+		hint->setStyleSheet("color: #7a7a7a; padding-right: 8px;");
+		statusBar()->addPermanentWidget(hint);
+	}
+
+	void EditorWindow::RunCommand(const QString& line)
+	{
+		if (line.isEmpty())
+			return;
+		FP_LOG("> %s", line.toUtf8().constData());
+		const QString name = line.section(' ', 0, 0).toLower();
+		const QString argument = line.section(' ', 1).trimmed();
+		if (name == "help")
+			FP_LOG("Commands: play, stop, save, undo, redo, gc, 2d, 3d, viewmode lit|unlit|wireframe, select <name>, create <kind>");
+		else if (name == "play")
+			Play();
+		else if (name == "stop")
+			Stop();
+		else if (name == "save")
+			SaveCurrent();
+		else if (name == "undo")
+			Undo();
+		else if (name == "redo")
+			Redo();
+		else if (name == "gc")
+		{
 			const GarbageCollectionStats stats = GarbageCollector::Get().Collect();
 			FP_LOG("GC freed %d objects, %d alive, %.3f ms", stats.NumFreed, stats.NumAlive, stats.Milliseconds);
-		});
-
-		statusBar()->showMessage("2D: right drag pans, wheel zooms. 3D (Ctrl+3): right drag orbits, middle drag pans, wheel dollies. Left drag moves, Shift snaps, F focuses");
+		}
+		else if (name == "2d" || name == "3d")
+			Set3DView(name == "3d");
+		else if (name == "viewmode")
+		{
+			const QString mode = argument.toLower();
+			SetViewMode(mode == "unlit" ? ViewMode::Unlit : mode == "wireframe" ? ViewMode::Wireframe : ViewMode::Lit);
+		}
+		else if (name == "select")
+		{
+			const Entity entity = m_World->FindEntityByName(ToString(argument).CStr());
+			if (entity == NullEntity)
+				FP_LOG_WARN("No entity named %s", argument.toUtf8().constData());
+			Select(entity);
+		}
+		else if (name == "create")
+			CreateEntity(argument);
+		else
+			FP_LOG_WARN("Unknown command %s. Type help for the list.", name.toUtf8().constData());
 	}
 
 	void EditorWindow::Set3DView(bool enabled)
@@ -323,7 +440,8 @@ namespace FP::Editor
 
 	void EditorWindow::SetViewMode(ViewMode mode)
 	{
-		m_ViewModeBox->setCurrentIndex(static_cast<int>(mode));
+		m_Viewport->SetViewMode(mode);
+		m_ViewportToolbar->SetViewMode(mode);
 	}
 
 	void EditorWindow::DropAsset(const QString& path, Vec3 point, Entity target)
@@ -527,6 +645,21 @@ namespace FP::Editor
 		SaveScene();
 	}
 
+	void EditorWindow::SaveAll()
+	{
+		for (int i = 0; i < m_CentralTabs->count(); ++i)
+		{
+			CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->widget(i));
+			if (editor && editor->IsDirty() && !editor->Save())
+				FP_LOG_ERROR("Could not save %s", editor->GetPath().toUtf8().constData());
+		}
+		// Saving the scene also writes every changed material.
+		if (m_Dirty || m_ScenePath.isEmpty())
+			SaveScene();
+		else
+			MaterialLibrary::Get().SaveDirty();
+	}
+
 	bool EditorWindow::NewScript(const QString& className)
 	{
 		QString error;
@@ -638,15 +771,8 @@ namespace FP::Editor
 		if (!m_EditPending)
 			m_History->SetSelection(m_SelectedGuid);
 
-		// Keep the hierarchy row in sync without feeding back into Select.
-		const QString key = ToQString(m_SelectedGuid.ToString());
-		QSignalBlocker block(m_Hierarchy);
-		m_Hierarchy->setCurrentItem(nullptr);
-		for (int i = 0; i < m_Hierarchy->count(); ++i)
-		{
-			if (m_Hierarchy->item(i)->data(GuidRole).toString() == key)
-				m_Hierarchy->setCurrentRow(i);
-		}
+		// Keep the outliner row in sync without feeding back into Select.
+		m_Outliner->SetSelected(m_SelectedGuid);
 
 		if (changed)
 			m_Inspector->SetTarget(m_World.Get(), entity);
@@ -654,18 +780,9 @@ namespace FP::Editor
 
 	void EditorWindow::RefreshHierarchy()
 	{
-		QSignalBlocker block(m_Hierarchy);
-		m_Hierarchy->clear();
-		const Array<Entity> entities = m_World->GetEntities();
-		for (Entity entity : entities)
-		{
-			QListWidgetItem* item = new QListWidgetItem(ToQString(m_World->GetEntityName(entity)));
-			item->setData(GuidRole, ToQString(m_World->Get<IdComponent>(entity).Id.ToString()));
-			m_Hierarchy->addItem(item);
-			if (entity == m_Selected)
-				m_Hierarchy->setCurrentItem(item);
-		}
-		m_HierarchyCount = entities.Num();
+		m_Outliner->Rebuild(*m_World.Get(), m_ScenePath.isEmpty() ? "Untitled" : QFileInfo(m_ScenePath).completeBaseName());
+		m_Outliner->SetSelected(m_SelectedGuid);
+		m_HierarchyCount = m_World->GetEntities().Num();
 	}
 
 	void EditorWindow::MarkDirty()
@@ -756,6 +873,8 @@ namespace FP::Editor
 	{
 		const QString name = m_ScenePath.isEmpty() ? "Untitled" : QFileInfo(m_ScenePath).fileName();
 		setWindowTitle(QString("%1%2 - FirstPrinciples%3").arg(name, m_Dirty ? "*" : "", m_World->IsPlaying() ? " [Playing]" : ""));
+		// The viewport tab is the open scene, like UE's level tab.
+		m_CentralTabs->setTabText(m_CentralTabs->indexOf(m_Viewport), QFileInfo(name).completeBaseName() + (m_Dirty ? "*" : ""));
 	}
 
 	bool EditorWindow::ConfirmDiscard()
@@ -836,14 +955,55 @@ namespace FP::Editor
 		return SaveScene();
 	}
 
-	void EditorWindow::CreateEntity(bool withSprite)
+	Entity EditorWindow::CreateEntity(const QString& kind)
 	{
-		Entity entity = m_World->CreateEntity(withSprite ? "Sprite" : "Entity");
-		if (withSprite)
+		const String name = ToString(kind);
+		Entity entity = NullEntity;
+		if (kind == "Empty Entity")
+		{
+			entity = m_World->CreateEntity("Entity");
+		}
+		else if (kind == "Sprite")
+		{
+			entity = m_World->CreateEntity(name);
 			m_World->Add<SpriteComponent>(entity);
+		}
+		else if (kind == "Camera")
+		{
+			entity = m_World->CreateEntity(name);
+			m_World->Add<CameraComponent>(entity);
+		}
+		else if (kind == "Point Light")
+		{
+			entity = m_World->CreateEntity(name);
+			m_World->Get<TransformComponent>(entity).Position.Z = 1.5f; // above the sprites so it lights their faces
+			m_World->Add<PointLightComponent>(entity);
+		}
+		else if (kind == "Directional Light")
+		{
+			entity = m_World->CreateEntity(name);
+			m_World->Get<TransformComponent>(entity).Rotation = { -40, 30, 0 };
+			m_World->Add<DirectionalLightComponent>(entity);
+		}
+		else if (kind == "Ambient Light")
+		{
+			entity = m_World->CreateEntity(name);
+			m_World->Add<AmbientLightComponent>(entity);
+		}
+		else if (Primitives::GetNames().FindIf([&](const char* shape) { return kind == shape; }) != INDEX_NONE)
+		{
+			entity = m_World->CreateEntity(name);
+			m_World->Add<MeshComponent>(entity).Mesh = name;
+		}
+		else
+		{
+			FP_LOG_WARN("Unknown entity kind %s", name.CStr());
+			return NullEntity;
+		}
 		MarkDirty();
 		RefreshHierarchy();
 		Select(entity);
+		return entity;
 	}
 
 	void EditorWindow::DuplicateSelected()

@@ -58,7 +58,7 @@ Game code lives in `Game/`. The editor and the runtime both link it.
    };
    ```
 
-2. **Register** them in `Game::RegisterComponents` (`Game/Game.cpp`) so the inspector and scene files see them.
+2. **Register** them in `Game::RegisterComponents` (`Game/Game.cpp`) so the Details panel and scene files see them.
 
    ```cpp
    registry.Register<HealthComponent>("Health")
@@ -117,7 +117,7 @@ FP_SCRIPT(Rotator)
 
 - **Scripts > New Script...** writes a starter file and opens it in a tab next to the viewport.
 - Add a **Scripts** component to an entity, then **Add Script**. An entity can have any number.
-- Fields listed in `FP_SCRIPT` show in the inspector, save with the scene and keep their values
+- Fields listed in `FP_SCRIPT` show in the Details panel, save with the scene and keep their values
   across hot reloads. Other members reset when scripts reload.
 - Saving a script rebuilds and reloads it (turn this off with **Scripts > Auto Reload**).
   **Scripts > Reload Scripts** (Ctrl+R) forces it. Build output goes to the console, and double
@@ -134,7 +134,7 @@ and the `GameScripts` project builds along with the editor.
 ### Materials and lighting
 
 A sprite draws unlit with its `Tint` and `Texture` until it gets a **Material** component. That points
-at a shared `.material` file in `Content/Materials`. Select the entity and the inspector shows the
+at a shared `.material` file in `Content/Materials`. Select the entity and the Details panel shows the
 material's values below the component, or a **Create Material...** button when it has none. Edits apply
 to every entity using that material. **Save Material** or Ctrl+S writes them.
 
@@ -163,19 +163,36 @@ shows every material on meshes, including a refracting glass sphere.
 `Transform.Rotation` is euler degrees as pitch (X), yaw (Y) and roll (Z). Cameras and lights point
 down their local -Z axis.
 
+### Editor layout
+
+The editor follows Unreal Engine 5's layout and dark theme, using this engine's own terms.
+
+- **Place Entities** on the left: click an entry to create it, or drag it into the viewport to place it
+  under the mouse. The icons on top filter by category.
+- **Viewport** in the middle, in a tab named after the open scene. The pills over it switch between
+  Perspective and Top (2D), pick Lit, Unlit or Wireframe, and turn grid snap on with a grid size.
+- **Details** shows the selection's components in collapsible sections. Add components with the Add
+  button, remove one with the x on its header, and filter fields with the search box.
+- **Outliner** lists every entity under the scene with its type, plus a search box.
+- **Content Browser** and **Output Log** share the bottom. The status bar has buttons for both and a
+  console box: type `help` for the commands (play, stop, save, undo, redo, gc, 2d, 3d, viewmode,
+  select, create).
+
 ### Content browser
 
-The **Content** tab next to the **Console** at the bottom of the editor shows everything in
+The **Content Browser** tab next to the **Output Log** at the bottom of the editor shows everything in
 `Content` plus the scripts in `Game/Scripts`. Textures show thumbnails and materials show their color.
 
 - Double click a scene to open it or a script to edit it in a tab. Click a material to edit it in
-  the inspector, or a texture to preview it.
+  the Details panel, or a texture to preview it.
 - Drag a texture into the viewport to make a sprite, an `.obj` to make a mesh, or a material onto a
-  sprite or mesh to assign it. Drag any asset onto a matching inspector field to fill it in.
-- Right click for New Folder, New Material, New Scene and New Script, plus Rename (F2), Duplicate,
-  Delete, Copy Path and Show in Finder or Explorer.
+  sprite or mesh to assign it. Drag any asset onto a matching Details field to fill it in.
+- **Add** or a right click makes a New Folder, Material, Scene or Script. **Import** copies files in,
+  and **Save All** saves the scene, materials and script tabs. Back, forward and the folder path
+  above the files move between folders.
+- Right click an asset to Rename (F2), Duplicate, Delete, Copy Path or Show in Finder or Explorer.
 - Renaming rewrites references in every scene and material. Delete moves files to the system Trash.
-- The browser refreshes on its own when files change, and the Console comes forward when a script
+- The browser refreshes on its own when files change, and the Output Log comes forward when a script
   build fails.
 
 ### Undo and redo
@@ -183,7 +200,7 @@ The **Content** tab next to the **Console** at the bottom of the editor shows ev
 Ctrl+Z undoes and Ctrl+Shift+Z redoes (Cmd on macOS, and Ctrl+Y also redoes on Windows). Both are in the
 **Edit** menu too.
 
-- Every scene edit can be undone: moving, creating, duplicating, deleting, dropping assets, inspector
+- Every scene edit can be undone: moving, creating, duplicating, deleting, dropping assets, Details
   fields, components, scripts and material values. The selection comes back with each step.
 - A drag or a burst of typing becomes one step once the mouse comes up and edits pause briefly.
 - Script tabs and text fields keep their own text undo while they have focus.
@@ -223,11 +240,12 @@ FP::JobSystem::ParallelFor(enemyCount, 32, [&](int32 i) { UpdateEnemy(i); });
 | Pan | 2D: right or middle drag. 3D: middle drag or Shift right drag |
 | Zoom | Mouse wheel |
 | Orbit (3D) | Right drag or Alt left drag |
-| Toggle 3D view | Ctrl+3 |
-| View mode | Toolbar dropdown, or Alt+4 Lit, Alt+3 Unlit, Alt+2 Wireframe |
+| Toggle 3D view | Ctrl+3 or the Perspective pill |
+| View mode | Viewport pill, or Alt+4 Lit, Alt+3 Unlit, Alt+2 Wireframe |
 | Rename / delete asset | F2 / Delete in the content browser |
 | Focus selection | F |
-| Select / move | Left click / left drag along the view plane (hold Shift to snap) |
+| Select / move | Left click / left drag along the view plane |
+| Grid snap | Grid pill over the viewport. Shift flips snapping while dragging |
 | Create sprite | Ctrl+Shift+A |
 | Duplicate / delete | Ctrl+D / Delete |
 | Undo / redo | Ctrl+Z / Ctrl+Shift+Z |

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Editor/EditorIcons.h"
 #include "Engine/ComponentRegistry.h"
 #include "Engine/World.h"
 #include "Engine/Scripting/ScriptComponent.h"
@@ -10,6 +11,9 @@
 #include <vector>
 
 class QFormLayout;
+class QLabel;
+class QLineEdit;
+class QToolButton;
 class QVBoxLayout;
 
 namespace FP::Editor
@@ -52,6 +56,8 @@ namespace FP::Editor
 	private:
 		void Rebuild();
 		void RebuildLater();
+		void SetTitle(const QString& text, EditorIcon icon);
+		void ApplyFilter();
 		void AddMaterialSection();
 		void AddMaterialEditor(const String& contentPath, const QString& title);
 		void AddAssetView();
@@ -64,6 +70,10 @@ namespace FP::Editor
 		World* m_World = nullptr;
 		Entity m_Entity = NullEntity;
 		QWidget* m_Content = nullptr;
+		QLabel* m_TitleIcon = nullptr;
+		QLabel* m_Title = nullptr;
+		QToolButton* m_AddButton = nullptr;
+		QLineEdit* m_Filter = nullptr;
 		QVBoxLayout* m_Layout = nullptr;
 		std::vector<std::function<void()>> m_Refreshers;
 

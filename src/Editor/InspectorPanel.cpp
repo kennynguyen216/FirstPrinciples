@@ -4,6 +4,8 @@
 #include "Engine/Paths.h"
 #include "Engine/Scripting/ScriptRuntime.h"
 #include "Editor/ContentBrowser.h"
+#include "Editor/EditorIcons.h"
+#include "Editor/EditorStyle.h"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -15,7 +17,7 @@
 #include <QFormLayout>
 #include <QImage>
 #include <QFileInfo>
-#include <QGroupBox>
+#include <QSet>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QDragEnterEvent>
@@ -43,6 +45,9 @@ namespace FP::Editor
 			box->setSingleStep(0.1);
 			box->setKeyboardTracking(false);
 			box->setMinimumWidth(70);
+			// Style sheet padding does not reach the text inside a spin box, so set it on the editor itself.
+			if (QLineEdit* text = box->findChild<QLineEdit*>())
+				text->setTextMargins(4, 0, 2, 0);
 			return box;
 		}
 
@@ -108,10 +113,99 @@ namespace FP::Editor
 			}
 		};
 
+		// A collapsible category like UE's Details panel. The header holds the title and any actions.
+		// Collapsed titles are remembered so rebuilding after an edit keeps the layout.
+		class DetailsSection : public QWidget
+		{
+		public:
+			explicit DetailsSection(const QString& title)
+			{
+				QVBoxLayout* outer = new QVBoxLayout(this);
+				outer->setContentsMargins(0, 0, 0, 0);
+				outer->setSpacing(0);
+
+				QWidget* header = new QWidget();
+				header->setObjectName("SectionHeader");
+				header->setStyleSheet("#SectionHeader { background: #2f2f2f; border-radius: 3px; }");
+				m_Header = new QHBoxLayout(header);
+				m_Header->setContentsMargins(4, 2, 4, 2);
+				m_Toggle = new QToolButton();
+				m_Toggle->setCheckable(true);
+				m_Toggle->setText(title);
+				m_Toggle->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+				m_Toggle->setStyleSheet("QToolButton { background: transparent; border: none; font-weight: bold; color: #ffffff; padding: 3px; }");
+				m_Header->addWidget(m_Toggle, 1, Qt::AlignLeft);
+				outer->addWidget(header);
+
+				m_Body = new QWidget();
+				m_Body->setObjectName("SectionBody");
+				m_Body->setStyleSheet("#SectionBody { background: #1a1a1a; }");
+				m_Layout = new QVBoxLayout(m_Body);
+				m_Layout->setContentsMargins(10, 6, 6, 6);
+				outer->addWidget(m_Body);
+
+				const bool collapsed = Collapsed().contains(title);
+				m_Toggle->setChecked(!collapsed);
+				Update();
+				connect(m_Toggle, &QToolButton::toggled, this, [this, title](bool open) {
+					if (open)
+						Collapsed().remove(title);
+					else
+						Collapsed().insert(title);
+					Update();
+				});
+			}
+
+			QVBoxLayout* Body() const { return m_Layout; }
+
+			// Adds a small flat button on the right side of the header.
+			QToolButton* AddAction(const QIcon& icon, const QString& text, const QString& tip)
+			{
+				QToolButton* button = new QToolButton();
+				button->setIcon(icon);
+				button->setText(text);
+				button->setToolTip(tip);
+				button->setAutoRaise(true);
+				button->setToolButtonStyle(text.isEmpty() ? Qt::ToolButtonIconOnly : Qt::ToolButtonTextBesideIcon);
+				button->setStyleSheet("QToolButton { background: transparent; border: none; padding: 2px 4px; } QToolButton:hover { background: #575757; border-radius: 3px; }");
+				m_Header->addWidget(button);
+				return button;
+			}
+
+		private:
+			static QSet<QString>& Collapsed()
+			{
+				static QSet<QString> titles;
+				return titles;
+			}
+
+			void Update()
+			{
+				m_Body->setVisible(m_Toggle->isChecked());
+				m_Toggle->setArrowType(m_Toggle->isChecked() ? Qt::DownArrow : Qt::RightArrow);
+			}
+
+			QHBoxLayout* m_Header = nullptr;
+			QToolButton* m_Toggle = nullptr;
+			QWidget* m_Body = nullptr;
+			QVBoxLayout* m_Layout = nullptr;
+		};
+
+		QFormLayout* MakeForm(QVBoxLayout* body)
+		{
+			QFormLayout* form = new QFormLayout();
+			form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+			form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+			form->setHorizontalSpacing(12);
+			form->setVerticalSpacing(4);
+			body->addLayout(form);
+			return form;
+		}
+
 		// Spin boxes for Vec2 and Vec3 share this so every axis behaves the same.
 		QWidget* MakeVectorRow(int count, QDoubleSpinBox** boxes)
 		{
-			static const char* const labels[3] = { "X ", "Y ", "Z " };
+			static const char* const axisColors[3] = { "#c83a3a", "#5eb03a", "#3a7ae0" };
 			QWidget* row = new QWidget();
 			QHBoxLayout* layout = new QHBoxLayout(row);
 			layout->setContentsMargins(0, 0, 0, 0);
@@ -119,8 +213,8 @@ namespace FP::Editor
 			for (int i = 0; i < count; ++i)
 			{
 				boxes[i] = MakeFloatBox();
-				boxes[i]->setPrefix(labels[i]);
 				boxes[i]->setMinimumWidth(56);
+				boxes[i]->setStyleSheet(QString("QDoubleSpinBox { border-left: 3px solid %1; border-top-left-radius: 2px; border-bottom-left-radius: 2px; }").arg(axisColors[i]));
 				layout->addWidget(boxes[i]);
 			}
 			return row;
@@ -130,7 +224,33 @@ namespace FP::Editor
 	InspectorPanel::InspectorPanel(QWidget* parent) : QWidget(parent)
 	{
 		QVBoxLayout* outer = new QVBoxLayout(this);
-		outer->setContentsMargins(0, 0, 0, 0);
+		outer->setContentsMargins(6, 6, 6, 0);
+		outer->setSpacing(6);
+
+		// Header: what is shown, plus the Add button for components.
+		QHBoxLayout* header = new QHBoxLayout();
+		m_TitleIcon = new QLabel();
+		header->addWidget(m_TitleIcon);
+		m_Title = new QLabel();
+		m_Title->setStyleSheet("font-size: 14px; font-weight: bold; color: #ffffff;");
+		header->addWidget(m_Title, 1);
+		m_AddButton = new QToolButton();
+		m_AddButton->setText("Add");
+		m_AddButton->setIcon(EditorIcons::Get(EditorIcon::Add, EditorStyle::Play));
+		m_AddButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+		m_AddButton->setPopupMode(QToolButton::InstantPopup);
+		m_AddButton->setToolTip("Add a component");
+		header->addWidget(m_AddButton);
+		outer->addLayout(header);
+
+		m_Filter = new QLineEdit();
+		m_Filter->setPlaceholderText("Search");
+		m_Filter->setProperty("search", true);
+		m_Filter->addAction(EditorIcons::Get(EditorIcon::Search), QLineEdit::LeadingPosition);
+		m_Filter->setClearButtonEnabled(true);
+		connect(m_Filter, &QLineEdit::textChanged, this, &InspectorPanel::ApplyFilter);
+		outer->addWidget(m_Filter);
+
 		QScrollArea* scroll = new QScrollArea();
 		scroll->setWidgetResizable(true);
 		scroll->setFrameShape(QFrame::NoFrame);
@@ -139,6 +259,8 @@ namespace FP::Editor
 		m_Content = new QWidget();
 		m_Layout = new QVBoxLayout(m_Content);
 		m_Layout->setAlignment(Qt::AlignTop);
+		m_Layout->setContentsMargins(0, 0, 0, 6);
+		m_Layout->setSpacing(4);
 		scroll->setWidget(m_Content);
 
 		// Script field rows point into script code, so let go of them before the library unloads.
@@ -194,12 +316,10 @@ namespace FP::Editor
 			const ScriptSlot& slot = component.Scripts[index];
 			const ScriptType* type = runtime.FindType(slot.Name);
 
-			QGroupBox* box = new QGroupBox(ToQString(slot.Name));
-			QVBoxLayout* boxLayout = new QVBoxLayout(box);
-			QFormLayout* form = new QFormLayout();
-			form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+			DetailsSection* box = new DetailsSection(ToQString(slot.Name));
+			QVBoxLayout* boxLayout = box->Body();
+			QFormLayout* form = MakeForm(boxLayout);
 			form->setRowWrapPolicy(QFormLayout::WrapLongRows); // script field names are often long
-			boxLayout->addLayout(form);
 
 			if (!type)
 			{
@@ -233,19 +353,14 @@ namespace FP::Editor
 				}
 			}
 
-			QHBoxLayout* buttons = new QHBoxLayout();
-			buttons->addStretch();
 			if (type && type->SourceFile)
 			{
-				QPushButton* editButton = new QPushButton("Edit");
-				editButton->setFlat(true);
+				QToolButton* editButton = box->AddAction(EditorIcons::Get(EditorIcon::Script), "Edit", "Open the script source");
 				const QString source = QString::fromUtf8(type->SourceFile);
-				connect(editButton, &QPushButton::clicked, this, [this, source]() { emit OpenScriptRequested(source); });
-				buttons->addWidget(editButton);
+				connect(editButton, &QToolButton::clicked, this, [this, source]() { emit OpenScriptRequested(source); });
 			}
-			QPushButton* remove = new QPushButton("Remove");
-			remove->setFlat(true);
-			connect(remove, &QPushButton::clicked, this, [this, index]() {
+			QToolButton* remove = box->AddAction(EditorIcons::Get(EditorIcon::Close), "", "Remove script");
+			connect(remove, &QToolButton::clicked, this, [this, index]() {
 				ScriptSlot* current = SlotAt(index);
 				if (!current)
 					return;
@@ -259,8 +374,6 @@ namespace FP::Editor
 				emit Modified();
 				RebuildLater();
 			});
-			buttons->addWidget(remove);
-			boxLayout->addLayout(buttons);
 			layout->addWidget(box);
 		}
 
@@ -315,10 +428,9 @@ namespace FP::Editor
 			return;
 		}
 
-		QGroupBox* group = new QGroupBox(QString("%1: %2").arg(kind, info.fileName()));
-		QVBoxLayout* layout = new QVBoxLayout(group);
-		QFormLayout* form = new QFormLayout();
-		layout->addLayout(form);
+		DetailsSection* group = new DetailsSection(QString("%1: %2").arg(kind, info.fileName()));
+		QVBoxLayout* layout = group->Body();
+		QFormLayout* form = MakeForm(layout);
 		form->addRow("Path", new QLabel(QDir(ToQString(Paths::GetProjectDir())).relativeFilePath(m_AssetPath)));
 		form->addRow("Size", new QLabel(QString("%1 KB").arg(QString::number(info.size() / 1024.0, 'f', 1))));
 
@@ -378,11 +490,8 @@ namespace FP::Editor
 	void InspectorPanel::AddMaterialEditor(const String& path, const QString& title)
 	{
 		// Edits change the shared asset, so every entity using it updates at once.
-		QGroupBox* group = new QGroupBox(title);
-		QVBoxLayout* groupLayout = new QVBoxLayout(group);
-		QFormLayout* form = new QFormLayout();
-		form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-		groupLayout->addLayout(form);
+		DetailsSection* group = new DetailsSection(title);
+		QFormLayout* form = MakeForm(group->Body());
 
 		const String materialPath = path;
 		auto data = [materialPath]() -> void* {
@@ -397,12 +506,11 @@ namespace FP::Editor
 		for (const FieldInfo& field : Material::GetFields())
 			AddFieldEditor(form, field, data, changed);
 
-		QPushButton* save = new QPushButton("Save Material");
-		connect(save, &QPushButton::clicked, this, [materialPath]() {
+		QToolButton* save = group->AddAction(EditorIcons::Get(EditorIcon::Save), "Save", "Save the material asset");
+		connect(save, &QToolButton::clicked, this, [materialPath]() {
 			if (Material* m = MaterialLibrary::Get().Load(materialPath))
 				m->Save();
 		});
-		groupLayout->addWidget(save, 0, Qt::AlignRight);
 		m_Layout->addWidget(group);
 	}
 
@@ -425,24 +533,29 @@ namespace FP::Editor
 			delete item;
 		}
 
+		// The old menu belongs to the Add button, so replace it each time.
+		delete m_AddButton->menu();
+		m_AddButton->setMenu(nullptr);
+		m_AddButton->setEnabled(false);
+
 		if (!m_AssetPath.isEmpty())
 		{
+			SetTitle(QFileInfo(m_AssetPath).completeBaseName(), EditorIcon::ContentBrowser);
 			AddAssetView();
 			RefreshValues();
+			ApplyFilter();
 			return;
 		}
 
 		if (!m_World || !m_World->IsValid(m_Entity))
 		{
-			QLabel* empty = new QLabel("Nothing selected");
-			empty->setEnabled(false);
-			m_Layout->addWidget(empty);
+			SetTitle("Select an entity to see its details", EditorIcon::Details);
 			return;
 		}
 
+		SetTitle(ToQString(m_World->GetEntityName(m_Entity)), EditorIcon::Entity);
 		entt::registry& registry = m_World->GetRegistry();
-		QToolButton* add = new QToolButton();
-		QMenu* addMenu = new QMenu(add);
+		QMenu* addMenu = new QMenu(m_AddButton);
 
 		for (const ComponentInfo* info : ComponentRegistry::Get().GetAll())
 		{
@@ -458,11 +571,9 @@ namespace FP::Editor
 				continue;
 			}
 
-			QGroupBox* group = new QGroupBox(info->Name);
-			QVBoxLayout* groupLayout = new QVBoxLayout(group);
-			QFormLayout* form = new QFormLayout();
-			form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-			groupLayout->addLayout(form);
+			DetailsSection* group = new DetailsSection(info->Name);
+			QVBoxLayout* groupLayout = group->Body();
+			QFormLayout* form = MakeForm(groupLayout);
 			// Looks the component up every time because EnTT may move it when others are added.
 			auto data = [this, info]() -> void* {
 				return m_World && m_World->IsValid(m_Entity) ? info->TryGet(m_World->GetRegistry(), m_Entity) : nullptr;
@@ -472,26 +583,43 @@ namespace FP::Editor
 			for (const FieldInfo& field : info->Fields)
 				AddFieldEditor(form, field, data, [this]() { emit Modified(); });
 
-			QPushButton* remove = new QPushButton("Remove");
-			remove->setFlat(true);
-			connect(remove, &QPushButton::clicked, this, [this, info]() {
+			QToolButton* remove = group->AddAction(EditorIcons::Get(EditorIcon::Close), "", "Remove component");
+			connect(remove, &QToolButton::clicked, this, [this, info]() {
 				info->Remove(m_World->GetRegistry(), m_Entity);
 				emit Modified();
 				RebuildLater();
 			});
-			groupLayout->addWidget(remove, 0, Qt::AlignRight);
 			m_Layout->addWidget(group);
 
 			if (info == ComponentRegistry::Get().Find<MaterialComponent>())
 				AddMaterialSection();
 		}
 
-		add->setText("Add Component");
-		add->setPopupMode(QToolButton::InstantPopup);
-		add->setMenu(addMenu);
-		add->setEnabled(!addMenu->isEmpty());
-		m_Layout->addWidget(add);
+		m_AddButton->setMenu(addMenu);
+		m_AddButton->setEnabled(!addMenu->isEmpty());
 		RefreshValues();
+		ApplyFilter();
+	}
+
+	void InspectorPanel::SetTitle(const QString& text, EditorIcon icon)
+	{
+		m_Title->setText(text);
+		m_TitleIcon->setPixmap(EditorIcons::Get(icon).pixmap(18, 18));
+	}
+
+	void InspectorPanel::ApplyFilter()
+	{
+		// Hides rows whose field name does not match, like UE's details search.
+		const QString filter = m_Filter->text().trimmed();
+		for (QFormLayout* form : m_Content->findChildren<QFormLayout*>())
+		{
+			for (int row = 0; row < form->rowCount(); ++row)
+			{
+				QLayoutItem* label = form->itemAt(row, QFormLayout::LabelRole);
+				const QLabel* text = label ? qobject_cast<QLabel*>(label->widget()) : nullptr;
+				form->setRowVisible(row, filter.isEmpty() || !text || text->text().contains(filter, Qt::CaseInsensitive));
+			}
+		}
 	}
 
 	void InspectorPanel::AddFieldEditor(QFormLayout* form, const FieldInfo& field, DataFn data, ChangedFn changed)
@@ -517,6 +645,8 @@ namespace FP::Editor
 				QSpinBox* box = new QSpinBox();
 				box->setRange(INT32_MIN, INT32_MAX);
 				box->setKeyboardTracking(false);
+				if (QLineEdit* text = box->findChild<QLineEdit*>())
+					text->setTextMargins(4, 0, 2, 0);
 				connect(box, &QSpinBox::valueChanged, this, [=](int value) {
 					if (void* c = data()) { fieldCopy.Get<int32>(c) = value; changed(); }
 				});

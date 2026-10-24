@@ -9,11 +9,9 @@
 #include <memory>
 
 class QAction;
-class QComboBox;
 class QFileSystemWatcher;
 class QTabWidget;
 class QDockWidget;
-class QListWidget;
 class QPlainTextEdit;
 class QTimer;
 
@@ -27,7 +25,9 @@ namespace FP::Editor
 	class CodeEditor;
 	class ContentBrowser;
 	class InspectorPanel;
+	class OutlinerPanel;
 	class ScriptBuilder;
+	class ViewportToolbar;
 	class ViewportWidget;
 
 	class EditorWindow : public QMainWindow
@@ -45,6 +45,9 @@ namespace FP::Editor
 		void Play();
 		void Stop();
 		void Select(Entity entity);
+
+		// Creates an entity from a Place Entities kind such as "Point Light" or "Cube" and selects it.
+		Entity CreateEntity(const QString& kind);
 
 		// Steps the scene back or forward. A focused script tab gets its own text undo instead.
 		void Undo();
@@ -76,6 +79,10 @@ namespace FP::Editor
 	private:
 		void BuildMenus();
 		void BuildDocks();
+		void BuildStatusBar();
+
+		// Runs a line typed into the status bar's console box.
+		void RunCommand(const QString& line);
 
 		void Tick();
 		void RefreshHierarchy();
@@ -94,7 +101,6 @@ namespace FP::Editor
 		bool SaveScene();
 		bool SaveSceneAs();
 
-		void CreateEntity(bool withSprite);
 		void DuplicateSelected();
 		void DeleteSelected();
 
@@ -118,6 +124,9 @@ namespace FP::Editor
 		// Ctrl+S saves the open script when one is showing, otherwise the scene.
 		void SaveCurrent();
 
+		// Saves the scene, changed materials and every edited script tab.
+		void SaveAll();
+
 		StrongObjectPtr<World> m_World;
 		Entity m_Selected = NullEntity;
 		Guid m_SelectedGuid;
@@ -133,7 +142,7 @@ namespace FP::Editor
 
 		ViewportWidget* m_Viewport = nullptr;
 		InspectorPanel* m_Inspector = nullptr;
-		QListWidget* m_Hierarchy = nullptr;
+		OutlinerPanel* m_Outliner = nullptr;
 		QPlainTextEdit* m_Console = nullptr;
 		QTimer* m_Timer = nullptr;
 		QAction* m_UndoAction = nullptr;
@@ -141,11 +150,12 @@ namespace FP::Editor
 		QAction* m_PlayAction = nullptr;
 		QAction* m_StopAction = nullptr;
 		QAction* m_View3DAction = nullptr;
-		QComboBox* m_ViewModeBox = nullptr;
+		ViewportToolbar* m_ViewportToolbar = nullptr;
 		ScriptBuilder* m_ScriptBuilder = nullptr;
 		QTabWidget* m_CentralTabs = nullptr;
 		ContentBrowser* m_ContentBrowser = nullptr;
 		QDockWidget* m_ConsoleDock = nullptr;
+		QDockWidget* m_ContentDock = nullptr;
 		QFileSystemWatcher* m_ScriptWatcher = nullptr;
 		QTimer* m_ScriptDebounce = nullptr;
 		bool m_AutoReloadScripts = true;

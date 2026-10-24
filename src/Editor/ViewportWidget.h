@@ -33,6 +33,12 @@ namespace FP::Editor
 		void SetViewMode(ViewMode mode) { m_ViewMode = mode; }
 		ViewMode GetViewMode() const { return m_ViewMode; }
 
+		// Snaps dragged entities to a grid of this size. Shift inverts it while dragging.
+		void SetSnap(bool enabled, float size) { m_SnapEnabled = enabled; m_SnapSize = size; }
+
+		// A widget that floats along the top edge, like the viewport toolbar. The viewport keeps it sized.
+		void SetOverlay(QWidget* overlay);
+
 		// Centers the editor camera on the selected entity.
 		void FocusSelected();
 
@@ -47,6 +53,9 @@ namespace FP::Editor
 
 		// A file was dropped. point is where it landed in the world and target is what was under it.
 		void AssetDropped(const QString& path, FP::Vec3 point, FP::Entity target);
+
+		// An entry from Place Entities was dropped.
+		void EntityDropped(const QString& kind, FP::Vec3 point);
 
 	protected:
 		void paintEvent(QPaintEvent* event) override;
@@ -101,6 +110,10 @@ namespace FP::Editor
 		bool m_Panning = false;
 		bool m_Orbiting = false;
 		bool m_Dragging = false;
+
+		QWidget* m_Overlay = nullptr;
+		bool m_SnapEnabled = false;
+		float m_SnapSize = 0.25f;
 
 		// Dragging moves the selection along a plane facing the camera through where it was grabbed.
 		Vec3 m_DragPlanePoint;
