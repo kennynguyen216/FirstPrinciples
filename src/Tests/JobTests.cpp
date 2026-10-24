@@ -3,6 +3,7 @@
 #include "HAL/PlatformMisc.h"
 #include "Core/Log.h"
 
+#include <memory>
 #include <thread>
 
 using namespace FP;
@@ -122,4 +123,27 @@ FP_TEST(Job_ThroughputComparedToThreads)
 	FP_EXPECT(done.load() == Count);
 
 	FP_LOG("  %d jobs in %.2f ms (%.2f us each) on %d workers", Count, jobSeconds * 1000, jobSeconds / Count * 1e6, JobSystem::GetWorkerCount());
+}
+
+FP_TEST(Job_ParallelForCoversEveryIndexOnce)
+{
+	ScopedJobs jobs;
+	constexpr int32 Count = 10007; // not a multiple of the batch size
+	// Atomics cannot move, so they live in a plain array rather than an Array.
+	std::unique_ptr<std::atomic<int32>[]> hits(new std::atomic<int32>[Count]());
+	JobSystem::ParallelFor(Count, 64, [&hits](int32 i) { hits[i].fetch_add(1, std::memory_order_relaxed); });
+	bool allOnce = true;
+	for (int32 i = 0; i < Count; ++i)
+		allOnce &= hits[i].load() == 1;
+	FP_EXPECT(allOnce);
+}
+
+FP_TEST(Job_NestedParallelFor)
+{
+	ScopedJobs jobs;
+	std::atomic<int64> sum{ 0 };
+	JobSystem::ParallelFor(16, 1, [&sum](int32 outer) {
+		JobSystem::ParallelFor(100, 10, [&sum, outer](int32 inner) { sum.fetch_add(outer * 100 + inner, std::memory_order_relaxed); });
+	});
+	FP_EXPECT(sum.load() == static_cast<int64>(1600) * 1599 / 2);
 }

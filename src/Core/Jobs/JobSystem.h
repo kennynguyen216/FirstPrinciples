@@ -144,6 +144,28 @@ namespace FP
 		// never spin waiting for that thread to do something. It may be the one running the job.
 		static void Wait(JobCounter& counter, int32 target = 0);
 
+		// Calls fn(index) for every index from 0 to count minus one across the workers, then returns.
+		// batchSize indices share one job so tiny bodies are not drowned out by scheduling.
+		// Safe to call inside a job. The wait parks like any other.
+		template <typename F>
+		static void ParallelFor(int32 count, int32 batchSize, F&& fn)
+		{
+			if (count <= 0)
+				return;
+			if (batchSize < 1)
+				batchSize = 1;
+			JobCounter counter;
+			for (int32 start = 0; start < count; start += batchSize)
+			{
+				const int32 end = start + batchSize < count ? start + batchSize : count;
+				Run([&fn, start, end]() {
+					for (int32 i = start; i < end; ++i)
+						fn(i);
+				}, &counter);
+			}
+			Wait(counter);
+		}
+
 		static int32 GetWorkerCount();
 		static bool IsInsideJob();
 
