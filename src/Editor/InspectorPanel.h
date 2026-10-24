@@ -65,6 +65,7 @@ namespace FP::Editor
 		void ApplyFilter();
 		void AddMaterialSection();
 		void AddMaterialSlots(QFormLayout* form);
+		void AddAnimatorClips(QFormLayout* form);
 		void AddAudioSection();
 		void AddMaterialEditor(const String& contentPath, const QString& title);
 		void AddAssetView();

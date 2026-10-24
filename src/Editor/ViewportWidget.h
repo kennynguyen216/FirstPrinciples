@@ -99,6 +99,8 @@ namespace FP::Editor
 
 		// Moves the camera for held WASD keys while the right button is down.
 		void Fly(float deltaTime);
+		// The GPU mesh of a Mesh or SkeletalMesh component, or null.
+		const GPUMesh* FindMesh(Entity entity) const;
 		bool HitSurface(const Ray& ray, Entity entity, float& outDistance) const;
 
 		void AddGizmos(const RenderView& view);
