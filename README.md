@@ -111,6 +111,48 @@ Game code lives in your project's `Source` folder. The editor and the runtime bo
 Textures are `.png`, `.jpg`, `.tga` or `.bmp` files under `Content/`. Use the `...` button next to a texture
 field to pick one.
 
+### Audio
+
+Use **File > Import Audio...** to copy a WAV into the open project's `Content/Audio`, or copy it there yourself.
+Add an **AudioSource** component to an entity and use its `Clip` picker to select the file.
+Turn on **PlayOnStart** to hear it when the scene starts, and **Loop** for ambience. The inspector
+provides preview, reload and playback controls. Editor **Stop** stops game audio and restores the scene.
+Imports validate a staged copy and never overwrite an existing destination.
+
+Supported clips are uncompressed PCM16 or float32 WAV, mono or stereo, at 8-96 kHz. Clips must be
+at most 60 seconds, 64 MiB on disk and 32 MiB decoded. Decoded clips share a bounded 128 MiB cache.
+Audio uses SDL3; no additional audio library or asset conversion is required. Missing output hardware
+leaves the editor and game usable, with an audio status message and a retry control.
+
+For positional sound, enable **Spatial** on a mono source and add an **AudioListener** to the player
+or another entity. The listener follows that entity's position and rotation. Without an explicit
+listener, audio uses a primary camera, then the origin. **MinDistance** and **MaxDistance** control
+distance attenuation in world units; panning follows the listener's right direction. Stereo sources
+play without positioning. Master, SFX, Music and UI volumes are available through the editor's
+**Audio...** controls. Pitch changes both pitch and speed.
+
+Game systems can preload a clip in `OnStart` and play overlapping effects during play:
+
+```cpp
+world.GetAudio().Preload("Audio/Click.wav");
+const FP::AudioPlayResult played = world.GetAudio().PlayOneShot("Audio/Click.wav");
+if (!played)
+    FP_LOG_WARN("Audio: %s", played.Result.Message.CStr());
+```
+
+`Play(entity)` restarts an entity's primary source; `Pause`, `Resume` and `Stop` accept the returned
+voice handle. One-shots can optionally follow an owner entity through `FP::OneShotParams`.
+Scene replacement, owner destruction and ending play release the affected voices. These APIs run
+on the main thread. Preload effects before latency-sensitive triggers: an uncached load is synchronous.
+
+Open `Projects/Sample/Content/Scenes/AudioDemo.scene` and press Play. Move the listener with WASD/arrows and press
+Space for overlapping clicks. Demo WAVs are original generated sounds; regenerate and check them
+with `python Scripts/GenerateAudioFixtures.py`. Run `Projects/Sample/Binaries/Debug/Tests Audio` for audio tests.
+
+The first version uses resident WAVs and simple stereo panning. Compressed/streamed music, HRTF,
+occlusion, Doppler and effects are deferred. Dense mixes can hard-clip, and an immediate Stop can
+click.
+
 ### C++ scripts
 
 Scripts are per entity behaviour written in C++ in the project's `Source/Scripts`. They build into a separate
@@ -333,7 +375,7 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 
 | Library | Use | How it gets here |
 |---|---|---|
-| [SDL3](https://libsdl.org) | Windowing, input, 2D rendering | Homebrew on macOS, `Scripts/Setup.ps1` on Windows |
+| [SDL3](https://libsdl.org) | Windowing, input, GPU rendering and audio | Homebrew on macOS, `Scripts/Setup.ps1` on Windows |
 | [Qt 6](https://qt.io) | Editor UI | Homebrew on macOS, Qt installer + `QT_DIR` on Windows |
 | [EnTT](https://github.com/skypjack/entt) | ECS | Git submodule in `ThirdParty/entt` |
 | [stb_image](https://github.com/nothings/stb) | PNG, JPG and TGA loading | Git submodule in `ThirdParty/stb` |

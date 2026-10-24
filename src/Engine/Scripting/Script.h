@@ -72,7 +72,7 @@ namespace FP
 	}
 
 	// Bump when the script interface changes so stale modules are refused instead of crashing.
-	constexpr uint32 ScriptInterfaceVersion = 1;
+	constexpr uint32 ScriptInterfaceVersion = 2;
 
 	// Fingerprint of everything a script module shares with the host by layout. A module built
 	// against different engine headers or a different configuration gives a different value.
@@ -81,6 +81,8 @@ namespace FP
 		const uint64 parts[] = {
 			ScriptInterfaceVersion, FP_BUILD_DEBUG, sizeof(void*), sizeof(World), sizeof(String), sizeof(Array<int32>),
 			sizeof(TransformComponent), sizeof(ScriptType), sizeof(FieldInfo), sizeof(ModuleContext),
+			sizeof(AudioWorld), sizeof(AudioResult), sizeof(AudioPlayResult), sizeof(VoiceHandle), sizeof(OneShotParams),
+			sizeof(AudioSourceComponent), sizeof(AudioListenerComponent),
 		};
 		return HashBytes(parts, sizeof(parts));
 	}

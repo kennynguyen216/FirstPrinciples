@@ -9,6 +9,7 @@
 #include <memory>
 
 class QAction;
+class QLabel;
 class QFileSystemWatcher;
 class QTabWidget;
 class QDockWidget;
@@ -18,6 +19,7 @@ class QTimer;
 namespace FP
 {
 	class GPUDevice;
+	class AudioDevice;
 }
 
 namespace FP::Editor
@@ -35,7 +37,7 @@ namespace FP::Editor
 		Q_OBJECT
 
 	public:
-		explicit EditorWindow(GPUDevice& device);
+		EditorWindow(GPUDevice& device, AudioDevice& audio);
 		~EditorWindow() override;
 
 		void OpenScene(const QString& path);
@@ -117,6 +119,8 @@ namespace FP::Editor
 
 		void DuplicateSelected();
 		void DeleteSelected();
+		void ImportAudio(bool assign);
+		void ShowAudioSettings();
 
 		static void LogSink(LogLevel level, const char* message, void* userData);
 
@@ -143,6 +147,7 @@ namespace FP::Editor
 		void SaveAll();
 
 		StrongObjectPtr<World> m_World;
+		AudioDevice& m_Audio;
 		Entity m_Selected = NullEntity;
 		Guid m_SelectedGuid;
 
@@ -165,6 +170,10 @@ namespace FP::Editor
 		QAction* m_PlayAction = nullptr;
 		QAction* m_StopAction = nullptr;
 		QAction* m_View3DAction = nullptr;
+		QAction* m_ImportAudioAction = nullptr;
+		QLabel* m_AudioStatus = nullptr;
+		float m_AudioGains[4] = { 1, 1, 1, 1 };
+		bool m_AudioMutes[4] = {};
 		ViewportToolbar* m_ViewportToolbar = nullptr;
 		ScriptBuilder* m_ScriptBuilder = nullptr;
 		QTabWidget* m_CentralTabs = nullptr;

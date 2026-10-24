@@ -1,0 +1,67 @@
+#pragma once
+
+#include "Core/CoreMinimal.h"
+#include "Engine/Math.h"
+
+#include <entt/entity/entity.hpp>
+#include <limits>
+
+namespace FP
+{
+	enum class AudioError : uint8
+	{
+		Ok, NotReady, InvalidSource, InvalidSettings, MissingClip,
+		UnsupportedFormat, DecodeFailed, BudgetExceeded, VoiceLimit, BackendFailure
+	};
+
+	struct AudioResult
+	{
+		AudioError Code = AudioError::Ok;
+		String Message;
+		explicit operator bool() const { return Code == AudioError::Ok; }
+	};
+
+	enum class AudioBus : uint8 { SFX, Music, UI };
+	enum class VoiceState : uint8 { Invalid, Playing, Paused, Draining };
+
+	struct VoiceHandle
+	{
+		uint64 Context = 0;
+		uint64 Generation = 0;
+		uint32 Slot = std::numeric_limits<uint32>::max();
+		explicit operator bool() const { return Context != 0 && Generation != 0 && Slot != std::numeric_limits<uint32>::max(); }
+		bool operator==(const VoiceHandle&) const = default;
+	};
+
+	struct AudioPlayResult
+	{
+		VoiceHandle Voice;
+		AudioResult Result;
+		explicit operator bool() const { return static_cast<bool>(Result) && static_cast<bool>(Voice); }
+	};
+
+	struct AudioPlaybackParams
+	{
+		float Volume = 1;
+		float Pitch = 1;
+		bool Loop = false;
+		AudioBus Bus = AudioBus::SFX;
+		int32 Priority = 128;
+		float LeftGain = 1;
+		float RightGain = 1;
+		bool Preview = false;
+	};
+
+	struct OneShotParams
+	{
+		float Volume = 1;
+		float Pitch = 1;
+		AudioBus Bus = AudioBus::SFX;
+		int32 Priority = 128;
+		bool Spatial = false;
+		entt::entity Owner = entt::null;
+		Vec3 Position;
+		float MinDistance = 1;
+		float MaxDistance = 25;
+	};
+}

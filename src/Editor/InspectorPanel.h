@@ -3,6 +3,7 @@
 #include "Editor/EditorIcons.h"
 #include "Engine/ComponentRegistry.h"
 #include "Engine/World.h"
+#include "Engine/Audio/AudioTypes.h"
 #include "Engine/Scripting/ScriptComponent.h"
 
 #include <QWidget>
@@ -36,10 +37,12 @@ namespace FP::Editor
 
 		// Pulls current values into the widgets. Skips the widget being edited.
 		void RefreshValues();
+		void StopPreview();
 
 	signals:
 		// A field was edited. Name changes matter to the hierarchy.
 		void Modified();
+		void ImportAudioRequested();
 
 		// The user asked to edit a script's source file.
 		void OpenScriptRequested(const QString& path);
@@ -59,6 +62,7 @@ namespace FP::Editor
 		void SetTitle(const QString& text, EditorIcon icon);
 		void ApplyFilter();
 		void AddMaterialSection();
+		void AddAudioSection();
 		void AddMaterialEditor(const String& contentPath, const QString& title);
 		void AddAssetView();
 		void AddScriptsSection(QVBoxLayout* layout);
@@ -76,6 +80,7 @@ namespace FP::Editor
 		QLineEdit* m_Filter = nullptr;
 		QVBoxLayout* m_Layout = nullptr;
 		std::vector<std::function<void()>> m_Refreshers;
+		VoiceHandle m_Preview;
 
 		struct EditScript
 		{

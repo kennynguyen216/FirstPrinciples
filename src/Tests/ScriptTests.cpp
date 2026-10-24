@@ -3,6 +3,8 @@
 #include "Engine/SceneSerializer.h"
 #include "Engine/Scripting/ScriptRuntime.h"
 #include "Engine/Scripting/ScriptSystem.h"
+#include "Engine/SceneHistory.h"
+#include "Engine/FieldSerializer.h"
 
 using namespace FP;
 
@@ -70,6 +72,78 @@ FP_TEST(Script_ComponentRoundTripsUnknownScripts)
 	FP_EXPECT(back.Scripts[1].Name == "NotCompiledYet");
 	FP_EXPECT(back.Scripts[1].Properties == "Speed 7\n");
 	FP_EXPECT(SceneSerializer::SaveToString(*loaded.Get()) == text);
+}
+
+FP_TEST(Script_AudioAndPropertiesSurviveHistoryAndRejectedLoad)
+{
+	Engine::RegisterEngineComponents();
+	StrongObjectPtr<World> world(NewObject<World>());
+	const Entity entity = world->CreateEntity("Scripted audio");
+	const Guid id = world->Get<IdComponent>(entity).Id;
+	const String originalProperties = "Label  \"has \\\"quotes\\\" and space\"\nSpeed\t7\n";
+	world->Add<ScriptComponent>(entity).Scripts.Emplace("NotCompiledYet", originalProperties);
+	world->Add<AudioSourceComponent>(entity).Clip = "Audio/Click.wav";
+	SceneHistory history(*world.Get());
+	history.Reset(id);
+	const String original = SceneSerializer::SaveToString(*world.Get());
+	world->Get<ScriptComponent>(entity).Scripts[0].Properties = "Speed 9\n";
+	world->Get<AudioSourceComponent>(entity).Volume = 0.25f;
+	FP_EXPECT(history.Commit(id));
+	const String edited = SceneSerializer::SaveToString(*world.Get());
+	FP_EXPECT(history.Undo());
+	FP_EXPECT(SceneSerializer::SaveToString(*world.Get()) == original);
+	FP_EXPECT(world->Get<ScriptComponent>(world->FindEntityByGuid(id)).Scripts[0].Properties == originalProperties);
+	FP_EXPECT(history.Redo());
+	FP_EXPECT(SceneSerializer::SaveToString(*world.Get()) == edited);
+	FP_EXPECT(!SceneSerializer::LoadFromString(*world.Get(), (edited + "  Broken \"unterminated\n").View()));
+	FP_EXPECT(SceneSerializer::SaveToString(*world.Get()) == edited);
+	FP_EXPECT(!SceneSerializer::LoadFromString(*world.Get(), (edited + "entity invalid\n").View()));
+	FP_EXPECT(SceneSerializer::SaveToString(*world.Get()) == edited);
+}
+
+FP_TEST(FieldSerializer_RawLineCallbacksKeepParseFailures)
+{
+	int twoArgumentCalls = 0;
+	FP_EXPECT(FieldSerializer::ForEachLine("Value 1\n", [&](int32 line, const Array<String>& tokens) {
+		++twoArgumentCalls;
+		return line == 1 && tokens.Num() == 2;
+	}));
+	FP_EXPECT(twoArgumentCalls == 1);
+	String raw;
+	FP_EXPECT(FieldSerializer::ForEachLine("# skipped\n  Label  \"two words\"\n", [&](int32 line, const Array<String>& tokens, std::string_view text) {
+		raw = text;
+		return line == 2 && tokens[1] == "two words";
+	}));
+	FP_EXPECT(raw == "  Label  \"two words\"");
+	FP_EXPECT(!FieldSerializer::ForEachLine("Value 1\n", [](int32, const Array<String>&, std::string_view) { return false; }));
+	FP_EXPECT(!FieldSerializer::ForEachLine("Label \"unterminated\n", [](int32, const Array<String>&) { return true; }));
+}
+
+FP_TEST(Script_SceneReplacementKeepsEntityCleanup)
+{
+	Engine::RegisterEngineComponents();
+	ResetCounters();
+	StrongObjectPtr<World> world(NewObject<World>());
+	const Entity original = world->CreateEntity("Original");
+	world->Add<ScriptComponent>(original).Scripts.Emplace("TestCounter");
+	world->AddSystem<ScriptSystem>();
+	world->BeginPlay();
+	FP_EXPECT(TestCounter::Alive == 1);
+	StrongObjectPtr<World> replacement(NewObject<World>());
+	const Entity incoming = replacement->CreateEntity("Replacement");
+	replacement->Add<ScriptComponent>(incoming).Scripts.Emplace("TestCounter");
+	const String text = SceneSerializer::SaveToString(*replacement.Get());
+	FP_EXPECT(!SceneSerializer::LoadFromString(*world.Get(), (text + "entity invalid\n").View()));
+	FP_EXPECT(TestCounter::Alive == 1 && TestCounter::Stops == 0);
+	FP_EXPECT(SceneSerializer::LoadFromString(*world.Get(), text.View()));
+	FP_EXPECT(TestCounter::Starts == 2 && TestCounter::Stops == 1 && TestCounter::Alive == 1);
+	FP_EXPECT(world->IsPlaying());
+	world->Update(0.016f);
+	FP_EXPECT(TestCounter::Starts == 2 && TestCounter::Alive == 1);
+	world->DestroyEntity(world->FindEntityByName("Replacement"));
+	world->Update(0.016f);
+	FP_EXPECT(TestCounter::Alive == 0 && TestCounter::Stops == 2);
+	world->EndPlay();
 }
 
 FP_TEST(Script_SystemRunsLifecycle)

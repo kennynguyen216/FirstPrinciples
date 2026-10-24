@@ -20,3 +20,8 @@ struct FollowPlayerComponent
 {
 	float Smoothing = 5;
 };
+
+struct AudioDemoComponent
+{
+	FP::String Clip = "Audio/Click.wav";
+};

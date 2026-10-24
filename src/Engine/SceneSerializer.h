@@ -13,6 +13,7 @@ namespace FP
 	//     Rotation 0
 	namespace SceneSerializer
 	{
+		bool Validate(World& world);
 		String SaveToString(World& world);
 
 		// Replaces the world's entities with the scene. Returns false on a hard parse error.

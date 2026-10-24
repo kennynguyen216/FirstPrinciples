@@ -22,3 +22,11 @@ public:
 	const char* GetName() const override { return "FollowPlayer"; }
 	void Update(FP::World& world, float deltaTime) override;
 };
+
+class AudioDemoSystem : public FP::System
+{
+public:
+	const char* GetName() const override { return "AudioDemo"; }
+	void OnStart(FP::World& world) override;
+	void Update(FP::World& world, float deltaTime) override;
+};

@@ -10,6 +10,7 @@
 #include "Engine/Math.h"
 #include "Engine/Paths.h"
 #include "Engine/World.h"
+#include "Engine/Audio/AudioWorld.h"
 
 namespace FP::Engine
 {

@@ -1,0 +1,332 @@
+#include "Engine/Audio/AudioWorld.h"
+#include "Engine/Audio/AudioDevice.h"
+#include "Engine/Audio/AudioClip.h"
+
+#include <algorithm>
+#include <atomic>
+#include <cmath>
+
+namespace FP
+{
+	namespace
+	{
+		uint64 NextContext()
+		{
+			static std::atomic<uint64> next{ 0 };
+			return ++next;
+		}
+		bool Finite(Vec3 value)
+		{
+			return std::isfinite(value.X) && std::isfinite(value.Y) && std::isfinite(value.Z);
+		}
+		bool ValidDistances(float minDistance, float maxDistance)
+		{
+			return std::isfinite(minDistance) && std::isfinite(maxDistance) && minDistance > 0 && maxDistance > minDistance;
+		}
+		bool ValidParams(const AudioPlaybackParams& p)
+		{
+			return std::isfinite(p.Volume) && p.Volume >= 0 && p.Volume <= 1 && std::isfinite(p.Pitch)
+				&& p.Pitch >= 0.25f && p.Pitch <= 4 && p.Priority >= 0 && p.Priority <= 255
+				&& (p.Bus == AudioBus::SFX || p.Bus == AudioBus::Music || p.Bus == AudioBus::UI);
+		}
+		bool SourceParams(const AudioSourceComponent& source, AudioPlaybackParams& p)
+		{
+			p.Volume = source.Volume;
+			p.Pitch = source.Pitch;
+			p.Loop = source.Loop;
+			p.Priority = source.Priority;
+			if (source.Bus == "SFX") p.Bus = AudioBus::SFX;
+			else if (source.Bus == "Music") p.Bus = AudioBus::Music;
+			else if (source.Bus == "UI") p.Bus = AudioBus::UI;
+			else return false;
+			return ValidParams(p) && ValidDistances(source.MinDistance, source.MaxDistance);
+		}
+		AudioPlayResult Failure(AudioError error, const char* message)
+		{
+			return { {}, { error, message } };
+		}
+	}
+
+	AudioSpatialGains CalculateAudioSpatialGains(Vec3 source, const TransformComponent& listener,
+		float minDistance, float maxDistance)
+	{
+		// shortcut: stereo panning has no front/back cues; add HRTF when a game needs them.
+		if (!Finite(source) || !Finite(listener.Position) || !Finite(listener.Rotation)
+			|| !ValidDistances(minDistance, maxDistance)) return {};
+		// Double intermediates prevent finite large world positions from overflowing distance math.
+		const double x = double(source.X) - listener.Position.X;
+		const double y = double(source.Y) - listener.Position.Y;
+		const double z = double(source.Z) - listener.Position.Z;
+		const double distance = std::sqrt(x * x + y * y + z * z);
+		if (distance >= maxDistance) return {};
+		const float attenuation = distance <= minDistance ? 1 : float((minDistance / distance)
+			* (maxDistance - distance) / (maxDistance - minDistance));
+		const Vec3 right = listener.GetRight();
+		if (!Finite(right)) return {};
+		const float pan = distance > 0 ? std::clamp(float((x * right.X + y * right.Y + z * right.Z) / distance), -1.f, 1.f) : 0;
+		return { attenuation * std::sqrt((1 - pan) * 0.5f), attenuation * std::sqrt((1 + pan) * 0.5f) };
+	}
+
+	AudioWorld::AudioWorld(World& world) : m_World(world) { ConnectRegistry(); }
+	AudioWorld::~AudioWorld() { EndPlay(); DisconnectRegistry(); }
+
+	void AudioWorld::ConnectRegistry()
+	{
+		m_World.GetRegistry().on_destroy<AudioSourceComponent>().connect<&AudioWorld::SourceRemoved>(*this);
+	}
+
+	void AudioWorld::DisconnectRegistry()
+	{
+		m_World.GetRegistry().on_destroy<AudioSourceComponent>().disconnect<&AudioWorld::SourceRemoved>(*this);
+	}
+
+	void AudioWorld::SourceRemoved(entt::registry&, Entity entity)
+	{
+		StopSource(entity);
+		std::erase_if(m_Sources, [entity](const Source& source) { return source.Owner == entity; });
+	}
+
+	bool AudioWorld::Attach(AudioDevice* device)
+	{
+		if (m_Playing) return false;
+		StopAll();
+		m_Device = device;
+		m_DeviceLifetime = device ? device->GetLifetimeToken() : std::weak_ptr<void>{};
+		return true;
+	}
+
+	AudioDevice* AudioWorld::GetDevice() const
+	{
+		FP_ASSERT(std::this_thread::get_id() == m_Thread, "AudioWorld is main-thread only");
+		return m_DeviceLifetime.expired() ? nullptr : m_Device;
+	}
+
+	AudioResult AudioWorld::Preload(const String& clip)
+	{
+		if (!GetDevice()) return { AudioError::NotReady, "No audio service is attached" };
+		return m_Device->GetClipCache().Load(clip).Result;
+	}
+
+	void AudioWorld::BeginPlay()
+	{
+		if (m_Playing) return;
+		ResetScene();
+		m_Playing = true;
+		m_Context = NextContext();
+		if (GetDevice()) m_Device->GetClipCache().ClearFailures();
+		for (auto [entity, source] : m_World.View<AudioSourceComponent>().each())
+			if (source.Enabled && !source.Clip.IsEmpty()) Preload(source.Clip);
+		Update();
+	}
+
+	void AudioWorld::EndPlay()
+	{
+		StopAll();
+		m_Playing = false;
+		m_Context = 0;
+		m_Sources.clear();
+	}
+
+	void AudioWorld::StopAll()
+	{
+		if (GetDevice() && m_Context) m_Device->StopContext(m_Context);
+		m_Voices.clear();
+		for (Source& source : m_Sources) source.Voice = {};
+		m_Context = m_Playing ? NextContext() : 0;
+	}
+
+	void AudioWorld::ResetScene()
+	{
+		StopAll();
+		m_Sources.clear();
+		m_ListenerEntity = NullEntity;
+		m_ListenerCandidates.clear();
+		m_WarnedNoListener = false;
+	}
+
+	AudioWorld::Source& AudioWorld::TrackSource(Entity entity)
+	{
+		for (Source& source : m_Sources) if (source.Owner == entity) return source;
+		m_Sources.push_back({ entity });
+		return m_Sources.back();
+	}
+
+	AudioPlayResult AudioWorld::Play(Entity entity)
+	{
+		return PlayInternal(entity, false);
+	}
+
+	AudioPlayResult AudioWorld::PlayInternal(Entity entity, bool preservePause)
+	{
+		if (!m_World.IsValid(entity)) return Failure(AudioError::InvalidSource, "Audio source entity is invalid");
+		const auto* source = m_World.TryGet<AudioSourceComponent>(entity);
+		if (!source || !source->Enabled) return Failure(AudioError::InvalidSource, "Audio source is absent or disabled");
+		if (!m_Playing || !GetDevice() || !m_Device->IsReady()) return Failure(AudioError::NotReady, "Audio world is stopped or output is unavailable");
+		Source& tracked = TrackSource(entity);
+		tracked.RequestedClip = source->Clip;
+		AudioPlaybackParams params;
+		if (!SourceParams(*source, params)) return Failure(AudioError::InvalidSettings, "Invalid audio volume, pitch, bus, priority or distance");
+		const auto loaded = m_Device->GetClipCache().Load(source->Clip);
+		if (!loaded.Result) return { {}, loaded.Result };
+		if (source->Spatial && loaded.Clip->Channels != 1)
+			return Failure(AudioError::InvalidSettings, "Spatial playback requires a mono WAV; export a mono version");
+		Voice voice{ {}, entity, true, source->Spatial, {}, source->MinDistance, source->MaxDistance, params };
+		voice.Channels = loaded.Clip->Channels;
+		SelectListener();
+		ApplySpatial(voice);
+		const VoiceHandle previous = tracked.Voice;
+		const bool paused = preservePause && GetState(previous) == VoiceState::Paused;
+		auto result = m_Device->Play(m_Context, loaded.Clip, voice.Params, previous, paused);
+		if (!result) return result;
+		std::erase_if(m_Voices, [previous](const Voice& v) { return v.Handle == previous; });
+		voice.Handle = result.Voice;
+		m_Voices.push_back(voice);
+		tracked.Voice = result.Voice;
+		return result;
+	}
+
+	AudioPlayResult AudioWorld::PlayOneShot(const String& clip, const OneShotParams& p)
+	{
+		if (!m_Playing || !GetDevice() || !m_Device->IsReady()) return Failure(AudioError::NotReady, "Audio world is stopped or output is unavailable");
+		if (p.Owner != NullEntity && !m_World.IsValid(p.Owner)) return Failure(AudioError::InvalidSource, "One-shot owner entity is invalid");
+		if (p.Owner != NullEntity)
+			if (const auto* source = m_World.TryGet<AudioSourceComponent>(p.Owner); source && !source->Enabled)
+				return Failure(AudioError::InvalidSource, "One-shot owner audio source is disabled");
+		AudioPlaybackParams params;
+		params.Volume = p.Volume; params.Pitch = p.Pitch; params.Bus = p.Bus; params.Priority = p.Priority;
+		if (!ValidParams(params) || !ValidDistances(p.MinDistance, p.MaxDistance) || !Finite(p.Position))
+			return Failure(AudioError::InvalidSettings, "Invalid one-shot playback settings");
+		const auto loaded = m_Device->GetClipCache().Load(clip);
+		if (!loaded.Result) return { {}, loaded.Result };
+		if (p.Spatial && loaded.Clip->Channels != 1)
+			return Failure(AudioError::InvalidSettings, "Spatial playback requires a mono WAV; export a mono version");
+		Voice voice{ {}, p.Owner, false, p.Spatial, p.Position, p.MinDistance, p.MaxDistance, params };
+		SelectListener();
+		ApplySpatial(voice);
+		auto result = m_Device->Play(m_Context, loaded.Clip, voice.Params);
+		if (result) { voice.Handle = result.Voice; m_Voices.push_back(voice); }
+		return result;
+	}
+
+	bool AudioWorld::Owns(VoiceHandle voice) const
+	{
+		return m_Playing && GetDevice() && voice.Context == m_Context && bool(voice);
+	}
+	bool AudioWorld::Stop(VoiceHandle voice) { return Owns(voice) && m_Device->Stop(voice); }
+	bool AudioWorld::Pause(VoiceHandle voice) { return Owns(voice) && m_Device->Pause(voice); }
+	bool AudioWorld::Resume(VoiceHandle voice) { return Owns(voice) && m_Device->Resume(voice); }
+	VoiceState AudioWorld::GetState(VoiceHandle voice) const { return Owns(voice) ? m_Device->GetState(voice) : VoiceState::Invalid; }
+	VoiceHandle AudioWorld::GetSourceVoice(Entity entity) const
+	{
+		for (const Source& source : m_Sources)
+			if (source.Owner == entity && GetState(source.Voice) != VoiceState::Invalid) return source.Voice;
+		return {};
+	}
+
+	void AudioWorld::StopSource(Entity entity)
+	{
+		for (const Voice& voice : m_Voices) if (voice.Owner == entity) Stop(voice.Handle);
+		std::erase_if(m_Voices, [entity](const Voice& voice) { return voice.Owner == entity; });
+		for (Source& source : m_Sources) if (source.Owner == entity) source.Voice = {};
+	}
+
+	void AudioWorld::SelectListener()
+	{
+		std::vector<Entity> candidates;
+		const auto entities = m_World.GetEntities();
+		auto validTransform = [this](Entity entity) {
+			const auto* t = m_World.TryGet<TransformComponent>(entity);
+			return t && Finite(t->Position) && Finite(t->Rotation);
+		};
+		for (Entity entity : entities)
+			if (const auto* listener = m_World.TryGet<AudioListenerComponent>(entity); listener && listener->Enabled && validTransform(entity))
+				candidates.push_back(entity);
+		if (candidates.empty())
+			for (Entity entity : entities)
+				if (const auto* camera = m_World.TryGet<CameraComponent>(entity); camera && camera->Primary && validTransform(entity))
+					candidates.push_back(entity);
+		if (candidates != m_ListenerCandidates && candidates.size() > 1)
+			FP_LOG_WARN("Multiple audio listeners/cameras: using the earliest created eligible entity");
+		m_ListenerCandidates = std::move(candidates);
+		m_ListenerEntity = m_ListenerCandidates.empty() ? Entity(NullEntity) : m_ListenerCandidates.front();
+		m_Listener = m_ListenerEntity == NullEntity ? TransformComponent{} : m_World.Get<TransformComponent>(m_ListenerEntity);
+	}
+
+	void AudioWorld::ApplySpatial(Voice& voice)
+	{
+		voice.Params.LeftGain = voice.Params.RightGain = 1;
+		if (!voice.Spatial) return;
+		Vec3 position = voice.Position;
+		if (voice.Owner != NullEntity)
+		{
+			const auto* transform = m_World.TryGet<TransformComponent>(voice.Owner);
+			if (!transform || !Finite(transform->Position) || !Finite(transform->Rotation))
+			{
+				voice.Params.LeftGain = voice.Params.RightGain = 0;
+				return;
+			}
+			position = transform->Position;
+		}
+		const auto gains = CalculateAudioSpatialGains(position, m_Listener, voice.MinDistance, voice.MaxDistance);
+		voice.Params.LeftGain = gains.Left; voice.Params.RightGain = gains.Right;
+		if (m_ListenerEntity == NullEntity && !m_WarnedNoListener)
+		{
+			FP_LOG_WARN("Spatial audio has no listener or primary camera; using the origin");
+			m_WarnedNoListener = true;
+		}
+	}
+
+	void AudioWorld::Update()
+	{
+		if (!m_Playing) return;
+		SelectListener();
+		auto report = [this](Entity entity, const AudioPlayResult& result) {
+			if (!result) FP_LOG_WARN("Audio source '%s': %s", m_World.GetEntityName(entity).CStr(), result.Result.Message.CStr());
+		};
+		for (Entity entity : m_World.GetEntities())
+		{
+			const auto* source = m_World.TryGet<AudioSourceComponent>(entity);
+			if (!source) continue;
+			const bool added = std::none_of(m_Sources.begin(), m_Sources.end(), [entity](const Source& s) { return s.Owner == entity; });
+			Source& tracked = TrackSource(entity);
+			if (added)
+			{
+				tracked.RequestedClip = source->Clip;
+				if (!source->Enabled) StopSource(entity);
+				else if (source->PlayOnStart) report(entity, Play(entity));
+			}
+			else if (!source->Enabled) StopSource(entity);
+			else if (GetState(tracked.Voice) != VoiceState::Invalid && source->Clip != tracked.RequestedClip)
+			{
+				tracked.RequestedClip = source->Clip;
+				report(entity, PlayInternal(entity, true));
+			}
+		}
+		std::erase_if(m_Sources, [this](const Source& source) { return !m_World.IsValid(source.Owner); });
+		for (Voice& voice : m_Voices)
+		{
+			if (voice.Owner != NullEntity && !m_World.IsValid(voice.Owner)) { Stop(voice.Handle); continue; }
+			if (GetState(voice.Handle) == VoiceState::Invalid) continue;
+			if (voice.Primary)
+			{
+				const auto* source = m_World.TryGet<AudioSourceComponent>(voice.Owner);
+				AudioPlaybackParams params;
+				if (!source || !SourceParams(*source, params) || (source->Spatial && voice.Channels != 1))
+				{
+					if (voice.SettingsValid) FP_LOG_WARN("Audio source '%s': invalid live settings; voice is muted until corrected", m_World.GetEntityName(voice.Owner).CStr());
+					voice.SettingsValid = false;
+					voice.Params.LeftGain = voice.Params.RightGain = 0;
+					if (GetDevice()) m_Device->SetParameters(voice.Handle, voice.Params);
+					continue;
+				}
+				voice.SettingsValid = true;
+				voice.Params = params;
+				voice.Spatial = source->Spatial;
+				voice.MinDistance = source->MinDistance; voice.MaxDistance = source->MaxDistance;
+			}
+			ApplySpatial(voice);
+			if (GetDevice()) m_Device->SetParameters(voice.Handle, voice.Params);
+		}
+		std::erase_if(m_Voices, [this](const Voice& voice) { return GetState(voice.Handle) == VoiceState::Invalid; });
+	}
+}

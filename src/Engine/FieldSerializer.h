@@ -11,8 +11,7 @@ namespace FP::FieldSerializer
 	// Appends "  Name value" plus a newline. indent is the leading text.
 	void Write(String& out, const FieldInfo& field, const void* data, const char* indent = "  ");
 
-	// tokens[0] is the field name and the rest are its values. Missing values become zero.
-	void Read(const FieldInfo& field, void* data, const Array<String>& tokens);
+	bool Read(const FieldInfo& field, void* data, const Array<String>& tokens);
 
 	// Appends text in quotes with \" \\ and \n escaped so Tokenize reads it back unchanged.
 	void AppendQuoted(String& out, const String& text);
@@ -21,12 +20,12 @@ namespace FP::FieldSerializer
 	void Copy(const FieldInfo& field, void* dst, const void* src);
 
 	// Splits on whitespace and keeps quoted strings whole, handling \" \\ and \n escapes.
-	Array<String> Tokenize(std::string_view line);
+	Array<String> Tokenize(std::string_view line, bool* valid = nullptr);
 
 	// Calls fn(lineNumber, tokens) or fn(lineNumber, tokens, line) for every non empty, non comment line.
 	// Returning false stops early.
 	template <typename Fn>
-	void ForEachLine(std::string_view text, Fn fn)
+	bool ForEachLine(std::string_view text, Fn fn)
 	{
 		usize start = 0;
 		int32 lineNumber = 0;
@@ -38,8 +37,13 @@ namespace FP::FieldSerializer
 			const std::string_view line = text.substr(start, end - start);
 			start = end + 1;
 			++lineNumber;
+			const usize first = line.find_first_not_of(" \t\r");
+			if (first == std::string_view::npos || line[first] == '#') continue;
 
-			Array<String> tokens = Tokenize(line);
+			bool valid;
+			Array<String> tokens = Tokenize(line, &valid);
+			if (!valid)
+				return false;
 			if (tokens.IsEmpty() || tokens[0].StartsWith("#"))
 				continue;
 			bool keepGoing = true;
@@ -48,7 +52,8 @@ namespace FP::FieldSerializer
 			else
 				keepGoing = fn(lineNumber, tokens);
 			if (!keepGoing)
-				return;
+				return false;
 		}
+		return true;
 	}
 }

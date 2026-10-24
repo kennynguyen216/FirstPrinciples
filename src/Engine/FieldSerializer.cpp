@@ -1,6 +1,8 @@
 #include "Engine/FieldSerializer.h"
 
 #include <cstdlib>
+#include <cmath>
+#include <limits>
 
 namespace FP::FieldSerializer
 {
@@ -21,11 +23,6 @@ namespace FP::FieldSerializer
 				out += c;
 			}
 			out += '"';
-		}
-
-		float ParseFloat(const Array<String>& tokens, int32 index, float fallback = 0.0f)
-		{
-			return index < tokens.Num() ? std::strtof(tokens[index].CStr(), nullptr) : fallback;
 		}
 
 		template <typename T>
@@ -66,20 +63,44 @@ namespace FP::FieldSerializer
 		out += '\n';
 	}
 
-	void Read(const FieldInfo& field, void* data, const Array<String>& tokens)
+	bool Read(const FieldInfo& field, void* data, const Array<String>& tokens)
 	{
+		const int32 count = field.Type == FieldType::Vec2 ? 2 : field.Type == FieldType::Vec3 ? 3 : field.Type == FieldType::Color ? 4 : 1;
+		if (tokens.Num() != count + 1 && !(field.Type == FieldType::Color && tokens.Num() == 4))
+			return false;
+		float values[4] = { 0, 0, 0, 1 };
+		if (field.Type != FieldType::Bool && field.Type != FieldType::Int && field.Type != FieldType::String)
+		{
+			for (int32 i = 1; i < tokens.Num(); ++i)
+			{
+				double value;
+				if (!tokens[i].ToFloat(value) || !std::isfinite(value) || std::fabs(value) > std::numeric_limits<float>::max())
+					return false;
+				values[i - 1] = static_cast<float>(value);
+			}
+		}
 		switch (field.Type)
 		{
-			case FieldType::Bool: field.Get<bool>(data) = tokens.Num() > 1 && tokens[1] == "true"; break;
-			case FieldType::Int: field.Get<int32>(data) = tokens.Num() > 1 ? std::atoi(tokens[1].CStr()) : 0; break;
-			case FieldType::Float: field.Get<float>(data) = ParseFloat(tokens, 1); break;
-			case FieldType::Vec2: field.Get<Vec2>(data) = { ParseFloat(tokens, 1), ParseFloat(tokens, 2) }; break;
-			case FieldType::Vec3: field.Get<Vec3>(data) = { ParseFloat(tokens, 1), ParseFloat(tokens, 2), ParseFloat(tokens, 3) }; break;
-			case FieldType::Color:
-				field.Get<Color>(data) = { ParseFloat(tokens, 1), ParseFloat(tokens, 2), ParseFloat(tokens, 3), ParseFloat(tokens, 4, 1.0f) };
+			case FieldType::Bool:
+				if (tokens[1] != "true" && tokens[1] != "false") return false;
+				field.Get<bool>(data) = tokens[1] == "true";
 				break;
-			case FieldType::String: field.Get<String>(data) = tokens.Num() > 1 ? tokens[1] : String(); break;
+			case FieldType::Int:
+			{
+				int64 value;
+				if (!tokens[1].ToInt(value) || value < std::numeric_limits<int32>::min() || value > std::numeric_limits<int32>::max()) return false;
+				field.Get<int32>(data) = static_cast<int32>(value);
+				break;
+			}
+			case FieldType::Float: field.Get<float>(data) = values[0]; break;
+			case FieldType::Vec2: field.Get<Vec2>(data) = { values[0], values[1] }; break;
+			case FieldType::Vec3: field.Get<Vec3>(data) = { values[0], values[1], values[2] }; break;
+			case FieldType::Color:
+				field.Get<Color>(data) = { values[0], values[1], values[2], values[3] };
+				break;
+			case FieldType::String: field.Get<String>(data) = tokens[1]; break;
 		}
+		return true;
 	}
 
 	void AppendQuoted(String& out, const String& text)
@@ -101,8 +122,9 @@ namespace FP::FieldSerializer
 		}
 	}
 
-	Array<String> Tokenize(std::string_view line)
+	Array<String> Tokenize(std::string_view line, bool* valid)
 	{
+		if (valid) *valid = true;
 		Array<String> tokens;
 		usize i = 0;
 		auto isSpace = [](char c) { return c == ' ' || c == '\t' || c == '\r'; };
@@ -128,6 +150,11 @@ namespace FP::FieldSerializer
 						token += line[i];
 					}
 					++i;
+				}
+				if (i >= line.size() || (i + 1 < line.size() && !isSpace(line[i + 1])))
+				{
+					if (valid) *valid = false;
+					return {};
 				}
 				++i;
 			}

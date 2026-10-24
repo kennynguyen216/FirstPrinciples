@@ -3,6 +3,7 @@
 // --screenshot saves a frame after half a second and quits, handy as a smoke test.
 
 #include "Engine/Engine.h"
+#include "Engine/Audio/AudioDevice.h"
 #include "Engine/Project.h"
 #include "Core/Jobs/JobSystem.h"
 #include "Engine/Render/Renderer.h"
@@ -77,7 +78,12 @@ int main(int argc, char** argv)
 	Engine::RegisterEngineComponents();
 	Game::RegisterComponents();
 
+	AudioDevice audio;
+	if (const AudioResult initialized = audio.Initialize(); !initialized)
+		FP_LOG_WARN("Audio unavailable: %s", initialized.Message.CStr());
+
 	StrongObjectPtr<World> world(NewObject<World>(nullptr, "GameWorld"));
+	world->GetAudio().Attach(&audio);
 	const String scenePath = Paths::Content(scene);
 	if (!SceneSerializer::LoadFromFile(*world.Get(), scenePath.CStr()))
 		FP_LOG_WARN("Starting with an empty world");
@@ -99,6 +105,7 @@ int main(int argc, char** argv)
 			SDL_Event event;
 			while (SDL_PollEvent(&event))
 			{
+				audio.ProcessEvent(event);
 				if (event.type == SDL_EVENT_QUIT)
 					running = false;
 				Input::ProcessEvent(event);
@@ -111,6 +118,7 @@ int main(int argc, char** argv)
 				deltaTime = 0.1f; // avoid huge steps after a stall
 
 			world->Update(deltaTime);
+			audio.Update();
 			Input::EndFrame();
 
 			SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device->GetHandle());
@@ -136,6 +144,7 @@ int main(int argc, char** argv)
 
 	world.Reset();
 	GarbageCollector::Get().Collect();
+	audio.Shutdown();
 	ScriptRuntime::Get().UnloadModule();
 	SDL_ReleaseWindowFromGPUDevice(device->GetHandle(), window);
 	SDL_DestroyWindow(window);

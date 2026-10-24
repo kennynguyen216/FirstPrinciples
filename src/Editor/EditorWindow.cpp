@@ -1,4 +1,7 @@
 #include "Editor/EditorWindow.h"
+#include "Editor/AudioImport.h"
+#include "Engine/Audio/AudioDevice.h"
+#include "Engine/Audio/AudioWorld.h"
 #include "Editor/CodeEditor.h"
 #include "Editor/ContentBrowser.h"
 #include "Editor/DockTab.h"
@@ -22,8 +25,15 @@
 #include "Game.h"
 
 #include <SDL3/SDL_timer.h>
+#include <SDL3/SDL_events.h>
 
 #include <QCloseEvent>
+#include <QCheckBox>
+#include <QDialog>
+#include <QDoubleSpinBox>
+#include <QFormLayout>
+#include <QPushButton>
+#include <QVBoxLayout>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QDir>
@@ -62,9 +72,10 @@ namespace FP::Editor
 		}
 	}
 
-	EditorWindow::EditorWindow(GPUDevice& device)
+	EditorWindow::EditorWindow(GPUDevice& device, AudioDevice& audio) : m_Audio(audio)
 	{
 		m_World.Reset(NewObject<World>(nullptr, "EditorWorld"));
+		m_World->GetAudio().Attach(&audio);
 		m_History = std::make_unique<SceneHistory>(*m_World.Get());
 		m_HistoryTimer = new QTimer(this);
 		m_HistoryTimer->setSingleShot(true);
@@ -126,6 +137,14 @@ namespace FP::Editor
 
 	EditorWindow::~EditorWindow()
 	{
+		// Dock teardown can emit signals after the derived window has been destroyed.
+		for (QDockWidget* dock : findChildren<QDockWidget*>())
+			disconnect(dock, nullptr, this, nullptr);
+		m_Timer->stop();
+		m_Inspector->StopPreview();
+		m_World->EndPlay();
+		m_Inspector->SetTarget(nullptr, NullEntity);
+		m_World->GetAudio().Attach(nullptr);
 		Log::RemoveSink(&EditorWindow::LogSink, this);
 	}
 
@@ -150,6 +169,7 @@ namespace FP::Editor
 		addDockWidget(Qt::LeftDockWidgetArea, placeDock);
 
 		m_Inspector = new InspectorPanel();
+		connect(m_Inspector, &InspectorPanel::ImportAudioRequested, this, [this]() { ImportAudio(true); });
 		connect(m_Inspector, &InspectorPanel::OpenScriptRequested, this, &EditorWindow::OpenScript);
 		connect(m_Inspector, &InspectorPanel::Modified, this, [this]() {
 			MarkDirty();
@@ -255,6 +275,7 @@ namespace FP::Editor
 		file->addAction("&Open Scene...", QKeySequence::Open, this, &EditorWindow::OpenSceneDialog);
 		file->addAction("&Save", QKeySequence::Save, this, &EditorWindow::SaveCurrent);
 		file->addAction("Save Scene &As...", QKeySequence::SaveAs, this, &EditorWindow::SaveSceneAs);
+		m_ImportAudioAction = file->addAction("&Import Audio...", this, [this]() { ImportAudio(false); });
 		file->addSeparator();
 		file->addAction("E&xit", QKeySequence::Quit, this, &QWidget::close);
 
@@ -452,6 +473,20 @@ namespace FP::Editor
 		QLabel* hint = new QLabel("Hold right mouse and WASD to fly, Alt drag orbits, W E R move rotate scale, F focuses");
 		hint->setStyleSheet("color: #7a7a7a; padding-right: 8px;");
 		statusBar()->addPermanentWidget(hint);
+		QPushButton* audioSettings = new QPushButton("Audio...");
+		audioSettings->setToolTip("Output diagnostics and Master, SFX, Music and UI gains");
+		connect(audioSettings, &QPushButton::clicked, this, &EditorWindow::ShowAudioSettings);
+		statusBar()->addPermanentWidget(audioSettings);
+		m_AudioStatus = new QLabel();
+		m_AudioStatus->setAccessibleName("Audio output status");
+		statusBar()->addPermanentWidget(m_AudioStatus);
+		QPushButton* retry = new QPushButton("Retry Audio");
+		connect(retry, &QPushButton::clicked, this, [this]() {
+			const AudioResult result = m_Audio.Initialize();
+			if (!result)
+				QMessageBox::warning(this, "Audio output", ToQString(result.Message));
+		});
+		statusBar()->addPermanentWidget(retry);
 	}
 
 	void EditorWindow::RunCommand(const QString& line)
@@ -844,6 +879,12 @@ namespace FP::Editor
 
 	void EditorWindow::Tick()
 	{
+		SDL_Event event;
+		while (SDL_PollEvent(&event))
+			m_Audio.ProcessEvent(event);
+		m_Audio.Update();
+		m_AudioStatus->setText(m_Audio.IsReady() ? "Audio ready" : "Audio unavailable");
+		m_AudioStatus->setToolTip(ToQString(m_Audio.GetStatusText()));
 		const uint64 now = SDL_GetTicksNS();
 		float deltaTime = static_cast<float>(now - m_LastTicks) / 1e9f;
 		m_LastTicks = now;
@@ -941,6 +982,7 @@ namespace FP::Editor
 		}
 		if (m_World->IsPlaying())
 			return;
+		m_Inspector->StopPreview();
 		CommitHistory();
 		if (m_History->Undo())
 			RestoreHistoryStep();
@@ -955,6 +997,7 @@ namespace FP::Editor
 		}
 		if (m_World->IsPlaying())
 			return;
+		m_Inspector->StopPreview();
 		CommitHistory();
 		if (m_History->Redo())
 			RestoreHistoryStep();
@@ -1022,15 +1065,16 @@ namespace FP::Editor
 
 	void EditorWindow::OpenScene(const QString& path)
 	{
+		StrongObjectPtr<World> candidate(NewObject<World>(nullptr, "SceneCandidate"));
+		if (!SceneSerializer::LoadFromFile(*candidate.Get(), ToString(path).CStr()))
+			return;
 		Stop();
-		if (SceneSerializer::LoadFromFile(*m_World.Get(), ToString(path).CStr()))
-		{
-			if (Renderer* renderer = m_Viewport->GetRenderer())
-				renderer->PreloadTextures(*m_World.Get());
-			m_ScenePath = path;
-			m_Dirty = false;
-			FP_LOG("Opened %s", ToString(path).CStr());
-		}
+		m_World->ReplaceScene(*candidate.Get());
+		if (Renderer* renderer = m_Viewport->GetRenderer())
+			renderer->PreloadTextures(*m_World.Get());
+		m_ScenePath = path;
+		m_Dirty = false;
+		FP_LOG("Opened %s", ToString(path).CStr());
 		m_Selected = NullEntity;
 		Select(NullEntity);
 		m_Inspector->SetTarget(m_World.Get(), NullEntity);
@@ -1165,6 +1209,7 @@ namespace FP::Editor
 	{
 		if (m_World->IsPlaying())
 			return;
+		m_Inspector->StopPreview();
 		CommitHistory();
 		// Snapshot the scene so Stop can put everything back.
 		m_PlaySnapshot = SceneSerializer::SaveToString(*m_World.Get());
@@ -1174,12 +1219,15 @@ namespace FP::Editor
 		m_Viewport->SetPlaying(true);
 		m_PlayAction->setEnabled(false);
 		m_StopAction->setEnabled(true);
+		m_ImportAudioAction->setEnabled(false);
+		m_Inspector->RefreshValues();
 		UpdateTitle();
 		FP_LOG("Play");
 	}
 
 	void EditorWindow::Stop()
 	{
+		m_Inspector->StopPreview();
 		if (!m_World->IsPlaying())
 			return;
 		m_World->EndPlay();
@@ -1195,8 +1243,90 @@ namespace FP::Editor
 		m_Inspector->SetTarget(m_World.Get(), m_Selected);
 		m_PlayAction->setEnabled(true);
 		m_StopAction->setEnabled(false);
+		m_ImportAudioAction->setEnabled(true);
 		UpdateTitle();
 		FP_LOG("Stop");
+	}
+
+	void EditorWindow::ImportAudio(bool assign)
+	{
+		if (m_World->IsPlaying())
+			return;
+		const QString source = QFileDialog::getOpenFileName(this, "Import Audio", {}, "Audio (*.wav)");
+		if (source.isEmpty())
+			return;
+		const QDir content(ToQString(Paths::GetContentDir()));
+		if (!content.mkpath("Audio"))
+		{
+			QMessageBox::warning(this, "Import Audio", "Cannot create Content/Audio. Check folder access.");
+			return;
+		}
+		QString destination = QFileDialog::getSaveFileName(this, "Import Audio into Content/Audio",
+			content.filePath("Audio/" + QFileInfo(source).fileName()), "Audio (*.wav)", nullptr, QFileDialog::DontConfirmOverwrite);
+		if (destination.isEmpty())
+			return;
+		if (!destination.endsWith(".wav", Qt::CaseInsensitive))
+			destination += ".wav";
+		String relative;
+		const AudioResult result = ImportAudioFile(ToString(source), ToString(destination), relative);
+		if (!result)
+		{
+			QMessageBox::warning(this, "Import Audio", QString("%1\n\n%2").arg(QFileInfo(source).fileName(), ToQString(result.Message)));
+			return;
+		}
+		m_Audio.GetClipCache().Load(relative, true);
+		m_ContentBrowser->Refresh();
+		if (assign && m_World->IsValid(m_Selected))
+		{
+			if (AudioSourceComponent* audio = m_World->TryGet<AudioSourceComponent>(m_Selected))
+			{
+				m_Inspector->StopPreview();
+				audio->Clip = relative;
+				MarkDirty();
+				m_Inspector->SetTarget(m_World.Get(), m_Selected);
+			}
+		}
+		statusBar()->showMessage(QString("Imported %1").arg(ToQString(relative)), 5000);
+	}
+
+	void EditorWindow::ShowAudioSettings()
+	{
+		QDialog dialog(this);
+		dialog.setWindowTitle("Audio output and mixer");
+		QVBoxLayout* layout = new QVBoxLayout(&dialog);
+		QLabel* diagnostics = new QLabel(ToQString(m_Audio.GetStatusText()));
+		diagnostics->setWordWrap(true);
+		diagnostics->setTextInteractionFlags(Qt::TextSelectableByMouse);
+		layout->addWidget(diagnostics);
+		QFormLayout* form = new QFormLayout();
+		layout->addLayout(form);
+		const char* names[] = { "Master", "SFX", "Music", "UI" };
+		for (int i = 0; i < 4; ++i)
+		{
+			QDoubleSpinBox* gain = new QDoubleSpinBox();
+			gain->setRange(0, 1);
+			gain->setSingleStep(0.05);
+			gain->setValue(m_AudioGains[i]);
+			gain->setAccessibleName(QString("%1 volume").arg(names[i]));
+			connect(gain, &QDoubleSpinBox::valueChanged, &dialog, [this, i](double value) {
+				m_AudioGains[i] = static_cast<float>(value);
+				if (i == 0) m_Audio.SetMasterGain(m_AudioGains[i]);
+				else m_Audio.SetBusGain(static_cast<AudioBus>(i - 1), m_AudioGains[i]);
+			});
+			form->addRow(QString("%1 volume").arg(names[i]), gain);
+			QCheckBox* mute = new QCheckBox(QString("Mute %1").arg(names[i]));
+			mute->setChecked(m_AudioMutes[i]);
+			connect(mute, &QCheckBox::toggled, &dialog, [this, i](bool checked) {
+				m_AudioMutes[i] = checked;
+				if (i == 0) m_Audio.SetMasterMuted(checked);
+				else m_Audio.SetBusMuted(static_cast<AudioBus>(i - 1), checked);
+			});
+			form->addRow(mute);
+		}
+		QPushButton* close = new QPushButton("Close");
+		connect(close, &QPushButton::clicked, &dialog, &QDialog::accept);
+		layout->addWidget(close);
+		dialog.exec();
 	}
 
 	void EditorWindow::closeEvent(QCloseEvent* event)
