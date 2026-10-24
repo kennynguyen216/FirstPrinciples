@@ -34,6 +34,7 @@ namespace FP::Editor
 			{ "Empty Entity", "Basic", EditorIcon::Entity, "An entity with only a name and transform" },
 			{ "Sprite", "Basic", EditorIcon::Sprite, "A textured quad for 2D games" },
 			{ "Camera", "Basic", EditorIcon::Camera, "The view the game renders from" },
+			{ "Character", "Basic", EditorIcon::Entity, "A pill shaped player that walks, climbs steps and jumps. Move it with Move and Jump in a script" },
 			{ "Point Light", "Lights", EditorIcon::PointLight, "Light that shines in every direction from a point" },
 			{ "Directional Light", "Lights", EditorIcon::DirectionalLight, "Sun style light that comes from one direction" },
 			{ "Ambient Light", "Lights", EditorIcon::AmbientLight, "Flat light that fills every shadow" },

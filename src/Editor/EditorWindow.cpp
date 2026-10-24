@@ -123,7 +123,11 @@ namespace FP::Editor
 		connect(m_Viewport, &ViewportWidget::EntityDropped, this, [this](const QString& kind, Vec3 point) {
 			const Entity entity = CreateEntity(kind);
 			if (entity != NullEntity)
-				m_World->Get<TransformComponent>(entity).Position = point;
+			{
+				// Characters stand on the drop point rather than sinking halfway into it.
+				const float lift = kind == "Character" ? 1.0f : 0.0f;
+				m_World->Get<TransformComponent>(entity).Position = point + Vec3(0, lift, 0);
+			}
 		});
 
 		// Drives the world and the viewport at about 60 fps.
@@ -337,6 +341,7 @@ namespace FP::Editor
 			meshes->addAction(name, this, [this, name]() { CreateEntity(name); });
 		}
 		entity->addAction("Create &Point Light", this, [this]() { CreateEntity("Point Light"); });
+		entity->addAction("Create &Character", this, [this]() { CreateEntity("Character"); });
 		entity->addAction("Create &Directional Light", this, [this]() { CreateEntity("Directional Light"); });
 		// Text fields take these keys first, so they still copy, paste and erase text there.
 		entity->addAction("&Copy", QKeySequence::Copy, this, &EditorWindow::CopySelected);
@@ -1290,6 +1295,14 @@ namespace FP::Editor
 		{
 			entity = m_World->CreateEntity(name);
 			m_World->Add<SpriteComponent>(entity);
+		}
+		else if (kind == "Character")
+		{
+			// A pill that walks, standing on the ground.
+			entity = m_World->CreateEntity(name);
+			m_World->Get<TransformComponent>(entity).Position.Y = 1;
+			m_World->Add<MeshComponent>(entity).Mesh = "Capsule";
+			m_World->Add<CharacterControllerComponent>(entity);
 		}
 		else if (kind == "Camera")
 		{
