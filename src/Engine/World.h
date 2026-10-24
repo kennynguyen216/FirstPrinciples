@@ -13,6 +13,7 @@ namespace FP
 	class World;
 	class AudioWorld;
 	class Animator;
+	class Physics;
 
 	using Entity = entt::entity;
 	inline constexpr entt::null_t NullEntity = entt::null;
@@ -42,6 +43,9 @@ namespace FP
 		// The entity's animator, made on first use. Null without an AnimatorComponent.
 		// Virtual for the same reason as GetAudio.
 		virtual Animator* GetAnimator(Entity entity);
+
+		// Bodies, forces and raycasts. Made on first use. Virtual for the same reason as GetAudio.
+		virtual Physics& GetPhysics();
 
 		// ---- Entities ------------------------------------------------------
 
@@ -174,6 +178,7 @@ namespace FP
 		double m_Time = 0;
 		bool m_Playing = false;
 		std::unique_ptr<AudioWorld> m_Audio;
+		std::unique_ptr<Physics> m_Physics;
 		String m_PendingScene;
 	};
 }
