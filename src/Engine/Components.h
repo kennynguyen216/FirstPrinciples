@@ -124,6 +124,33 @@ namespace FP
 		}
 	};
 
+	// The shape physics sees for an entity. Alone it is a solid, unmoving part of the level.
+	// Add a RigidBodyComponent to make it move. Sizes scale with the transform.
+	struct ColliderComponent
+	{
+		String Shape = "Box"; // Box, Sphere, Capsule or Mesh (the entity's mesh)
+		Vec3 Size{ 1, 1, 1 }; // Box, full size before scaling
+		float Radius = 0.5f;  // Sphere and Capsule
+		float Height = 2;     // Capsule, end to end, standing along Y
+		Vec3 Offset;          // from the entity's origin
+		bool Trigger = false; // reports overlaps instead of blocking
+	};
+
+	// Lets physics move the entity. Dynamic bodies fall and collide, kinematic ones follow their
+	// transform and push dynamic ones aside, and static ones never move.
+	struct RigidBodyComponent
+	{
+		String Motion = "Dynamic"; // Dynamic, Kinematic or Static
+		float Mass = 1; // kilograms
+		float Friction = 0.5f;
+		float Restitution = 0; // bounciness, 0 to 1
+		float LinearDamping = 0.05f;
+		float AngularDamping = 0.05f;
+		float GravityScale = 1;
+		bool LockRotation = false; // keeps it upright, for characters
+		bool Continuous = false;   // stops fast small bodies passing through thin walls
+	};
+
 	// Light at the transform's position. In 2D, Position.Z is the height above the sprites.
 	struct PointLightComponent
 	{
