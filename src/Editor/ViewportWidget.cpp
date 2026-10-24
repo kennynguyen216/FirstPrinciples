@@ -162,11 +162,11 @@ namespace FP::Editor
 		update();
 	}
 
-	TransformComponent* ViewportWidget::SelectedTransform() const
+	std::optional<TransformComponent> ViewportWidget::SelectedTransform() const
 	{
-		if (!m_World || !m_World->IsValid(m_Selected))
-			return nullptr;
-		return m_World->TryGet<TransformComponent>(m_Selected);
+		if (!m_World || !m_World->IsValid(m_Selected) || !m_World->Has<TransformComponent>(m_Selected))
+			return std::nullopt;
+		return m_World->GetWorldTransform(m_Selected);
 	}
 
 	void ViewportWidget::Fly(float deltaTime)
@@ -214,7 +214,7 @@ namespace FP::Editor
 	{
 		if (!m_World || !m_World->IsValid(m_Selected) || !m_World->Has<TransformComponent>(m_Selected))
 			return;
-		const Vec3 position = m_World->Get<TransformComponent>(m_Selected).Position;
+		const Vec3 position = m_World->GetWorldPosition(m_Selected);
 		m_CameraCenter = position.XY();
 		m_OrbitTarget = position;
 	}
@@ -226,7 +226,7 @@ namespace FP::Editor
 		for (auto [entity, transform, light] : m_World->View<TransformComponent, PointLightComponent>().each())
 		{
 			const Color color{ light.Color.R, light.Color.G, light.Color.B, 0.9f };
-			const Vec3 p = transform.Position;
+			const Vec3 p = m_World->GetWorldPosition(entity);
 			const float handle = 10.0f * dpr * view.WorldPerPixel(p);
 			m_Lines.AddCircle(p, handle, color, 16, view.CameraRight, view.CameraUp);
 			m_Lines.AddLine(p - view.CameraRight * handle, p + view.CameraRight * handle, color);
@@ -247,24 +247,26 @@ namespace FP::Editor
 		for (auto [entity, transform, light] : m_World->View<TransformComponent, DirectionalLightComponent>().each())
 		{
 			const Color color{ light.Color.R, light.Color.G, light.Color.B, 0.9f };
-			const Vec3 p = transform.Position;
+			const TransformComponent placed = m_World->GetWorldTransform(entity);
+			const Vec3 p = placed.Position;
 			const float handle = 10.0f * dpr * view.WorldPerPixel(p);
 			m_Lines.AddCircle(p, handle, color, 16, view.CameraRight, view.CameraUp);
-			const Vec3 forward = transform.GetForward();
+			const Vec3 forward = placed.GetForward();
 			const Vec3 tip = p + forward * handle * 4.0f;
 			m_Lines.AddLine(p, tip, color);
-			m_Lines.AddLine(tip, tip - (forward + transform.GetRight() * 0.5f) * handle, color);
-			m_Lines.AddLine(tip, tip - (forward - transform.GetRight() * 0.5f) * handle, color);
+			m_Lines.AddLine(tip, tip - (forward + placed.GetRight() * 0.5f) * handle, color);
+			m_Lines.AddLine(tip, tip - (forward - placed.GetRight() * 0.5f) * handle, color);
 		}
 
 		for (auto [entity, transform, camera] : m_World->View<TransformComponent, CameraComponent>().each())
 		{
 			const Color color{ 0.8f, 0.8f, 0.8f, 0.7f };
-			const Vec3 p = transform.Position;
+			const TransformComponent placed = m_World->GetWorldTransform(entity);
+			const Vec3 p = placed.Position;
 			const float handle = 10.0f * dpr * view.WorldPerPixel(p);
-			const Mat4 rotation = Mat4::Translation(p) * Mat4::Rotation(transform.GetRotation());
+			const Mat4 rotation = Mat4::Translation(p) * Mat4::Rotation(placed.GetRotation());
 			m_Lines.AddBox(rotation, Vec3(-1, -0.7f, -0.5f) * handle, Vec3(1, 0.7f, 0.5f) * handle, color);
-			m_Lines.AddLine(p, p + transform.GetForward() * handle * 3.0f, color);
+			m_Lines.AddLine(p, p + placed.GetForward() * handle * 3.0f, color);
 			// An orthographic camera also shows what it will see at the default 1280x720 window.
 			if (!camera.Perspective && camera.Zoom > 0.01f)
 				m_Lines.AddRect(rotation, { 1280.0f / camera.Zoom, 720.0f / camera.Zoom }, { color.R, color.G, color.B, 0.25f });
@@ -276,8 +278,8 @@ namespace FP::Editor
 		if (!m_World->IsValid(m_Selected) || !m_World->Has<TransformComponent>(m_Selected))
 			return;
 		const Color color{ 1, 0.85f, 0.1f, 1 };
-		const TransformComponent& transform = m_World->Get<TransformComponent>(m_Selected);
-		const Mat4 model = transform.GetMatrix();
+		const TransformComponent transform = m_World->GetWorldTransform(m_Selected);
+		const Mat4 model = m_World->GetWorldMatrix(m_Selected);
 
 		{
 			if (const GPUMesh* gpuMesh = FindMesh(m_Selected))
@@ -310,11 +312,12 @@ namespace FP::Editor
 		const float radius = 12.0f * static_cast<float>(devicePixelRatioF());
 		Entity best = NullEntity;
 		float bestDistance = radius;
-		auto consider = [&](Entity entity, const TransformComponent& transform) {
+		auto consider = [&](Entity entity, const TransformComponent&) {
 			// Skip things behind a perspective camera.
-			if (!view.Orthographic && Vec3::Dot(transform.Position - view.CameraPosition, view.CameraForward) <= 0)
+			const Vec3 position = m_World->GetWorldPosition(entity);
+			if (!view.Orthographic && Vec3::Dot(position - view.CameraPosition, view.CameraForward) <= 0)
 				return;
-			const float distance = (view.WorldToScreen(transform.Position) - pixel).Length();
+			const float distance = (view.WorldToScreen(position) - pixel).Length();
 			if (distance < bestDistance)
 			{
 				best = entity;
@@ -341,12 +344,11 @@ namespace FP::Editor
 
 	bool ViewportWidget::HitSurface(const Ray& ray, Entity entity, float& outDistance) const
 	{
-		const TransformComponent& transform = m_World->Get<TransformComponent>(entity);
 		const SpriteComponent* sprite = m_World->TryGet<SpriteComponent>(entity);
 
 		Vec3 min{ -0.5f, -0.5f, 0 };
 		Vec3 max{ 0.5f, 0.5f, 0 };
-		Mat4 model = transform.GetMatrix();
+		Mat4 model = m_World->GetWorldMatrix(entity);
 		if (sprite)
 		{
 			model = model * Mat4::Scale({ sprite->Size, 1 });
@@ -478,7 +480,7 @@ namespace FP::Editor
 		// Drawn with Qt over the frame so handles are thick, smooth and always on top.
 		if (!m_Playing && m_Target)
 		{
-			if (const TransformComponent* transform = SelectedTransform())
+			if (const std::optional<TransformComponent> transform = SelectedTransform())
 				m_Gizmo.Paint(painter, CurrentView(), static_cast<float>(devicePixelRatioF()), *transform);
 		}
 	}
@@ -538,7 +540,7 @@ namespace FP::Editor
 			const RenderView view = CurrentView();
 			const float dpr = static_cast<float>(devicePixelRatioF());
 			// Handles of the selected entity's gizmo come before anything they cover.
-			if (const TransformComponent* transform = SelectedTransform())
+			if (const std::optional<TransformComponent> transform = SelectedTransform())
 			{
 				if (m_Gizmo.BeginDrag(m_Gizmo.HitTest(view, dpr, *transform, pixel), view, dpr, *transform, pixel))
 					return;
@@ -553,7 +555,7 @@ namespace FP::Editor
 			if (picked != NullEntity && freeMove)
 			{
 				// Grab on a plane facing the camera through the object.
-				const Vec3 position = m_World->Get<TransformComponent>(picked).Position;
+				const Vec3 position = m_World->GetWorldPosition(picked);
 				m_DragPlanePoint = position;
 				m_DragPlaneNormal = -view.CameraForward;
 				const Ray ray = view.ScreenToRay(pixel);
@@ -605,11 +607,13 @@ namespace FP::Editor
 		const bool shift = event->modifiers() & Qt::ShiftModifier;
 		if (m_Gizmo.IsDragging())
 		{
-			if (TransformComponent* transform = SelectedTransform())
+			if (std::optional<TransformComponent> transform = SelectedTransform())
 			{
 				// Snapping is on with the toolbar button, or off with Shift held.
+				// The gizmo works in world space, so the result goes back through the parents.
 				const bool snapping = m_SnapEnabled != shift;
 				m_Gizmo.UpdateDrag(CurrentView(), ToPixels(position), *transform, snapping ? m_SnapSize : 0.0f, snapping);
+				m_World->SetWorldTransform(m_Selected, *transform);
 				emit EntityMoved(m_Selected);
 				update();
 			}
@@ -658,14 +662,14 @@ namespace FP::Editor
 					if (std::fabs(m_DragPlaneNormal.Y) < 0.9f) target.Y = snap(target.Y);
 					if (std::fabs(m_DragPlaneNormal.Z) < 0.9f) target.Z = snap(target.Z);
 				}
-				m_World->Get<TransformComponent>(m_Selected).Position = target;
+				m_World->SetWorldPosition(m_Selected, target);
 				emit EntityMoved(m_Selected);
 			}
 		}
 		else if (event->buttons() == Qt::NoButton)
 		{
 			// Light up the handle under the mouse.
-			const TransformComponent* transform = SelectedTransform();
+			const std::optional<TransformComponent> transform = SelectedTransform();
 			const TransformGizmo::Handle hover = transform
 				? m_Gizmo.HitTest(CurrentView(), static_cast<float>(devicePixelRatioF()), *transform, ToPixels(position))
 				: TransformGizmo::Handle::None;
