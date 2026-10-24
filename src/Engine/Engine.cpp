@@ -15,6 +15,20 @@ namespace FP::Engine
 		// Slots are written only when set, as "Slot index path", so one material stays one line.
 		constexpr int32 MaxMaterialSlots = 256;
 
+		void WriteParentComponent(String& out, const void* component)
+		{
+			out.Appendf("  Parent %s\n", static_cast<const ParentComponent*>(component)->Parent.ToString().CStr());
+		}
+
+		void ReadParentComponent(void* component, const Array<String>& tokens, std::string_view)
+		{
+			Guid id;
+			if (tokens[0] == "Parent" && tokens.Num() > 1 && Guid::Parse(tokens[1].View(), id))
+				static_cast<ParentComponent*>(component)->Parent = id;
+			else
+				FP_LOG_WARN("Parent component needs a parent id");
+		}
+
 		void WriteMaterialComponent(String& out, const void* component)
 		{
 			const MaterialComponent& material = *static_cast<const MaterialComponent*>(component);
@@ -55,6 +69,10 @@ namespace FP::Engine
 			return;
 
 		registry.Register<IdComponent>("Id").HideInEditor();
+
+		registry.Register<ParentComponent>("Parent")
+			.CustomSerializer(&WriteParentComponent, &ReadParentComponent)
+			.HideInEditor();
 
 		registry.Register<NameComponent>("Name")
 			.Field("Name", &NameComponent::Name);

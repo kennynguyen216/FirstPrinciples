@@ -55,6 +55,9 @@ namespace FP
 	{
 		if (!IsValid(entity))
 			return;
+		// Children first, so nothing is left pointing at a parent that is gone.
+		for (Entity child : GetChildren(entity))
+			DestroyEntity(child);
 		if (m_Playing)
 			m_PendingDestroy.AddUnique(entity);
 		else
@@ -104,6 +107,136 @@ namespace FP
 		for (const Item& item : items)
 			result.Add(item.Value);
 		return result;
+	}
+
+	Entity World::GetParent(Entity entity) const
+	{
+		const ParentComponent* parent = IsValid(entity) ? m_Registry.try_get<ParentComponent>(entity) : nullptr;
+		if (!parent)
+			return NullEntity;
+		// The cached handle is checked against the id, since handles are reused after destroys.
+		const IdComponent* cachedId = m_Registry.valid(parent->Cached) ? m_Registry.try_get<IdComponent>(parent->Cached) : nullptr;
+		if (cachedId && cachedId->Id == parent->Parent)
+			return parent->Cached;
+		const Entity found = FindEntityByGuid(parent->Parent);
+		const_cast<ParentComponent*>(parent)->Cached = found;
+		return found;
+	}
+
+	Array<Entity> World::GetChildren(Entity entity) const
+	{
+		Array<Entity> children;
+		if (!IsValid(entity))
+			return children;
+		const Guid id = m_Registry.get<IdComponent>(entity).Id;
+		for (Entity candidate : GetEntities())
+		{
+			const ParentComponent* parent = m_Registry.try_get<ParentComponent>(candidate);
+			if (parent && parent->Parent == id)
+				children.Add(candidate);
+		}
+		return children;
+	}
+
+	Entity World::FindChild(Entity parent, std::string_view name, bool recursive) const
+	{
+		for (Entity child : GetChildren(parent))
+		{
+			if (GetEntityName(child) == name)
+				return child;
+			if (recursive)
+			{
+				if (const Entity found = FindChild(child, name, true); found != NullEntity)
+					return found;
+			}
+		}
+		return NullEntity;
+	}
+
+	bool World::IsDescendantOf(Entity entity, Entity ancestor) const
+	{
+		// The depth limit stops a hand edited loop in a scene file from hanging.
+		Entity current = GetParent(entity);
+		for (int32 depth = 0; current != NullEntity && depth < 1000; ++depth)
+		{
+			if (current == ancestor)
+				return true;
+			current = GetParent(current);
+		}
+		return false;
+	}
+
+	bool World::SetParent(Entity child, Entity parent, bool keepWorldTransform)
+	{
+		if (!IsValid(child) || child == parent || (parent != NullEntity && (!IsValid(parent) || IsDescendantOf(parent, child))))
+			return false;
+		const Mat4 world = GetWorldMatrix(child);
+		if (parent == NullEntity)
+			m_Registry.remove<ParentComponent>(child);
+		else
+			m_Registry.emplace_or_replace<ParentComponent>(child, ParentComponent{ m_Registry.get<IdComponent>(parent).Id, parent });
+
+		TransformComponent* transform = m_Registry.try_get<TransformComponent>(child);
+		if (keepWorldTransform && transform)
+		{
+			// Work out the local transform that lands in the same place under the new parent.
+			const Mat4 local = parent == NullEntity ? world : GetWorldMatrix(parent).Inverse() * world;
+			transform->Position = { local.At(3, 0), local.At(3, 1), local.At(3, 2) };
+			Vec3 scale;
+			Mat4 rotation = local;
+			for (int c = 0; c < 3; ++c)
+			{
+				const float length = Vec3(local.At(c, 0), local.At(c, 1), local.At(c, 2)).Length();
+				(&scale.X)[c] = length;
+				for (int r = 0; r < 3; ++r)
+					rotation.At(c, r) /= length > 1e-8f ? length : 1;
+			}
+			transform->Scale = scale;
+			transform->Rotation = Quat::FromMatrix(rotation).ToEuler();
+		}
+		return true;
+	}
+
+	Mat4 World::GetWorldMatrix(Entity entity) const
+	{
+		const TransformComponent* transform = IsValid(entity) ? m_Registry.try_get<TransformComponent>(entity) : nullptr;
+		const Mat4 local = transform ? transform->GetMatrix() : Mat4();
+		const Entity parent = GetParent(entity);
+		return parent != NullEntity && !IsDescendantOf(parent, entity) ? GetWorldMatrix(parent) * local : local;
+	}
+
+	Vec3 World::GetWorldPosition(Entity entity) const
+	{
+		const Mat4 world = GetWorldMatrix(entity);
+		return { world.At(3, 0), world.At(3, 1), world.At(3, 2) };
+	}
+
+	Quat World::GetWorldRotation(Entity entity) const
+	{
+		const TransformComponent* transform = IsValid(entity) ? m_Registry.try_get<TransformComponent>(entity) : nullptr;
+		const Quat local = transform ? transform->GetRotation() : Quat();
+		const Entity parent = GetParent(entity);
+		return parent != NullEntity && !IsDescendantOf(parent, entity) ? GetWorldRotation(parent) * local : local;
+	}
+
+	TransformComponent World::GetWorldTransform(Entity entity) const
+	{
+		TransformComponent out;
+		const Mat4 world = GetWorldMatrix(entity);
+		out.Position = { world.At(3, 0), world.At(3, 1), world.At(3, 2) };
+		out.Rotation = GetWorldRotation(entity).ToEuler();
+		for (int c = 0; c < 3; ++c)
+			(&out.Scale.X)[c] = Vec3(world.At(c, 0), world.At(c, 1), world.At(c, 2)).Length();
+		return out;
+	}
+
+	void World::SetWorldPosition(Entity entity, Vec3 position)
+	{
+		TransformComponent* transform = IsValid(entity) ? m_Registry.try_get<TransformComponent>(entity) : nullptr;
+		if (!transform)
+			return;
+		const Entity parent = GetParent(entity);
+		transform->Position = parent != NullEntity ? GetWorldMatrix(parent).Inverse().TransformPoint(position) : position;
 	}
 
 	void World::Clear()

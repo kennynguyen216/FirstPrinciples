@@ -3,6 +3,8 @@
 #include "Core/CoreMinimal.h"
 #include "Engine/Math.h"
 
+#include <entt/entity/entity.hpp>
+
 // Built in components. Keep them plain data. Behaviour lives in systems.
 
 namespace FP
@@ -38,7 +40,16 @@ namespace FP
 		bool Enabled = true;
 	};
 
+	// Makes the entity a child of another. Its Transform is then relative to the parent, so it
+	// moves, turns and scales with it. Set it with World::SetParent rather than by hand.
+	struct ParentComponent
+	{
+		Guid Parent;
+		entt::entity Cached = entt::null; // found from Parent on first use
+	};
+
 	// 2D games use X and Y with Rotation.Z as the spin. 3D uses all three axes.
+	// Relative to the parent when the entity has one, otherwise in world space.
 	struct TransformComponent
 	{
 		Vec3 Position;
