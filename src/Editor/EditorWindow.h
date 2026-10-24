@@ -50,6 +50,7 @@ namespace FP::Editor
 
 	protected:
 		void closeEvent(QCloseEvent* event) override;
+		bool eventFilter(QObject* watched, QEvent* event) override;
 
 	private:
 		void BuildMenus();
@@ -83,6 +84,9 @@ namespace FP::Editor
 		bool CloseScriptTab(int index);
 		bool ConfirmCloseScripts();
 		void ReloadScriptTabIfClean(const QString& path);
+
+		// Opens the file and line named in a compiler message. False when the text names none.
+		bool OpenBuildMessage(const QString& line);
 
 		// Ctrl+S saves the open script when one is showing, otherwise the scene.
 		void SaveCurrent();

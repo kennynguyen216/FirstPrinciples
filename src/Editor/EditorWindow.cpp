@@ -22,6 +22,9 @@
 #include <QDir>
 #include <QFileSystemWatcher>
 #include <QInputDialog>
+#include <QMouseEvent>
+#include <QRegularExpression>
+#include <QTextBlock>
 #include <QFileInfo>
 #include <QKeySequence>
 #include <QListWidget>
@@ -133,6 +136,8 @@ namespace FP::Editor
 
 		m_Console = new QPlainTextEdit();
 		m_Console->setReadOnly(true);
+		m_Console->setToolTip("Double click a build error to open it");
+		m_Console->viewport()->installEventFilter(this);
 		m_Console->setMaximumBlockCount(2000);
 		QDockWidget* consoleDock = new QDockWidget("Console", this);
 		consoleDock->setObjectName("Console");
@@ -339,6 +344,35 @@ namespace FP::Editor
 		const int line = editor->textCursor().blockNumber() + 1;
 		editor->LoadFile(path);
 		editor->GoToLine(line);
+	}
+
+	bool EditorWindow::OpenBuildMessage(const QString& line)
+	{
+		// Clang and GCC write path:line:column. MSVC writes path(line,column).
+		static const QRegularExpression pattern(R"(((?:[A-Za-z]:)?[^\s:(]+\.(?:cpp|h|hpp|inl))(?::(\d+)(?::(\d+))?|\((\d+)(?:,(\d+))?\)))");
+		const QRegularExpressionMatch match = pattern.match(line);
+		if (!match.hasMatch())
+			return false;
+		const QString path = ScriptBuilder::ResolveSourcePath(match.captured(1));
+		if (!QFileInfo::exists(path))
+			return false;
+		const int lineNumber = (match.captured(2).isEmpty() ? match.captured(4) : match.captured(2)).toInt();
+		const int column = (match.captured(2).isEmpty() ? match.captured(5) : match.captured(3)).toInt();
+		OpenScript(path);
+		if (CodeEditor* editor = FindScriptTab(path))
+			editor->GoToLine(std::max(1, lineNumber), std::max(1, column));
+		return true;
+	}
+
+	bool EditorWindow::eventFilter(QObject* watched, QEvent* event)
+	{
+		if (watched == m_Console->viewport() && event->type() == QEvent::MouseButtonDblClick)
+		{
+			const QPoint position = static_cast<QMouseEvent*>(event)->position().toPoint();
+			if (OpenBuildMessage(m_Console->cursorForPosition(position).block().text()))
+				return true;
+		}
+		return QMainWindow::eventFilter(watched, event);
 	}
 
 	void EditorWindow::SaveCurrent()
