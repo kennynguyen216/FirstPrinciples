@@ -165,6 +165,23 @@ namespace FP::Editor
 	{
 		m_Hierarchy = new HierarchyPanel();
 		connect(m_Hierarchy, &HierarchyPanel::EntityClicked, this, [this](const Guid& id) { Select(m_World->FindEntityByGuid(id)); });
+		connect(m_Hierarchy, &HierarchyPanel::ParentRequested, this, [this](const Guid& child, const Guid& parent) {
+			const Entity parentEntity = parent == Guid() ? NullEntity : m_World->FindEntityByGuid(parent);
+			if (!m_World->SetParent(m_World->FindEntityByGuid(child), parentEntity))
+			{
+				FP_LOG_WARN("An entity cannot be parented to itself or one of its children");
+				return;
+			}
+			MarkDirty();
+			RefreshHierarchy();
+		});
+		connect(m_Hierarchy, &HierarchyPanel::CreateChildRequested, this, [this](const Guid& parent) {
+			const Entity entity = m_World->CreateEntity("Child");
+			m_World->SetParent(entity, m_World->FindEntityByGuid(parent), false);
+			MarkDirty();
+			RefreshHierarchy();
+			Select(entity);
+		});
 		PlaceEntitiesPanel* placeEntities = new PlaceEntitiesPanel();
 		connect(placeEntities, &PlaceEntitiesPanel::CreateRequested, this, [this](const QString& kind) { CreateEntity(kind); });
 		QDockWidget* placeDock = DockTab::Create(this, "Place Entities", EditorIcon::PlaceEntities, placeEntities);
