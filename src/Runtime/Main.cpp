@@ -5,6 +5,8 @@
 #include "Engine/Engine.h"
 #include "Engine/Render/Renderer.h"
 #include "Engine/SceneSerializer.h"
+#include "Engine/Scripting/ScriptRuntime.h"
+#include "Engine/Scripting/ScriptSystem.h"
 #include "Game/Game.h"
 
 #include <SDL3/SDL.h>
@@ -76,6 +78,9 @@ int main(int argc, char** argv)
 	if (!SceneSerializer::LoadFromFile(*world.Get(), scenePath.CStr()))
 		FP_LOG_WARN("Starting with an empty world");
 
+	// Scripts are optional. The game still runs its built in systems without them.
+	ScriptRuntime::Get().LoadModule(ScriptRuntime::GetDefaultModulePath());
+	world->AddSystem<ScriptSystem>();
 	Game::AddSystems(*world.Get());
 	world->BeginPlay();
 
@@ -126,6 +131,7 @@ int main(int argc, char** argv)
 
 	world.Reset();
 	GarbageCollector::Get().Collect();
+	ScriptRuntime::Get().UnloadModule();
 	SDL_ReleaseWindowFromGPUDevice(device->GetHandle(), window);
 	SDL_DestroyWindow(window);
 	delete device;

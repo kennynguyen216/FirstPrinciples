@@ -8,6 +8,8 @@
 #include "Engine/Render/MeshData.h"
 #include "Engine/Paths.h"
 #include "Engine/SceneSerializer.h"
+#include "Engine/Scripting/ScriptRuntime.h"
+#include "Engine/Scripting/ScriptSystem.h"
 #include "Game/Game.h"
 
 #include <SDL3/SDL_timer.h>
@@ -429,6 +431,7 @@ namespace FP::Editor
 			return;
 		// Snapshot the scene so Stop can put everything back.
 		m_PlaySnapshot = SceneSerializer::SaveToString(*m_World.Get());
+		m_World->AddSystem<ScriptSystem>();
 		Game::AddSystems(*m_World.Get());
 		m_World->BeginPlay();
 		m_Viewport->SetPlaying(true);

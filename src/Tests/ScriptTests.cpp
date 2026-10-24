@@ -146,3 +146,34 @@ FP_TEST(Script_MissingScriptWarnsOnce)
 	world->EndPlay();
 	FP_EXPECT(!world->Get<ScriptComponent>(e).Scripts[0].Failed);
 }
+
+FP_TEST(Script_LoadsGameScriptsModule)
+{
+	Engine::RegisterEngineComponents();
+	ScriptRuntime& runtime = ScriptRuntime::Get();
+	if (!runtime.LoadModule(ScriptRuntime::GetDefaultModulePath()))
+	{
+		FP_LOG_WARN("Skipping, GameScripts is not built");
+		return;
+	}
+	FP_EXPECT(runtime.FindType("Rotator") != nullptr);
+	FP_EXPECT(runtime.FindType("TestCounter") != nullptr);
+
+	// A script from the module edits a world owned by the host.
+	StrongObjectPtr<World> world(NewObject<World>());
+	Entity e = world->CreateEntity("Spinning");
+	world->Add<ScriptComponent>(e).Scripts.Emplace("Rotator", "DegreesPerSecond 0 90 0\n");
+	world->AddSystem<ScriptSystem>();
+	world->BeginPlay();
+	world->Update(1.0f);
+	FP_EXPECT(std::fabs(world->Get<TransformComponent>(e).Rotation.Y - 90) < 1e-3f);
+
+	// Reloading mid play keeps the script and its values.
+	FP_EXPECT(runtime.Reload());
+	world->Update(1.0f);
+	FP_EXPECT(std::fabs(world->Get<TransformComponent>(e).Rotation.Y - 180) < 1e-3f);
+
+	world->EndPlay();
+	runtime.UnloadModule();
+	FP_EXPECT(runtime.FindType("Rotator") == nullptr);
+}
