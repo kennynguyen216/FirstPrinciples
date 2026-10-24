@@ -84,6 +84,7 @@ namespace FP::Editor
 		addMenu->addAction(EditorIcons::Get(EditorIcon::Folder), "New Folder...", this, &ContentBrowser::NewFolder);
 		addMenu->addAction(EditorIcons::Get(EditorIcon::Material), "New Material...", this, &ContentBrowser::NewMaterial);
 		addMenu->addAction(EditorIcons::Get(EditorIcon::Scene), "New Scene...", this, &ContentBrowser::NewScene);
+		addMenu->addAction(EditorIcons::Get(EditorIcon::Script), "New UI Page...", this, &ContentBrowser::NewPage);
 		addMenu->addAction(EditorIcons::Get(EditorIcon::Script), "New Script...", this, [this]() { emit NewScriptRequested(); });
 		add->setMenu(addMenu);
 		bar->addWidget(add);
@@ -291,6 +292,7 @@ namespace FP::Editor
 			{
 				menu.addAction("New Material...", this, &ContentBrowser::NewMaterial);
 				menu.addAction("New Scene...", this, &ContentBrowser::NewScene);
+				menu.addAction("New UI Page...", this, &ContentBrowser::NewPage);
 			}
 		}
 		menu.addSeparator();
@@ -342,6 +344,58 @@ namespace FP::Editor
 		const QString relative = QDir(m_ContentRoot).relativeFilePath(path);
 		if (!MaterialLibrary::Get().Create(String(relative.toUtf8().constData())))
 			return;
+		SelectPath(path);
+		emit AssetSelected(path);
+	}
+
+	void ContentBrowser::NewPage()
+	{
+		const QString name = AskForName("New UI Page", "NewPage");
+		if (name.isEmpty())
+			return;
+		const QString path = m_CurrentFolder + "/" + name + ".html";
+		if (QFileInfo::exists(path))
+		{
+			QMessageBox::warning(this, "New UI Page", name + " already exists.");
+			return;
+		}
+		// A starter that shows each way the page and scripts talk.
+		const QString page = QString::fromUtf8(R"html(<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+	/* The page covers the whole screen and is see through wherever nothing is drawn. */
+	body { margin: 0; font-family: Helvetica, Arial, sans-serif; color: white; }
+	.panel { position: absolute; top: 24px; left: 24px; padding: 12px 18px; border-radius: 10px; background: rgba(0, 0, 0, 0.6); }
+	button { font: inherit; margin-left: 12px; padding: 6px 14px; border: 0; border-radius: 8px; background: #3a8dff; color: white; }
+	button:hover { background: #5aa2ff; }
+</style>
+</head>
+<body>
+	<div class="panel">
+		<!-- A script fills this in with GetUI()->Set("score", 10). -->
+		Score: <b data-bind="score">0</b>
+		<!-- Scripts on this entity and the scene hear it in OnUIEvent("clicked", data). -->
+		<button onclick="engine.send('clicked', { time: Date.now() })">Click me</button>
+	</div>
+	<script>
+		// A script sends this with GetUI()->Emit("hello", "{"name":"Noodle"}").
+		engine.on("hello", function (data) { console.log("Hello " + data.name); });
+		// Runs whenever a script sets score.
+		engine.watch("score", function (score) { document.title = "Score " + score; });
+	</script>
+</body>
+</html>
+)html");
+		QFile file(path);
+		if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+		{
+			QMessageBox::warning(this, "New UI Page", "Could not write " + path);
+			return;
+		}
+		file.write(page.toUtf8());
+		file.close();
 		SelectPath(path);
 		emit AssetSelected(path);
 	}
@@ -499,6 +553,8 @@ namespace FP::Editor
 		if (QStringList{ "png", "jpg", "jpeg", "tga", "bmp" }.contains(suffix)) return "Texture";
 		if (QStringList{ "obj", "gltf", "glb" }.contains(suffix)) return "Mesh";
 		if (QStringList{ "cpp", "h", "hpp" }.contains(suffix)) return "Script";
+		if (QStringList{ "html", "htm" }.contains(suffix)) return "Page";
+		if (QStringList{ "css", "js", "json" }.contains(suffix)) return "Web";
 		return "File";
 	}
 
@@ -775,6 +831,8 @@ namespace FP::Editor
 		else if (kind == "Scene") icon = TileIcon(EditorIcon::Scene, QColor(0xf0, 0xa0, 0x30));
 		else if (kind == "Mesh") icon = TileIcon(EditorIcon::Mesh, QColor(0x3a, 0xa0, 0xd0));
 		else if (kind == "Script") icon = TileIcon(EditorIcon::Script, QColor(0x4f, 0xa3, 0xe0));
+		else if (kind == "Page") icon = TileIcon(EditorIcon::Script, QColor(0xe0, 0x8a, 0x3a));
+		else if (kind == "Web") icon = TileIcon(EditorIcon::Script, QColor(0xc0, 0xa0, 0x40));
 		else icon = TileIcon(EditorIcon::OutputLog, QColor(0x80, 0x80, 0x80));
 
 		m_IconCache.insert(key, icon);

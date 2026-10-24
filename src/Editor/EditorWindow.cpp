@@ -23,6 +23,7 @@
 #include "Engine/Scripting/ScriptRuntime.h"
 #include "Engine/Scripting/ScriptSystem.h"
 #include "Engine/Animation/AnimationSystem.h"
+#include "Engine/UI/UISystem.h"
 #include "Engine/Animation/SkeletalModel.h"
 #include "Game.h"
 
@@ -272,8 +273,9 @@ namespace FP::Editor
 				if (ConfirmDiscard())
 					OpenScene(path);
 			}
-			else if (kind == "Script")
+			else if (kind == "Script" || kind == "Page" || kind == "Web")
 			{
+				// Pages, styles and page scripts are text, so they open in a code tab too.
 				OpenScript(path);
 			}
 			else
@@ -643,6 +645,26 @@ namespace FP::Editor
 			{
 				m_World->Add<MeshComponent>(changed).Mesh = ToString(relative);
 			}
+		}
+		else if (kind == "Page")
+		{
+			// Onto an entity, or onto the primary camera so it shows over the game.
+			changed = target;
+			if (!m_World->IsValid(changed))
+			{
+				for (auto [entity, camera] : m_World->View<CameraComponent>().each())
+				{
+					if (camera.Primary)
+						changed = entity;
+				}
+			}
+			if (!m_World->IsValid(changed))
+			{
+				FP_LOG_WARN("Drop a page onto an entity, or add a camera to put it on");
+				return;
+			}
+			m_World->Add<UIComponent>(changed).Page = ToString(relative);
+			FP_LOG("Added UI page %s to %s. It shows while playing.", ToString(relative).CStr(), m_World->GetEntityName(changed).CStr());
 		}
 		else if (kind == "Material")
 		{
@@ -1371,6 +1393,7 @@ namespace FP::Editor
 		m_PlaySnapshot = SceneSerializer::SaveToString(*m_World.Get());
 		m_World->AddSystem<ScriptSystem>();
 		m_World->AddSystem<AnimationSystem>();
+		m_World->AddSystem<UISystem>();
 		Game::AddSystems(*m_World.Get());
 		m_World->BeginPlay();
 		m_Viewport->SetPlaying(true);

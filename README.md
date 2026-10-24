@@ -19,7 +19,8 @@ Scripts/Setup.sh
 Scripts/Build.sh
 ```
 
-`Setup.sh` installs premake, SDL3 and Qt with Homebrew. `Build.sh` builds the Sample project: makefiles
+`Setup.sh` installs premake, SDL3, Qt and 7-Zip with Homebrew, then downloads the Ultralight SDK used
+for game UI (`Scripts/GetUltralight.sh` does just that part). `Build.sh` builds the Sample project: makefiles
 go in `Projects/Sample/Build` and everything builds into `Projects/Sample/Binaries/Debug`. Pass `release`
 for an optimised build, and a project folder to build another one, like `Scripts/Build.sh debug Projects/MyGame`.
 For Xcode run `Scripts/GenerateXcode.sh` instead.
@@ -248,6 +249,61 @@ when it reloads.
 
 The runtime loads the same library at startup. Building from the command line works as before,
 and the `GameScripts` project builds along with the editor, running the header tool first.
+
+### Game UI
+
+Game UI is written in HTML, CSS and JavaScript and drawn by [Ultralight](https://ultralig.ht).
+`Scripts/Setup.sh` fetches its SDK (or run `Scripts/GetUltralight.sh`, `.ps1` on Windows). Without it
+everything still builds and UI simply does not draw.
+
+Add a **UI** component and pick a page from `Content`, or drag an `.html` file onto an entity in the
+viewport (onto empty space puts it on the primary camera). Like a Unity canvas, a UI on a camera
+draws over that camera's view, and a UI on any other entity draws over every view. `Order` stacks
+several pages and `Input` lets a page take the mouse and keyboard. Pages show while the game plays.
+
+**In the page**, a global `engine` object talks to the game:
+
+```html
+Score: <b data-bind="score">0</b> <span id="result"></span>
+<button onclick="engine.send('jump', { height: 2 })">Jump</button>
+<script>
+    engine.on("gameOver", function (data) { document.getElementById("result").textContent = data.won ? "You won" : "You lost"; });
+    engine.watch("health", function (value) { document.body.classList.toggle("low", value < 20); });
+</script>
+```
+
+- `data-bind="key"` elements show `engine.state[key]` and update by themselves.
+- `engine.watch(key, fn)` runs whenever a script sets the key. `engine.on(name, fn)` hears events.
+- `engine.send(name, data)` reaches scripts. Any JSON value works as data.
+- `console.log` and page errors go to the Output Log. Saving the page, its CSS or its JS while
+  playing reloads it, keeping the values scripts set.
+
+**In a C++ script** on the same entity, or a scene script:
+
+```cpp
+void OnUpdate(float) override
+{
+    GetUI()->Set("score", Score);                 // numbers, bools and text
+    if (Lives == 0)
+        GetUI()->Emit("gameOver", "{\"won\":false}");
+}
+
+void OnUIEvent(std::string_view name, const Json& data) override
+{
+    if (name == "jump")
+        Jump(data["height"].AsNumber(1));
+}
+```
+
+`GetUI(entity)` reaches another entity's page. `RunScript(js)` runs JavaScript in the page and
+`LoadPage(path)` swaps pages. `Json` reads what pages send: `data["player"]["name"].AsString()`.
+**Add > New UI Page...** in the Content Browser writes a starter page, and double clicking pages,
+CSS and JS opens them in a code tab. The 3D showcase camera has a HUD (`Content/UI/HUD.html` and
+`Source/Scripts/ShowcaseHUD.cpp`) with live state, a Jump button, a speed slider and a shadow switch.
+
+Ultralight's free license covers commercial use for teams under US$200K in revenue and in funding.
+The free edition caps pages at 60 frames per second, runs JavaScript without a JIT and has no video.
+Pages render on the CPU and only changed frames upload to the GPU.
 
 ### Parents and children
 
@@ -602,6 +658,7 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 | [Monocypher](https://monocypher.org) | Key exchange and encryption for network packets | Git submodule in `ThirdParty/monocypher` |
 | [spdlog](https://github.com/gabime/spdlog) | Logging to the console, files and the editor | Git submodule in `ThirdParty/spdlog` |
 | [cgltf](https://github.com/jkuhlmann/cgltf) | glTF loading for skeletal meshes and animations | Git submodule in `ThirdParty/cgltf` |
+| [Ultralight](https://ultralig.ht) 2.0 beta | Game UI in HTML, CSS and JavaScript | Binary SDK downloaded by `Scripts/GetUltralight.sh` or `.ps1` into `ThirdParty/Ultralight`. Optional: without it game UI draws nothing |
 | [Dear ImGui](https://github.com/ocornut/imgui/tree/docking) | Immediate mode UI with docking and multi-viewport support | Git submodule in `ThirdParty/imgui`, tracking upstream `docking` |
 
 The ImGui submodule includes the complete upstream repository: core, demo, backends, examples,

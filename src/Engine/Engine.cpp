@@ -132,6 +132,12 @@ namespace FP::Engine
 			.Field("Material", &MaterialComponent::Material).AssetPath("Materials (*.material)")
 			.CustomSerializer(&WriteMaterialComponent, &ReadMaterialComponent);
 
+		registry.Register<UIComponent>("UI")
+			.Field("Page", &UIComponent::Page).AssetPath("Pages (*.html *.htm)")
+			.Field("Visible", &UIComponent::Visible)
+			.Field("Input", &UIComponent::Input).Tooltip("Gets the mouse and keyboard while drawn")
+			.Field("Order", &UIComponent::Order).Tooltip("Higher draws on top");
+
 		registry.Register<ScriptComponent>("Scripts")
 			.CustomSerializer(&ScriptComponentFormat::Write, &ScriptComponentFormat::Read)
 			.CustomInspector();

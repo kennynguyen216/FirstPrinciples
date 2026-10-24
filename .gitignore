@@ -13,6 +13,9 @@ Intermediate/
 ThirdParty/SDL3/
 ThirdParty/premake/
 
+# Downloaded by Scripts/GetUltralight
+ThirdParty/Ultralight/
+
 # Tools and OS
 .claude/
 .vs/

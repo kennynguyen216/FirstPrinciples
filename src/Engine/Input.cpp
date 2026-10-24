@@ -2,6 +2,7 @@
 #include "Core/Misc/ModuleContext.h"
 
 #include <cstring>
+#include <string>
 
 namespace FP::Input
 {
@@ -15,6 +16,8 @@ namespace FP::Input
 			bool MouseDown[static_cast<int>(MouseButton::Count)] = {};
 			bool MousePressed[static_cast<int>(MouseButton::Count)] = {};
 			Vec2 MousePosition;
+			Vec2 Scroll;
+			std::string Typed;
 		};
 
 		// The host's state when running inside a loaded module, so scripts read real input.
@@ -34,6 +37,8 @@ namespace FP::Input
 	bool IsMouseDown(MouseButton button) { return GetState().MouseDown[static_cast<int>(button)]; }
 	bool WasMousePressed(MouseButton button) { return GetState().MousePressed[static_cast<int>(button)]; }
 	Vec2 GetMousePosition() { return GetState().MousePosition; }
+	Vec2 GetScroll() { return GetState().Scroll; }
+	std::string_view GetTypedText() { return GetState().Typed; }
 
 	Vec2 GetMoveAxis()
 	{
@@ -62,6 +67,8 @@ namespace FP::Input
 	}
 
 	void SetMousePosition(Vec2 position) { GetState().MousePosition = position; }
+	void AddScroll(Vec2 amount) { GetState().Scroll += amount; }
+	void AddTypedText(std::string_view utf8) { GetState().Typed.append(utf8); }
 
 	void ProcessEvent(const SDL_Event& event)
 	{
@@ -84,6 +91,12 @@ namespace FP::Input
 				if (event.button.button == SDL_BUTTON_MIDDLE) SetMouseButton(MouseButton::Middle, down);
 				break;
 			}
+			case SDL_EVENT_MOUSE_WHEEL:
+				AddScroll({ event.wheel.x, event.wheel.y });
+				break;
+			case SDL_EVENT_TEXT_INPUT:
+				AddTypedText(event.text.text);
+				break;
 			case SDL_EVENT_WINDOW_FOCUS_LOST:
 				Reset();
 				break;
@@ -97,6 +110,8 @@ namespace FP::Input
 		std::memset(GetState().Pressed, 0, sizeof(GetState().Pressed));
 		std::memset(GetState().Released, 0, sizeof(GetState().Released));
 		std::memset(GetState().MousePressed, 0, sizeof(GetState().MousePressed));
+		GetState().Scroll = {};
+		GetState().Typed.clear();
 	}
 
 	void Reset()

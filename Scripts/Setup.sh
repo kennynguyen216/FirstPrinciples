@@ -3,5 +3,6 @@
 set -e
 command -v brew >/dev/null || { echo "Install Homebrew first: https://brew.sh"; exit 1; }
 git -C "$(dirname "$0")/.." submodule update --init
-brew install premake sdl3 qt
+brew install premake sdl3 qt sevenzip
+"$(dirname "$0")/GetUltralight.sh"
 echo "Done. Run Scripts/Build.sh to build."

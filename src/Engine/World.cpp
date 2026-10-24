@@ -1,5 +1,6 @@
 #include "Engine/World.h"
 #include "Engine/Animation/Animator.h"
+#include "Engine/UI/UISystem.h"
 #include "Engine/Audio/AudioWorld.h"
 #include "Engine/ComponentRegistry.h"
 #include "Engine/Paths.h"
@@ -35,6 +36,11 @@ namespace FP
 	Animator* World::GetAnimator(Entity entity)
 	{
 		return AnimatorInstance::For(*this, entity);
+	}
+
+	UIDocument* World::GetUI(Entity entity)
+	{
+		return UISystem::For(*this, entity);
 	}
 
 	Entity World::CreateEntity(String name, const Guid& id)

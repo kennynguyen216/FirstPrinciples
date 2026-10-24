@@ -38,6 +38,10 @@ namespace FP
 		ViewMode Mode = ViewMode::Lit;
 		uint32 Width = 1;
 		uint32 Height = 1;
+		// The camera entity this view comes from, or NullEntity for an editor camera.
+		Entity Camera = NullEntity;
+		// Pixels per screen point. UI pages use it to keep their size on high DPI screens.
+		float PixelScale = 1;
 
 		Mat4 GetViewProjection() const { return Projection * View; }
 
