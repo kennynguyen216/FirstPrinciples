@@ -79,6 +79,10 @@ namespace FP::Editor
 	private:
 		void BuildMenus();
 		void BuildDocks();
+		void BuildStatusBar();
+
+		// Runs a line typed into the status bar's console box.
+		void RunCommand(const QString& line);
 
 		void Tick();
 		void RefreshHierarchy();

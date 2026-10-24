@@ -35,6 +35,7 @@
 #include <QFileInfo>
 #include <QKeySequence>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPlainTextEdit>
@@ -348,7 +349,87 @@ namespace FP::Editor
 			addAction(action);
 		}
 
-		statusBar()->showMessage("2D: right drag pans, wheel zooms. 3D (Ctrl+3): right drag orbits, middle drag pans, wheel dollies. Left drag moves, Shift snaps, F focuses");
+		BuildStatusBar();
+	}
+
+	void EditorWindow::BuildStatusBar()
+	{
+		// UE style bottom bar: buttons that bring panels forward, then a console command box.
+		auto addButton = [this](EditorIcon icon, const QString& text, QDockWidget* dock) {
+			QToolButton* button = new QToolButton();
+			button->setIcon(EditorIcons::Get(icon));
+			button->setText(text);
+			button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+			button->setAutoRaise(true);
+			connect(button, &QToolButton::clicked, this, [dock]() {
+				dock->show();
+				dock->raise();
+			});
+			statusBar()->addWidget(button);
+		};
+		addButton(EditorIcon::ContentBrowser, "Content Browser", m_ContentDock);
+		addButton(EditorIcon::OutputLog, "Output Log", m_ConsoleDock);
+
+		QLabel* cmd = new QLabel();
+		cmd->setPixmap(EditorIcons::Get(EditorIcon::Console).pixmap(16, 16));
+		cmd->setToolTip("Console command");
+		statusBar()->addWidget(cmd);
+		QLineEdit* command = new QLineEdit();
+		command->setPlaceholderText("Enter Console Command (help lists them)");
+		command->setMinimumWidth(320);
+		connect(command, &QLineEdit::returnPressed, this, [this, command]() {
+			RunCommand(command->text().trimmed());
+			command->clear();
+		});
+		statusBar()->addWidget(command);
+
+		QLabel* hint = new QLabel("Right drag orbits or pans, wheel zooms, left drag moves, F focuses");
+		hint->setStyleSheet("color: #7a7a7a; padding-right: 8px;");
+		statusBar()->addPermanentWidget(hint);
+	}
+
+	void EditorWindow::RunCommand(const QString& line)
+	{
+		if (line.isEmpty())
+			return;
+		FP_LOG("> %s", line.toUtf8().constData());
+		const QString name = line.section(' ', 0, 0).toLower();
+		const QString argument = line.section(' ', 1).trimmed();
+		if (name == "help")
+			FP_LOG("Commands: play, stop, save, undo, redo, gc, 2d, 3d, viewmode lit|unlit|wireframe, select <name>, create <kind>");
+		else if (name == "play")
+			Play();
+		else if (name == "stop")
+			Stop();
+		else if (name == "save")
+			SaveCurrent();
+		else if (name == "undo")
+			Undo();
+		else if (name == "redo")
+			Redo();
+		else if (name == "gc")
+		{
+			const GarbageCollectionStats stats = GarbageCollector::Get().Collect();
+			FP_LOG("GC freed %d objects, %d alive, %.3f ms", stats.NumFreed, stats.NumAlive, stats.Milliseconds);
+		}
+		else if (name == "2d" || name == "3d")
+			Set3DView(name == "3d");
+		else if (name == "viewmode")
+		{
+			const QString mode = argument.toLower();
+			SetViewMode(mode == "unlit" ? ViewMode::Unlit : mode == "wireframe" ? ViewMode::Wireframe : ViewMode::Lit);
+		}
+		else if (name == "select")
+		{
+			const Entity entity = m_World->FindEntityByName(ToString(argument).CStr());
+			if (entity == NullEntity)
+				FP_LOG_WARN("No entity named %s", argument.toUtf8().constData());
+			Select(entity);
+		}
+		else if (name == "create")
+			CreateEntity(argument);
+		else
+			FP_LOG_WARN("Unknown command %s. Type help for the list.", name.toUtf8().constData());
 	}
 
 	void EditorWindow::Set3DView(bool enabled)
