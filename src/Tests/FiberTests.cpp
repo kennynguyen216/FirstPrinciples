@@ -137,3 +137,51 @@ FP_TEST(Fiber_StackIsWholePagesAndUsable)
 	PlatformFibers::Destroy(state.Worker);
 	PlatformFibers::RevertThread(state.Main);
 }
+
+#include "Core/Jobs/FiberPool.h"
+
+namespace
+{
+	PlatformFiber GPoolMain;
+	int GPoolRuns = 0;
+
+	void PoolEntry(void* arg)
+	{
+		PooledFiber* self = static_cast<PooledFiber*>(arg);
+		for (;;)
+		{
+			GPoolRuns += *static_cast<int*>(self->UserData);
+			PlatformFibers::Switch(self->Platform, GPoolMain);
+		}
+	}
+}
+
+FP_TEST(Fiber_PoolHandsOutAndTakesBack)
+{
+	FiberPool pool;
+	FP_EXPECT(pool.Initialize(4, 32 * 1024, &PoolEntry));
+	FP_EXPECT(pool.GetCapacity() == 4 && pool.GetFreeCount() == 4);
+	FP_EXPECT(pool.GetStackSize() % PlatformMemory::GetPageSize() == 0);
+
+	PlatformFibers::ConvertThread(GPoolMain);
+	int amount = 3;
+	PooledFiber* fibers[4] = {};
+	for (PooledFiber*& fiber : fibers)
+	{
+		fiber = pool.Acquire();
+		FP_EXPECT(fiber != nullptr);
+		fiber->UserData = &amount;
+		PlatformFibers::Switch(GPoolMain, fiber->Platform);
+	}
+	FP_EXPECT(GPoolRuns == 12);
+	FP_EXPECT(pool.Acquire() == nullptr);
+
+	// A released fiber resumes where it left off when acquired again.
+	pool.Release(fibers[2]);
+	PooledFiber* again = pool.Acquire();
+	FP_EXPECT(again == fibers[2]);
+	again->UserData = &amount;
+	PlatformFibers::Switch(GPoolMain, again->Platform);
+	FP_EXPECT(GPoolRuns == 15);
+	PlatformFibers::RevertThread(GPoolMain);
+}
