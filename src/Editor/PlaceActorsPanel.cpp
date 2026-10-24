@@ -107,11 +107,12 @@ namespace FP::Editor
 				EditorIcons::Get(icon).paint(painter, QRect(tile.center().x() - iconSize / 2, tile.center().y() - iconSize / 2, iconSize, iconSize));
 
 				QFont font = option.font;
-				font.setPixelSize(14);
+				font.setPixelSize(13);
 				painter->setFont(font);
 				painter->setPen(EditorStyle::Bright);
-				const QRect text(tile.right() + 14, row.top(), row.width() - tile.width() - 54, row.height());
-				painter->drawText(text, Qt::AlignVCenter | Qt::AlignLeft, index.data(Qt::DisplayRole).toString());
+				const QRect text(tile.right() + 12, row.top(), row.width() - tile.width() - 48, row.height());
+				const QString name = QFontMetrics(font).elidedText(index.data(Qt::DisplayRole).toString(), Qt::ElideRight, text.width());
+				painter->drawText(text, Qt::AlignVCenter | Qt::AlignLeft, name);
 
 				const int help = 18;
 				EditorIcons::Get(EditorIcon::Help).paint(painter, QRect(row.right() - help - 12, row.center().y() - help / 2, help, help));
