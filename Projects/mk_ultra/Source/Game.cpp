@@ -1,4 +1,5 @@
 #include "Game.h"
+#include "DriverSystem.h"
 
 using namespace FP;
 
@@ -10,6 +11,6 @@ namespace Game
 
 	void AddSystems(World& world)
 	{
-		(void)world;
+		world.AddSystem<DriverSystem>();
 	}
 }

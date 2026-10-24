@@ -1,0 +1,218 @@
+# FirstPrinciples scene
+version 2
+
+entity 90825acd-6016-4f14-ab67-987f9d2b7921
+component Name
+  Name "Truck"
+component Transform
+  Position 0 0 -60
+  Rotation 0 0 0
+  Scale 2.5 2.5 7
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Gold.material"
+
+entity aae47f15-856b-4c5b-b5e1-8010acd59eba
+component Name
+  Name "TravelMarker"
+component Transform
+  Position 0 0 -85
+  Rotation 0 0 0
+  Scale 0.8 0.8 0.8
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Plastic.material"
+
+entity 498ad1e0-20b3-43f7-8c15-2f066b7eb746
+component Name
+  Name "DriverCamera"
+component Transform
+  Position 0 4 -44
+  Rotation 0 0 0
+  Scale 1 1 1
+component Camera
+  Perspective true
+  Zoom 64
+  FieldOfView 70
+  NearClip 0.2
+  FarClip 20000
+  Primary true
+  Background 0.01 0.01 0.02 1
+  Exposure 1
+  Tonemap true
+
+entity 1107143b-bfc8-412c-849c-93b43425188f
+component Name
+  Name "Depot"
+component Transform
+  Position 0 -15 0
+  Rotation 0 0 0
+  Scale 60 20 60
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Plastic.material"
+
+entity 569ab3bc-7e96-464b-bf53-ecd63b81cd9f
+component Name
+  Name "Colony"
+component Transform
+  Position 0 0 -8400
+  Rotation 0 0 0
+  Scale 400 400 400
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Jelly.material"
+
+entity f1cadbee-b97a-4fe2-b44e-7314d17e6df1
+component Name
+  Name "Ambient Light"
+component Transform
+  Position 0 0 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component AmbientLight
+  Color 0.6 0.7 1 1
+  Intensity 0.4
+
+entity d1152cec-641f-4782-955e-f165d0e027eb
+component Name
+  Name "Sun"
+component Transform
+  Position 0 0 0
+  Rotation -30 120 0
+  Scale 1 1 1
+component DirectionalLight
+  Color 1 0.95 0.85 1
+  Intensity 2
+
+entity 38899efd-5ab4-4418-84ee-3b2f23ab4f23
+component Name
+  Name "CabFloor"
+component Transform
+  Position 0 -5000 0
+  Rotation 0 0 0
+  Scale 8 1 12
+component Mesh
+  Mesh "Plane"
+component Material
+  Material "Materials/Plastic.material"
+
+entity 26caec4f-e9c4-4ed9-b505-71081f7751e2
+component Name
+  Name "CabWallLeft"
+component Transform
+  Position -4.1 -4998 0
+  Rotation 0 0 0
+  Scale 0.2 4 12.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Plastic.material"
+
+entity 54296ea9-8a7e-4340-8c0b-f0d50e6d0e08
+component Name
+  Name "CabWallRight"
+component Transform
+  Position 4.1 -4998 0
+  Rotation 0 0 0
+  Scale 0.2 4 12.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Plastic.material"
+
+entity 95f69f6e-20c7-41a2-8875-5eb62cb87f22
+component Name
+  Name "CabWallBack"
+component Transform
+  Position 0 -4998 6.1
+  Rotation 0 0 0
+  Scale 8.4 4 0.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Plastic.material"
+
+entity 565a6181-de90-4ade-b8a9-72ed20af35c2
+component Name
+  Name "CabWindshield"
+component Transform
+  Position 0 -4998 -6.1
+  Rotation 0 0 0
+  Scale 8.4 4 0.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Windshield.material"
+
+entity 1d0a1a06-bd5b-41e1-acc1-b936fb2423c7
+component Name
+  Name "CabConsole"
+component Transform
+  Position 0 -4999.5 -5.3
+  Rotation 0 0 0
+  Scale 6 1 1.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Gold.material"
+
+entity c07e2c6c-5d11-4125-99c1-c91d68693178
+component Name
+  Name "Wheel"
+component Transform
+  Position 0 -4998.7 -4.6
+  Rotation -35 0 0
+  Scale 0.9 0.9 0.12
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Gold.material"
+
+entity 06646036-efa4-4e6f-8306-4bb99df05aa3
+component Name
+  Name "CabSeat"
+component Transform
+  Position 0 -4999.6 -3.4
+  Rotation 0 0 0
+  Scale 1 0.8 1
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Plastic.material"
+
+entity 3b182f8f-a2b7-48c3-bc15-21d5a7313d31
+component Name
+  Name "Driver"
+component Transform
+  Position 0 -5000 3
+  Rotation 0 0 0
+  Scale 1 1 1
+
+entity 799b9a90-6a75-4107-b6a4-5011c89e842e
+component Name
+  Name "CabLight"
+component Transform
+  Position 0 -4996.5 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component PointLight
+  Color 1 0.9 0.75 1
+  Intensity 3
+  Range 12
+
+entity e5830ee6-f161-4288-8ea5-6d5eda6c53a5
+component Name
+  Name "Scrubber"
+component Transform
+  Position 0 -4999 5.5
+  Rotation 0 0 0
+  Scale 2.4 2 0.8
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Jelly.material"
