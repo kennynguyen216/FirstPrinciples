@@ -1,5 +1,6 @@
 #include "Editor/EditorWindow.h"
 #include "Editor/CodeEditor.h"
+#include "Editor/ContentBrowser.h"
 #include "Editor/InspectorPanel.h"
 #include "Editor/ScriptBuilder.h"
 #include "Editor/ViewportWidget.h"
@@ -143,7 +144,16 @@ namespace FP::Editor
 		consoleDock->setObjectName("Console");
 		consoleDock->setWidget(m_Console);
 		addDockWidget(Qt::BottomDockWidgetArea, consoleDock);
-		resizeDocks({ consoleDock }, { 160 }, Qt::Vertical);
+		m_ConsoleDock = consoleDock;
+
+		// The content browser shares the bottom area with the console as a tab.
+		m_ContentBrowser = new ContentBrowser();
+		QDockWidget* contentDock = new QDockWidget("Content", this);
+		contentDock->setObjectName("Content");
+		contentDock->setWidget(m_ContentBrowser);
+		tabifyDockWidget(consoleDock, contentDock);
+		contentDock->raise();
+		resizeDocks({ consoleDock }, { 220 }, Qt::Vertical);
 	}
 
 	void EditorWindow::BuildMenus()
@@ -444,7 +454,11 @@ namespace FP::Editor
 	void EditorWindow::OnScriptsBuilt(bool success)
 	{
 		if (!success)
+		{
+			// Build errors live in the console, so bring it forward.
+			m_ConsoleDock->raise();
 			return;
+		}
 		// Running scripts move to the new code with their field values.
 		if (ScriptRuntime::Get().Reload())
 			FP_LOG("Scripts reloaded%s", m_World->IsPlaying() ? " while playing" : "");

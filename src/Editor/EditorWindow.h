@@ -9,6 +9,7 @@ class QAction;
 class QComboBox;
 class QFileSystemWatcher;
 class QTabWidget;
+class QDockWidget;
 class QListWidget;
 class QPlainTextEdit;
 class QTimer;
@@ -21,6 +22,7 @@ namespace FP
 namespace FP::Editor
 {
 	class CodeEditor;
+	class ContentBrowser;
 	class InspectorPanel;
 	class ScriptBuilder;
 	class ViewportWidget;
@@ -47,6 +49,8 @@ namespace FP::Editor
 
 		// Creates Game/Scripts/<className>.cpp and opens it. Returns false and explains why on failure.
 		bool NewScript(const QString& className);
+
+		ContentBrowser* GetContentBrowser() const { return m_ContentBrowser; }
 
 	protected:
 		void closeEvent(QCloseEvent* event) override;
@@ -110,6 +114,8 @@ namespace FP::Editor
 		QComboBox* m_ViewModeBox = nullptr;
 		ScriptBuilder* m_ScriptBuilder = nullptr;
 		QTabWidget* m_CentralTabs = nullptr;
+		ContentBrowser* m_ContentBrowser = nullptr;
+		QDockWidget* m_ConsoleDock = nullptr;
 		QFileSystemWatcher* m_ScriptWatcher = nullptr;
 		QTimer* m_ScriptDebounce = nullptr;
 		bool m_AutoReloadScripts = true;

@@ -1,3 +1,4 @@
+#include "Editor/ContentBrowser.h"
 #include "Editor/EditorWindow.h"
 #include "Editor/ScriptBuilder.h"
 #include "Engine/Engine.h"
@@ -55,6 +56,11 @@ int main(int argc, char** argv)
 			const QString mode = args[modeIndex + 1].toLower();
 			window.SetViewMode(mode == "unlit" ? FP::ViewMode::Unlit : mode == "wireframe" ? FP::ViewMode::Wireframe : FP::ViewMode::Lit);
 		}
+		// --browse folder shows a folder in the content browser, relative to Content.
+		const int browseIndex = static_cast<int>(args.indexOf("--browse"));
+		if (browseIndex >= 0 && browseIndex + 1 < args.size())
+			window.GetContentBrowser()->ShowFolder(QString::fromUtf8(FP::Paths::Content(args[browseIndex + 1].toUtf8().constData()).CStr()));
+
 		// --open-script path opens a script tab, relative to the project.
 		const int openIndex = static_cast<int>(args.indexOf("--open-script"));
 		if (openIndex >= 0 && openIndex + 1 < args.size())
