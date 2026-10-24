@@ -61,6 +61,10 @@ namespace FP
 		bool Load();
 		bool Save();
 
+		// The .material file text. Undo keeps these to put edits back.
+		String SaveToString() const;
+		void LoadFromString(std::string_view text);
+
 		static const Array<FieldInfo>& GetFields();
 		static const Array<const char*>& GetShaderNames();
 
@@ -84,6 +88,9 @@ namespace FP
 
 		// Saves every material changed in the editor. Returns how many were written.
 		int32 SaveDirty();
+
+		// Every material loaded so far.
+		Array<Material*> GetLoaded() const;
 
 		void Clear();
 
