@@ -479,7 +479,10 @@ namespace FP
 	{
 		m_Frame.ShadowParams = {};
 		const DirectionalLightComponent* light = world.IsValid(m_ShadowCaster) ? world.TryGet<DirectionalLightComponent>(m_ShadowCaster) : nullptr;
-		const bool enabled = light && m_Mode == ViewMode::Lit && m_ShadowPipelines[0] && m_ShadowPipelines[1];
+		// 2D scenes with only sprites have nothing to cast, so they skip the pass.
+		entt::registry& registry = world.GetRegistry();
+		const bool hasCasters = !registry.view<MeshComponent>().empty() || !registry.view<SkeletalMeshComponent>().empty();
+		const bool enabled = light && hasCasters && m_Mode == ViewMode::Lit && m_ShadowPipelines[0] && m_ShadowPipelines[1];
 
 		// Lit always samples the map, so keep a tiny cleared one around when shadows are off.
 		const uint32 size = enabled ? static_cast<uint32>(light->ShadowResolution < 64 ? 64 : light->ShadowResolution > 4096 ? 4096 : light->ShadowResolution) : 16;
