@@ -37,6 +37,17 @@ namespace FP
 		virtual void AddImpulse(entt::entity entity, Vec3 impulse) = 0;
 		virtual void AddTorque(entt::entity entity, Vec3 torque) = 0;
 
+		// Like AddForce and AddImpulse but at a world point, so an off center push also spins.
+		virtual void AddForceAtPoint(entt::entity entity, Vec3 force, Vec3 point) = 0;
+		virtual void AddImpulseAtPoint(entt::entity entity, Vec3 impulse, Vec3 point) = 0;
+
+		// Kicks every dynamic body near center away from it. The kick is impulse at the center and
+		// fades to nothing at radius.
+		virtual void AddExplosion(Vec3 center, float radius, float impulse) = 0;
+
+		// In kilograms. Zero for bodies that do not move and entities without one.
+		virtual float GetMass(entt::entity entity) const = 0;
+
 		virtual Vec3 GetVelocity(entt::entity entity) const = 0;
 		virtual void SetVelocity(entt::entity entity, Vec3 velocity) = 0;
 		virtual Vec3 GetAngularVelocity(entt::entity entity) const = 0;
@@ -44,6 +55,9 @@ namespace FP
 
 		// The closest body along a ray, skipping ignore and triggers. direction need not be unit length.
 		virtual bool Raycast(Vec3 origin, Vec3 direction, float maxDistance, RaycastHit& hit, entt::entity ignore = entt::null) const = 0;
+
+		// Like Raycast but sweeps a ball, which is more forgiving for aiming and checking for room.
+		virtual bool SphereCast(Vec3 origin, float radius, Vec3 direction, float maxDistance, RaycastHit& hit, entt::entity ignore = entt::null) const = 0;
 
 		// Every entity with a body touching the sphere, triggers included.
 		virtual Array<entt::entity> OverlapSphere(Vec3 center, float radius) const = 0;
