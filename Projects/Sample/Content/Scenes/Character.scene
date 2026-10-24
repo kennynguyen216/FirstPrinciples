@@ -1,0 +1,408 @@
+# FirstPrinciples scene
+version 2
+
+entity 9c000001-0000-4000-8000-000000000001
+component Name
+  Name "Ambient"
+component Transform
+  Position 0 0 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component AmbientLight
+  Color 0.6 0.7 1 1
+  Intensity 0.35
+
+entity 9c000002-0000-4000-8000-000000000002
+component Name
+  Name "Sun"
+component Transform
+  Position 0 0 0
+  Rotation -50 60 0
+  Scale 1 1 1
+component DirectionalLight
+  Color 1 0.95 0.85 1
+  Intensity 1.7
+  CastShadows true
+  ShadowResolution 1024
+  ShadowDistance 30
+  ShadowStrength 1
+
+entity 9c000003-0000-4000-8000-000000000003
+component Name
+  Name "Ground"
+component Transform
+  Position 0 -0.25 0
+  Rotation 0 0 0
+  Scale 40 0.5 40
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/BricksFloor.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Radius 0.5
+  Height 2
+  Offset 0 0 0
+  Trigger false
+
+entity 9c000004-0000-4000-8000-000000000004
+component Name
+  Name "Step"
+component Transform
+  Position 4.6 0.15 0
+  Rotation 0 0 0
+  Scale 0.6 0.3 3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Bricks.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Radius 0.5
+  Height 2
+  Offset 0 0 0
+  Trigger false
+
+entity 9c000005-0000-4000-8000-000000000005
+component Name
+  Name "Step"
+component Transform
+  Position 5.2 0.3 0
+  Rotation 0 0 0
+  Scale 0.6 0.6 3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Bricks.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Radius 0.5
+  Height 2
+  Offset 0 0 0
+  Trigger false
+
+entity 9c000006-0000-4000-8000-000000000006
+component Name
+  Name "Step"
+component Transform
+  Position 5.8 0.45 0
+  Rotation 0 0 0
+  Scale 0.6 0.9 3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Bricks.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Radius 0.5
+  Height 2
+  Offset 0 0 0
+  Trigger false
+
+entity 9c000007-0000-4000-8000-000000000007
+component Name
+  Name "Step"
+component Transform
+  Position 6.4 0.6 0
+  Rotation 0 0 0
+  Scale 0.6 1.2 3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Bricks.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Radius 0.5
+  Height 2
+  Offset 0 0 0
+  Trigger false
+
+entity 9c000008-0000-4000-8000-000000000008
+component Name
+  Name "Step"
+component Transform
+  Position 7 0.75 0
+  Rotation 0 0 0
+  Scale 0.6 1.5 3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Bricks.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Radius 0.5
+  Height 2
+  Offset 0 0 0
+  Trigger false
+
+entity 9c000009-0000-4000-8000-000000000009
+component Name
+  Name "Landing"
+component Transform
+  Position 8.8 0.75 0
+  Rotation 0 0 0
+  Scale 3 1.5 3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Bricks.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Radius 0.5
+  Height 2
+  Offset 0 0 0
+  Trigger false
+
+entity 9c00000a-0000-4000-8000-00000000000a
+component Name
+  Name "Ramp"
+component Transform
+  Position 0 1 -7
+  Rotation 0 0 20
+  Scale 6 0.3 3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Plastic.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Radius 0.5
+  Height 2
+  Offset 0 0 0
+  Trigger false
+
+entity 9c00000b-0000-4000-8000-00000000000b
+component Name
+  Name "Steep Ramp"
+component Transform
+  Position -7 1.6 -7
+  Rotation 0 0 -60
+  Scale 4 0.3 3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Plastic.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Radius 0.5
+  Height 2
+  Offset 0 0 0
+  Trigger false
+
+entity 9c00000c-0000-4000-8000-00000000000c
+component Name
+  Name "Wall"
+component Transform
+  Position -8 1.5 3
+  Rotation 0 0 0
+  Scale 0.5 3 8
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Bricks.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Radius 0.5
+  Height 2
+  Offset 0 0 0
+  Trigger false
+
+entity 9c00000d-0000-4000-8000-00000000000d
+component Name
+  Name "Lift"
+component Transform
+  Position -4 0.5 5
+  Rotation 0 0 0
+  Scale 2.5 0.3 2.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Neon.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Radius 0.5
+  Height 2
+  Offset 0 0 0
+  Trigger false
+component RigidBody
+  Motion "Kinematic"
+  Mass 1
+  Friction 0.6
+  Restitution 0
+  LinearDamping 0.05
+  AngularDamping 0.05
+  GravityScale 1
+  LockRotation false
+  Continuous false
+component Scripts
+  script "Bobber"
+    Height 1.5
+    Speed 0.8
+
+entity 9c00000e-0000-4000-8000-00000000000e
+component Name
+  Name "Crate"
+component Transform
+  Position 3 0.45 5
+  Rotation 0 0 0
+  Scale 0.9 0.9 0.9
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Bricks.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Radius 0.5
+  Height 2
+  Offset 0 0 0
+  Trigger false
+component RigidBody
+  Motion "Dynamic"
+  Mass 5
+  Friction 0.6
+  Restitution 0
+  LinearDamping 0.05
+  AngularDamping 0.05
+  GravityScale 1
+  LockRotation false
+  Continuous false
+
+entity 9c00000f-0000-4000-8000-00000000000f
+component Name
+  Name "Crate"
+component Transform
+  Position 4.2 0.45 5
+  Rotation 0 0 0
+  Scale 0.9 0.9 0.9
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Bricks.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Radius 0.5
+  Height 2
+  Offset 0 0 0
+  Trigger false
+component RigidBody
+  Motion "Dynamic"
+  Mass 5
+  Friction 0.6
+  Restitution 0
+  LinearDamping 0.05
+  AngularDamping 0.05
+  GravityScale 1
+  LockRotation false
+  Continuous false
+
+entity 9c000010-0000-4000-8000-000000000010
+component Name
+  Name "Crate"
+component Transform
+  Position 3.6 0.45 6.2
+  Rotation 0 0 0
+  Scale 0.9 0.9 0.9
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Bricks.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Radius 0.5
+  Height 2
+  Offset 0 0 0
+  Trigger false
+component RigidBody
+  Motion "Dynamic"
+  Mass 5
+  Friction 0.6
+  Restitution 0
+  LinearDamping 0.05
+  AngularDamping 0.05
+  GravityScale 1
+  LockRotation false
+  Continuous false
+
+entity 9c000011-0000-4000-8000-000000000011
+component Name
+  Name "Zone"
+component Transform
+  Position 0 1 7
+  Rotation 0 0 0
+  Scale 2 2 2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Glass.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Radius 0.5
+  Height 2
+  Offset 0 0 0
+  Trigger true
+component Scripts
+  script "GoalZone"
+    Score 0
+    Counts "Player"
+
+entity 9c000012-0000-4000-8000-000000000012
+component Name
+  Name "Player"
+component Transform
+  Position 0 1 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component Mesh
+  Mesh "Capsule"
+component Material
+  Material "Materials/Plastic.material"
+component CharacterController
+  Radius 0.5
+  Height 2
+  StepHeight 0.35
+  MaxSlope 50
+  Mass 70
+  AirControl 0.1
+  GravityScale 1
+component Scripts
+  script "PlayerController"
+    WalkSpeed 5
+    RunSpeed 9
+    JumpSpeed 6
+    LookSpeed 0.15
+    Camera "Player Camera"
+
+entity 9c000013-0000-4000-8000-000000000013
+component Name
+  Name "Player Camera"
+component Transform
+  Position 0 1.5 5
+  Rotation -12 0 0
+  Scale 1 1 1
+component Parent
+  Parent 9c000012-0000-4000-8000-000000000012
+component Camera
+  Perspective true
+  Zoom 64
+  FieldOfView 60
+  NearClip 0.1
+  FarClip 500
+  Primary true
+  Background 0.05 0.06 0.09 1
+  Exposure 1
+  Tonemap true
