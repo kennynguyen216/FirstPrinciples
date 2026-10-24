@@ -99,6 +99,14 @@ int main(int argc, char** argv)
 			window.DropAsset(QString::fromUtf8(FP::Paths::Content(args[dropIndex + 1].toUtf8().constData()).CStr()), {}, target);
 		}
 
+		// --undo then --redo step the history once each after the edits above, and log what is left.
+		if (args.contains("--undo"))
+			window.Undo();
+		if (args.contains("--redo"))
+			window.Redo();
+		if (args.contains("--undo") || args.contains("--redo"))
+			FP_LOG("Scene has %d entities after undo and redo", window.GetWorld().GetEntities().Num());
+
 		const int shotIndex = static_cast<int>(args.indexOf("--screenshot"));
 		if (shotIndex >= 0 && shotIndex + 1 < args.size())
 		{
