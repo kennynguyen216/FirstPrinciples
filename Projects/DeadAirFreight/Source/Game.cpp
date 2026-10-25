@@ -150,7 +150,11 @@ namespace Game
 			.Field("Hatch", &SoundCuesComponent::Hatch).AssetPath(wav)
 			.Field("AirlockVent", &SoundCuesComponent::AirlockVent).AssetPath(wav)
 			.Field("Countdown", &SoundCuesComponent::Countdown).AssetPath(wav)
-			.Field("Go", &SoundCuesComponent::Go).AssetPath(wav);
+			.Field("Go", &SoundCuesComponent::Go).AssetPath(wav)
+			.Field("JackpotBoost", &SoundCuesComponent::JackpotBoost).AssetPath(wav)
+			.Field("Walk", &SoundCuesComponent::Walk).AssetPath(wav)
+			.Field("Run", &SoundCuesComponent::Run).AssetPath(wav)
+			.Field("Engine", &SoundCuesComponent::Engine).AssetPath(wav);
 	}
 
 	void AddSystems(World& world)

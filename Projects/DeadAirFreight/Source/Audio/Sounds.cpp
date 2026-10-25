@@ -8,11 +8,18 @@ namespace
 	constexpr float NearDistance = 2;
 	constexpr float FarDistance = 30;
 
+	// The entity that carries a LoopSlot's sound.
+	struct LoopVoice
+	{
+		LoopSlot Slot = LoopSlot::Footsteps;
+	};
+
 	const String* GetField(const SoundCuesComponent& cues, SoundCue cue)
 	{
 		const String* fields[] = { &cues.LaserFire, &cues.RepairBeam, &cues.TankPuncture, &cues.TankPatched, &cues.MiteSpawn,
 			&cues.MiteChitter, &cues.MiteBite, &cues.MiteDeath, &cues.Boost, &cues.Hatch, &cues.AirlockVent,
-			&cues.Countdown, &cues.Go };
+			&cues.Countdown, &cues.Go, &cues.JackpotBoost, &cues.Walk, &cues.Run,
+			&cues.Engine };
 		const int32 index = static_cast<int32>(cue);
 		return index < static_cast<int32>(sizeof(fields) / sizeof(fields[0])) ? fields[index] : nullptr;
 	}
@@ -39,9 +46,11 @@ namespace Sounds
 		return {};
 	}
 
-	void Play(World& world, SoundCue cue)
+	void Play(World& world, SoundCue cue, float volume)
 	{
-		PlayClip(world, GetClip(world, cue), {});
+		OneShotParams params;
+		params.Volume = volume;
+		PlayClip(world, GetClip(world, cue), params);
 	}
 
 	void PlayAt(World& world, SoundCue cue, Vec3 position)
@@ -53,13 +62,39 @@ namespace Sounds
 		params.MaxDistance = FarDistance;
 		PlayClip(world, GetClip(world, cue), params);
 	}
+
+	void SetLoop(World& world, LoopSlot slot, SoundCue cue, bool on)
+	{
+		const String clip = on ? GetClip(world, cue) : String{};
+		Entity voice = NullEntity;
+		for (auto [entity, loop] : world.View<LoopVoice>().each())
+		{
+			if (loop.Slot == slot)
+				voice = entity;
+		}
+		if (voice == NullEntity)
+		{
+			if (clip.IsEmpty())
+				return;
+			voice = world.CreateEntity(slot == LoopSlot::Engine ? "Engine Loop" : "Footsteps");
+			world.Add<LoopVoice>(voice).Slot = slot;
+			world.Add<AudioSourceComponent>(voice).Loop = true;
+		}
+		AudioSourceComponent& source = world.Get<AudioSourceComponent>(voice);
+		if (source.Clip == clip)
+			return;
+		world.GetAudio().StopSource(voice);
+		source.Clip = clip;
+		if (!clip.IsEmpty())
+			world.GetAudio().Play(voice);
+	}
 }
 
 void SoundPreloadSystem::OnStart(World& world)
 {
 	for (auto [entity, cues] : world.View<SoundCuesComponent>().each())
 	{
-		for (int32 i = 0; i <= static_cast<int32>(SoundCue::Go); ++i)
+		for (int32 i = 0; i <= static_cast<int32>(SoundCue::Engine); ++i)
 		{
 			const String* clip = GetField(cues, static_cast<SoundCue>(i));
 			if (!clip || clip->IsEmpty())

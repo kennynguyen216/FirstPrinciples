@@ -1734,11 +1734,15 @@ component SoundCues
   MiteChitter "asset://9ed7fd0d-611c-456a-95a0-e93c6199109a"
   MiteBite ""
   MiteDeath ""
-  Boost ""
+  Boost "asset://848cbe1e-a0c2-4dfa-b93b-8d00efd5b845"
   Hatch ""
   AirlockVent ""
   Countdown "asset://5513f8a7-4a2d-4c64-abc5-054511f892d8"
   Go ""
+  JackpotBoost "asset://e961fdbe-2db8-45a6-9e3a-21f8d3cc3733"
+  Walk "asset://d8382115-59b8-4f6e-ab18-8dd5ce02c03b"
+  Run "asset://b0eb79f0-5694-418b-9802-4577d44b73c8"
+  Engine "asset://5d0e92b3-22a1-4116-8d33-b3ca45fa77ea"
 
 entity dc96e6bd-8d42-46d0-87f5-c0c256822a49
 component Name

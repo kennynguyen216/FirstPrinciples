@@ -104,6 +104,8 @@ private:
 	float m_Bank = 0;
 	float m_BaseFieldOfView = 60;
 	float m_SprintFov = 0;
+	// A ticket won the jackpot this frame, so its boost gets the jackpot sound too.
+	bool m_Jackpot = false;
 
 	bool m_CursorFree = false;
 	float m_WindNow = 0;

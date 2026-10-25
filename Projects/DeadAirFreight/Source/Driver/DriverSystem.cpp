@@ -1,4 +1,5 @@
 #include "DriverSystem.h"
+#include "Audio/Sounds.h"
 
 #include "WeatherFetch.h"
 
@@ -255,8 +256,24 @@ void DriverSystem::Update(World& world, float deltaTime)
 	Ticket& ticket = world.Get<Ticket>(m_Truck);
 	DriverState* driver = m_Driver != NullEntity ? world.TryGet<DriverState>(m_Driver) : nullptr;
 
+	const float boostBefore = truck->Boost;
 	if (!m_Finished)
 		Simulate(*truck, life, ticket, driver, deltaTime);
+	if (truck->Boost > boostBefore)
+	{
+		// A jackpot's slot machine win plays over a quieter boost.
+		Sounds::Play(world, SoundCue::Boost, m_Jackpot ? 0.5f : 1.0f);
+		if (m_Jackpot)
+			Sounds::Play(world, SoundCue::JackpotBoost);
+	}
+	m_Jackpot = false;
+	// The engine hums at cruise and drops out from a boost's start until it slows back to cruise.
+	Sounds::SetLoop(world, LoopSlot::Engine, SoundCue::Engine, !m_Finished && truck->Boost <= 0 && truck->Speed <= m_Settings.CruiseSpeed);
+	if (driver && driver->InCab)
+	{
+		const bool walking = !driver->Seated && !m_Finished && !IsBlackedOut(life) && Input::GetMoveAxis().LengthSquared() > 0;
+		Sounds::SetLoop(world, LoopSlot::Footsteps, Input::IsKeyDown(SDL_SCANCODE_LSHIFT) ? SoundCue::Run : SoundCue::Walk, walking);
+	}
 	if (m_Finished)
 	{
 		truck->Speed = truck->Boost = 0;
@@ -364,6 +381,7 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 			if (ticket.Won == Prize::Jackpot)
 			{
 				truck.Boost = m_Settings.BoostTime;
+				m_Jackpot = true;
 				Notify("JACKPOT! HYPERDRIVE OVERLOAD", Good, 3);
 			}
 		}

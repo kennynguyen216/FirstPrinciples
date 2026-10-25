@@ -19,6 +19,10 @@ struct SoundCuesComponent
 	FP::String AirlockVent;
 	FP::String Countdown;
 	FP::String Go;
+	FP::String JackpotBoost; // layered over Boost when a ticket wins the jackpot
+	FP::String Walk; // loops while the local player walks
+	FP::String Run; // loops while the local player sprints
+	FP::String Engine; // loops while the truck cruises, silent while it boosts
 };
 
 enum class SoundCue : FP::uint8
@@ -36,6 +40,17 @@ enum class SoundCue : FP::uint8
 	AirlockVent,
 	Countdown,
 	Go,
+	JackpotBoost,
+	Walk,
+	Run,
+	Engine,
+};
+
+// A looping, unpositioned sound. Each slot plays one clip at a time.
+enum class LoopSlot : FP::uint8
+{
+	Footsteps,
+	Engine,
 };
 
 namespace Sounds
@@ -44,8 +59,11 @@ namespace Sounds
 	FP::String GetClip(FP::World& world, SoundCue cue);
 
 	// Plays a cue once. Positioned sounds fade with distance from the camera.
-	void Play(FP::World& world, SoundCue cue);
+	void Play(FP::World& world, SoundCue cue, float volume = 1);
 	void PlayAt(FP::World& world, SoundCue cue, FP::Vec3 position);
+
+	// Loops a cue in a slot, switching clip when the cue changes. Off stops the slot.
+	void SetLoop(FP::World& world, LoopSlot slot, SoundCue cue, bool on);
 }
 
 // Loads every set clip when play starts so the first time a cue plays has no hitch.

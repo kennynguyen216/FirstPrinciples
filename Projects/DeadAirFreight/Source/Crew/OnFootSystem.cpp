@@ -303,6 +303,7 @@ void OnFootSystem::Update(World& world, float deltaTime)
 	body.Rotation.Z = 0;
 
 	const bool racing = state->Phase == MatchPhase::Racing;
+	Sounds::SetLoop(world, LoopSlot::Footsteps, SoundCue::Walk, racing && Input::GetMoveAxis().LengthSquared() > 0);
 	if (racing)
 	{
 		const float yaw = body.Rotation.Y * DegToRad;
