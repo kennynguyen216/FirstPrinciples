@@ -131,6 +131,15 @@ void DriverSystem::OnStart(World& world)
 		const TransformComponent& floorTransform = world.Get<TransformComponent>(floor);
 		const Vec3 half = Vec3{ floorTransform.Scale.X, 0, floorTransform.Scale.Z } * 0.5f - Vec3{ m_Settings.CabWallMargin, 0, m_Settings.CabWallMargin };
 		m_CabBounds = { floorTransform.Position - half, floorTransform.Position + half };
+		// The hatch is an open doorway; the walker may step into it, where the cab's owner takes them
+		// through (Dead Air Freight's TransitSystem).
+		if (const Entity hatch = FindOrNull(world, "CabHatch"); hatch != NullEntity)
+		{
+			const TransformComponent& hatchTransform = world.Get<TransformComponent>(hatch);
+			m_CabBounds.DoorX = hatchTransform.Position.X;
+			m_CabBounds.DoorHalfWidth = hatchTransform.Scale.X * 0.5f - m_Settings.CabWallMargin;
+			m_CabBounds.DoorZ = hatchTransform.Position.Z + 1;
+		}
 		m_Wheel = world.Get<TransformComponent>(wheel).Position;
 		m_Scrubber = scrubber != NullEntity ? world.Get<TransformComponent>(scrubber).Position : Vec3{ 1e9f, 0, 0 };
 

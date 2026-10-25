@@ -310,13 +310,37 @@ component Mesh
 component Material
   Material "Materials/CockpitMirror.material"
 
-entity 6ee667b8-4b9d-4620-a361-116060a83cb1
+entity b606190d-d730-4b39-91a5-30eed84636c5
 component Name
-  Name "CabWallBack"
+  Name "CabWallBackLeft"
 component Transform
-  Position 0 -4998 6.1
+  Position -2.5 -4998 6.1
   Rotation 0 0 0
-  Scale 8.4 4 0.2
+  Scale 3.4 4 0.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity c89e23cf-05fb-4cc4-9fbf-d486fcd8658f
+component Name
+  Name "CabWallBackRight"
+component Transform
+  Position 2.5 -4998 6.1
+  Rotation 0 0 0
+  Scale 3.4 4 0.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 7dd74376-8ca4-4146-b0f8-e64c3be34415
+component Name
+  Name "CabWallBackTop"
+component Transform
+  Position 0 -4996.5 6.1
+  Rotation 0 0 0
+  Scale 1.6 1 0.2
 component Mesh
   Mesh "Cube"
 component Material
@@ -1154,21 +1178,17 @@ entity c6e773d3-a8f2-49f1-b15c-27a8a72d6a93
 component Name
   Name "CabHatch"
 component Transform
-  Position 0 -4998.85 5.95
+  Position 0 -5000 6.2
   Rotation 0 0 0
-  Scale 1.5 2.3 0.1
-component Mesh
-  Mesh "Cube"
-component Material
-  Material "Materials/Hatch.material"
+  Scale 1.6 3 0.2
 
 entity 85db65b4-7c43-4712-a755-c6dc87ec20b9
 component Name
   Name "CabHatchPostLeft"
 component Transform
-  Position -0.95 -4998.75 5.9
+  Position -0.95 -4998.425 5.9
   Rotation 0 0 0
-  Scale 0.3 2.5 0.25
+  Scale 0.3 3.15 0.25
 component Mesh
   Mesh "Cube"
 component Material
@@ -1178,9 +1198,9 @@ entity 369b5cc1-b116-47c4-8d27-4a9f519c2e8b
 component Name
   Name "CabHatchPostRight"
 component Transform
-  Position 0.95 -4998.75 5.9
+  Position 0.95 -4998.425 5.9
   Rotation 0 0 0
-  Scale 0.3 2.5 0.25
+  Scale 0.3 3.15 0.25
 component Mesh
   Mesh "Cube"
 component Material
@@ -1190,7 +1210,7 @@ entity a94f9919-b6e9-4828-ac5d-e63316ffb520
 component Name
   Name "CabHatchLintel"
 component Transform
-  Position 0 -4997.4 5.9
+  Position 0 -4996.85 5.9
   Rotation 0 0 0
   Scale 2.2 0.3 0.25
 component Mesh
@@ -1202,49 +1222,13 @@ entity 0214f5ee-84b4-4308-892d-2a43dddbeff4
 component Name
   Name "CabHatchSign"
 component Transform
-  Position 0 -4997 5.98
+  Position 0 -4996.55 5.98
   Rotation 0 0 0
   Scale 1.4 0.3 0.04
 component Mesh
   Mesh "Cube"
 component Material
   Material "Materials/CockpitAmber.material"
-
-entity 79b25cc6-8eed-437c-835d-618b0dc67e21
-component Name
-  Name "CabHatchPort"
-component Transform
-  Position 0 -4998.25 5.88
-  Rotation 0 0 0
-  Scale 0.5 0.5 0.04
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "Materials/CockpitTrim.material"
-
-entity f86a8ffc-467a-4ed9-9aa7-f59cae190547
-component Name
-  Name "CabHatchPortGlow"
-component Transform
-  Position 0 -4998.25 5.86
-  Rotation 0 0 0
-  Scale 0.38 0.38 0.02
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "Materials/CockpitScreen.material"
-
-entity 90a1ca1d-81e9-4334-b86c-4e1d28ba97de
-component Name
-  Name "CabHatchWheel"
-component Transform
-  Position 0 -4998.95 5.86
-  Rotation 0 0 0
-  Scale 0.6 0.6 0.06
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "Materials/CockpitChrome.material"
 
 entity 0dca165b-8441-42d3-899c-411019d7b446
 component Name
@@ -1607,7 +1591,7 @@ component TankConfig
 component OnFootConfig
   MoveSpeed 6
   LookSensitivity 0.15
-  EyeHeight 1.6
+  EyeHeight 2.4
   BodyRadius 0.5
   LaserRange 60
   FireInterval 0.15
@@ -1794,13 +1778,51 @@ component Collider
   Offset 0 0 0
   Trigger false
 
-entity ea45ff27-f931-45fd-8f95-7dfc2f46e033
+entity 432a5cf0-9497-46c2-a0a5-18f38c44f12f
 component Name
-  Name "Cargo Bay A Wall Back"
+  Name "Cargo Bay A Wall Back Left"
 component Transform
-  Position -3000 -2997 20.25
+  Position -3005.65 -2997 20.25
   Rotation 0 0 0
-  Scale 21 6 0.5
+  Scale 9.7 6 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/BayWall.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Radius 0.5
+  Height 2
+  Offset 0 0 0
+  Trigger false
+
+entity 2d482b90-2149-4633-adeb-5f48b7178304
+component Name
+  Name "Cargo Bay A Wall Back Right"
+component Transform
+  Position -2994.35 -2997 20.25
+  Rotation 0 0 0
+  Scale 9.7 6 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/BayWall.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Radius 0.5
+  Height 2
+  Offset 0 0 0
+  Trigger false
+
+entity 94d9363d-e052-40ce-adbe-14fa4d30f3dd
+component Name
+  Name "Cargo Bay A Wall Back Top"
+component Transform
+  Position -3000 -2995.5 20.25
+  Rotation 0 0 0
+  Scale 1.6 3 0.5
 component Mesh
   Mesh "Cube"
 component Material
@@ -1882,13 +1904,51 @@ component Collider
   Offset 0 0 0
   Trigger false
 
-entity e40259b0-7910-4b73-b52e-b439d74a90b1
+entity 6f62e7e7-2b1a-4c53-8dab-73d04deddd21
 component Name
-  Name "Cargo Bay B Wall Back"
+  Name "Cargo Bay B Wall Back Left"
 component Transform
-  Position 3000 -2997 20.25
+  Position 2994.35 -2997 20.25
   Rotation 0 0 0
-  Scale 21 6 0.5
+  Scale 9.7 6 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/BayWall.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Radius 0.5
+  Height 2
+  Offset 0 0 0
+  Trigger false
+
+entity c5716511-a829-4f4b-86b0-34d4b515c441
+component Name
+  Name "Cargo Bay B Wall Back Right"
+component Transform
+  Position 3005.65 -2997 20.25
+  Rotation 0 0 0
+  Scale 9.7 6 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/BayWall.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Radius 0.5
+  Height 2
+  Offset 0 0 0
+  Trigger false
+
+entity c210760e-3ccb-4b48-9ad3-41c4584ee57c
+component Name
+  Name "Cargo Bay B Wall Back Top"
+component Transform
+  Position 3000 -2995.5 20.25
+  Rotation 0 0 0
+  Scale 1.6 3 0.5
 component Mesh
   Mesh "Cube"
 component Material
@@ -1917,13 +1977,9 @@ entity 8c0f2176-3bed-4b66-ac49-4be09d01c81a
 component Name
   Name "Cargo Bay A Hatch"
 component Transform
-  Position -3000 -2999 19.95
+  Position -3000 -3000 20.5
   Rotation 0 0 0
-  Scale 1.6 2 0.1
-component Mesh
-  Mesh "Cube"
-component Material
-  Material "Materials/Hatch.material"
+  Scale 1.6 3 0.5
 component BayHatch
   Crew 0
 
@@ -1931,13 +1987,9 @@ entity f3350d79-a2b5-4376-a12e-795fdda660cf
 component Name
   Name "Cargo Bay B Hatch"
 component Transform
-  Position 3000 -2999 19.95
+  Position 3000 -3000 20.5
   Rotation 0 0 0
-  Scale 1.6 2 0.1
-component Mesh
-  Mesh "Cube"
-component Material
-  Material "Materials/Hatch.material"
+  Scale 1.6 3 0.5
 component BayHatch
   Crew 1
 

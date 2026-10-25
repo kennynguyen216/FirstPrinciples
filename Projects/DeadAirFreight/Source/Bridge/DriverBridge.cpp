@@ -1,4 +1,5 @@
 #include "Bridge/DriverBridge.h"
+#include "Crew/TransitSystem.h"
 #include "Driver/Cab.h"
 #include "Driver/DriverSystem.h"
 #include "LifeSupport/Cargo.h"
@@ -58,6 +59,8 @@ void DriverLauncherSystem::Update(World& world, float)
 	world.AddSystem<CargoBridgeInSystem>(member.Crew);
 	world.AddSystem<DriverSystem>();
 	world.AddSystem<CargoBridgeOutSystem>(member.Crew);
+	// After the Driver's systems, so the hatch's ghosts follow where the cab is this frame.
+	world.AddSystem<TransitSystem>();
 
 	// Either crewmate can fly or defend. The Driver's seat starts in the cab, the Defender's in the bay.
 	const Entity cabBody = FindByName(world, CabBodyName);

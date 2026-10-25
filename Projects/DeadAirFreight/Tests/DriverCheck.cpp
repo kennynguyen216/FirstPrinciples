@@ -131,6 +131,22 @@ static void CheckFlight()
 	CHECK(driver.Position.Z == -5 && driver.Position.X == 0)
 	CHECK(CanReach(driver, { 0, 1, -6 }, settings))
 	CHECK(!CanReach(driver, { 0, 1, 0 }, settings))
+
+	// The back wall's doorway lets the walker past the wall only inside its width, and keeps them in it.
+	CabBounds door = bounds;
+	door.DoorHalfWidth = 0.5f;
+	door.DoorZ = 6;
+	driver.Position = { 2, 0, 0 };
+	for (int i = 0; i < 10 * 60; ++i)
+		StepOnFoot(driver, {}, { 0, -1 }, door, settings, dt);
+	CHECK(driver.Position.Z == 5)
+	driver.Position = { 0, 0, 0 };
+	for (int i = 0; i < 10 * 60; ++i)
+		StepOnFoot(driver, {}, { 0, -1 }, door, settings, dt);
+	CHECK(driver.Position.Z == 6)
+	for (int i = 0; i < 60; ++i)
+		StepOnFoot(driver, {}, { 1, 0 }, door, settings, dt);
+	CHECK(driver.Position.X == 0.5f)
 }
 
 static std::string ReadFile(const char* path)

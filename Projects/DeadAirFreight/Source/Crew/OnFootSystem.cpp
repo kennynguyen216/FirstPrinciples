@@ -75,17 +75,37 @@ namespace
 		world.Get<MaterialComponent>(beam).Material = BeamMaterials[static_cast<int32>(mode)];
 	}
 
-	// Keeps a walker inside their room and out of anything solid in it: walls and tanks.
+	const TransformComponent* FindHatch(World& world, int32 crew)
+	{
+		for (auto [entity, transform, hatch] : world.View<TransformComponent, BayHatchComponent>().each())
+		{
+			if (hatch.Crew == crew)
+				return &transform;
+		}
+		return nullptr;
+	}
+
+	// Keeps a walker inside their room and out of anything solid in it: walls and tanks. The bay's
+	// hatch in the back wall is an open doorway the walker may step into, where TransitSystem takes
+	// them through to the cab. from is where the walker stood before this step.
 	// Boxes are treated as upright, which everything in the rooms is. Jolt's character controller
 	// replaces this when it lands.
-	void KeepClear(World& world, const OnFootComponent& onFoot, float radius, TransformComponent& body)
+	void KeepClear(World& world, const OnFootComponent& onFoot, float radius, TransformComponent& body, Vec3 from)
 	{
 		Vec3 room;
 		InteriorComponent interior;
 		if (FindInterior(world, onFoot.Crew, onFoot.Interior.CStr(), &room, &interior) != NullEntity)
 		{
-			body.Position.X = std::clamp(body.Position.X, room.X - interior.HalfWidth + radius, room.X + interior.HalfWidth - radius);
-			body.Position.Z = std::clamp(body.Position.Z, room.Z - interior.HalfLength + radius, room.Z + interior.HalfLength - radius);
+			const float backZ = room.Z + interior.HalfLength - radius;
+			const TransformComponent* hatch = onFoot.Interior == "Bay" ? FindHatch(world, onFoot.Crew) : nullptr;
+			const float doorX = hatch ? hatch->Position.X : 0;
+			const float doorHalfWidth = hatch ? hatch->Scale.X * 0.5f - radius : -1;
+			if (from.Z > backZ)
+				body.Position.X = std::clamp(body.Position.X, doorX - doorHalfWidth, doorX + doorHalfWidth);
+			else
+				body.Position.X = std::clamp(body.Position.X, room.X - interior.HalfWidth + radius, room.X + interior.HalfWidth - radius);
+			const bool atDoor = std::abs(body.Position.X - doorX) <= doorHalfWidth;
+			body.Position.Z = std::clamp(body.Position.Z, room.Z - interior.HalfLength + radius, atDoor ? hatch->Position.Z + 1 : backZ);
 		}
 
 		const float feet = body.Position.Y - body.Scale.Y * 0.5f;
@@ -214,9 +234,10 @@ void OnFootSystem::Update(World& world, float deltaTime)
 		const Vec3 right{ std::cos(yaw), 0, -std::sin(yaw) };
 		const Vec2 axis = Input::GetMoveAxis();
 		const Vec3 move = forward * axis.Y + right * axis.X;
+		const Vec3 from = body.Position;
 		if (move.LengthSquared() > 0)
 			body.Position += move.Normalized() * (config.MoveSpeed * deltaTime);
-		KeepClear(world, onFoot, config.BodyRadius, body);
+		KeepClear(world, onFoot, config.BodyRadius, body, from);
 
 		if (Input::WasKeyPressed(SDL_SCANCODE_Q))
 		{
