@@ -1,4 +1,6 @@
 #include "Engine/Audio/AudioDevice.h"
+#include "Engine/Audio/AudioRoomEffect.h"
+#include "Engine/Audio/AudioFileStream.h"
 
 #include <SDL3/SDL.h>
 #include <algorithm>
@@ -21,6 +23,10 @@ namespace FP
 		bool Gain(float value) { return std::isfinite(value) && value >= 0 && value <= 1; }
 		bool Valid(const AudioPlaybackParams& p)
 		{
+			if (!Gain(p.Room.Wet) || !Gain(p.Room.Damping) || !Gain(p.Room.LateGain)
+				|| !std::isfinite(p.Room.Decay) || p.Room.Decay < 0.1f || p.Room.Decay > 6) return false;
+			for (const auto& tap : p.Room.Reflections)
+				if (!std::isfinite(tap.Delay) || tap.Delay < 0 || tap.Delay > 0.5f || !Gain(tap.LeftGain) || !Gain(tap.RightGain) || !Gain(tap.Damping)) return false;
 			return Gain(p.Volume) && Gain(p.LeftGain) && Gain(p.RightGain) && std::isfinite(p.Pitch) &&
 				p.Pitch >= .25f && p.Pitch <= 4 && p.Priority >= 0 && p.Priority <= 255 && uint8(p.Bus) <= uint8(AudioBus::Voice) &&
 				std::isfinite(p.LowPassHz) && (p.LowPassHz == 0 || (p.LowPassHz >= 20 && p.LowPassHz <= 20000));
@@ -33,6 +39,8 @@ namespace FP
 		{
 			SDL_AudioStream* Stream = nullptr;
 			std::shared_ptr<const AudioClip> Clip;
+			std::unique_ptr<AudioFileStream> File;
+			std::array<float, 512 * 2> FileSamples{};
 			std::vector<float> Ring;
 			size_t ReadHead = 0, Buffered = 0;
 			int SampleRate = 0;
@@ -43,10 +51,19 @@ namespace FP
 			uint32 Ramp = 0;
 			float LowPass = 1, TargetLowPass = 1, FilterLeft = 0, FilterRight = 0;
 			uint32 FilterRamp = 0;
+			std::unique_ptr<AudioRoomEffect> Room;
+			float WetGain = 0, TargetWetGain = 0;
+			uint32 WetRamp = 0;
+			bool SourceEnded = false;
+			uint64 TailRemaining = 0;
 			uint64 Overruns = 0;
+			bool Fading = false;
+			uint32 FadeRemaining = 0;
+			float Peak = 0, Rms = 0;
 			std::array<float, 512 * 2> Scratch{};
 		};
 		std::array<std::unique_ptr<Slot>, GameVoices + 1> Voices;
+		std::array<std::unique_ptr<Slot>, GameVoices + 1> Retiring;
 		AudioClipCache Cache;
 		std::shared_ptr<void> Lifetime = std::make_shared<int>(0);
 		std::thread::id Thread = std::this_thread::get_id();
@@ -57,6 +74,8 @@ namespace FP
 		std::array<bool, 4> BusMuted{};
 		uint64 Generation = 0, Serial = 0, Rejected = 0, Stolen = 0, Overruns = 0;
 		std::atomic<uint64> Clipped{0}, Nonfinite{0};
+		std::atomic<float> InputPeak{0}, OutputPeak{0}, Rms{0}, ReductionDb{0};
+		AudioLimiter Limiter;
 		std::atomic<int> OutputRate{0}, OutputChannels{0};
 		String Error;
 
@@ -67,24 +86,51 @@ namespace FP
 			auto* slot = Voices[voice.Slot].get();
 			return slot && slot->Context == voice.Context && slot->Generation == voice.Generation ? slot : nullptr;
 		}
-		void Retire(uint32 index)
+		void DestroySlot(std::unique_ptr<Slot>& slot)
 		{
-			auto& slot = Voices[index];
 			if (!slot) return;
 			SDL_SetAudioStreamGetCallback(slot->Stream, nullptr, nullptr);
 			SDL_DestroyAudioStream(slot->Stream);
 			Overruns += slot->Overruns;
 			slot.reset();
 		}
+		void Retire(uint32 index) { DestroySlot(Voices[index]); }
+		void Release(uint32 index, bool fade)
+		{
+			auto& slot = Voices[index];
+			if (!slot) return;
+			if (!fade || slot->Paused || slot->Failed) { Retire(index); return; }
+			uint32 selected = 0;
+			for (uint32 i = 0; i < Retiring.size(); ++i)
+			{
+				if (!Retiring[i]) { selected = i; break; }
+				if (Retiring[i]->Serial < Retiring[selected]->Serial) selected = i;
+			}
+			// shortcut: more than 65 simultaneous fade tails retire the oldest; size for measured burst workloads.
+			DestroySlot(Retiring[selected]);
+			Slot* outgoing = slot.get();
+			if (!SDL_LockAudioStream(outgoing->Stream)) { Retire(index); return; }
+			SDL_ClearAudioStream(outgoing->Stream);
+			outgoing->Fading = true; outgoing->Ended = false;
+			outgoing->FadeRemaining = uint32(std::max(1, int(std::round(outgoing->SampleRate * outgoing->Params.Pitch / 200))));
+			outgoing->TargetLeft = outgoing->TargetRight = outgoing->TargetWetGain = 0;
+			outgoing->Ramp = outgoing->WetRamp = outgoing->FadeRemaining;
+			if (outgoing->SourceEnded) outgoing->TailRemaining = std::max(outgoing->TailRemaining, uint64(outgoing->FadeRemaining));
+			Retiring[selected] = std::move(slot);
+			SDL_UnlockAudioStream(outgoing->Stream);
+		}
 		void CloseOutput()
 		{
 			for (uint32 i = 0; i < Voices.size(); ++i) Retire(i);
+			for (auto& slot : Retiring) DestroySlot(slot);
 			if (Device)
 			{
 				SDL_SetAudioPostmixCallback(Device, nullptr, nullptr);
 				SDL_CloseAudioDevice(Device);
 				Device = 0;
 			}
+			Limiter = {};
+			InputPeak = OutputPeak = Rms = ReductionDb = 0;
 		}
 		void Targets(Slot& slot)
 		{
@@ -93,6 +139,14 @@ namespace FP
 			const float scalar = slot.Params.Volume * (MasterMuted ? 0.f : Master) *
 				(slot.Params.Preview ? 1.f : (BusMuted[bus] ? 0.f : BusGains[bus]));
 			const float left = scalar * slot.Params.LeftGain, right = scalar * slot.Params.RightGain;
+			const float wet = slot.Params.Preview ? 0.f : scalar * slot.Params.Room.Wet;
+			if (wet > 0 && !slot.Room) slot.Room = std::make_unique<AudioRoomEffect>(sampleRate);
+			if (slot.Room) slot.Room->Configure(slot.Params.Room);
+			if (wet != slot.TargetWetGain)
+			{
+				slot.TargetWetGain = wet;
+				slot.WetRamp = std::max(1, sampleRate / 50);
+			}
 			if (left != slot.TargetLeft || right != slot.TargetRight)
 			{
 				slot.TargetLeft = left;
@@ -119,10 +173,44 @@ namespace FP
 			auto& slot = *static_cast<Slot*>(userdata);
 			if (additional <= 0 || slot.Paused || slot.Ended || slot.Failed) return;
 			uint64 requested = (uint64(additional) + sizeof(float) * 2 - 1) / (sizeof(float) * 2);
+			if (slot.Fading) requested = std::min(requested, uint64(slot.FadeRemaining));
+			float peak = 0;
+			double squareSum = 0;
+			uint64 mixedSamples = 0;
 			if (requested > 16384) { ++slot.Overruns; requested = 16384; }
 			while (requested)
 			{
-				const uint64 count = slot.Clip ? std::min({requested, uint64(512), slot.Clip->Frames - slot.Cursor}) : std::min(requested, uint64(512));
+				if (slot.File && slot.File->Failed()) { slot.Failed = true; return; }
+				if (slot.SourceEnded && !slot.TailRemaining)
+				{
+					slot.Ended = true;
+					if (!SDL_FlushAudioStream(stream)) slot.Failed = true;
+					return;
+				}
+				const bool tail = slot.SourceEnded;
+				uint64 count = tail ? std::min({requested, uint64(512), slot.TailRemaining}) :
+					slot.Clip && !slot.File ? std::min({requested, uint64(512), slot.Clip->Frames - slot.Cursor}) : std::min(requested, uint64(512));
+				if (slot.File && !tail)
+				{
+					uint32 read = slot.File->Read(slot.FileSamples.data(), uint32(count));
+					if (read < count && slot.File->Finished())
+					{
+						read += slot.File->Read(slot.FileSamples.data() + read * slot.Clip->Channels, uint32(count - read));
+						count = read;
+					}
+					else if (read < count)
+					{
+						++slot.Overruns;
+						std::fill(slot.FileSamples.begin() + read * slot.Clip->Channels, slot.FileSamples.begin() + count * slot.Clip->Channels, 0.f);
+					}
+					if (!count)
+					{
+						slot.SourceEnded = true;
+						slot.TailRemaining = slot.Room ? uint64((slot.Params.Room.Decay * 1.5f + 0.5f) * slot.SampleRate) : 0;
+						if (slot.Fading) slot.TailRemaining = std::max(slot.TailRemaining, uint64(slot.FadeRemaining));
+						continue;
+					}
+				}
 				for (uint64 frame = 0; frame < count; ++frame)
 				{
 					if (slot.Ramp)
@@ -132,7 +220,12 @@ namespace FP
 						--slot.Ramp;
 					}
 					float left = 0, right = 0;
-					if (slot.Clip)
+					if (slot.File && !tail)
+					{
+						left = slot.FileSamples[frame * slot.Clip->Channels];
+						right = slot.FileSamples[frame * slot.Clip->Channels + (slot.Clip->Channels == 2 ? 1 : 0)];
+					}
+					else if (slot.Clip && !tail)
 					{
 						const size_t offset = static_cast<size_t>((slot.Cursor + frame) * slot.Clip->Channels);
 						left = slot.Clip->Samples[offset];
@@ -153,35 +246,56 @@ namespace FP
 					slot.FilterRight += slot.LowPass * (right - slot.FilterRight);
 					if (std::abs(slot.FilterLeft) < 1e-20f) slot.FilterLeft = 0;
 					if (std::abs(slot.FilterRight) < 1e-20f) slot.FilterRight = 0;
-					slot.Scratch[frame * 2] = slot.FilterLeft * slot.Left;
-					slot.Scratch[frame * 2 + 1] = slot.FilterRight * slot.Right;
+					if (slot.WetRamp)
+					{
+						slot.WetGain += (slot.TargetWetGain - slot.WetGain) / slot.WetRamp;
+						--slot.WetRamp;
+					}
+					const Vec2 wet = slot.Room ? slot.Room->Process((left + right) * 0.5f) : Vec2{};
+					slot.Scratch[frame * 2] = slot.FilterLeft * slot.Left + wet.X * slot.WetGain;
+					slot.Scratch[frame * 2 + 1] = slot.FilterRight * slot.Right + wet.Y * slot.WetGain;
+					for (int channel = 0; channel < 2; ++channel)
+					{
+						const float value = slot.Scratch[frame * 2 + channel];
+						peak = std::max(peak, std::abs(value)); squareSum += double(value) * value; ++mixedSamples;
+					}
 				}
+				const float peakDecay = float(std::exp(-2.302585093 * count / (slot.SampleRate > 0 ? slot.SampleRate * slot.Params.Pitch : 48000)));
+				slot.Peak = std::max(peak, slot.Peak * peakDecay); slot.Rms = mixedSamples ? float(std::sqrt(squareSum / mixedSamples)) : 0;
 				if (!SDL_PutAudioStreamData(stream, slot.Scratch.data(), int(count * sizeof(float) * 2))) { slot.Failed = true; return; }
-				slot.Cursor += count;
+				if (!tail) slot.Cursor += count;
+				else slot.TailRemaining -= count;
 				requested -= count;
-				if (slot.Clip && slot.Cursor == slot.Clip->Frames)
+				if (slot.Fading) slot.FadeRemaining -= uint32(count);
+				if (slot.Clip && !slot.File && !tail && slot.Cursor == slot.Clip->Frames)
 				{
 					if (slot.Params.Loop) slot.Cursor = 0;
 					else
 					{
-						slot.Ended = true;
-						if (!SDL_FlushAudioStream(stream)) slot.Failed = true;
-						return;
+						slot.SourceEnded = true;
+						slot.TailRemaining = slot.Room ? uint64((slot.Params.Room.Decay * 1.5f + 0.5f) * slot.SampleRate) : 0;
+						if (slot.Fading) slot.TailRemaining = std::max(slot.TailRemaining, uint64(slot.FadeRemaining));
 					}
+				}
+				if ((slot.SourceEnded && !slot.TailRemaining) || (slot.Fading && !slot.FadeRemaining))
+				{
+					slot.Ended = true;
+					if (!SDL_FlushAudioStream(stream)) slot.Failed = true;
+					return;
 				}
 			}
 		}
 		static void SDLCALL Postmix(void* userdata, const SDL_AudioSpec* spec, float* buffer, int bytes)
 		{
 			auto& self = *static_cast<Impl*>(userdata);
-			uint64 clipped = 0, nonfinite = 0;
-			for (int i = 0; i < bytes / int(sizeof(float)); ++i)
-			{
-				if (!std::isfinite(buffer[i])) { buffer[i] = 0; ++nonfinite; }
-				else if (buffer[i] < -1 || buffer[i] > 1) { buffer[i] = std::clamp(buffer[i], -1.f, 1.f); ++clipped; }
-			}
-			self.Clipped.fetch_add(clipped, std::memory_order_relaxed);
-			self.Nonfinite.fetch_add(nonfinite, std::memory_order_relaxed);
+			const auto levels = self.Limiter.Process(buffer, bytes / int(sizeof(float)), spec->channels, spec->freq);
+			self.Clipped.fetch_add(levels.LimitedSamples, std::memory_order_relaxed);
+			self.Nonfinite.fetch_add(levels.NonfiniteSamples, std::memory_order_relaxed);
+			const float decay = float(std::exp(-2.302585093 * bytes / (sizeof(float) * std::max(1, spec->channels) * double(std::max(1, spec->freq)))));
+			self.InputPeak.store(std::max(levels.InputPeak, self.InputPeak.load(std::memory_order_relaxed) * decay), std::memory_order_relaxed);
+			self.OutputPeak.store(std::max(levels.OutputPeak, self.OutputPeak.load(std::memory_order_relaxed) * decay), std::memory_order_relaxed);
+			self.Rms.store(levels.Rms, std::memory_order_relaxed);
+			self.ReductionDb.store(levels.ReductionDb, std::memory_order_relaxed);
 			self.OutputRate.store(spec->freq, std::memory_order_relaxed);
 			self.OutputChannels.store(spec->channels, std::memory_order_relaxed);
 		}
@@ -218,7 +332,7 @@ namespace FP
 		AudioDevice::Impl::Fill(&slot, stream.get(), 80, 0);
 		if (SDL_GetAudioStreamQueued(stream.get()) != 0 || SDL_GetAudioStreamAvailable(stream.get()) != 0) return false;
 		SDL_ClearAudioStream(stream.get());
-		slot.Cursor = 0; slot.Ended = false; slot.Paused = true;
+		slot.Cursor = 0; slot.Ended = false; slot.SourceEnded = false; slot.Paused = true;
 		AudioDevice::Impl::Fill(&slot, stream.get(), 8, 0);
 		if (slot.Cursor != 0 || SDL_GetAudioStreamQueued(stream.get()) != 0) return false;
 		slot.Paused = false; slot.Left = slot.Right = 0; slot.TargetLeft = slot.TargetRight = 1; slot.Ramp = 4;
@@ -227,7 +341,7 @@ namespace FP
 		for (size_t i = 0; i < 4; ++i) if (std::abs(tail[i * 2] - clip->Samples[i] * float(i + 1) / 4) > .00001f) return false;
 		SDL_ClearAudioStream(stream.get());
 		clip->Frames = 800; clip->Samples.assign(800, .25f);
-		slot.Cursor = 0; slot.Ended = false;
+		slot.Cursor = 0; slot.Ended = false; slot.SourceEnded = false;
 		if (!SDL_SetAudioStreamFrequencyRatio(stream.get(), 2)) return false;
 		AudioDevice::Impl::Fill(&slot, stream.get(), 800 * 8, 0);
 		const int pitchedFrames = SDL_GetAudioStreamAvailable(stream.get()) / 8;
@@ -306,6 +420,111 @@ namespace FP
 		return std::abs(output[1918] - .1f) < .00001f && std::abs(output[1919] - .05f) < .00001f;
 	}
 
+	bool AudioFileMixerOfflineSelfCheck(const std::shared_ptr<const AudioClip>& clip)
+	{
+		SDL_AudioSpec spec{SDL_AUDIO_F32, 2, clip->SampleRate};
+		auto stream = std::unique_ptr<SDL_AudioStream, decltype(&SDL_DestroyAudioStream)>(SDL_CreateAudioStream(&spec, &spec), SDL_DestroyAudioStream);
+		if (!stream) return false;
+		AudioDevice::Impl::Slot slot;
+		slot.Stream = stream.get(); slot.Clip = clip; slot.SampleRate = clip->SampleRate;
+		slot.Left = slot.TargetLeft = slot.Right = slot.TargetRight = 1;
+		AudioResult result; slot.File = AudioFileStream::Open(*clip, false, result);
+		if (!slot.File) return false;
+		uint64 total = 0;
+		const uint64 deadline = SDL_GetTicks() + 10000;
+		std::array<float, 1024> output{};
+		while (!slot.Ended && !slot.Failed && SDL_GetTicks() < deadline)
+		{
+			if (slot.File->BufferedFrames() < 512 && !slot.File->Finished()) { SDL_Delay(1); continue; }
+			AudioDevice::Impl::Fill(&slot, stream.get(), 512 * 8, 0);
+			const int bytes = SDL_GetAudioStreamData(stream.get(), output.data(), int(sizeof(output)));
+			if (bytes < 0 || bytes % 8) return false;
+			for (int i = 0; i < bytes / int(sizeof(float)); i += 2)
+				if (output[i] != .25f || output[i + 1] != -.5f) return false;
+			total += uint64(bytes / 8);
+		}
+		return slot.Ended && !slot.Failed && total == clip->Frames && !slot.Overruns && SDL_GetAudioStreamAvailable(stream.get()) == 0;
+	}
+
+	bool AudioRoomOfflineSelfCheck()
+	{
+		SDL_AudioSpec spec{SDL_AUDIO_F32, 2, 8000};
+		auto stream = std::unique_ptr<SDL_AudioStream, decltype(&SDL_DestroyAudioStream)>(SDL_CreateAudioStream(&spec, &spec), SDL_DestroyAudioStream);
+		if (!stream) return false;
+		auto clip = std::make_shared<AudioClip>();
+		clip->Channels = 1; clip->SampleRate = 8000; clip->Frames = 4; clip->Samples = {0.5f, 0, 0, 0};
+		AudioDevice device;
+		AudioDevice::Impl::Slot slot;
+		slot.Stream = stream.get(); slot.Clip = clip; slot.SampleRate = 8000;
+		slot.Params.Room.Wet = 1; slot.Params.Room.Decay = 0.2f; slot.Params.Room.Damping = 0;
+		slot.Params.Room.Reflections[0] = {0.1f, 0.5f, 0.25f};
+		device.m_Impl->Targets(slot);
+		AudioDevice::Impl::Fill(&slot, stream.get(), 8000 * 8, 0);
+		if (!slot.Ended || !slot.SourceEnded || slot.Cursor != clip->Frames || slot.TailRemaining) return false;
+		std::vector<float> samples(size_t(SDL_GetAudioStreamAvailable(stream.get())) / sizeof(float));
+		if (samples.size() <= 1602 || SDL_GetAudioStreamData(stream.get(), samples.data(), int(samples.size() * sizeof(float))) <= 0) return false;
+		if (samples[1600] < 0.05f || std::abs(samples[1600] - samples[1601] * 2) > 0.00001f) return false;
+		for (float sample : samples) if (!std::isfinite(sample) || std::abs(sample) > 1) return false;
+		// Existing bus/master controls must silence the wet path as well as the direct sound.
+		slot.Params.Bus = AudioBus::Voice;
+		device.m_Impl->BusMuted[size_t(AudioBus::Voice)] = true;
+		device.m_Impl->Targets(slot);
+		if (slot.TargetWetGain != 0 || slot.TargetLeft != 0 || slot.TargetRight != 0) return false;
+		return true;
+	}
+
+	bool AudioMixingOfflineSelfCheck()
+	{
+		AudioDevice device;
+		auto clip = std::make_shared<AudioClip>();
+		clip->Channels = 1; clip->SampleRate = 8000; clip->Frames = 8000; clip->Samples.assign(8000, 0.5f);
+		auto makeSlot = [&]() {
+			auto slot = std::make_unique<AudioDevice::Impl::Slot>();
+			SDL_AudioSpec spec{SDL_AUDIO_F32, 2, 8000};
+			slot->Stream = SDL_CreateAudioStream(&spec, &spec);
+			slot->Clip = clip; slot->SampleRate = 8000; slot->Params.Loop = true;
+			slot->Left = slot->Right = slot->TargetLeft = slot->TargetRight = 1;
+			slot->Context = 17; slot->Generation = 1;
+			return slot;
+		};
+		device.m_Impl->Voices[0] = makeSlot();
+		auto* slot = device.m_Impl->Voices[0].get();
+		if (!slot->Stream) return false;
+		AudioDevice::Impl::Fill(slot, slot->Stream, 512 * 8, 0);
+		const auto voices = device.GetVoices();
+		if (voices.Num() != 1 || voices[0].Peak != 0.5f || voices[0].Rms != 0.5f) return false;
+		const VoiceHandle handle{17, 1, 0};
+		if (!device.Stop(handle) || device.GetState(handle) != VoiceState::Invalid || !device.m_Impl->Retiring[0]) return false;
+		slot = device.m_Impl->Retiring[0].get();
+		AudioDevice::Impl::Fill(slot, slot->Stream, 512 * 8, 0);
+		std::array<float, 80> output{};
+		if (!slot->Ended || slot->FadeRemaining || SDL_GetAudioStreamData(slot->Stream, output.data(), int(sizeof(output))) != sizeof(output)) return false;
+		if (std::abs(output[0] - 0.4875f) > 0.00001f || std::abs(output[78]) > 0.000001f) return false;
+		for (size_t i = 2; i < output.size(); i += 2) if (output[i] > output[i - 2] || output[i] != output[i + 1]) return false;
+		device.StopContext(17);
+		if (device.m_Impl->Retiring[0]) return false;
+		device.m_Impl->Voices[0] = makeSlot();
+		if (!device.Stop(handle, false) || device.m_Impl->Retiring[0]) return false;
+		// A full active-voice burst can fade together without consuming live voice slots.
+		for (uint32 i = 0; i < device.m_Impl->Voices.size(); ++i)
+		{
+			device.m_Impl->Voices[i] = makeSlot();
+			device.Stop({17, 1, i});
+		}
+		for (const auto& retiring : device.m_Impl->Retiring) if (!retiring) return false;
+		device.StopContext(17);
+		for (const auto& retiring : device.m_Impl->Retiring) if (retiring) return false;
+		SDL_AudioSpec spec{SDL_AUDIO_F32, 2, 8000};
+		std::array<float, 4> loud{2, 1, -2, -1};
+		AudioDevice::Impl::Postmix(device.m_Impl.get(), &spec, loud.data(), int(sizeof(loud)));
+		if (device.GetMixLevels().OutputPeak != 0.98f || device.GetMixLevels().LimitedSamples != 4) return false;
+		std::array<float, 160> silence{};
+		AudioDevice::Impl::Postmix(device.m_Impl.get(), &spec, silence.data(), int(sizeof(silence)));
+		const auto held = device.GetMixLevels();
+		if (held.OutputPeak >= 0.98f || held.OutputPeak < 0.9f || held.Rms != 0) return false;
+		return true;
+	}
+
 	AudioDevice::AudioDevice() : m_Impl(std::make_unique<Impl>()) {}
 	AudioDevice::~AudioDevice() { Shutdown(); }
 	AudioResult AudioDevice::Initialize()
@@ -346,7 +565,7 @@ namespace FP
 	{
 		m_Impl->CheckThread();
 		if (!clip || !clip->Frames || clip->Channels < 1 || clip->Channels > 2 || clip->SampleRate < 8000 ||
-			clip->SampleRate > 96000 || clip->Frames > 96000ull * 60 || clip->Samples.size() != clip->Frames * clip->Channels)
+			clip->SampleRate > 96000 || (!clip->IsStreaming() && clip->Samples.size() != clip->Frames * clip->Channels))
 			return {{}, {AudioError::MissingClip, "A validated nonempty audio clip is required."}};
 		return StartVoice(context, clip, clip->SampleRate, params, replace, startPaused);
 	}
@@ -386,6 +605,12 @@ namespace FP
 		auto incoming = std::make_unique<Impl::Slot>();
 		incoming->Clip = clip;
 		incoming->SampleRate = sampleRate;
+		if (clip && clip->IsStreaming())
+		{
+			AudioResult result;
+			incoming->File = AudioFileStream::Open(*clip, params.Loop, result);
+			if (!incoming->File) return fail(result.Code, result.Message.CStr());
+		}
 		if (!clip) incoming->Ring.resize(static_cast<size_t>(sampleRate / 4));
 		incoming->Params = params;
 		incoming->Paused = startPaused;
@@ -407,7 +632,7 @@ namespace FP
 			return fail(AudioError::BackendFailure, error.CStr());
 		}
 		if (startPaused) SDL_UnbindAudioStream(incoming->Stream);
-		m_Impl->Retire(selected);
+		m_Impl->Release(selected, true);
 		const VoiceHandle handle{context, incoming->Generation, selected};
 		m_Impl->Voices[selected] = std::move(incoming);
 		if (stealing) ++m_Impl->Stolen;
@@ -437,16 +662,15 @@ namespace FP
 		if (!slot || !Valid(params) || params.Preview != slot->Params.Preview) return false;
 		if (!SDL_LockAudioStream(slot->Stream)) return false;
 		const bool success = SDL_SetAudioStreamFrequencyRatio(slot->Stream, params.Pitch);
-		if (success) { slot->Params = params; m_Impl->Targets(*slot); }
+		if (success) { slot->Params = params; if (slot->File) slot->File->SetLoop(params.Loop); m_Impl->Targets(*slot); }
 		SDL_UnlockAudioStream(slot->Stream);
 		return success;
 	}
-	bool AudioDevice::Stop(VoiceHandle voice)
+	bool AudioDevice::Stop(VoiceHandle voice, bool fade)
 	{
-		// shortcut: immediate stops can click; add bounded fades when a game needs smooth retirement.
 		m_Impl->CheckThread();
 		if (!m_Impl->Find(voice)) return false;
-		m_Impl->Retire(voice.Slot);
+		m_Impl->Release(voice.Slot, fade);
 		return true;
 	}
 	bool AudioDevice::Pause(VoiceHandle voice)
@@ -498,22 +722,25 @@ namespace FP
 	{
 		m_Impl->CheckThread();
 		for (uint32 i = 0; i < m_Impl->Voices.size(); ++i) if (m_Impl->Voices[i] && m_Impl->Voices[i]->Context == context) m_Impl->Retire(i);
+		for (auto& slot : m_Impl->Retiring) if (slot && slot->Context == context) m_Impl->DestroySlot(slot);
 	}
 	void AudioDevice::Update()
 	{
 		m_Impl->CheckThread();
 		if (m_Impl->RetryPending) { m_Impl->RetryPending = false; Initialize(); }
 		if (!IsReady()) return;
-		for (uint32 i = 0; i < m_Impl->Voices.size(); ++i)
+		auto update = [this](std::unique_ptr<Impl::Slot>& voice)
 		{
-			auto* slot = m_Impl->Voices[i].get();
-			if (!slot || !SDL_LockAudioStream(slot->Stream)) continue;
+			auto* slot = voice.get();
+			if (!slot || !SDL_LockAudioStream(slot->Stream)) return;
 			const bool failed = slot->Failed;
 			const bool done = !slot->Paused && slot->Ended && SDL_GetAudioStreamQueued(slot->Stream) == 0 && SDL_GetAudioStreamAvailable(slot->Stream) == 0;
 			SDL_UnlockAudioStream(slot->Stream);
-			if (failed) { m_Impl->Error = "An audio stream callback failed; the affected voice was stopped."; FP_LOG_WARN("%s", m_Impl->Error.CStr()); }
-			if (done || failed) m_Impl->Retire(i);
-		}
+			if (failed) { m_Impl->Error = "An audio stream failed while reading, decoding or mixing; the affected voice was stopped."; FP_LOG_WARN("%s", m_Impl->Error.CStr()); }
+			if (done || failed) m_Impl->DestroySlot(voice);
+		};
+		for (auto& voice : m_Impl->Voices) update(voice);
+		for (auto& voice : m_Impl->Retiring) update(voice);
 	}
 	bool AudioDevice::SetBusGain(AudioBus bus, float gain)
 	{
@@ -539,6 +766,30 @@ namespace FP
 		return true;
 	}
 	void AudioDevice::SetMasterMuted(bool muted) { m_Impl->CheckThread(); m_Impl->MasterMuted = muted; m_Impl->RefreshGains(); }
+	AudioMixLevels AudioDevice::GetMixLevels() const
+	{
+		m_Impl->CheckThread();
+		return {m_Impl->InputPeak.load(), m_Impl->OutputPeak.load(), m_Impl->Rms.load(), m_Impl->ReductionDb.load(), m_Impl->Clipped.load(), m_Impl->Nonfinite.load()};
+	}
+	Array<AudioVoiceInfo> AudioDevice::GetVoices() const
+	{
+		m_Impl->CheckThread();
+		Array<AudioVoiceInfo> result;
+		for (uint32 i = 0; i < m_Impl->Voices.size(); ++i)
+		{
+			auto* slot = m_Impl->Voices[i].get();
+			if (!slot || !SDL_LockAudioStream(slot->Stream)) continue;
+			AudioVoiceInfo info;
+			info.Handle = {slot->Context, slot->Generation, i};
+			info.Clip = slot->Clip ? slot->Clip->Path : String("Voice stream");
+			info.Params = slot->Params;
+			info.State = slot->Paused ? VoiceState::Paused : slot->Ended ? VoiceState::Draining : VoiceState::Playing;
+			info.Peak = slot->Paused ? 0 : slot->Peak; info.Rms = slot->Paused ? 0 : slot->Rms;
+			SDL_UnlockAudioStream(slot->Stream);
+			result.Add(std::move(info));
+		}
+		return result;
+	}
 	String AudioDevice::GetStatusText() const
 	{
 		m_Impl->CheckThread();
@@ -553,7 +804,7 @@ namespace FP
 			if (SDL_LockAudioStream(slot->Stream)) { overruns += slot->Overruns; SDL_UnlockAudioStream(slot->Stream); }
 		}
 		const char* name = IsReady() ? SDL_GetAudioDeviceName(m_Impl->Device) : nullptr;
-		return String::Format("%s: %s, %d Hz / %d channels\nVoices %u (paused %u, draining %u); resident %llu, pinned %llu bytes\nRejected %llu, stolen %llu, demand overruns %llu, clipped %llu, nonfinite %llu%s%s",
+		return String::Format("%s: %s, %d Hz / %d channels\nVoices %u (paused %u, draining %u); resident %llu, pinned %llu bytes\nRejected %llu, stolen %llu, demand overruns %llu, limited samples %llu, nonfinite %llu%s%s",
 			IsReady() ? "Ready" : "Unavailable", name ? name : "default output", m_Impl->OutputRate.load(), m_Impl->OutputChannels.load(), active, paused, draining,
 			static_cast<unsigned long long>(m_Impl->Cache.ResidentBytes()), static_cast<unsigned long long>(m_Impl->Cache.PinnedBytes()),
 			static_cast<unsigned long long>(m_Impl->Rejected), static_cast<unsigned long long>(m_Impl->Stolen), static_cast<unsigned long long>(overruns),

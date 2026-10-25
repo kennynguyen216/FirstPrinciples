@@ -9,10 +9,31 @@
 namespace FP
 {
 	class AudioDevice;
+	struct AudioDebugRay { Vec3 From, To; bool Reflection = false; };
+	struct AudioDebugHit
+	{
+		Entity Object = NullEntity;
+		String Material;
+		Vec3 Point;
+		float Transmission = 1, Absorption = 0, Damping = 0;
+		bool Reflection = false;
+	};
+	struct AudioDebugSource
+	{
+		uint64 Key = 0;
+		Entity Owner = NullEntity;
+		Vec3 Listener, Position;
+		double Updated = 0;
+		float Transmission = 1;
+		AudioPlaybackParams Params;
+		std::vector<AudioDebugRay> Rays;
+		std::vector<AudioDebugHit> Hits;
+	};
 
 	struct AudioSpatialGains { float Left = 0; float Right = 0; };
 	AudioSpatialGains CalculateAudioSpatialGains(Vec3 source, const TransformComponent& listener,
 		float minDistance, float maxDistance);
+	float CalculateAudioDoppler(Vec3 source, Vec3 listener, Vec3 sourceVelocity, Vec3 listenerVelocity, float scale = 1);
 
 	// Main-thread scene audio. Components contain authored data only; voices live here.
 	class AudioWorld
@@ -41,6 +62,9 @@ namespace FP
 		virtual void StopSource(Entity source);
 		virtual void StopAll();
 		virtual Entity GetListenerEntity() const { return m_ListenerEntity; }
+		void SetDebugEnabled(bool enabled);
+		bool IsDebugEnabled() const { return m_DebugEnabled; }
+		const std::vector<AudioDebugSource>& GetDebugSources();
 
 	private:
 		friend class World;
@@ -66,7 +90,17 @@ namespace FP
 			double NextOcclusionCheck = 0;
 			float OcclusionGain = 1;
 			float LowPassHz = 0;
+			AudioRoomParams Room;
+			float BasePitch = 1, DopplerScale = 1, DopplerPitch = 1;
+			double DopplerTime = 0;
 		};
+		struct Motion
+		{
+			Entity Owner = NullEntity;
+			Vec3 Previous, Position;
+			double PreviousTime = 0, Time = 0;
+		};
+		Vec3 SampleVelocity(Entity owner, Vec3 position);
 		AudioPlayResult PlayInternal(Entity source, bool preservePause);
 		Source& TrackSource(Entity source);
 		void ResetScene();
@@ -75,7 +109,11 @@ namespace FP
 		void SourceRemoved(entt::registry&, Entity entity);
 		void SelectListener();
 		void ApplySpatial(Voice& voice);
-		void ApplyOcclusion(AudioPlaybackParams& params, Vec3 source, Entity owner);
+		AudioDebugSource* BeginDebug(Entity owner, Vec3 position, uint64 key);
+		void BindDebugVoice(Entity owner, uint64 key);
+		void ApplyOcclusion(AudioPlaybackParams& params, Vec3 source, Entity owner, AudioDebugSource* debug = nullptr);
+		void ApplyRoom(AudioPlaybackParams& params, Vec3 source, Entity owner, float minDistance, float maxDistance, AudioDebugSource* debug = nullptr);
+		Entity ColliderOwner(Entity entity) const;
 		bool Owns(VoiceHandle voice) const;
 
 		World& m_World;
@@ -90,5 +128,9 @@ namespace FP
 		Entity m_ListenerEntity = NullEntity;
 		std::vector<Entity> m_ListenerCandidates;
 		bool m_WarnedNoListener = false;
+		bool m_DebugEnabled = false;
+		std::vector<AudioDebugSource> m_DebugSources;
+		std::vector<Motion> m_Motion;
+		Entity m_MotionListener = NullEntity;
 	};
 }

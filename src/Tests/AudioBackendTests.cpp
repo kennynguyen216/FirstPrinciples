@@ -96,7 +96,8 @@ FP_TEST(Audio_WavRejectsMalformedAndNonfinite)
 	check(Wav(1, 7999));
 	check(Wav(3));
 	check(Wav(1, 8000, false, 0));
-	check(Wav(1, 8000, false, 8000 * 60 + 1));
+	const auto longClip = AudioClipCache::ValidateFile(fixtures.Write("long.wav", Wav(1, 8000, false, 8000 * 60 + 1)));
+	FP_EXPECT(longClip && longClip.Clip->IsStreaming() && longClip.Clip->Samples.empty());
 	auto bytes = Wav(); bytes.pop_back(); check(bytes);
 	bytes = Wav(); bytes[32] = 1; check(bytes);
 	bytes = Wav(); bytes[20] = 17; check(bytes);

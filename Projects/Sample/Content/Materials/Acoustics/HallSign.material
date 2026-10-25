@@ -1,0 +1,9 @@
+# FirstPrinciples material
+Shader "Unlit"
+BaseColor 1 1 1 1
+BaseColorMap "Textures/Acoustics/HallSign.png"
+Metallic 0
+Roughness 0.8
+SoundTransmission 0.25
+SoundAbsorption 0.4
+SoundDamping 0.5

@@ -77,8 +77,10 @@ namespace FP::Editor
 			for (const fs::path& part : relativeParent)
 				if (!Portable(part))
 					return Error("The destination contains an invalid or nonportable folder name.");
-			if (!Portable(destination.filename()) || !Utf8(destination.extension()).EqualsIgnoreCase(".wav"))
-				return Error("Choose a portable WAV filename without reserved characters or device names.");
+			const String extension = Utf8(destination.extension());
+			if (!Portable(destination.filename()) || (!extension.EqualsIgnoreCase(".wav") && !extension.EqualsIgnoreCase(".mp3")))
+				return Error("Choose a portable WAV or MP3 filename without reserved characters or device names.");
+			auto matchingFormat = [&](const AudioClip& clip) { return extension.EqualsIgnoreCase(clip.Encoding == "MP3" ? ".mp3" : ".wav"); };
 			// Detect case-only directory names before allowing an asset into a portable project.
 			fs::path checked = content;
 			for (const fs::path& part : relativeParent)
@@ -103,18 +105,20 @@ namespace FP::Editor
 					const auto validated = AudioClipCache::ValidateFile(Utf8(finalPath));
 					if (!validated.Result)
 						return validated.Result;
+					if (!matchingFormat(*validated.Clip))
+						return Error("Use the source audio format's extension; import does not convert between WAV and MP3.");
 					relativePath = relative;
 					return {};
 				}
 				return Error("The destination already exists. Choose another filename; audio import never overwrites files.");
 			}
-			if (fs::file_size(source) > 64ull * 1024 * 1024)
-				return Error("The WAV exceeds the 64 MiB source-file limit.");
+			if (fs::file_size(source) > 4ull * 1024 * 1024 * 1024)
+				return Error("The audio file exceeds the 4 GiB source-file limit.");
 			const fs::path staged = parent / Native(String(".audio-import-") + Guid::New().ToString() + ".tmp");
 			using File = std::unique_ptr<std::FILE, decltype(&std::fclose)>;
 			File input(Open(source, false), &std::fclose);
 			if (!input)
-				return Error("Cannot read the source WAV. Check file access and retry.");
+				return Error("Cannot read the source audio. Check file access and retry.");
 			struct Cleanup
 			{
 				fs::path Path;
@@ -129,31 +133,33 @@ namespace FP::Editor
 			while (const usize count = std::fread(buffer.data(), 1, buffer.size(), input.get()))
 			{
 				total += count;
-				if (total > 64ull * 1024 * 1024)
-					return Error("The source grew beyond the 64 MiB limit during import.");
+				if (total > 4ull * 1024 * 1024 * 1024)
+					return Error("The source grew beyond the 4 GiB limit during import.");
 				if (std::fwrite(buffer.data(), 1, count, output.get()) != count)
-					return Error("Cannot write the staged WAV. Check free disk space and retry.");
+					return Error("Cannot write the staged audio. Check free disk space and retry.");
 			}
 			if (std::ferror(input.get()) || std::fflush(output.get()) != 0)
-				return Error("The WAV copy could not be completed. Check disk access and retry.");
+				return Error("The audio copy could not be completed. Check disk access and retry.");
 #if FP_PLATFORM_WINDOWS
 			const int flushed = _commit(_fileno(output.get()));
 #else
 			const int flushed = fsync(fileno(output.get()));
 #endif
 			if (flushed != 0 || std::fclose(output.release()) != 0)
-				return Error("Cannot flush the staged WAV. Check the destination disk and retry.");
+				return Error("Cannot flush the staged audio. Check the destination disk and retry.");
 			input.reset();
 			const auto validated = AudioClipCache::ValidateFile(Utf8(staged));
 			if (!validated.Result)
 				return validated.Result;
+			if (!matchingFormat(*validated.Clip))
+				return Error("Use the source audio format's extension; import does not convert between WAV and MP3.");
 #if FP_PLATFORM_WINDOWS
 			const bool committed = MoveFileExW(staged.c_str(), finalPath.c_str(), MOVEFILE_WRITE_THROUGH) != FALSE;
 #else
 			const bool committed = link(staged.c_str(), finalPath.c_str()) == 0;
 #endif
 			if (!committed)
-				return Error("Import could not commit the WAV; the destination may now exist. Choose another filename or check disk access.");
+				return Error("Import could not commit the audio; the destination may now exist. Choose another filename or check disk access.");
 			relativePath = relative;
 			return {};
 		}

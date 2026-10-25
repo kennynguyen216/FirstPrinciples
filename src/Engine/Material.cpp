@@ -41,7 +41,10 @@ namespace FP
 				.Field("Subsurface", &MaterialData::Subsurface)
 				.Field("IndexOfRefraction", &MaterialData::IndexOfRefraction)
 				.Field("Thickness", &MaterialData::Thickness)
-				.Field("AlphaCutoff", &MaterialData::AlphaCutoff);
+				.Field("AlphaCutoff", &MaterialData::AlphaCutoff)
+				.Field("SoundTransmission", &MaterialData::SoundTransmission).Range(0, 1).Tooltip("Sound level passing through this object: 0 blocks, 1 passes at full volume")
+				.Field("SoundAbsorption", &MaterialData::SoundAbsorption).Range(0, 1).Tooltip("Reflected sound absorbed by the surface: 0 reflects fully, 1 absorbs fully")
+				.Field("SoundDamping", &MaterialData::SoundDamping).Range(0, 1).Tooltip("High-frequency loss for transmitted sound and reflections: 0 is clear, 1 is heavily muffled");
 			return list;
 		}();
 		return fields;

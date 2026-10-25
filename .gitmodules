@@ -23,3 +23,6 @@
 [submodule "ThirdParty/opus"]
 	path = ThirdParty/opus
 	url = https://github.com/xiph/opus.git
+[submodule "ThirdParty/dr_libs"]
+	path = ThirdParty/dr_libs
+	url = https://github.com/mackron/dr_libs.git

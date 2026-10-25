@@ -81,7 +81,7 @@ namespace FP::Engine
 
 		static const Array<const char*> audioBuses{ "SFX", "Music", "UI", "Voice" };
 		registry.Register<AudioSourceComponent>("AudioSource")
-			.Field("Clip", &AudioSourceComponent::Clip).AssetPath("Audio (*.wav)")
+			.Field("Clip", &AudioSourceComponent::Clip).AssetPath("Audio (*.wav *.mp3)")
 			.Field("Enabled", &AudioSourceComponent::Enabled)
 			.Field("Volume", &AudioSourceComponent::Volume).Range(0, 1)
 			.Field("Pitch", &AudioSourceComponent::Pitch).Range(0.25f, 4)
@@ -89,12 +89,18 @@ namespace FP::Engine
 			.Field("PlayOnStart", &AudioSourceComponent::PlayOnStart)
 			.Field("Bus", &AudioSourceComponent::Bus).Choices(audioBuses)
 			.Field("Spatial", &AudioSourceComponent::Spatial)
+			.Field("DopplerScale", &AudioSourceComponent::DopplerScale).Range(0, 4).Tooltip("Spatial pitch shift from motion: 0 disables it, 1 uses meters and seconds, higher values exaggerate it")
 			.Field("Occlusion", &AudioSourceComponent::Occlusion).Tooltip("Spatial sounds are quieter and muffled behind solid colliders; requires PhysicsSystem during Play")
 			.Field("MinDistance", &AudioSourceComponent::MinDistance).Range(0.001f, 1e9f)
 			.Field("MaxDistance", &AudioSourceComponent::MaxDistance).Range(0.001f, 1e9f)
 			.Field("Priority", &AudioSourceComponent::Priority).Range(0, 255).Tooltip("Higher priority voices keep playing when too many sounds play at once");
 		registry.Register<AudioListenerComponent>("AudioListener")
 			.Field("Enabled", &AudioListenerComponent::Enabled);
+		registry.Register<AudioRoomComponent>("AudioRoom")
+			.Field("Enabled", &AudioRoomComponent::Enabled)
+			.Field("Size", &AudioRoomComponent::Size).Tooltip("Box interior dimensions in meters; place solid walls at its boundaries")
+			.Field("Wet", &AudioRoomComponent::Wet).Range(0, 1)
+			.Field("Decay", &AudioRoomComponent::Decay).Range(0.1f, 6).Tooltip("Maximum reverb decay in seconds; surface absorption shortens the tail");
 
 		registry.Register<VoiceChatComponent>("VoiceChat")
 			.Field("Enabled", &VoiceChatComponent::Enabled).Tooltip("Player needs Network OnePerPeer; enable microphone explicitly, then hold V to talk")
