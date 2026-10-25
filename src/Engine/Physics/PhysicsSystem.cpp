@@ -14,7 +14,10 @@ namespace FP
 		PhysicsWorld& physics = static_cast<PhysicsWorld&>(world.GetPhysics());
 		physics.Sync(world);
 		if (physics.Step(deltaTime) > 0)
+		{
 			physics.WriteBack(world);
+			physics.WriteCharacters(world);
+		}
 
 		Array<PhysicsEvent> events;
 		physics.TakeEvents(events);

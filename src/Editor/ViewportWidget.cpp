@@ -337,6 +337,21 @@ namespace FP::Editor
 
 	void ViewportWidget::AddColliders()
 	{
+		// Full circles at the ends stand in for the rounded caps.
+		const auto addCapsule = [this](Vec3 center, float radius, float half, Color color, Vec3 right, Vec3 up, Vec3 forward) {
+			const Vec3 top = center + up * half;
+			const Vec3 bottom = center - up * half;
+			m_Lines.AddCircle(top, radius, color, 24, right, forward);
+			m_Lines.AddCircle(bottom, radius, color, 24, right, forward);
+			for (const Vec3 side : { right, right * -1.0f, forward, forward * -1.0f })
+				m_Lines.AddLine(top + side * radius, bottom + side * radius, color);
+			for (const Vec3 end : { top, bottom })
+			{
+				m_Lines.AddCircle(end, radius, color, 24, right, up);
+				m_Lines.AddCircle(end, radius, color, 24, forward, up);
+			}
+		};
+
 		for (auto [entity, collider] : m_World->View<ColliderComponent>().each())
 		{
 			// Triggers are amber so they read apart from solid colliders.
@@ -365,18 +380,7 @@ namespace FP::Editor
 			{
 				const float radius = collider.Radius * std::fmax(scale.X, scale.Z);
 				const float half = std::fmax(collider.Height * scale.Y * 0.5f - radius, 0.0f);
-				const Vec3 top = center + up * half;
-				const Vec3 bottom = center - up * half;
-				m_Lines.AddCircle(top, radius, color, 24, right, forward);
-				m_Lines.AddCircle(bottom, radius, color, 24, right, forward);
-				for (const Vec3 side : { right, right * -1.0f, forward, forward * -1.0f })
-					m_Lines.AddLine(top + side * radius, bottom + side * radius, color);
-				// Full circles at the ends stand in for the rounded caps.
-				for (const Vec3 end : { top, bottom })
-				{
-					m_Lines.AddCircle(end, radius, color, 24, right, up);
-					m_Lines.AddCircle(end, radius, color, 24, forward, up);
-				}
+				addCapsule(center, radius, half, color, right, up, forward);
 			}
 			else if (collider.Shape == "Mesh")
 			{
@@ -389,6 +393,15 @@ namespace FP::Editor
 				const Vec3 half{ collider.Size.X * scale.X * 0.5f, collider.Size.Y * scale.Y * 0.5f, collider.Size.Z * scale.Z * 0.5f };
 				m_Lines.AddBox(frame, half * -1.0f, half, color);
 			}
+		}
+
+		// Characters are blue, always upright and never scaled, like physics sees them.
+		for (auto [entity, character] : m_World->View<CharacterControllerComponent>().each())
+		{
+			const Color color{ 0.35f, 0.7f, 1, entity == m_Selected ? 0.95f : 0.35f };
+			const float radius = std::fmax(character.Radius, 0.05f);
+			const float half = std::fmax(character.Height * 0.5f - radius, 0.0f);
+			addCapsule(m_World->GetWorldPosition(entity), radius, half, color, { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 });
 		}
 	}
 

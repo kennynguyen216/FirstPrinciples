@@ -169,6 +169,22 @@ namespace FP::Engine
 			.Field("Offset", &ColliderComponent::Offset)
 			.Field("Trigger", &ColliderComponent::Trigger).Tooltip("Reports overlaps to scripts instead of blocking");
 
+		registry.Register<CharacterControllerComponent>("CharacterController")
+			.Field("Radius", &CharacterControllerComponent::Radius).Range(0.05f, 10)
+			.Field("Height", &CharacterControllerComponent::Height).Range(0.1f, 20).Tooltip("End to end, standing along Y")
+			.Field("StepHeight", &CharacterControllerComponent::StepHeight).Range(0, 2).Tooltip("Steps up to this tall are climbed")
+			.Field("MaxSlope", &CharacterControllerComponent::MaxSlope).Range(0, 89).Tooltip("Steepest walkable ground in degrees")
+			.Field("Mass", &CharacterControllerComponent::Mass).Range(1, 1000).Tooltip("Kilograms, for pushing things")
+			.Field("AirControl", &CharacterControllerComponent::AirControl).Range(0, 1).Tooltip("How much Move steers in the air")
+			.Field("GravityScale", &CharacterControllerComponent::GravityScale);
+
+		registry.Register<PlayerInputComponent>("PlayerInput")
+			.Field("WalkSpeed", &PlayerInputComponent::WalkSpeed).Range(0, 20)
+			.Field("RunSpeed", &PlayerInputComponent::RunSpeed).Range(0, 30).Tooltip("While Shift is held")
+			.Field("JumpSpeed", &PlayerInputComponent::JumpSpeed).Range(0, 20)
+			.Field("LookSpeed", &PlayerInputComponent::LookSpeed).Range(0, 1).Tooltip("Degrees per pixel of mouse movement, 0 turns mouse look off")
+			.Field("Camera", &PlayerInputComponent::Camera).Tooltip("The child camera that tilts up and down");
+
 		static const Array<const char*> motionTypes{ "Dynamic", "Kinematic", "Static" };
 		registry.Register<RigidBodyComponent>("RigidBody")
 			.Field("Motion", &RigidBodyComponent::Motion).Choices(motionTypes)

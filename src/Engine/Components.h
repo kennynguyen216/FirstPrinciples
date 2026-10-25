@@ -170,6 +170,31 @@ namespace FP
 		bool Continuous = false;   // stops fast small bodies passing through thin walls
 	};
 
+	// A capsule that walks: it slides along walls, climbs steps and slopes, rides moving platforms
+	// and pushes things. Scripts move it with Move and Jump. Use it instead of a collider and rigid
+	// body. Its shape sits centered on the entity and always stands upright.
+	struct CharacterControllerComponent
+	{
+		float Radius = 0.5f;
+		float Height = 2;          // end to end, standing along Y
+		float StepHeight = 0.35f;  // steps up to this tall are climbed
+		float MaxSlope = 50;       // steepest walkable ground in degrees
+		float Mass = 70;           // kilograms, for pushing things and weighing on them
+		float AirControl = 0.1f;   // how much Move steers in the air, 0 to 1
+		float GravityScale = 1;
+	};
+
+	// Plays a character controller from the keyboard and mouse with no script: WASD walks, Shift
+	// runs, Space jumps and the mouse turns it. A child camera named Camera tilts with the mouse.
+	struct PlayerInputComponent
+	{
+		float WalkSpeed = 5;
+		float RunSpeed = 9;   // while Shift is held
+		float JumpSpeed = 6;
+		float LookSpeed = 0.15f; // degrees per pixel of mouse movement
+		String Camera = "Player Camera";
+	};
+
 	// Light at the transform's position. In 2D, Position.Z is the height above the sprites.
 	struct PointLightComponent
 	{
