@@ -63,6 +63,8 @@ FP_TEST(AudioImport_RejectsCorruptOutsideCaseAndReservedNames)
 	FP_EXPECT(!Editor::ImportAudioFile(Utf8(fixture.Source), Utf8(fixture.Directory / "CON.wav"), relative));
 	FP_EXPECT(!Editor::ImportAudioFile(Utf8(fixture.Source), Utf8(fixture.Directory / "CON.effect.wav"), relative));
 	FP_EXPECT(!Editor::ImportAudioFile(Utf8(fixture.Source), Utf8(fixture.Directory / "Trailing .wav "), relative));
+	FP_EXPECT(!Editor::ImportAudioFile(Utf8(fixture.Source), Utf8(fixture.Directory / "Wrong.mp3"), relative));
+	FP_EXPECT(!fs::exists(fixture.Directory / "Wrong.mp3"));
 	FP_EXPECT(Editor::ImportAudioFile(Utf8(fixture.Source), Utf8(destination), relative));
 	relative = "unchanged";
 	FP_EXPECT(!Editor::ImportAudioFile(Utf8(fixture.Source), Utf8(fixture.Directory / "tone.wav"), relative));

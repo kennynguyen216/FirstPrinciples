@@ -30,6 +30,7 @@ local JoltDir = Root .. "/ThirdParty/JoltPhysics"
 -- glTF parser for skeletal meshes and animations. One header, built once by CgltfImpl.cpp.
 local CgltfInclude = Root .. "/ThirdParty/cgltf"
 local OpusDir = Root .. "/ThirdParty/opus"
+local DrLibsDir = Root .. "/ThirdParty/dr_libs"
 -- Game UI in HTML, CSS and JavaScript. A binary SDK fetched by Scripts/GetUltralight, so it is
 -- optional: without it everything builds and UI components draw nothing.
 local UltralightDir = Root .. "/ThirdParty/Ultralight"
@@ -38,7 +39,7 @@ if not HasUltralight then
 	premake.warn("Ultralight is missing, so game UI will not draw. Run Scripts/GetUltralight to get it.")
 end
 local ImGuiDir = Root .. "/ThirdParty/imgui"
-if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) or not os.isdir(SpdlogInclude) or not os.isdir(CgltfInclude) or not os.isfile(ImGuiDir .. "/imgui.h") or not os.isdir(JoltDir .. "/Jolt") then
+if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) or not os.isdir(SpdlogInclude) or not os.isdir(CgltfInclude) or not os.isfile(ImGuiDir .. "/imgui.h") or not os.isdir(JoltDir .. "/Jolt") or not os.isfile(DrLibsDir .. "/dr_mp3.h") then
 	premake.warn("Submodules are missing. Run: git submodule update --init")
 end
 
@@ -92,7 +93,7 @@ local ProjectName = io.readfile(ProjectFile):match('Name%s+"?([%w_]+)"?') or pat
 
 -- Include paths every project that touches engine headers needs.
 local function EngineIncludes()
-	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir, SpdlogInclude, CgltfInclude, ImGuiDir, JoltDir, OpusDir .. "/include" }
+	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir, SpdlogInclude, CgltfInclude, ImGuiDir, JoltDir, OpusDir .. "/include", DrLibsDir }
 	if HasUltralight then
 		externalincludedirs { UltralightDir .. "/include" }
 		defines { "FP_WITH_ULTRALIGHT=1" }

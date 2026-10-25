@@ -590,6 +590,7 @@ namespace FP::Editor
 				state->Metadata = QString("\n%1, %2 channel(s), %3 Hz, %4 s, %5 MiB, revision %6")
 					.arg(ToQString(clip.Encoding)).arg(clip.Channels).arg(clip.SampleRate).arg(clip.Duration, 0, 'f', 3)
 					.arg(clip.Samples.size() * sizeof(float) / (1024.0 * 1024.0), 0, 'f', 2).arg(clip.Revision);
+				if (clip.IsStreaming()) state->Metadata += "\nStreaming from disk (1-second playback buffer).";
 				state->Channels = clip.Channels;
 				state->ClippedSamples = clip.ClippedSamples;
 				state->Modified = clip.LastWriteTicks;
@@ -657,12 +658,12 @@ namespace FP::Editor
 			pause->setEnabled(!editing && voice != VoiceState::Invalid);
 			stop->setEnabled(!editing && voice != VoiceState::Invalid);
 			pause->setText(voice == VoiceState::Paused ? "Resume Source" : "Pause Source");
-			QString text = source->Clip.IsEmpty() ? "No clip assigned. Import or pick a WAV inside Content." : ToQString(source->Clip);
+			QString text = source->Clip.IsEmpty() ? "No clip assigned. Import or pick a WAV or MP3 inside Content." : ToQString(source->Clip);
 			if (!state->Metadata.isEmpty())
 			{
 				text += state->Metadata;
 				if (source->Spatial && state->Channels != 1)
-					text += "\nSpatial audio requires a mono clip. Disable Spatial or choose a mono WAV.";
+					text += "\nSpatial audio requires a mono clip. Disable Spatial or choose a mono WAV or MP3.";
 				if (state->ClippedSamples)
 					text += QString("\n%1 out-of-range samples were clamped.").arg(state->ClippedSamples);
 				const String path = Paths::Content(source->Clip.View());
@@ -708,7 +709,7 @@ namespace FP::Editor
 	void InspectorPanel::AddAssetView()
 	{
 		const QFileInfo info(m_AssetPath);
-		if (info.suffix().compare("wav", Qt::CaseInsensitive) == 0)
+		if (info.suffix().compare("wav", Qt::CaseInsensitive) == 0 || info.suffix().compare("mp3", Qt::CaseInsensitive) == 0)
 		{
 			AddAudioSection();
 			return;

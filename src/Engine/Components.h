@@ -28,7 +28,7 @@ namespace FP
 
 	struct AudioSourceComponent
 	{
-		String Clip; // WAV relative to Content
+		String Clip; // WAV or MP3 relative to Content
 		bool Enabled = true;
 		float Volume = 1;
 		float Pitch = 1;
@@ -37,6 +37,7 @@ namespace FP
 		String Bus = "SFX";
 		bool Spatial = false;
 		bool Occlusion = true;
+		float DopplerScale = 1;
 		float MinDistance = 1;
 		float MaxDistance = 25;
 		int32 Priority = 128;
@@ -45,6 +46,14 @@ namespace FP
 	struct AudioListenerComponent
 	{
 		bool Enabled = true;
+	};
+
+	struct AudioRoomComponent
+	{
+		bool Enabled = true;
+		Vec3 Size{ 8, 3, 8 }; // local dimensions of the room interior, in meters
+		float Wet = 0.5f;
+		float Decay = 1; // seconds to decay by 60 dB
 	};
 
 	struct VoiceChatComponent

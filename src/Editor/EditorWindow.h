@@ -47,6 +47,7 @@ namespace FP::Editor
 		void Play();
 		void Stop();
 		void Select(Entity entity);
+		void ShowAudioDebugger();
 
 		// Creates an entity from a Place Entities kind such as "Point Light" or "Cube" and selects it.
 		Entity CreateEntity(const QString& kind);
@@ -196,6 +197,7 @@ namespace FP::Editor
 		ContentBrowser* m_ContentBrowser = nullptr;
 		QDockWidget* m_ConsoleDock = nullptr;
 		QDockWidget* m_ContentDock = nullptr;
+		QDockWidget* m_AudioDebugger = nullptr;
 		bool m_DockTitlesPending = false;
 		QByteArray m_DefaultLayout;
 		QFileSystemWatcher* m_ScriptWatcher = nullptr;

@@ -1,6 +1,7 @@
 #include "Editor/ViewportWidget.h"
 #include "Editor/PlaceEntitiesPanel.h"
 #include "Engine/Input.h"
+#include "Engine/Audio/AudioWorld.h"
 
 #include <SDL3/SDL.h>
 
@@ -595,6 +596,17 @@ namespace FP::Editor
 			AddSelection(view);
 		}
 
+		if (m_World->GetAudio().IsDebugEnabled())
+		{
+			for (const auto& source : m_World->GetAudio().GetDebugSources())
+			{
+				for (const auto& ray : source.Rays)
+					m_Lines.AddLine(ray.From, ray.To, ray.Reflection ? Color{0.2f, 0.85f, 1, 1} :
+						(source.Transmission < 0.99f || source.Params.LowPassHz > 0) ? Color{1, 0.5f, 0.15f, 1} : Color{0.25f, 1, 0.4f, 1});
+				for (const auto& hit : source.Hits)
+					m_Lines.AddCircle(hit.Point, std::max(0.02f, view.WorldPerPixel(hit.Point) * 4), {1, 0.8f, 0.2f, 1}, 8, view.CameraRight, view.CameraUp);
+			}
+		}
 		SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(m_Device.GetHandle());
 		m_Renderer->Render(cmd, m_Target->GetHandle(), m_Target->GetWidth(), m_Target->GetHeight(), *m_World, view, &m_Lines);
 		SDL_SubmitGPUCommandBuffer(cmd);

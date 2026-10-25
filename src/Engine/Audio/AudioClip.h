@@ -10,6 +10,8 @@ namespace FP
 	struct AudioClip
 	{
 		String Path;
+		String StreamPath; // Absolute file backing long clips; samples stay on disk.
+		bool IsStreaming() const { return !StreamPath.IsEmpty(); }
 		uint64 Revision = 0;
 		int SampleRate = 0;
 		int Channels = 0;

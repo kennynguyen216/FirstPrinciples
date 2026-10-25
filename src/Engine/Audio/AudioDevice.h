@@ -1,11 +1,20 @@
 #pragma once
 
 #include "Engine/Audio/AudioClip.h"
+#include "Engine/Audio/AudioLimiter.h"
 
 union SDL_Event;
 
 namespace FP
 {
+	struct AudioVoiceInfo
+	{
+		VoiceHandle Handle;
+		String Clip;
+		AudioPlaybackParams Params;
+		VoiceState State = VoiceState::Invalid;
+		float Peak = 0, Rms = 0;
+	};
 	class AudioDevice
 	{
 	public:
@@ -23,7 +32,7 @@ namespace FP
 		// Main-thread mono PCM input. Full/nonfinite batches fail without changing queued samples.
 		bool QueueStream(VoiceHandle voice, const float* samples, uint32 count);
 		bool SetParameters(VoiceHandle voice, const AudioPlaybackParams& params);
-		bool Stop(VoiceHandle voice);
+		bool Stop(VoiceHandle voice, bool fade = true);
 		bool Pause(VoiceHandle voice);
 		bool Resume(VoiceHandle voice);
 		VoiceState GetState(VoiceHandle voice) const;
@@ -34,12 +43,17 @@ namespace FP
 		bool SetMasterGain(float gain);
 		void SetMasterMuted(bool muted);
 		String GetStatusText() const;
+		AudioMixLevels GetMixLevels() const;
+		Array<AudioVoiceInfo> GetVoices() const;
 		void ProcessEvent(const SDL_Event& event);
 		std::weak_ptr<void> GetLifetimeToken() const;
 
 	private:
 		friend bool AudioBackendOfflineSelfCheck();
 		friend bool AudioStreamingOfflineSelfCheck();
+		friend bool AudioFileMixerOfflineSelfCheck(const std::shared_ptr<const AudioClip>& clip);
+		friend bool AudioRoomOfflineSelfCheck();
+		friend bool AudioMixingOfflineSelfCheck();
 		AudioPlayResult StartVoice(uint64 context, const std::shared_ptr<const AudioClip>& clip, int sampleRate,
 			const AudioPlaybackParams& params, VoiceHandle replace, bool startPaused);
 		struct Impl;

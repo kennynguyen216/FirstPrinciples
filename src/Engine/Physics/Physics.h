@@ -58,6 +58,9 @@ namespace FP
 		// The closest solid body along a ray, skipping both ignored entities. direction need not be unit length.
 		virtual bool Raycast(Vec3 origin, Vec3 direction, float maxDistance, RaycastHit& hit,
 			entt::entity ignore = entt::null, entt::entity ignoreAlso = entt::null) const = 0;
+		// One hit per solid entity, nearest first; used for sound through multiple objects.
+		virtual Array<RaycastHit> RaycastAll(Vec3 origin, Vec3 direction, float maxDistance,
+			entt::entity ignore = entt::null, entt::entity ignoreAlso = entt::null) const = 0;
 
 		// Like Raycast but sweeps a ball, which is more forgiving for aiming and checking for room.
 		virtual bool SphereCast(Vec3 origin, float radius, Vec3 direction, float maxDistance, RaycastHit& hit, entt::entity ignore = entt::null) const = 0;

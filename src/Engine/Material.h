@@ -4,7 +4,7 @@
 
 namespace FP
 {
-	// Values a material sets on its base shader. Saved as a .material text file.
+	// Visual and acoustic properties saved as a .material text file.
 	// Every map is optional. Scalars multiply their map, so a missing map means "use the scalar".
 	struct MaterialData
 	{
@@ -43,6 +43,10 @@ namespace FP
 		float Thickness = 0.5f;
 
 		float AlphaCutoff = 0.01f;
+
+		float SoundTransmission = 0.25f;
+		float SoundAbsorption = 0.4f;
+		float SoundDamping = 0.5f;
 	};
 
 	// A shared material asset. Entities point at it by path through MaterialComponent.
