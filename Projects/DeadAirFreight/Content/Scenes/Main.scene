@@ -1723,7 +1723,8 @@ component SiphonConfig
   MiteDrainKgPerSecond 0.5
   MiteBellyKg 4
   MiteBiteHoleSeconds 4
-  MiteTrickleSeconds 6
+  MiteTrickleSeconds 12
+  MiteTrickleMaxSeconds 16
 component SoundCues
   LaserFire "asset://5513f8a7-4a2d-4c64-abc5-054511f892d8"
   RepairBeam ""

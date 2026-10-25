@@ -16,8 +16,10 @@ struct SiphonConfigComponent
 	float MiteBellyKg = 4;
 	// Seconds latched on before a Mite chews a hole in its tank. 0 never does.
 	float MiteBiteHoleSeconds = 4;
-	// A Mite gets into each bay this often while racing. Both bays get theirs at the same moments.
-	float MiteTrickleSeconds = 6;
+	// A Mite gets into each bay after a random wait between these while racing. Both bays get theirs
+	// at the same moments.
+	float MiteTrickleSeconds = 12;
+	float MiteTrickleMaxSeconds = 16;
 };
 
 enum class SiphonKind : FP::uint8

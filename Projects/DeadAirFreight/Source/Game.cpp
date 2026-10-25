@@ -133,7 +133,8 @@ namespace Game
 			.Field("MiteDrainKgPerSecond", &SiphonConfigComponent::MiteDrainKgPerSecond)
 			.Field("MiteBellyKg", &SiphonConfigComponent::MiteBellyKg)
 			.Field("MiteBiteHoleSeconds", &SiphonConfigComponent::MiteBiteHoleSeconds)
-			.Field("MiteTrickleSeconds", &SiphonConfigComponent::MiteTrickleSeconds);
+			.Field("MiteTrickleSeconds", &SiphonConfigComponent::MiteTrickleSeconds)
+			.Field("MiteTrickleMaxSeconds", &SiphonConfigComponent::MiteTrickleMaxSeconds);
 
 		const char* wav = "Audio (*.wav)";
 		registry.Register<SoundCuesComponent>("SoundCues")

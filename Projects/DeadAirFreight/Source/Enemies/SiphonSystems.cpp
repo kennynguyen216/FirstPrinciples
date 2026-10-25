@@ -1,5 +1,6 @@
 #include "Enemies/SiphonSystems.h"
 #include "Audio/Sounds.h"
+#include "Driver/SpaceWeather.h"
 #include "LifeSupport/Cargo.h"
 #include "Match/MatchQueries.h"
 #include "Net/GameNet.h"
@@ -179,7 +180,9 @@ void SiphonSpawnerSystem::OnStart(World& world)
 {
 	m_SinceTrickle = 0;
 	m_NextIndex = 0;
+	m_Random = 1;
 	const SiphonConfigComponent config = GetConfig(world);
+	m_NextTrickle = config.MiteTrickleSeconds;
 	const String chitter = Sounds::GetClip(world, SoundCue::MiteChitter);
 	for (int32 crew = 0; crew < CrewCount; ++crew)
 	{
@@ -218,9 +221,11 @@ void SiphonSpawnerSystem::Update(World& world, float deltaTime)
 	if (config.MiteTrickleSeconds <= 0)
 		return;
 	m_SinceTrickle += deltaTime;
-	while (m_SinceTrickle >= config.MiteTrickleSeconds)
+	while (m_SinceTrickle >= m_NextTrickle)
 	{
-		m_SinceTrickle -= config.MiteTrickleSeconds;
+		m_SinceTrickle -= m_NextTrickle;
+		const float spread = std::max(config.MiteTrickleMaxSeconds - config.MiteTrickleSeconds, 0.0f);
+		m_NextTrickle = std::max(config.MiteTrickleSeconds + spread * NextRandom(m_Random), 0.1f);
 		// The same spot in both bays keeps the crews' bays fair.
 		for (int32 crew = 0; crew < CrewCount; ++crew)
 			Siphons::Spawn(world, crew, SiphonKind::Mite, 1, m_NextIndex);

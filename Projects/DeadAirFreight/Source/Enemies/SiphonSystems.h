@@ -19,7 +19,7 @@ namespace Siphons
 	FP::int32 CountActive(FP::World& world, FP::int32 crew);
 }
 
-// Fills each crew's pool when play starts, then lets a Mite into both bays every few seconds.
+// Fills each crew's pool when play starts, then lets a Mite into both bays every so often.
 // Hazards (M6) add surges through Siphons::Spawn.
 class SiphonSpawnerSystem : public FP::System
 {
@@ -30,6 +30,8 @@ public:
 
 private:
 	float m_SinceTrickle = 0;
+	float m_NextTrickle = 0;
+	unsigned m_Random = 1;
 	FP::uint32 m_NextIndex = 0;
 };
 
