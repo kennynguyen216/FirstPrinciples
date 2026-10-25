@@ -2,6 +2,8 @@
 
 #include "WeatherFetch.h"
 
+#include "Engine/UI/UISystem.h"
+
 #include <algorithm>
 #include <cstdarg>
 #include <cstdio>
@@ -45,6 +47,29 @@ namespace
 	}
 
 	Color Faded(Color color, float alpha) { return { color.R, color.G, color.B, alpha }; }
+
+	// One line of HUD text for the page: its text, CSS color, an optional bar filled 0 to 1 and a size.
+	std::string Line(const std::string& text, Color color, float bar = -1, float size = 1)
+	{
+		auto channel = [](float c) { return static_cast<int>(std::clamp(c, 0.0f, 1.0f) * 255); };
+		return "{\"t\":" + UIDocument::ToJsonString(text) + Format(",\"c\":\"rgba(%d,%d,%d,%.2f)\",\"bar\":%.3f,\"size\":%.2f}",
+			channel(color.R), channel(color.G), channel(color.B), color.A, bar, size);
+	}
+
+	// Where a point lands on screen, -1 to 1 on both axes. False when it is off screen or behind.
+	bool ToScreen(const TransformComponent& camera, float fieldOfView, float aspect, Vec3 point, Vec2& screen)
+	{
+		const Quat rotation = camera.GetRotation();
+		const Vec3 local = Quat{ -rotation.X, -rotation.Y, -rotation.Z, rotation.W }.Rotate(point - camera.Position);
+		if (local.Z >= 0)
+		{
+			screen = Vec2{ local.X, local.Y };
+			return false;
+		}
+		const float halfHeight = std::tan(fieldOfView * 0.5f * DegToRad) * -local.Z;
+		screen = Vec2{ local.X / aspect, local.Y } * (1 / halfHeight);
+		return std::abs(screen.X) <= 1 && std::abs(screen.Y) <= 1;
+	}
 }
 
 void DriverSystem::OnStart(World& world)
@@ -153,8 +178,19 @@ void DriverSystem::OnStart(World& world)
 	m_CursorFree = false;
 	m_Bank = 0;
 	m_BaseFieldOfView = 60;
+	m_HudCamera = NullEntity;
 	for (auto [entity, camera] : world.View<CameraComponent>().each())
+	{
 		m_BaseFieldOfView = camera.Primary ? camera.FieldOfView : m_BaseFieldOfView;
+		m_HudCamera = camera.Primary ? entity : m_HudCamera;
+	}
+	// The HUD is a page drawn over this player's own camera, so it shows on no one else's screen.
+	if (m_HudCamera != NullEntity)
+	{
+		UIComponent& hud = world.Has<UIComponent>(m_HudCamera) ? world.Get<UIComponent>(m_HudCamera) : world.Add<UIComponent>(m_HudCamera);
+		hud.Page = "UI/DriverHud.html";
+		hud.Input = false; // the mouse flies the truck
+	}
 	m_PeakWindFought = 0;
 	m_Messages.clear();
 	m_Results.clear();
@@ -234,7 +270,7 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 		const float bank = std::clamp((truck.Yaw - yawBefore) / deltaTime * m_Settings.BankPerTurn, -m_Settings.BankMax, m_Settings.BankMax);
 		m_Bank += (bank - m_Bank) * std::min(1.0f, m_Settings.BankSmoothing * deltaTime);
 	}
-	if (truck.Speed <= m_Settings.CruiseSpeed && CollideWithRocks(truck, m_Rocks, truck.Time, m_Settings))
+	if (CollideWithRocks(truck, m_Rocks, truck.Time, m_Settings))
 		Notify("ASTEROID HIT!", Bad, 1.5f);
 
 	const bool scrubberWasBroken = life.ScrubberBroken;
@@ -267,7 +303,7 @@ void DriverSystem::Finish(const char* reason, const TruckState& truck, const Lif
 	m_Finished = true;
 	const bool delivered = std::string(reason) == "DELIVERED";
 	const float cargo = delivered ? life.Cargo : 0;
-	const float bonus = delivered ? life.ColonyTimeLeft * m_Settings.TimeBonusPerSecond : 0;
+	const float bonus = delivered ? std::max(0.0f, m_Settings.ParTime - truck.Time) * m_Settings.TimeBonusPerSecond : 0;
 	m_Results = {
 		reason,
 		Format("CARGO OXYGEN DELIVERED  %.1f KG", cargo),
@@ -411,169 +447,123 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 	if (!cameraTransform)
 		return;
 
-	Hud& hud = m_Hud;
-	hud.Begin(*cameraTransform, fieldOfView, m_Settings);
-	const float a = hud.GetAspect();
-	const float t = m_Settings.HudTextSize;
-	const float line = t * 1.5f;
+	UIDocumentInstance* page = m_HudCamera != NullEntity && world.IsValid(m_HudCamera) ? UISystem::For(world, m_HudCamera) : nullptr;
+	if (!page || !page->IsReady())
+		return;
+	const UIStateComponent* pageState = world.TryGet<UIStateComponent>(m_HudCamera);
+	const float aspect = pageState && pageState->Height > 0 ? static_cast<float>(pageState->Width) / static_cast<float>(pageState->Height) : 16.0f / 9;
 	const bool flash = std::fmod(truck.Time, 0.5f) < 0.25f;
 
-	const float dark = IsBlackedOut(life) ? 1 : life.Co2 * m_Settings.Co2DarkenMax;
-	if (dark > 0.01f)
-		hud.Box(world, { 0, 0 }, { a * 2 + 0.5f, 2.5f }, { 0, 0, 0, dark }, 5);
+	// Everything the page draws, as one JSON object. The page only lays it out (Content/UI/DriverHud.html).
+	std::string json = "{";
+	auto field = [&](const char* name, const std::string& value) {
+		json += json.size() > 1 ? "," : "";
+		json += Format("\"%s\":", name) + value;
+	};
+	auto list = [](const std::vector<std::string>& items) {
+		std::string out = "[";
+		for (size_t i = 0; i < items.size(); ++i)
+			out += (i ? "," : "") + items[i];
+		return out + "]";
+	};
+	field("dark", Format("%.3f", IsBlackedOut(life) ? 1 : life.Co2 * m_Settings.Co2DarkenMax));
 
-	const float left = -a + 0.05f;
-	float y = 1 - line;
-	hud.Text(world, { left, y }, t, life.CabReserve > 0 ? White : Warn, Format("CAB AIR   %.2f KG", life.CabReserve));
-	y -= line;
-	hud.Text(world, { left, y }, t, White, Format("CARGO O2  %.1f KG", life.Cargo));
-	y -= line;
 	const Color co2Color = life.Co2 > 0.6f ? Bad : life.Co2 > 0.25f ? Warn : Good;
-	hud.Text(world, { left, y }, t, co2Color, Format("CO2       %3.0f%%", life.Co2 * 100));
-	const float co2Bar = left + t * 0.75f * 15;
-	hud.Box(world, { co2Bar + 0.15f, y }, { 0.3f, t * 0.6f }, { 0.15f, 0.15f, 0.2f, 0.8f }, 10);
-	hud.Box(world, { co2Bar + life.Co2 * 0.15f, y }, { life.Co2 * 0.3f, t * 0.6f }, co2Color, 11);
-	y -= line;
-	hud.Text(world, { left, y }, t, life.Power < 1 ? Warn : White, Format("POWER     %3.0f%%", life.Power * 100));
+	std::vector<std::string> left = {
+		Line(Format("CAB AIR   %.2f KG", life.CabReserve), life.CabReserve > 0 ? White : Warn),
+		Line(Format("CARGO O2  %.1f KG", life.Cargo), White),
+		Line(Format("CO2       %3.0f%%", life.Co2 * 100), co2Color, life.Co2),
+		Line(Format("POWER     %3.0f%%", life.Power * 100), life.Power < 1 ? Warn : White),
+	};
 	if (life.CalmHands > 0)
-		hud.Text(world, { left, y -= line }, t, Good, Format("CALM HANDS %.0fS", std::ceil(life.CalmHands)));
+		left.push_back(Line(Format("CALM HANDS %.0fS", std::ceil(life.CalmHands)), Good));
 	if (life.AutoFix)
-		hud.Text(world, { left, y -= line }, t, Good, "FREE FIX BANKED");
+		left.push_back(Line("FREE FIX BANKED", Good));
 	if (truck.Boost > 0)
-		hud.Text(world, { left, y -= line }, t, flash ? Good : White, Format("HYPERDRIVE %.0fS", std::ceil(truck.Boost)));
+		left.push_back(Line(Format("HYPERDRIVE %.0fS", std::ceil(truck.Boost)), flash ? Good : White));
+	field("left", list(left));
 
 	const int clock = static_cast<int>(std::ceil(life.ColonyTimeLeft));
-	hud.Text(world, { 0, 1 - line * 1.2f }, t * 1.6f, life.ColonyTimeLeft < 60 && flash ? Bad : White, Format("COLONY AIR %d:%02d", clock / 60, clock % 60), Hud::Align::Center);
+	field("clock", Line(Format("COLONY AIR %d:%02d", clock / 60, clock % 60), life.ColonyTimeLeft < 60 && flash ? Bad : White));
+	field("right", list({
+		Line(Format("SOLAR WIND %.0f KM/S", m_WindNow), White),
+		Line(Format("STORM KP %.1f", m_KpNow), White),
+		Line(m_Package.WeatherLabel, m_Package.WeatherLabel == "LIVE" ? Good : Warn),
+	}));
 
-	const float right = a - 0.05f;
-	hud.Text(world, { right, 1 - line }, t, White, Format("SOLAR WIND %.0f KM/S", m_WindNow), Hud::Align::Right);
-	hud.Text(world, { right, 1 - line * 2 }, t, White, Format("STORM KP %.1f", m_KpNow), Hud::Align::Right);
-	hud.Text(world, { right, 1 - line * 3 }, t, m_Package.WeatherLabel == "LIVE" ? Good : Warn, m_Package.WeatherLabel, Hud::Align::Right);
-
-	y = 0.45f;
+	std::vector<std::string> center;
 	if (life.ScrubberBroken)
-	{
-		hud.Text(world, { 0, y }, t * 1.4f, flash ? Bad : White, "SCRUBBER DOWN", Hud::Align::Center);
-		y -= line * 1.4f;
-	}
-	if (IsBlackedOut(life))
-	{
-		hud.Text(world, { 0, 0 }, t * 2, Bad, "BLACKED OUT", Hud::Align::Center, 25);
-		hud.Text(world, { 0, -line * 1.5f }, t, Dim, "THE TRUCK IS DRIFTING...", Hud::Align::Center, 25);
-	}
+		center.push_back(Line("SCRUBBER DOWN", flash ? Bad : White, -1, 1.4f));
 	for (const Message& message : m_Messages)
-	{
-		hud.Text(world, { 0, y }, t, Faded(message.Color, std::min(message.TimeLeft, 1.0f)), message.Text, Hud::Align::Center);
-		y -= line;
-	}
+		center.push_back(Line(message.Text, Faded(message.Color, std::min(message.TimeLeft, 1.0f))));
+	field("center", list(center));
+	field("blackout", IsBlackedOut(life) ? "true" : "false");
 
-	const float promptY = -0.55f;
+	std::vector<std::string> prompts;
 	if (!m_Finished && !IsBlackedOut(life))
 	{
 		if (ticket.Active)
 		{
 			if (!ticket.Revealed)
-				hud.Text(world, { 0, promptY }, t, Dim, "HOLD LEFT MOUSE AND DRAG TO SCRATCH. HANDS ARE OFF THE WHEEL!", Hud::Align::Center);
+				prompts.push_back(Line("HOLD LEFT MOUSE AND DRAG TO SCRATCH. HANDS ARE OFF THE WHEEL!", Dim));
 		}
 		else if (seated)
 		{
-			hud.Text(world, { 0, promptY }, t, Dim, Format("MOUSE AIM  [T] TICKET -%.1fKG%s", GetTicketCost(m_Settings), driver ? "  [E] STAND UP" : ""), Hud::Align::Center);
+			prompts.push_back(Line(Format("MOUSE AIM  [T] TICKET -%.1fKG%s", GetTicketCost(m_Settings), driver ? "  [E] STAND UP" : ""), Dim));
 		}
 		else if (driver)
 		{
 			if (CanReach(*driver, m_Wheel, m_Settings))
-				hud.Text(world, { 0, promptY }, t, White, "[E] TAKE THE WHEEL", Hud::Align::Center);
+				prompts.push_back(Line("[E] TAKE THE WHEEL", White));
 			else if (CanReach(*driver, m_Scrubber, m_Settings))
-				hud.Text(world, { 0, promptY }, t, life.ScrubberBroken ? Warn : Good,
-					life.ScrubberBroken ? Format("HOLD [E] TO REPAIR THE SCRUBBER  %.0f%%", life.RepairProgress / m_Settings.ScrubberRepairTime * 100) : "AIR SCRUBBER: WORKING",
-					Hud::Align::Center);
+				prompts.push_back(Line(life.ScrubberBroken ? Format("HOLD [E] TO REPAIR THE SCRUBBER  %.0f%%", life.RepairProgress / m_Settings.ScrubberRepairTime * 100) : "AIR SCRUBBER: WORKING",
+					life.ScrubberBroken ? Warn : Good));
 		}
 		if (!truck.AtWheel && !ticket.Active)
 		{
 			const float drift = GetDriftAmount(truck, m_Settings);
-			hud.Text(world, { 0, promptY - line }, t, drift > 0 ? Bad : Warn,
-				drift > 0 ? Format("NOBODY AT THE WHEEL: DRIFTING %.0f%%", drift * 100) : Format("NOBODY AT THE WHEEL: HOLDING STEADY %.0fS", std::ceil(m_Settings.SteadyTime - truck.WheelEmptyTime)),
-				Hud::Align::Center);
+			prompts.push_back(Line(drift > 0 ? Format("NOBODY AT THE WHEEL: DRIFTING %.0f%%", drift * 100) : Format("NOBODY AT THE WHEEL: HOLDING STEADY %.0fS", std::ceil(m_Settings.SteadyTime - truck.WheelEmptyTime)),
+				drift > 0 ? Bad : Warn));
 		}
 	}
+	field("prompts", list(prompts));
 
 	const Vec3 toColony = m_Colony - truck.Position;
 	const float altitude = std::max(GetAltitude(truck), 0.0f);
-	const float progress = std::clamp(1 - altitude / m_Route.Length, 0.0f, 1.0f);
-	const float barWidth = 1.4f;
-	const float barY = -0.8f;
-	hud.Box(world, { 0, barY }, { barWidth, t * 0.5f }, { 0.15f, 0.15f, 0.2f, 0.8f }, 10);
-	hud.Box(world, { -barWidth * 0.5f + progress * barWidth * 0.5f, barY }, { progress * barWidth, t * 0.5f }, Good, 11);
-	hud.Text(world, { -barWidth * 0.5f - t, barY }, t * 0.8f, Dim, "DEPOT", Hud::Align::Right);
-	hud.Text(world, { barWidth * 0.5f + t, barY }, t * 0.8f, Dim, "COLONY");
 	const float km = altitude * m_Settings.KmPerUnit;
 	const int eta = static_cast<int>(std::ceil(altitude / std::max({ truck.Speed, m_Settings.CruiseSpeed, 1.0f })));
-	hud.Text(world, { 0, barY + line * 0.8f }, t * 1.2f, White,
-		(km >= 1e6f ? Format("%.1f MILLION KM", km / 1e6f) : Format("%.0f KM", km)) + Format("   ETA %d:%02d", eta / 60, eta % 60), Hud::Align::Center);
 	const float offCourse = std::acos(std::clamp(Vec3::Dot(truck.Travel, toColony.Normalized()), -1.0f, 1.0f)) * RadToDeg;
 	const Color courseColor = offCourse < 10 ? Good : offCourse < 35 ? Warn : Bad;
-	hud.Text(world, { 0, barY - line }, t, courseColor, Format("OFF COURSE %.0f DEG    SPEED %.2fC", offCourse, truck.Speed * m_Settings.KmPerUnit / 299792.458f), Hud::Align::Center);
-	const float gauge = std::min(offCourse / 90, 1.0f);
-	hud.Box(world, { 0, barY - line * 1.8f }, { barWidth, t * 0.3f }, { 0.15f, 0.15f, 0.2f, 0.8f }, 10);
-	hud.Box(world, { -barWidth * 0.5f + gauge * barWidth * 0.5f, barY - line * 1.8f }, { gauge * barWidth, t * 0.3f }, courseColor, 11);
+	field("progress", Format("%.4f", std::clamp(1 - altitude / m_Route.Length, 0.0f, 1.0f)));
+	field("distance", Line((km >= 1e6f ? Format("%.1f MILLION KM", km / 1e6f) : Format("%.0f KM", km)) + Format("   ETA %d:%02d", eta / 60, eta % 60), White));
+	field("course", Line(Format("OFF COURSE %.0f DEG    SPEED %.2fC", offCourse, truck.Speed * m_Settings.KmPerUnit / 299792.458f), courseColor, std::min(offCourse / 90, 1.0f)));
 
+	// Points at the colony from the screen's edge while it is out of view.
 	Vec2 screen;
-	if (seated && !hud.ToScreen(m_Colony, screen))
+	if (seated && !ToScreen(*cameraTransform, fieldOfView, aspect, m_Colony, screen))
 	{
 		const float length = std::sqrt(screen.X * screen.X + screen.Y * screen.Y);
 		const Vec2 direction = length > 1e-6f ? screen * (1 / length) : Vec2{ 0, -1 };
-		const float roll = std::atan2(direction.Y, direction.X) * RadToDeg;
-		hud.Text(world, { direction.X * a * 0.8f - t, direction.Y * 0.7f }, t * 2.5f, Warn, ">", Hud::Align::Left, 40, roll);
+		field("arrow", Format("{\"x\":%.3f,\"y\":%.3f}", direction.X, direction.Y));
 	}
 
 	if (ticket.Active)
-		DrawTicket(world, ticket);
+	{
+		std::string coating(ticket.Coating.size(), '0');
+		for (size_t i = 0; i < ticket.Coating.size(); ++i)
+			coating[i] = ticket.Coating[i] ? '1' : '0';
+		field("ticket", Format("{\"cols\":%d,\"rows\":%d,\"x\":%.3f,\"y\":%.3f,\"revealed\":%s,\"prize\":", ticket.Columns, ticket.Rows,
+			ticket.Coin.X / std::max(ticket.Columns, 1), ticket.Coin.Y / std::max(ticket.Rows, 1), ticket.Revealed ? "true" : "false")
+			+ UIDocument::ToJsonString(GetPrizeName(ticket.Won)) + ",\"coating\":\"" + coating + "\"}");
+	}
+
 	if (m_Finished)
-		DrawResults(world);
-	hud.End(world);
-}
-
-void DriverSystem::DrawTicket(World& world, const Ticket& ticket)
-{
-	const float cell = 0.04f;
-	const float width = cell * static_cast<float>(ticket.Columns);
-	const float height = cell * static_cast<float>(ticket.Rows);
-	const Vec2 center{ m_Hud.GetAspect() - width * 0.5f - 0.08f, 0.1f };
-	const float left = center.X - width * 0.5f;
-	const float top = center.Y + height * 0.5f;
-	const float t = m_Settings.HudTextSize;
-
-	m_Hud.Box(world, center, { width + 0.06f, height + 0.06f }, { 0.95f, 0.85f, 0.5f, 1 }, 30);
-	m_Hud.Box(world, center, { width, height }, { 0.98f, 0.96f, 0.88f, 1 }, 31);
-	m_Hud.Text(world, { center.X, top + 0.08f }, t * 1.2f, Warn, "SPACE SCRATCHER", Hud::Align::Center, 32);
-	m_Hud.Text(world, center, t * 2, { 0.6f, 0.1f, 0.2f, 1 }, GetPrizeName(ticket.Won), Hud::Align::Center, 32);
-	if (ticket.Revealed)
 	{
-		m_Hud.Text(world, { center.X, top - height - 0.08f }, t * 1.2f, Good, std::string("YOU WON: ") + GetPrizeName(ticket.Won), Hud::Align::Center, 32);
-		return;
+		std::vector<std::string> results;
+		for (size_t i = 0; i < m_Results.size(); ++i)
+			results.push_back(Line(m_Results[i], i == 0 ? Warn : m_Results[i].rfind("  ", 0) == 0 ? Dim : White, -1, i == 0 ? 1.8f : 0.9f));
+		field("results", list(results));
 	}
-	for (int y = 0; y < ticket.Rows; ++y)
-	{
-		for (int x = 0; x < ticket.Columns; ++x)
-		{
-			if (ticket.Coating[static_cast<size_t>(y * ticket.Columns + x)])
-				m_Hud.Box(world, { left + (static_cast<float>(x) + 0.5f) * cell, top - (static_cast<float>(y) + 0.5f) * cell }, { cell * 1.02f, cell * 1.02f },
-					{ 0.55f, 0.57f, 0.6f, 1 }, 33);
-		}
-	}
-	m_Hud.Text(world, { left + ticket.Coin.X * cell - t * 0.9f, top - ticket.Coin.Y * cell }, t * 1.8f, { 1, 0.8f, 0.2f, 1 }, "O", Hud::Align::Left, 34);
-}
-
-void DriverSystem::DrawResults(World& world)
-{
-	const float t = m_Settings.HudTextSize;
-	m_Hud.Box(world, { 0, 0 }, { m_Hud.GetAspect() * 2 + 0.5f, 2.5f }, { 0, 0, 0.03f, 0.85f }, 50);
-	float y = 0.6f;
-	for (size_t i = 0; i < m_Results.size(); ++i)
-	{
-		const bool heading = i == 0;
-		m_Hud.Text(world, { 0, y }, heading ? t * 1.8f : t * 0.9f, heading ? Warn : m_Results[i].rfind("  ", 0) == 0 ? Dim : White, m_Results[i], Hud::Align::Center, 60);
-		y -= heading ? t * 3 : t * 1.4f;
-	}
-	m_Hud.Text(world, { 0, -0.9f }, t * 0.8f, Dim, "PRESS STOP, THEN PLAY TO RACE AGAIN", Hud::Align::Center, 60);
+	json += "}";
+	page->SetJson("hud", json);
 }
