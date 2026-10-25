@@ -260,6 +260,20 @@ namespace FP::Engine
 			.Field("Color", &AmbientLightComponent::Color)
 			.Field("Intensity", &AmbientLightComponent::Intensity);
 
+		registry.Register<BlackHoleComponent>("BlackHole")
+			.Field("SchwarzschildRadius", &BlackHoleComponent::SchwarzschildRadius).Range(0.01f, 1000).Tooltip("Event horizon radius in world units")
+			.Field("SpeedOfLight", &BlackHoleComponent::SpeedOfLight).Range(0.1f, 10000).Tooltip("World units per second. Lower makes relativity stronger at game speeds")
+			.Field("AccretionDisk", &BlackHoleComponent::AccretionDisk)
+			.Field("DiskOuterRadius", &BlackHoleComponent::DiskOuterRadius).Range(0, 10000)
+			.Field("DiskTemperature", &BlackHoleComponent::DiskTemperature).Range(1000, 40000).Tooltip("Kelvin. 4500 glows orange, 9000 white-blue")
+			.Field("DiskBrightness", &BlackHoleComponent::DiskBrightness).Range(0, 100)
+			.Field("StarBrightness", &BlackHoleComponent::StarBrightness).Range(0, 10).Tooltip("Procedural stars where no skybox covers the sky");
+
+		registry.Register<GravityBodyComponent>("GravityBody")
+			.Field("Velocity", &GravityBodyComponent::Velocity).Tooltip("Ignored with a Dynamic RigidBody, which keeps its own")
+			.Field("Thrust", &GravityBodyComponent::Thrust).Range(0, 1000).Tooltip("Acceleration from the Move action")
+			.Field("Captured", &GravityBodyComponent::Captured);
+
 		registry.Register<SkyboxComponent>("Skybox")
 			.Field("Texture", &SkyboxComponent::Texture).AssetPath("Environment panoramas (*.hdr *.png *.jpg *.jpeg *.tga *.bmp)")
 			.Field("Intensity", &SkyboxComponent::Intensity).Range(0, 20)
