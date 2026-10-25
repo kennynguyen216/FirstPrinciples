@@ -126,7 +126,7 @@ component Transform
 component Mesh
   Mesh "Sphere"
 component Material
-  Material "Materials/Jelly.material"
+  Material "Materials/Mars.material"
 
 entity f1cadbee-b97a-4fe2-b44e-7314d17e6df1
 component Name
