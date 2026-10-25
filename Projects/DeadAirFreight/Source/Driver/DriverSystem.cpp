@@ -257,18 +257,27 @@ void DriverSystem::Update(World& world, float deltaTime)
 	DriverState* driver = m_Driver != NullEntity ? world.TryGet<DriverState>(m_Driver) : nullptr;
 
 	const float boostBefore = truck->Boost;
+	const bool ticketBefore = ticket.Active;
+	const bool revealedBefore = ticket.Revealed;
 	if (!m_Finished)
 		Simulate(*truck, life, ticket, driver, deltaTime);
+	if (ticket.Active && !ticketBefore)
+		Sounds::Play(world, SoundCue::TicketPull);
+	// The jackpot has its own sound, played with its boost.
+	if (ticket.Revealed && !revealedBefore && ticket.Won != Prize::Jackpot)
+		Sounds::Play(world, ticket.Won == Prize::Dud ? SoundCue::TicketDud : SoundCue::TicketWin);
 	if (truck->Boost > boostBefore)
 	{
 		// A jackpot's slot machine win plays over a quieter boost.
-		Sounds::Play(world, SoundCue::Boost, m_Jackpot ? 0.5f : 1.0f);
+		m_BoostVoice = Sounds::Play(world, SoundCue::Boost, m_Jackpot ? 0.5f : 1.0f);
 		if (m_Jackpot)
 			Sounds::Play(world, SoundCue::JackpotBoost);
 	}
 	m_Jackpot = false;
-	// The engine hums at cruise and drops out from a boost's start until it slows back to cruise.
-	Sounds::SetLoop(world, LoopSlot::Engine, SoundCue::Engine, !m_Finished && truck->Boost <= 0 && truck->Speed <= m_Settings.CruiseSpeed);
+	// The engine hum drops out while the boost sound plays and comes back once it goes quiet.
+	Sounds::SetLoop(world, LoopSlot::Engine, SoundCue::Engine, !m_Finished && world.GetAudio().GetState(m_BoostVoice) != VoiceState::Playing);
+	Sounds::SetLoop(world, LoopSlot::Scratch, SoundCue::Scratch,
+		!m_Finished && ticket.Active && !ticket.Revealed && !IsBlackedOut(life) && Input::IsMouseDown(MouseButton::Left));
 	if (driver && driver->InCab)
 	{
 		const bool walking = !driver->Seated && !m_Finished && !IsBlackedOut(life) && Input::GetMoveAxis().LengthSquared() > 0;

@@ -1726,9 +1726,9 @@ component SiphonConfig
   MiteTrickleSeconds 12
   MiteTrickleMaxSeconds 16
 component SoundCues
-  LaserFire "asset://5513f8a7-4a2d-4c64-abc5-054511f892d8"
+  LaserFire "asset://86d5f76b-2da4-4094-aa45-53989f61a88d"
   RepairBeam ""
-  TankPuncture ""
+  TankPuncture "asset://c63501e4-29a8-4219-8956-3885b70f665f"
   TankPatched ""
   MiteSpawn ""
   MiteChitter "asset://9ed7fd0d-611c-456a-95a0-e93c6199109a"
@@ -1743,6 +1743,10 @@ component SoundCues
   Walk "asset://d8382115-59b8-4f6e-ab18-8dd5ce02c03b"
   Run "asset://b0eb79f0-5694-418b-9802-4577d44b73c8"
   Engine "asset://5d0e92b3-22a1-4116-8d33-b3ca45fa77ea"
+  Scratch "asset://1c000ec9-bb01-452f-804c-2e5fc65ce50a"
+  TicketWin "asset://d7942447-9b87-4f4a-b784-8d487872a4ff"
+  TicketDud "asset://133b583b-655e-4437-a287-2b9b9980aa3c"
+  TicketPull "asset://c1348d31-e8fe-4c67-b903-7badfb034eaa"
 
 entity dc96e6bd-8d42-46d0-87f5-c0c256822a49
 component Name

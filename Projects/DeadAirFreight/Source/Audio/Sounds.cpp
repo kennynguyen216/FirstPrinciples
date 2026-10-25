@@ -19,18 +19,19 @@ namespace
 		const String* fields[] = { &cues.LaserFire, &cues.RepairBeam, &cues.TankPuncture, &cues.TankPatched, &cues.MiteSpawn,
 			&cues.MiteChitter, &cues.MiteBite, &cues.MiteDeath, &cues.Boost, &cues.Hatch, &cues.AirlockVent,
 			&cues.Countdown, &cues.Go, &cues.JackpotBoost, &cues.Walk, &cues.Run,
-			&cues.Engine };
+			&cues.Engine, &cues.Scratch, &cues.TicketPull, &cues.TicketWin, &cues.TicketDud };
 		const int32 index = static_cast<int32>(cue);
 		return index < static_cast<int32>(sizeof(fields) / sizeof(fields[0])) ? fields[index] : nullptr;
 	}
 
-	void PlayClip(World& world, const String& clip, const OneShotParams& params)
+	VoiceHandle PlayClip(World& world, const String& clip, const OneShotParams& params)
 	{
 		if (clip.IsEmpty())
-			return;
+			return {};
 		const AudioPlayResult played = world.GetAudio().PlayOneShot(clip, params);
 		if (!played)
 			FP_LOG_VERBOSE("Sound %s: %s", clip.CStr(), played.Result.Message.CStr());
+		return played.Voice;
 	}
 }
 
@@ -46,11 +47,11 @@ namespace Sounds
 		return {};
 	}
 
-	void Play(World& world, SoundCue cue, float volume)
+	VoiceHandle Play(World& world, SoundCue cue, float volume)
 	{
 		OneShotParams params;
 		params.Volume = volume;
-		PlayClip(world, GetClip(world, cue), params);
+		return PlayClip(world, GetClip(world, cue), params);
 	}
 
 	void PlayAt(World& world, SoundCue cue, Vec3 position)
@@ -76,7 +77,8 @@ namespace Sounds
 		{
 			if (clip.IsEmpty())
 				return;
-			voice = world.CreateEntity(slot == LoopSlot::Engine ? "Engine Loop" : "Footsteps");
+			const char* names[] = { "Footsteps", "Engine Loop", "Scratch Loop" };
+			voice = world.CreateEntity(names[static_cast<int32>(slot)]);
 			world.Add<LoopVoice>(voice).Slot = slot;
 			world.Add<AudioSourceComponent>(voice).Loop = true;
 		}
@@ -94,7 +96,7 @@ void SoundPreloadSystem::OnStart(World& world)
 {
 	for (auto [entity, cues] : world.View<SoundCuesComponent>().each())
 	{
-		for (int32 i = 0; i <= static_cast<int32>(SoundCue::Engine); ++i)
+		for (int32 i = 0; i <= static_cast<int32>(SoundCue::TicketDud); ++i)
 		{
 			const String* clip = GetField(cues, static_cast<SoundCue>(i));
 			if (!clip || clip->IsEmpty())

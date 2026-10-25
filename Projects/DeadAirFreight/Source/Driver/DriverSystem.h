@@ -106,6 +106,7 @@ private:
 	float m_SprintFov = 0;
 	// A ticket won the jackpot this frame, so its boost gets the jackpot sound too.
 	bool m_Jackpot = false;
+	FP::VoiceHandle m_BoostVoice;
 
 	bool m_CursorFree = false;
 	float m_WindNow = 0;
