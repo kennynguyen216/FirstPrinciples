@@ -227,7 +227,7 @@ namespace FP
 		if (GetDevice() && m_Context) m_Device->StopContext(m_Context);
 		m_Voices.clear();
 		m_PausedForWorld.clear();
-		for (Source& source : m_Sources) source.Voice = {};
+		for (Source& source : m_Sources) { source.Voice = {}; source.Recover = source.Paused = false; }
 		m_Context = m_Playing ? AllocateAudioContext() : 0;
 	}
 
@@ -237,6 +237,7 @@ namespace FP
 		m_DebugSources.clear();
 		StopAll();
 		m_Sources.clear();
+		m_OutputGeneration = 0;
 		m_ListenerEntity = NullEntity;
 		m_ListenerCandidates.clear();
 		m_WarnedNoListener = false;
@@ -275,7 +276,7 @@ namespace FP
 		SelectListener();
 		ApplySpatial(voice);
 		const VoiceHandle previous = tracked.Voice;
-		const bool previouslyPaused = GetState(previous) == VoiceState::Paused;
+		const bool previouslyPaused = GetState(previous) == VoiceState::Paused || (preservePause && tracked.Paused);
 		const bool pauseWithWorld = m_Paused && !(preservePause && previouslyPaused
 			&& std::find(m_PausedForWorld.begin(), m_PausedForWorld.end(), previous) == m_PausedForWorld.end());
 		auto result = m_Device->Play(m_Context, loaded.Clip, voice.Params, previous, m_Paused || (preservePause && previouslyPaused));
@@ -287,6 +288,8 @@ namespace FP
 		BindDebugVoice(voice.Owner, result.Voice.Generation);
 		m_Voices.push_back(voice);
 		tracked.Voice = result.Voice;
+		tracked.Recover = params.Loop;
+		tracked.Paused = preservePause && tracked.Paused;
 		return result;
 	}
 
@@ -356,15 +359,26 @@ namespace FP
 	{
 		return m_Playing && GetDevice() && voice.Context == m_Context && bool(voice);
 	}
-	bool AudioWorld::Stop(VoiceHandle voice) { return Owns(voice) && m_Device->Stop(voice); }
+	bool AudioWorld::Stop(VoiceHandle voice)
+	{
+		if (!Owns(voice) || !m_Device->Stop(voice)) return false;
+		for (Source& source : m_Sources) if (source.Voice == voice) source.Recover = source.Paused = false;
+		return true;
+	}
 	bool AudioWorld::Pause(VoiceHandle voice)
 	{
 		if (!Owns(voice) || !m_Device->Pause(voice)) return false;
 		// An explicit pause remains in effect after the world resumes.
 		std::erase(m_PausedForWorld, voice);
+		for (Source& source : m_Sources) if (source.Voice == voice) source.Paused = true;
 		return true;
 	}
-	bool AudioWorld::Resume(VoiceHandle voice) { return !m_Paused && Owns(voice) && m_Device->Resume(voice); }
+	bool AudioWorld::Resume(VoiceHandle voice)
+	{
+		if (m_Paused || !Owns(voice) || !m_Device->Resume(voice)) return false;
+		for (Source& source : m_Sources) if (source.Voice == voice) source.Paused = false;
+		return true;
+	}
 	VoiceState AudioWorld::GetState(VoiceHandle voice) const { return Owns(voice) ? m_Device->GetState(voice) : VoiceState::Invalid; }
 	VoiceHandle AudioWorld::GetSourceVoice(Entity entity) const
 	{
@@ -377,25 +391,25 @@ namespace FP
 	{
 		for (const Voice& voice : m_Voices) if (voice.Owner == entity) Stop(voice.Handle);
 		std::erase_if(m_Voices, [entity](const Voice& voice) { return voice.Owner == entity; });
-		for (Source& source : m_Sources) if (source.Owner == entity) source.Voice = {};
+		for (Source& source : m_Sources) if (source.Owner == entity) { source.Voice = {}; source.Recover = source.Paused = false; }
 	}
 
 	void AudioWorld::SelectListener()
 	{
 		std::vector<Entity> candidates;
-		const auto entities = m_World.GetEntities();
 		auto validTransform = [this](Entity entity) {
 			if (const auto* network = m_World.TryGet<NetworkComponent>(entity); network && network->Remote) return false;
 			const auto* t = m_World.TryGet<TransformComponent>(entity);
 			return t && Finite(t->Position) && Finite(t->Rotation);
 		};
-		for (Entity entity : entities)
-			if (const auto* listener = m_World.TryGet<AudioListenerComponent>(entity); listener && listener->Enabled && validTransform(entity))
+		for (auto [entity, listener] : m_World.View<AudioListenerComponent>().each())
+			if (listener.Enabled && validTransform(entity))
 				candidates.push_back(entity);
 		if (candidates.empty())
-			for (Entity entity : entities)
-				if (const auto* camera = m_World.TryGet<CameraComponent>(entity); camera && camera->Primary && validTransform(entity))
+			for (auto [entity, camera] : m_World.View<CameraComponent>().each())
+				if (camera.Primary && validTransform(entity))
 					candidates.push_back(entity);
+		std::sort(candidates.begin(), candidates.end(), [this](Entity a, Entity b) { return m_World.GetCreationIndex(a) < m_World.GetCreationIndex(b); });
 		if (candidates != m_ListenerCandidates && candidates.size() > 1)
 			FP_LOG_WARN("Multiple audio listeners/cameras: using the earliest created eligible entity");
 		m_ListenerCandidates = std::move(candidates);
@@ -550,7 +564,10 @@ namespace FP
 	void AudioWorld::ApplyRoom(AudioPlaybackParams& params, Vec3 source, Entity owner, float minDistance, float maxDistance, AudioDebugSource* debug)
 	{
 		// shortcut: first-order box reflections and a synthetic late tail; use mesh propagation for irregular rooms and portals.
-		for (Entity entity : m_World.GetEntities())
+		std::vector<Entity> rooms;
+		for (Entity entity : m_World.View<AudioRoomComponent>()) rooms.push_back(entity);
+		std::sort(rooms.begin(), rooms.end(), [this](Entity a, Entity b) { return m_World.GetCreationIndex(a) < m_World.GetCreationIndex(b); });
+		for (Entity entity : rooms)
 		{
 			const auto* room = m_World.TryGet<AudioRoomComponent>(entity);
 			if (!room || !room->Enabled || !Finite(room->Size) || !std::isfinite(room->Wet) || room->Wet <= 0 || room->Wet > 1
@@ -643,25 +660,40 @@ namespace FP
 	void AudioWorld::Update()
 	{
 		if (!m_Playing) return;
+		const bool ready = GetDevice() && m_Device->IsReady();
+		const bool recovered = ready && m_OutputGeneration != m_Device->GetOutputGeneration();
+		if (ready) m_OutputGeneration = m_Device->GetOutputGeneration();
 		SelectListener();
 		SampleVelocity(m_ListenerEntity, m_Listener.Position);
 		auto report = [this](Entity entity, const AudioPlayResult& result) {
 			if (!result) FP_LOG_WARN("Audio source '%s': %s", m_World.GetEntityName(entity).CStr(), result.Result.Message.CStr());
 		};
-		for (Entity entity : m_World.GetEntities())
+		std::vector<std::pair<uint64, Entity>> sources;
+		for (Entity entity : m_World.View<AudioSourceComponent>()) sources.emplace_back(m_World.GetCreationIndex(entity), entity);
+		std::sort(sources.begin(), sources.end());
+		for (const auto& [index, entity] : sources)
 		{
 			const auto* source = m_World.TryGet<AudioSourceComponent>(entity);
 			if (!source) continue;
-			const bool added = std::none_of(m_Sources.begin(), m_Sources.end(), [entity](const Source& s) { return s.Owner == entity; });
-			Source& tracked = TrackSource(entity);
+			const auto found = std::find_if(m_Sources.begin(), m_Sources.end(), [entity](const Source& s) { return s.Owner == entity; });
+			const bool added = found == m_Sources.end();
+			Source& tracked = added ? TrackSource(entity) : *found;
+			const VoiceState state = GetState(tracked.Voice);
+			if (state != VoiceState::Invalid) tracked.Recover = source->Loop;
 			if (added)
 			{
 				tracked.RequestedClip = source->Clip;
 				if (!source->Enabled) StopSource(entity);
-				else if (source->PlayOnStart) report(entity, Play(entity));
+				else if (source->PlayOnStart)
+				{
+					tracked.Recover = source->Loop;
+					report(entity, Play(entity));
+				}
 			}
 			else if (!source->Enabled) StopSource(entity);
-			else if (GetState(tracked.Voice) != VoiceState::Invalid && source->Clip != tracked.RequestedClip)
+			else if (recovered && tracked.Recover && source->Loop && state == VoiceState::Invalid)
+				report(entity, PlayInternal(entity, true));
+			else if (state != VoiceState::Invalid && source->Clip != tracked.RequestedClip)
 			{
 				tracked.RequestedClip = source->Clip;
 				report(entity, PlayInternal(entity, true));

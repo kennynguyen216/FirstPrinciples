@@ -132,6 +132,25 @@ FP_TEST(AudioRoom_ClipTailMixerMuteAndInvalidParameters)
 	SDL_ResetHint(SDL_HINT_AUDIO_DRIVER);
 }
 
+FP_TEST(AudioRoom_ComponentQueriesPreserveCreationOrder)
+{
+	Engine::RegisterEngineComponents();
+	StrongObjectPtr<World> world(NewObject<World>());
+	const Entity listener = world->CreateEntity("Listener");
+	world->Add<AudioListenerComponent>(listener);
+	const Entity first = world->CreateEntity("First room");
+	const Entity second = world->CreateEntity("Second room");
+	world->Add<AudioRoomComponent>(second).Wet = 0.8f;
+	world->Add<AudioRoomComponent>(first).Wet = 0.2f;
+	world->AddSystem<PhysicsSystem>();
+	world->BeginPlay();
+	OneShotParams params; params.Spatial = true; params.Occlusion = false;
+	FP_EXPECT(std::abs(world->GetAudio().GetSpatialParameters(params).Room.Wet - 0.2f) < 0.00001f);
+	world->Get<AudioRoomComponent>(first).Enabled = false;
+	FP_EXPECT(std::abs(world->GetAudio().GetSpatialParameters(params).Room.Wet - 0.8f) < 0.00001f);
+	world->EndPlay();
+}
+
 FP_TEST(AudioRoom_SettingsRoundTrip)
 {
 	Engine::RegisterEngineComponents();

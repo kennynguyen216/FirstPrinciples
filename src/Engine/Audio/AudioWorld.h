@@ -74,6 +74,8 @@ namespace FP
 			Entity Owner = NullEntity;
 			VoiceHandle Voice;
 			String RequestedClip;
+			bool Recover = false;
+			bool Paused = false;
 		};
 		struct Voice
 		{
@@ -122,6 +124,7 @@ namespace FP
 		std::weak_ptr<void> m_DeviceLifetime;
 		std::thread::id m_Thread = std::this_thread::get_id();
 		uint64 m_Context = 0;
+		uint64 m_OutputGeneration = 0;
 		bool m_Playing = false;
 		bool m_Paused = false;
 		std::vector<VoiceHandle> m_PausedForWorld;
