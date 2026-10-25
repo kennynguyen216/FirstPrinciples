@@ -1299,11 +1299,22 @@ namespace FP::Editor
 		}
 		else if (kind == "Character")
 		{
-			// A pill that walks, standing on the ground.
+			// A pill that plays straight away: it walks, jumps and looks around, and the game sees
+			// it through a camera that follows behind.
 			entity = m_World->CreateEntity(name);
 			m_World->Get<TransformComponent>(entity).Position.Y = 1;
 			m_World->Add<MeshComponent>(entity).Mesh = "Capsule";
 			m_World->Add<CharacterControllerComponent>(entity);
+			const String cameraName = m_World->Add<PlayerInputComponent>(entity).Camera;
+
+			const Entity camera = m_World->CreateEntity(cameraName);
+			TransformComponent& view = m_World->Get<TransformComponent>(camera);
+			view.Position = { 0, 1.5f, 5 };
+			view.Rotation = { -12, 0, 0 };
+			CameraComponent& lens = m_World->Add<CameraComponent>(camera);
+			lens.Perspective = true;
+			m_World->SetParent(camera, entity, false);
+			m_World->SetActiveCamera(camera);
 		}
 		else if (kind == "Camera")
 		{
