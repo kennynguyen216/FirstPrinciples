@@ -4,6 +4,7 @@
 #include "Enemies/Airlock.h"
 #include "Driver/DriverSettings.h"
 #include "Match/MatchQueries.h"
+#include "Net/GameNet.h"
 
 #include <cmath>
 
@@ -116,8 +117,18 @@ void TransitSystem::Update(World& world, float)
 	if (near && !m_NearHatch)
 		FP_LOG("Transit: press E to climb %s", inCab ? "down to the cargo bay, R to vent it" : "up to the cab");
 	m_NearHatch = near;
-	if (near && inCab && Input::WasKeyPressed(SDL_SCANCODE_R) && !Airlock::Vent(world, member.Crew))
-		FP_LOG("Airlock: still cycling");
+	if (near && inCab && Input::WasKeyPressed(SDL_SCANCODE_R))
+	{
+		// The host vents. Elsewhere the request goes to it.
+		if (!GameNet::IsHost(world))
+		{
+			NetWriter message = GameNet::Begin(GameNet::Message::Vent);
+			message.WriteU8(static_cast<uint8>(member.Crew));
+			GameNet::SendToHost(world, message, NetChannel::Reliable);
+		}
+		else if (!Airlock::Vent(world, member.Crew))
+			FP_LOG("Airlock: still cycling");
+	}
 	if (!near || !Input::WasKeyPressed(SDL_SCANCODE_E))
 		return;
 

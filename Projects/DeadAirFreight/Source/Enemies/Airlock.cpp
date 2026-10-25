@@ -3,6 +3,7 @@
 #include "Enemies/SiphonSystems.h"
 #include "LifeSupport/Cargo.h"
 #include "Match/MatchComponents.h"
+#include "Net/GameNet.h"
 
 #include <algorithm>
 
@@ -68,6 +69,8 @@ void AirlockSystem::Update(World& world, float deltaTime)
 		if (!open)
 			continue;
 		airlock.OpenFor -= deltaTime;
+		if (!GameNet::IsHost(world))
+			continue;
 
 		for (auto [entity, transform, siphon] : world.View<TransformComponent, SiphonComponent>().each())
 		{

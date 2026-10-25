@@ -29,6 +29,9 @@ enum class SiphonKind : FP::uint8
 struct SiphonComponent
 {
 	FP::int32 Crew = 0;
+	// Its place in the crew's pool. Every machine fills pools in the same order, so the network can
+	// name a creature by crew and index.
+	FP::int32 Index = 0;
 	SiphonKind Kind = SiphonKind::Mite;
 	bool Active = false;
 	float Health = 0;

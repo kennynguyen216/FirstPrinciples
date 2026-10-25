@@ -67,6 +67,9 @@ enum class CargoKind : FP::uint8
 struct CargoTankComponent
 {
 	FP::int32 Crew = 0;
+	// Its place in the crew's bay. Every machine spawns tanks in the same order, so the network can
+	// name a tank by crew and index.
+	FP::int32 Index = 0;
 	CargoKind Kind = CargoKind::Oxygen;
 	float AmountKg = 0;
 	float CapacityKg = 0;

@@ -6,6 +6,7 @@
 #include "Enemies/SiphonSystems.h"
 #include "LifeSupport/LifeSupportSystems.h"
 #include "Match/MatchSystems.h"
+#include "Net/NetSyncSystem.h"
 #include "Bridge/DriverBridge.h"
 
 using namespace FP;
@@ -129,6 +130,8 @@ namespace Game
 	void AddSystems(World& world)
 	{
 		world.AddSystem<SoundPreloadSystem>();
+		// What the host sent, applied before anything else looks at the match.
+		world.AddSystem<NetSyncSystem>();
 		// Seats first so every later system sees this frame's crews and roles.
 		world.AddSystem<CrewSystem>();
 		world.AddSystem<MatchSystem>();

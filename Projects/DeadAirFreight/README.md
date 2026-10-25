@@ -49,6 +49,17 @@ player's own camera (it needs the Ultralight SDK, from `Scripts/GetUltralight`),
 
 A life support readout for both crews goes to the log every few seconds, and Tab prints one.
 
+## Networked play
+
+The host runs the whole match: the truck, the bays, the creatures and the cargo. Everyone else sends
+what they do (steering, sitting, shots, repairs, vents) and shows what the host sends back. The host
+is whoever hosted the session (`--host`); everyone else joined it. One crewmate holds the wheel at a
+time. Crewmates in the cab are placed in cab space, so they stay aboard the moving truck.
+`Source/Net` holds the messages; the engine side is `NetworkSystem::SendGame` and `PollGame`.
+
+For now the scene has one truck, Crew A's. Crew B needs the Driver's systems to run a second one, and
+only the host sells scratch tickets.
+
 ## How the Driver and the rest fit together
 
 `Source/Bridge/DriverBridge` joins them without changing the Driver's code:

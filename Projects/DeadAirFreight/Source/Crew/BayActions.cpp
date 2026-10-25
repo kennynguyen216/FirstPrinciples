@@ -49,4 +49,24 @@ namespace BayActions
 		if (tank->Holes == 0)
 			FP_LOG("Laser: patched %s", world.GetEntityName(entity).CStr());
 	}
+
+	Entity FindTank(World& world, int32 crew, int32 index)
+	{
+		for (auto [entity, tank] : world.View<CargoTankComponent>().each())
+		{
+			if (tank.Crew == crew && tank.Index == index)
+				return entity;
+		}
+		return NullEntity;
+	}
+
+	Entity FindSiphon(World& world, int32 crew, int32 index)
+	{
+		for (auto [entity, siphon] : world.View<SiphonComponent>().each())
+		{
+			if (siphon.Crew == crew && siphon.Index == index)
+				return entity;
+		}
+		return NullEntity;
+	}
 }

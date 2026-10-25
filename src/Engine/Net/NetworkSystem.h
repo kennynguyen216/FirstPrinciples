@@ -28,6 +28,12 @@ namespace FP
 		void Update(World& world, float deltaTime) override;
 		void OnStop(World& world) override;
 
+		// The game's own messages, carried on the session alongside entity replication. A message
+		// holds about 1000 bytes. to 0 sends to every peer.
+		void SendGame(NetChannel channel, const void* data, int32 size, PeerId to = 0);
+		// The next game message from another peer. Event.Data holds just what the sender passed.
+		bool PollGame(NetEvent& out);
+
 	private:
 		enum class MessageType : uint8
 		{
@@ -35,6 +41,7 @@ namespace FP
 			Despawn,
 			Transforms,
 			Voice = VoiceChat::MessageType,
+			Game,
 		};
 
 		struct PartialSpawn
@@ -58,6 +65,8 @@ namespace FP
 		Array<Guid> m_SceneEntities;
 		Array<Guid> m_Spawned;
 		Array<PartialSpawn> m_Partial;
+		Array<NetEvent> m_GameMessages;
+		int32 m_GameHead = 0;
 		uint32 m_Tick = 0;
 	};
 }

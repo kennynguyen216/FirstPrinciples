@@ -81,6 +81,8 @@ namespace FP
 		bool PollEvent(NetEvent& out);
 
 		bool IsRunning() const { return m_Socket.IsOpen(); }
+		// Running and never asked to Join anyone: this is the session others joined.
+		bool IsHosting() const { return IsRunning() && !m_Joined; }
 		uint16 GetPort() const { return m_Socket.GetPort(); }
 		PeerId GetLocalId() const { return m_LocalId; }
 		Array<PeerId> GetPeers() const;
@@ -141,6 +143,7 @@ namespace FP
 		NetCrypto::KeyPair m_Keys;
 		uint8 m_Password[NetCrypto::KeySize] = {};
 		bool m_HasPassword = false;
+		bool m_Joined = false;
 		Array<Peer*> m_Peers;
 		Array<PendingJoin> m_Pending;
 		Array<NetEvent> m_Events;

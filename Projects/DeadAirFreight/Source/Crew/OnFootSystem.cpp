@@ -5,6 +5,7 @@
 #include "Enemies/SiphonComponents.h"
 #include "LifeSupport/LifeSupportComponents.h"
 #include "Match/MatchQueries.h"
+#include "Net/GameNet.h"
 
 #include <algorithm>
 #include <cmath>
@@ -141,10 +142,27 @@ namespace
 		const CargoTankComponent* tank = aim.Hit ? world.TryGet<CargoTankComponent>(aim.RayHit.Entity) : nullptr;
 		if (siphon && !siphon->Active)
 			siphon = nullptr;
-		if (siphon)
-			BayActions::HitSiphon(world, aim.RayHit.Entity, config.LaserDamage);
-		else if (tank)
-			BayActions::PunctureTank(world, aim.RayHit.Entity, aim.RayHit.Point); // a miss that lands on cargo
+		if (siphon || tank)
+		{
+			// The host applies hits. Elsewhere they go to the host, and its next bay update shows them.
+			if (GameNet::IsHost(world))
+			{
+				if (siphon)
+					BayActions::HitSiphon(world, aim.RayHit.Entity, config.LaserDamage);
+				else
+					BayActions::PunctureTank(world, aim.RayHit.Entity, aim.RayHit.Point); // a miss that lands on cargo
+			}
+			else
+			{
+				NetWriter message = GameNet::Begin(GameNet::Message::LaserHit);
+				message.WriteBool(siphon != nullptr);
+				message.WriteU8(static_cast<uint8>(siphon ? siphon->Crew : tank->Crew));
+				message.WriteU8(static_cast<uint8>(siphon ? siphon->Index : tank->Index));
+				message.WriteFloat(config.LaserDamage);
+				message.WriteVec3(aim.RayHit.Point);
+				GameNet::SendToHost(world, message, NetChannel::Reliable);
+			}
+		}
 		Sounds::Play(world, SoundCue::LaserFire);
 		ShowBeam(world, onFoot.Beam, aim.Muzzle, aim.End, LaserMode::Vaporize);
 		onFoot.BeamTimeLeft = config.BeamSeconds;
@@ -156,7 +174,19 @@ namespace
 		const Aim aim = Trace(world, config, eye, shooter);
 		const CargoTankComponent* tank = aim.Hit ? world.TryGet<CargoTankComponent>(aim.RayHit.Entity) : nullptr;
 		if (tank && tank->Holes > 0)
-			BayActions::RepairTank(world, aim.RayHit.Entity, deltaTime, aim.RayHit.Point);
+		{
+			if (GameNet::IsHost(world))
+				BayActions::RepairTank(world, aim.RayHit.Entity, deltaTime, aim.RayHit.Point);
+			else
+			{
+				NetWriter message = GameNet::Begin(GameNet::Message::LaserRepair);
+				message.WriteU8(static_cast<uint8>(tank->Crew));
+				message.WriteU8(static_cast<uint8>(tank->Index));
+				message.WriteFloat(deltaTime);
+				message.WriteVec3(aim.RayHit.Point);
+				GameNet::SendToHost(world, message, NetChannel::Reliable);
+			}
+		}
 
 		onFoot.RepairSoundIn -= deltaTime;
 		if (onFoot.RepairSoundIn <= 0)
