@@ -1,7 +1,7 @@
 #pragma once
 
 #define DRIVER_SETTINGS(X) \
-	X(MatchLength) X(CrossingTime) X(WeatherWindowHours) X(TimeBonusPerSecond) \
+	X(MatchLength) X(CrossingTime) X(WeatherWindowHours) X(TimeBonusPerSecond) X(ParTime) \
 	X(OxygenPerPersonPerDay) X(CrewSize) X(ColonyCrew) X(ColonyReserveKg) X(StartingCargo) \
 	X(CruiseSpeed) X(ThrustAccel) X(MouseSensitivity) X(MaxPitch) X(TurnTime90) \
 	X(CalmSolarWind) X(StormSolarWind) X(CalmWobble) X(StormWobble) X(WobbleFrequency) \

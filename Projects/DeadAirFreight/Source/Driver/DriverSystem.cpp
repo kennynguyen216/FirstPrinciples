@@ -234,7 +234,7 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 		const float bank = std::clamp((truck.Yaw - yawBefore) / deltaTime * m_Settings.BankPerTurn, -m_Settings.BankMax, m_Settings.BankMax);
 		m_Bank += (bank - m_Bank) * std::min(1.0f, m_Settings.BankSmoothing * deltaTime);
 	}
-	if (truck.Speed <= m_Settings.CruiseSpeed && CollideWithRocks(truck, m_Rocks, truck.Time, m_Settings))
+	if (CollideWithRocks(truck, m_Rocks, truck.Time, m_Settings))
 		Notify("ASTEROID HIT!", Bad, 1.5f);
 
 	const bool scrubberWasBroken = life.ScrubberBroken;
@@ -267,7 +267,7 @@ void DriverSystem::Finish(const char* reason, const TruckState& truck, const Lif
 	m_Finished = true;
 	const bool delivered = std::string(reason) == "DELIVERED";
 	const float cargo = delivered ? life.Cargo : 0;
-	const float bonus = delivered ? life.ColonyTimeLeft * m_Settings.TimeBonusPerSecond : 0;
+	const float bonus = delivered ? std::max(0.0f, m_Settings.ParTime - truck.Time) * m_Settings.TimeBonusPerSecond : 0;
 	m_Results = {
 		reason,
 		Format("CARGO OXYGEN DELIVERED  %.1f KG", cargo),

@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <initializer_list>
+#include <vector>
 
 using namespace FP;
 using namespace MatchQueries;
@@ -17,26 +19,118 @@ namespace
 		Entity Member = NullEntity;
 	};
 
+	// Crew A is orange and Crew B purple, on the truck's cab and the crew's shirts.
 	const char* TruckMaterials[CrewCount] = { "Materials/TruckCrewA.material", "Materials/TruckCrewB.material" };
 
-	// Placeholder looks until the real models are in: a box in the crew's color for a truck and a
-	// white post for a Defender. Every peer works these out for every player, so nothing is sent.
-	// A local Driver flies the Driver scene's own truck, so their crew entity stays hidden.
-	void ApplyLook(World& world, Entity entity, const CrewMemberComponent& member)
+	// The space truck faces -Z with its sections in file order: Gray_Metal, Red_Metal (the cab, in
+	// crew color), Glass, Lighter_Gray_Metal, Yellow, Dark_Grey. Scaled so the Driver's cab would fit.
+	constexpr const char* TruckMesh = "Meshes/SpaceTruck/SpaceTruckV1.obj";
+	constexpr float TruckScale = 3.5f;
+
+	// The crew character: sections Base, Cap, Helmet, Denim, Shirt, Button, Belt. Its feet are at 0
+	// and it faces +X. Both crews share the purple model; the orange one differs only in color.
+	constexpr const char* CharacterMesh = "Meshes/Characters/PurpleCharacter.obj";
+	constexpr float CharacterHeight = 5.02f;
+	const char* CharacterCaps[CrewCount] = { "Materials/Characters/OrangeCap.material", "Materials/Characters/PurpleShirt.material" };
+	const char* CharacterShirts[CrewCount] = { "Materials/Characters/OrangeShirt.material", "Materials/Characters/PurpleShirt.material" };
+
+	// A Defender's character lives on an entity of its own, because the crew member's scale is the
+	// body's size for the game and the model needs a uniform one. Made on every peer, never sent.
+	struct CrewCharacterComponent
 	{
-		const bool driver = member.Slot >= 0 && member.Role == CrewRole::Driver;
-		const char* material = driver ? TruckMaterials[member.Crew] : "Materials/Defender.material";
+		Entity Member = NullEntity;
+	};
+
+	// Sets a mesh and its materials, one per section; an empty slot uses the first material.
+	void SetLook(World& world, Entity entity, const char* mesh, const char* material, std::initializer_list<const char*> slots)
+	{
+		MeshComponent* shape = world.TryGet<MeshComponent>(entity);
+		if (!shape)
+			shape = &world.Add<MeshComponent>(entity);
+		if (shape->Mesh != mesh)
+			shape->Mesh = mesh;
 		MaterialComponent* look = world.TryGet<MaterialComponent>(entity);
 		if (!look)
 			look = &world.Add<MaterialComponent>(entity);
 		if (look->Material != material)
 			look->Material = material;
+		Array<String> wanted;
+		for (const char* slot : slots)
+			wanted.Add(slot);
+		if (!(look->Slots == wanted))
+			look->Slots = wanted;
+	}
+
+	// Every peer works these out for every player, so nothing is sent. Another crew's Driver is
+	// their truck, since their crew entity follows it. Your own truck and body stay hidden: you fly
+	// the Driver scene's truck, and you look out of your own eyes.
+	void ApplyLook(World& world, Entity entity, const CrewMemberComponent& member)
+	{
+		const bool driver = member.Slot >= 0 && member.Role == CrewRole::Driver;
+		const bool defender = member.Slot >= 0 && member.Role == CrewRole::Defender;
+		if (driver && entity != FindLocalMember(world))
+			SetLook(world, entity, TruckMesh, "Materials/SpaceTruck/GrayMetal.material",
+				{ "", TruckMaterials[member.Crew], "Materials/Windshield.material", "Materials/SpaceTruck/LighterGrayMetal.material",
+					"Materials/SpaceTruck/Yellow.material", "Materials/SpaceTruck/DarkGrey.material" });
+		else if (driver || defender)
+		{
+			if (world.Has<MeshComponent>(entity))
+				world.Remove<MeshComponent>(entity);
+		}
+		else
+			SetLook(world, entity, "Cube", "Materials/Defender.material", {});
 
 		// Scale is shared over the network, so only the owner sets it.
 		if (!IsRemote(world, entity))
 		{
 			TransformComponent& transform = world.Get<TransformComponent>(entity);
-			transform.Scale = driver ? Vec3{} : member.Slot >= 0 ? Vec3{ 0.8f, 1.8f, 0.8f } : Vec3{ 0.3f, 0.3f, 0.3f };
+			transform.Scale = driver ? Vec3{ 1, 1, 1 } * TruckScale : defender ? Vec3{ 0.8f, 1.8f, 0.8f } : Vec3{ 0.3f, 0.3f, 0.3f };
+		}
+	}
+
+	bool ShowsCharacter(World& world, Entity entity, const CrewMemberComponent& member)
+	{
+		return member.Slot >= 0 && member.Role == CrewRole::Defender && entity != FindLocalMember(world);
+	}
+
+	// Stands the character on the body's feet, facing where the body faces.
+	void PlaceCharacter(World& world, Entity character, Entity memberEntity, const CrewMemberComponent& member)
+	{
+		const TransformComponent& body = world.Get<TransformComponent>(memberEntity);
+		TransformComponent& transform = world.Get<TransformComponent>(character);
+		transform.Position = body.Position - Vec3{ 0, body.Scale.Y * 0.5f, 0 };
+		transform.Rotation = { 0, body.Rotation.Y + 90, 0 };
+		transform.Scale = Vec3{ 1, 1, 1 } * (body.Scale.Y / CharacterHeight);
+		SetLook(world, character, CharacterMesh, "Materials/Characters/Base.material",
+			{ "", CharacterCaps[member.Crew], "Materials/Characters/Helmet.material", "Materials/Characters/Denim.material",
+				CharacterShirts[member.Crew], "Materials/Characters/Button.material", "Materials/Characters/Belt.material" });
+	}
+
+	void UpdateCharacters(World& world)
+	{
+		std::vector<Entity> drawn;
+		std::vector<Entity> stale;
+		for (auto [entity, character] : world.View<CrewCharacterComponent>().each())
+		{
+			const CrewMemberComponent* member = world.IsValid(character.Member) ? world.TryGet<CrewMemberComponent>(character.Member) : nullptr;
+			if (!member || !ShowsCharacter(world, character.Member, *member))
+			{
+				stale.push_back(entity);
+				continue;
+			}
+			drawn.push_back(character.Member);
+			PlaceCharacter(world, entity, character.Member, *member);
+		}
+		for (Entity entity : stale)
+			world.DestroyEntity(entity);
+
+		for (auto [entity, member] : world.View<CrewMemberComponent>().each())
+		{
+			if (!ShowsCharacter(world, entity, member) || std::find(drawn.begin(), drawn.end(), entity) != drawn.end())
+				continue;
+			const Entity character = world.CreateEntity("Crew Character");
+			world.Add<CrewCharacterComponent>(character).Member = entity;
+			PlaceCharacter(world, character, entity, member);
 		}
 	}
 }
@@ -92,6 +186,7 @@ void CrewSystem::Update(World& world, float)
 
 	for (auto [entity, member] : world.View<CrewMemberComponent>().each())
 		ApplyLook(world, entity, member);
+	UpdateCharacters(world);
 }
 
 void MatchSystem::OnStart(World& world)

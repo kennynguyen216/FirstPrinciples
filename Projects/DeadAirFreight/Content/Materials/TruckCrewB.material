@@ -1,6 +1,6 @@
 # FirstPrinciples material
 Shader "Lit"
-BaseColor 0.1 0.7 1 1
+BaseColor 0.45 0.15 0.75 1
 BaseColorMap ""
 Tiling 1 1
 Offset 0 0

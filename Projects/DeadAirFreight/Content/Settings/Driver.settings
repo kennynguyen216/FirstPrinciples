@@ -2,7 +2,8 @@ MatchLength 300
 CrossingTime 210
 WeatherWindowHours 24
 
-TimeBonusPerSecond 0.1
+TimeBonusPerSecond 1
+ParTime 220 # keep equal to ParTimeSeconds on the Match entity in Main.scene
 
 OxygenPerPersonPerDay 0.8
 CrewSize 2
@@ -32,11 +33,11 @@ JerkDecay 5
 FetchLive 1
 FetchTimeout 4
 
-SteadyTime 6
+SteadyTime 1
 DriftRampTime 15
 WalkSpeed 3
 LookSensitivity 0.15
-EyeHeight 1.7
+EyeHeight 2.4
 InteractRange 2
 CabWallMargin 0.4
 
@@ -98,7 +99,7 @@ BounceJerk 150
 
 ChaseDistance 16
 ChaseHeight 4
-SeatedEyeHeight 2.2
+SeatedEyeHeight 2.5
 BankPerTurn 0.25
 BankMax 25
 BankSmoothing 4
