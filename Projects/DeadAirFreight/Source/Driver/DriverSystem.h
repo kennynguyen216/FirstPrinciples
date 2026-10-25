@@ -13,12 +13,43 @@
 #include <string>
 #include <vector>
 
+// How this machine takes part in a networked match (Dead Air Freight's DriverNet). The host
+// simulates the truck and its life support. Everyone else shows the host's truck, which arrives
+// each frame, and only runs their own player: walking, sitting and their camera.
+struct DriverNetSetup
+{
+	bool Authority = true;
+	// The host's match package, so everyone flies through the same weather and asteroids.
+	bool HasPackage = false;
+	MatchPackage Package;
+};
+
 class DriverSystem : public FP::System
 {
 public:
+	DriverSystem() = default;
+	explicit DriverSystem(DriverNetSetup net) : m_Net(std::move(net)) {}
+
 	const char* GetName() const override { return "Driver"; }
 	void OnStart(FP::World& world) override;
 	void Update(FP::World& world, float deltaTime) override;
+
+	const MatchPackage& GetPackage() const { return m_Package; }
+	// On the host: a crewmate on another machine who holds the wheel, steers or repairs the scrubber.
+	void SetRemoteCrew(bool atWheel, TruckControls controls, bool repairing)
+	{
+		m_RemoteAtWheel = atWheel;
+		m_RemoteControls = controls;
+		m_RemoteRepairing = repairing;
+	}
+	// Someone else holds the wheel, so this player cannot sit down at it.
+	void SetWheelTaken(bool taken) { m_WheelTaken = taken; }
+	// What this machine's player did last frame, for sending to the host.
+	bool IsLocalSeated() const { return m_LocalSeated; }
+	TruckControls GetLocalControls() const { return m_LocalControls; }
+	bool IsLocalRepairing() const { return m_LocalRepairing; }
+	// Away from the host: the host's match ended, so show its results.
+	void ShowResults(FP::World& world, const char* reason);
 
 private:
 	struct CabPart
@@ -77,4 +108,14 @@ private:
 	bool m_Finished = false;
 	std::vector<std::string> m_Results;
 	Hud m_Hud;
+
+	DriverNetSetup m_Net;
+	bool m_RemoteAtWheel = false;
+	TruckControls m_RemoteControls;
+	bool m_RemoteRepairing = false;
+	bool m_WheelTaken = false;
+	bool m_LocalSeated = false;
+	TruckControls m_LocalControls;
+	bool m_LocalRepairing = false;
+	float m_LastYaw = 0;
 };

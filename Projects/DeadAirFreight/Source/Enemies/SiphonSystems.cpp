@@ -2,6 +2,7 @@
 #include "Audio/Sounds.h"
 #include "LifeSupport/Cargo.h"
 #include "Match/MatchQueries.h"
+#include "Net/GameNet.h"
 
 #include <algorithm>
 #include <cmath>
@@ -112,8 +113,10 @@ namespace Siphons
 				break;
 			if (siphon.Active || siphon.Crew != crew || siphon.Kind != kind)
 				continue;
+			const int32 poolIndex = siphon.Index;
 			siphon = SiphonComponent{};
 			siphon.Crew = crew;
+			siphon.Index = poolIndex;
 			siphon.Kind = kind;
 			siphon.Active = true;
 			siphon.Health = config.MiteHealth;
@@ -178,6 +181,7 @@ void SiphonSpawnerSystem::OnStart(World& world)
 			const Entity entity = world.CreateEntity(String::Format("Crew %s Mite %d", GetCrewName(crew), i + 1));
 			SiphonComponent& siphon = world.Add<SiphonComponent>(entity);
 			siphon.Crew = crew;
+			siphon.Index = i;
 			siphon.Kind = SiphonKind::Mite;
 			world.Add<MeshComponent>(entity).Mesh = "Sphere";
 			world.Add<MaterialComponent>(entity).Material = "Materials/Mite.material";
@@ -201,7 +205,7 @@ void SiphonSpawnerSystem::OnStart(World& world)
 void SiphonSpawnerSystem::Update(World& world, float deltaTime)
 {
 	const MatchStateComponent* state = GetState(world);
-	if (!state || state->Phase != MatchPhase::Racing)
+	if (!state || state->Phase != MatchPhase::Racing || !GameNet::IsHost(world))
 		return;
 	const SiphonConfigComponent config = GetConfig(world);
 	if (config.MiteTrickleSeconds <= 0)
@@ -220,7 +224,7 @@ void SiphonSpawnerSystem::Update(World& world, float deltaTime)
 void SiphonSystem::Update(World& world, float deltaTime)
 {
 	const MatchStateComponent* state = GetState(world);
-	if (!state || state->Phase != MatchPhase::Racing)
+	if (!state || state->Phase != MatchPhase::Racing || !GameNet::IsHost(world))
 		return;
 	const SiphonConfigComponent config = GetConfig(world);
 

@@ -30,4 +30,6 @@ private:
 	// Hands a crew's whole cargo to the colony and scores it.
 	void Deliver(FP::World& world, MatchStateComponent& state, const MatchConfigComponent& config, FP::int32 crew, FP::Entity colony);
 	void Finish(MatchStateComponent& state, FP::int32 winner);
+
+	MatchPhase m_LastPhase = MatchPhase::Lobby;
 };

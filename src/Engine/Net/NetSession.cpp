@@ -74,10 +74,12 @@ namespace FP
 		m_Pending.Clear();
 		m_Keys.Wipe();
 		m_Socket.Close();
+		m_Joined = false;
 	}
 
 	void NetSession::Join(const NetAddress& address)
 	{
+		m_Joined = true;
 		QueueJoin(address, -1);
 	}
 

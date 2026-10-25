@@ -2,6 +2,7 @@
 #include "Audio/Sounds.h"
 #include "Crew/CrewComponents.h"
 #include "Match/MatchQueries.h"
+#include "Net/GameNet.h"
 #include "LifeSupport/Cargo.h"
 
 #include <algorithm>
@@ -116,6 +117,17 @@ void MatchSystem::Update(World& world, float deltaTime)
 	if (!state)
 		return;
 	const MatchConfigComponent& config = world.Get<MatchConfigComponent>(match);
+
+	// Away from the host the phases arrive from it (NetSyncSystem). Only take up a starting spot
+	// when its countdown begins.
+	if (!GameNet::IsHost(world))
+	{
+		if (state->Phase == MatchPhase::Countdown && m_LastPhase == MatchPhase::Lobby)
+			PlaceLocalMember(world);
+		m_LastPhase = state->Phase;
+		return;
+	}
+	m_LastPhase = state->Phase;
 
 	switch (state->Phase)
 	{

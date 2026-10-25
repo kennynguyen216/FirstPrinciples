@@ -58,7 +58,8 @@ void DriverSystem::OnStart(World& world)
 		return;
 	}
 
-	m_Package = BuildMatchPackage(GatherMatchSources(m_Settings), m_Settings, static_cast<unsigned>(std::time(nullptr)));
+	// Networked, everyone uses the host's package so the weather and asteroids match.
+	m_Package = m_Net.HasPackage ? m_Net.Package : BuildMatchPackage(GatherMatchSources(m_Settings), m_Settings, static_cast<unsigned>(std::time(nullptr)));
 	FP_LOG("Match Package: weather %s, %d solar wind readings (peak %.0f km/s), %d asteroid clusters (%s)",
 		m_Package.WeatherLabel.c_str(), static_cast<int>(m_Package.SolarWind.size()), m_Package.PeakSolarWind,
 		static_cast<int>(m_Package.Clusters.size()), m_Package.AsteroidLabel.c_str());
@@ -204,56 +205,78 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 			if (driver->Seated)
 				driver->Seated = false;
 			else if (CanReach(*driver, m_Wheel, m_Settings))
-				driver->Seated = true;
+			{
+				// Networked, only one crewmate holds the wheel at a time.
+				if (m_WheelTaken)
+					Notify("YOUR CREWMATE HAS THE WHEEL", Warn, 2);
+				else
+					driver->Seated = true;
+			}
 		}
 		repairing = !driver->Seated && Input::IsKeyDown(SDL_SCANCODE_E) && CanReach(*driver, m_Scrubber, m_Settings);
 	}
 	const bool seated = driver ? driver->Seated : true;
-	if (seated && awake && Input::WasKeyPressed(SDL_SCANCODE_T) && !ticket.Active)
+	m_LocalSeated = seated;
+	m_LocalRepairing = repairing;
+	// Tickets touch the truck's cargo and luck, so only the host sells them for now.
+	if (m_Net.Authority && seated && awake && Input::WasKeyPressed(SDL_SCANCODE_T) && !ticket.Active)
 	{
 		const Prize prize = RollPrize(NextRandom(truck.Random), GetPrizeOdds(m_Settings));
 		if (!BuyTicket(ticket, life, prize, m_Settings))
 			Notify("NOT ENOUGH CARGO AIR FOR A TICKET", Bad, 2);
 	}
 	const bool scratching = ticket.Active && !ticket.Revealed;
-	truck.AtWheel = seated && !scratching && awake;
+	const bool steering = seated && !scratching && awake;
+	// The host's truck is at the wheel when anyone holds it, here or on another machine. Away from the
+	// host the truck arrives from it, at the wheel or not.
+	if (m_Net.Authority)
+		truck.AtWheel = (steering || m_RemoteAtWheel) && awake;
 
 	m_WindNow = SolarWindAt(m_Package, truck.Time, m_Settings);
 	m_KpNow = KpAt(m_Package, truck.Time, m_Settings);
 	m_PeakWindFought = std::max(m_PeakWindFought, m_WindNow);
 
 	TruckControls controls;
-	if (truck.AtWheel)
-	{
+	if (steering)
 		controls.Aim = mouseMove * m_Settings.MouseSensitivity;
+	else if (m_RemoteAtWheel)
+		controls = m_RemoteControls;
+	m_LocalControls = steering ? controls : TruckControls{};
+
+	// The truck and its life support run on the host. Elsewhere they arrived from it this frame.
+	const float yawBefore = m_Net.Authority ? truck.Yaw : m_LastYaw;
+	const bool scrubberWasBroken = life.ScrubberBroken;
+	if (m_Net.Authority)
+	{
+		StepTruck(truck, controls, { m_WindNow, m_KpNow }, GetDisturbanceScale(life, m_Settings), m_Settings, deltaTime);
+		if (truck.Speed <= m_Settings.CruiseSpeed && CollideWithRocks(truck, m_Rocks, truck.Time, m_Settings))
+			Notify("ASTEROID HIT!", Bad, 1.5f);
+		StepLifeSupport(life, repairing || m_RemoteRepairing, m_Settings, deltaTime);
+		if (StepTicket(ticket, life, ticket.Active && awake ? mouseMove : Vec2{}, awake && Input::IsMouseDown(MouseButton::Left), m_Settings, deltaTime))
+		{
+			FP_LOG("Ticket: %s", GetPrizeName(ticket.Won));
+			if (ticket.Won == Prize::Jackpot)
+			{
+				truck.Boost = m_Settings.BoostTime;
+				Notify("JACKPOT! HYPERDRIVE OVERLOAD", Good, 3);
+			}
+		}
 	}
-	const float yawBefore = truck.Yaw;
-	StepTruck(truck, controls, { m_WindNow, m_KpNow }, GetDisturbanceScale(life, m_Settings), m_Settings, deltaTime);
 	if (deltaTime > 0)
 	{
 		const float bank = std::clamp((truck.Yaw - yawBefore) / deltaTime * m_Settings.BankPerTurn, -m_Settings.BankMax, m_Settings.BankMax);
 		m_Bank += (bank - m_Bank) * std::min(1.0f, m_Settings.BankSmoothing * deltaTime);
 	}
-	if (truck.Speed <= m_Settings.CruiseSpeed && CollideWithRocks(truck, m_Rocks, truck.Time, m_Settings))
-		Notify("ASTEROID HIT!", Bad, 1.5f);
-
-	const bool scrubberWasBroken = life.ScrubberBroken;
-	StepLifeSupport(life, repairing, m_Settings, deltaTime);
+	m_LastYaw = truck.Yaw;
 	if (scrubberWasBroken && !life.ScrubberBroken)
 		Notify("SCRUBBER FIXED", Good, 2.5f);
-	if (StepTicket(ticket, life, ticket.Active && awake ? mouseMove : Vec2{}, awake && Input::IsMouseDown(MouseButton::Left), m_Settings, deltaTime))
-	{
-		FP_LOG("Ticket: %s", GetPrizeName(ticket.Won));
-		if (ticket.Won == Prize::Jackpot)
-		{
-			truck.Boost = m_Settings.BoostTime;
-			Notify("JACKPOT! HYPERDRIVE OVERLOAD", Good, 3);
-		}
-	}
 
 	if (driver && driver->InCab && !driver->Seated && awake)
 		StepOnFoot(*driver, mouseMove * m_Settings.LookSensitivity, Input::GetMoveAxis(), m_CabBounds, m_Settings, deltaTime);
 
+	// The host decides when the match ends; everyone else hears it from the host (ShowResults).
+	if (!m_Net.Authority)
+		return;
 	if (GetAltitude(truck) <= m_Settings.DeliveryAltitude)
 		Finish("DELIVERED", truck, life);
 	else if (life.ColonyTimeLeft <= 0)
@@ -289,6 +312,13 @@ void DriverSystem::Finish(const char* reason, const TruckState& truck, const Lif
 	}
 	for (const std::string& line : m_Results)
 		FP_LOG("Results: %s", line.c_str());
+}
+
+void DriverSystem::ShowResults(World& world, const char* reason)
+{
+	if (m_Finished || m_Truck == NullEntity || !world.IsValid(m_Truck))
+		return;
+	Finish(reason, world.Get<TruckState>(m_Truck), world.Get<LifeSupport>(m_Truck));
 }
 
 void DriverSystem::Notify(const std::string& text, Color color, float seconds)

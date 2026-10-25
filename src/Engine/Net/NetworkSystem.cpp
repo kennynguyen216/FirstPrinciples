@@ -59,6 +59,33 @@ namespace FP
 	void NetworkSystem::OnStop(World&)
 	{
 		m_Session.Stop();
+		m_GameMessages.Clear();
+		m_GameHead = 0;
+	}
+
+	void NetworkSystem::SendGame(NetChannel channel, const void* data, int32 size, PeerId to)
+	{
+		if (!m_Session.IsRunning())
+			return;
+		NetWriter message;
+		message.WriteU8(static_cast<uint8>(MessageType::Game));
+		message.WriteBytes(data, static_cast<usize>(size));
+		if (to == 0)
+			m_Session.Broadcast(channel, message.Data(), message.Size());
+		else
+			m_Session.Send(to, channel, message.Data(), message.Size());
+	}
+
+	bool NetworkSystem::PollGame(NetEvent& out)
+	{
+		if (m_GameHead >= m_GameMessages.Num())
+		{
+			m_GameMessages.Clear();
+			m_GameHead = 0;
+			return false;
+		}
+		out = std::move(m_GameMessages[m_GameHead++]);
+		return true;
 	}
 
 	void NetworkSystem::ReplaceTemplates(World& world)
@@ -199,6 +226,17 @@ namespace FP
 				network->Owner = owner;
 				network->Remote = true;
 				FP_LOG_VERBOSE("Peer %016llx spawned %s", static_cast<unsigned long long>(owner), world.GetEntityName(entity).CStr());
+				break;
+			}
+			case MessageType::Game:
+			{
+				NetEvent& message = m_GameMessages.Emplace();
+				message.Type = NetEventType::Message;
+				message.Peer = event.Peer;
+				message.Channel = event.Channel;
+				message.Data.Resize(reader.Remaining());
+				if (reader.Remaining() > 0)
+					std::memcpy(message.Data.Data(), reader.ReadBytes(reader.Remaining()), message.Data.Num());
 				break;
 			}
 			case MessageType::Despawn:

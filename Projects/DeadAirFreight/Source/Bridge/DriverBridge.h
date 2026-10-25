@@ -37,8 +37,8 @@ private:
 	FP::int32 m_Crew;
 };
 
-// Runs just after the Driver's systems: their spending comes out of the tanks, and the end of the
-// Driver's match ends the shared one.
+// Runs just after the Driver's systems: their spending comes out of the tanks, crewmates in the cab
+// are placed in it, the host sends the truck, and the end of the Driver's match ends the shared one.
 class CargoBridgeOutSystem : public FP::System
 {
 public:
@@ -51,4 +51,7 @@ private:
 	FP::int32 m_Crew;
 	float m_DeliveryAltitude = 0;
 	float m_ColonyRadius = 0;
+	// The cab floor and seat in cab space, read before the cab starts riding the truck.
+	FP::Vec3 m_CabOrigin;
+	FP::Vec3 m_Seat;
 };

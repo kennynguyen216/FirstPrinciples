@@ -2,6 +2,7 @@
 #include "LifeSupport/Cargo.h"
 #include "Enemies/SiphonSystems.h"
 #include "Match/MatchQueries.h"
+#include "Net/GameNet.h"
 
 #include <algorithm>
 #include <cmath>
@@ -81,6 +82,7 @@ void LifeSupportSystem::SpawnTanks(World& world, int32 crew)
 
 		CargoTankComponent& tank = world.Add<CargoTankComponent>(entity);
 		tank.Crew = crew;
+		tank.Index = i;
 		tank.Kind = oxygen ? CargoKind::Oxygen : CargoKind::Water;
 		tank.CapacityKg = oxygen ? tanks.OxygenTankKg : tanks.WaterTankKg;
 		tank.AmountKg = tank.CapacityKg;
@@ -94,7 +96,7 @@ void LifeSupportSystem::SpawnTanks(World& world, int32 crew)
 
 void LifeSupportSystem::Update(World& world, float deltaTime)
 {
-	if (!IsRacing(world))
+	if (!IsRacing(world) || !GameNet::IsHost(world))
 		return;
 	const MatchConfigComponent match = GetMatchConfig(world);
 	const LifeSupportConfigComponent config = Cargo::GetConfig(world);
@@ -157,7 +159,8 @@ void LifeSupportSystem::Update(World& world, float deltaTime)
 
 void CargoTankSystem::Update(World& world, float deltaTime)
 {
-	const bool racing = IsRacing(world);
+	// Leaks run on the host. Every machine colors its tanks from what they hold.
+	const bool racing = IsRacing(world) && GameNet::IsHost(world);
 	const TankConfigComponent tanks = Cargo::GetTankConfig(world);
 	const LifeSupportDataComponent data = Cargo::GetData(world);
 
@@ -203,7 +206,7 @@ void ColonyClockSystem::OnStart(World& world)
 
 void ColonyClockSystem::Update(World& world, float deltaTime)
 {
-	if (!IsRacing(world))
+	if (!IsRacing(world) || !GameNet::IsHost(world))
 		return;
 	for (auto [entity, state] : world.View<ColonyStateComponent>().each())
 		state.OxygenKg = std::max(0.0f, state.OxygenKg - state.OxygenUsePerSecond * deltaTime);
