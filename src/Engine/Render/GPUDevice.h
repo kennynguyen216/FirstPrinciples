@@ -59,7 +59,7 @@ namespace FP
 		const char* GetDriverName() const;
 
 		// Loads Engine/Content/Shaders/<name>.spv or .msl depending on the backend.
-		SDL_GPUShader* LoadShader(const char* name, uint32 numSamplers, uint32 numUniformBuffers);
+		SDL_GPUShader* LoadShader(const char* name, uint32 numSamplers, uint32 numUniformBuffers, uint32 numStorageBuffers = 0);
 
 		// Compute shaders use one uniform buffer; resource counts follow SDL binding order.
 		SDL_GPUComputePipeline* LoadComputeShader(const char* name, uint32 samplers, uint32 readBuffers, uint32 writeBuffers, uint32 threadsX, uint32 threadsY);

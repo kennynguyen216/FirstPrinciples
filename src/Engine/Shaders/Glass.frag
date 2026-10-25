@@ -2,6 +2,9 @@
 #extension GL_GOOGLE_include_directive : require
 #include "Common.glsl"
 #include "Lighting.glsl"
+#define FP_ENVIRONMENT_BINDING 4
+#define FP_ENVIRONMENT_LIGHTING
+#include "Environment.glsl"
 
 // Transparent glass. Bends the already drawn scene through the surface normal, tints it,
 // blurs it with roughness and adds fresnel reflection and highlights.
@@ -63,6 +66,8 @@ void main()
 
 	vec3 color = behind * transmittance * (1.0 - fresnel);
 	color += fresnel * Frame.Ambient.rgb * 4.0;
+	if (Frame.EnvironmentSize.z > 0.0)
+		color += fresnel * EnvironmentReflection(n, v, roughness);
 	for (int i = 0; i < Frame.LightCount.x; ++i)
 	{
 		vec3 l;

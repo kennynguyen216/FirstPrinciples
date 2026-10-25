@@ -981,6 +981,29 @@ Projects/Sample/Binaries/Debug/Editor --drop Textures/Bricks_AO.png --undo --red
 Projects/Sample/Binaries/Debug/Editor --new-project MyGame
 ```
 
+### Skybox and environment lighting
+
+Create a **Skybox** from **Place Entities > Lights** or the **Entity** menu, then choose its
+**Texture** in Details. Use a 2:1 equirectangular panorama under `Content`, up to 8192 pixels wide.
+Radiance `.hdr` files retain values above white. PNG, JPG, TGA and BMP panoramas are read as sRGB.
+
+The panorama supplies the visible sky, diffuse light and roughness filtered reflections on lit
+materials and glass. **Intensity** scales the sky and lighting together. **Rotation** turns both
+around Y. Turn off **Visible** to keep the lighting while showing the camera background, or turn off
+**Enabled** to disable both. The first enabled Skybox in creation order is used. Existing ambient
+and direct lights add to the environment lighting.
+
+Open `Scenes/Environment.scene` to compare gold, plastic and glass with no direct or ambient lights.
+The original sunset panorama and demo regenerate with `python3 Scripts/GenerateEnvironmentDemo.py`.
+Run `Projects/Sample/Binaries/Debug/Tests Environment` for the environment tests.
+
+Panoramas are filtered to at most 512 by 256 for rendering. Diffuse light uses nine spherical
+harmonic coefficients and reflections use GGX filtered levels. Changes to the panorama reload it
+automatically. Loading and filtering happen on first use and can briefly pause rendering.
+Environment lighting does not cast shadows or capture nearby objects. Use direct lights for shadows
+and material ambient occlusion maps for local detail. Missing or invalid panoramas use the camera
+background and existing lights.
+
 ## Rendering
 
 Rendering uses SDL_GPU. macOS runs on Metal and Windows runs on Vulkan, so Windows machines need a

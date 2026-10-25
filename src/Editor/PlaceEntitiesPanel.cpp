@@ -39,6 +39,7 @@ namespace FP::Editor
 			{ "Point Light", "Lights", EditorIcon::PointLight, "Light that shines in every direction from a point" },
 			{ "Spot Light", "Lights", EditorIcon::DirectionalLight, "Cone of light along the transform's forward axis" },
 			{ "Directional Light", "Lights", EditorIcon::DirectionalLight, "Sun style light that comes from one direction" },
+			{ "Skybox", "Lights", EditorIcon::AmbientLight, "A panorama for the sky, diffuse lighting and reflections" },
 			{ "Ambient Light", "Lights", EditorIcon::AmbientLight, "Flat light that fills every shadow" },
 			{ "Cube", "Shapes", EditorIcon::Mesh, "A 1 unit cube mesh" },
 			{ "Sphere", "Shapes", EditorIcon::Entity, "A sphere mesh with a 0.5 unit radius" },

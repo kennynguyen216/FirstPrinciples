@@ -1,0 +1,126 @@
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+// Implementation of signed integer mod accurate to SPIR-V specification
+template<typename Tx, typename Ty>
+inline Tx spvSMod(Tx x, Ty y)
+{
+    Tx remainder = x - y * (x / y);
+    return select(Tx(remainder + y), remainder, remainder == 0 || (x >= 0) == (y >= 0));
+}
+
+struct EnvironmentData
+{
+    float4 Pixels[1];
+};
+
+struct SkyboxData
+{
+    float4x4 InverseViewProjection;
+    float4 CameraPosition;
+    float4 CameraForward;
+    float4 Params;
+    float4 Size;
+};
+
+struct main0_out
+{
+    float4 OutColor [[color(0)]];
+};
+
+struct main0_in
+{
+    float2 InUV [[user(locn0)]];
+};
+
+static inline __attribute__((always_inline))
+float3 EnvironmentDirection(thread const float3& direction, thread const float& rotation)
+{
+    float c = cos(rotation);
+    float s = sin(rotation);
+    return float3((c * direction.x) - (s * direction.z), direction.y, (s * direction.x) + (c * direction.z));
+}
+
+static inline __attribute__((always_inline))
+float3 EnvironmentPixel(thread int2& pixel, thread const int2& size, thread const int& offset, const device EnvironmentData& Environment)
+{
+    pixel.x = spvSMod(spvSMod(pixel.x, size.x) + size.x, size.x);
+    pixel.y = clamp(pixel.y, 0, size.y - 1);
+    return Environment.Pixels[(offset + (pixel.y * size.x)) + pixel.x].xyz;
+}
+
+static inline __attribute__((always_inline))
+float3 EnvironmentLevel(thread const float3& direction, thread const int& level0, thread const float4& dimensions, const device EnvironmentData& Environment)
+{
+    int2 size = int2(dimensions.xy);
+    int offset = 0;
+    for (int i = 0; i < level0; i++)
+    {
+        offset += (size.x * size.y);
+        size = max((size / int2(2)), int2(1));
+    }
+    float2 uv = float2((precise::atan2(direction.z, direction.x) / 6.283185482025146484375) + 0.5, acos(fast::clamp(direction.y, -1.0, 1.0)) / 3.1415927410125732421875);
+    float2 coordinate = (uv * float2(size)) - float2(0.5);
+    int2 pixel = int2(floor(coordinate));
+    float2 f = fract(coordinate);
+    int2 param = pixel;
+    int2 param_1 = size;
+    int param_2 = offset;
+    float3 _184 = EnvironmentPixel(param, param_1, param_2, Environment);
+    int2 param_3 = pixel + int2(1, 0);
+    int2 param_4 = size;
+    int param_5 = offset;
+    float3 _193 = EnvironmentPixel(param_3, param_4, param_5, Environment);
+    int2 param_6 = pixel + int2(0, 1);
+    int2 param_7 = size;
+    int param_8 = offset;
+    float3 _206 = EnvironmentPixel(param_6, param_7, param_8, Environment);
+    int2 param_9 = pixel + int2(1);
+    int2 param_10 = size;
+    int param_11 = offset;
+    float3 _214 = EnvironmentPixel(param_9, param_10, param_11, Environment);
+    return mix(mix(_184, _193, float3(f.x)), mix(_206, _214, float3(f.x)), float3(f.y));
+}
+
+static inline __attribute__((always_inline))
+float3 EnvironmentRadiance(thread const float3& direction, thread const float& roughness, thread const float4& dimensions, const device EnvironmentData& Environment)
+{
+    float level0 = fast::clamp(roughness, 0.0, 1.0) * (dimensions.z - 1.0);
+    int low = int(floor(level0));
+    int high = min((low + 1), (int(dimensions.z) - 1));
+    float3 param = direction;
+    int param_1 = low;
+    float4 param_2 = dimensions;
+    float3 param_3 = direction;
+    int param_4 = high;
+    float4 param_5 = dimensions;
+    return mix(EnvironmentLevel(param, param_1, param_2, Environment), EnvironmentLevel(param_3, param_4, param_5, Environment), float3(fract(level0)));
+}
+
+fragment main0_out main0(main0_in in [[stage_in]], constant SkyboxData& Skybox [[buffer(0)]], const device EnvironmentData& Environment [[buffer(1)]])
+{
+    main0_out out = {};
+    float4 point = Skybox.InverseViewProjection * float4((in.InUV.x * 2.0) - 1.0, 1.0 - (in.InUV.y * 2.0), 1.0, 1.0);
+    float3 _293;
+    if (Skybox.CameraPosition.w > 0.5)
+    {
+        _293 = Skybox.CameraForward.xyz;
+    }
+    else
+    {
+        _293 = fast::normalize((point.xyz / float3(point.w)) - Skybox.CameraPosition.xyz);
+    }
+    float3 direction = _293;
+    float3 param = direction;
+    float param_1 = Skybox.Params.y;
+    direction = EnvironmentDirection(param, param_1);
+    float3 param_2 = direction;
+    float param_3 = 0.0;
+    float4 param_4 = Skybox.Size;
+    out.OutColor = float4(EnvironmentRadiance(param_2, param_3, param_4, Environment) * Skybox.Params.x, 1.0);
+    return out;
+}
