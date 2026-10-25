@@ -21,11 +21,11 @@ namespace FP
 			return {reinterpret_cast<const char*>(text.data()), static_cast<int32>(text.size())};
 		}
 		fs::path Native(const String& text) { return fs::path(reinterpret_cast<const char8_t*>(text.CStr())); }
-		AudioClipResult Decode(const fs::path& path, uint64 transientBudget, bool validateAll = false)
+		AudioClipResult Decode(const fs::path& path, uint64 transientBudget, bool mono, bool validateAll = false)
 		{
 			if (transientBudget < MiB) return Error(AudioError::BudgetExceeded, "Clip exceeds the temporary loading reservation.");
 			AudioFileDecoder decoder;
-			if (const auto result = decoder.Open(Utf8(path)); !result) return {result, {}};
+			if (const auto result = decoder.Open(Utf8(path), mono); !result) return {result, {}};
 			auto clip = std::make_shared<AudioClip>(decoder.Info());
 			const uint64 decodedBytes = clip->Frames * clip->Channels * sizeof(float);
 			if (clip->Duration > 60 || decodedBytes > 32 * MiB)
@@ -56,14 +56,15 @@ namespace FP
 
 	struct AudioClipCache::Impl
 	{
-		struct Entry { std::shared_ptr<const AudioClip> Clip; uint64 Used = 0; };
+		using Key = std::pair<std::string, bool>;
+		struct Entry { std::shared_ptr<const AudioClip> Clip; uint64 Used = 0; bool Stale = false; };
 		fs::path Root;
 		bool ProjectContent = false;
-		std::map<std::string, uint64> AssetRevisions;
+		std::map<Key, uint64> AssetRevisions;
 		uint64 Budget, Transient, Serial = 0, Revision = 0;
-		std::map<std::string, Entry> Clips;
-		std::map<std::string, AudioResult> Failures;
-		std::map<std::string, std::string> Aliases;
+		std::map<Key, Entry> Clips;
+		std::map<Key, AudioResult> Failures;
+		std::map<Key, Key> Aliases;
 		std::vector<std::weak_ptr<const AudioClip>> Retired;
 		std::thread::id Thread = std::this_thread::get_id();
 		void CheckThread() const { FP_ASSERT(Thread == std::this_thread::get_id()); }
@@ -96,41 +97,61 @@ namespace FP
 	}
 	AudioClipResult AudioClipCache::ValidateFile(const String& path)
 	{
-		try { return Decode(Native(path), 128 * MiB, true); }
+		try { return Decode(Native(path), 128 * MiB, false, true); }
 		catch (const std::exception&) { return Error(AudioError::DecodeFailed, "Could not allocate or access the audio snapshot."); }
 	}
-	AudioClipResult AudioClipCache::Load(const String& reference, bool reload)
+	AudioClipResult AudioClipCache::Load(const String& reference, bool reload, bool mono)
 	{
 		const String path = m_Impl->ProjectContent ? Paths::AssetPath(reference) : reference;
 		m_Impl->CheckThread();
 		const std::string requested(path.View());
+		const Impl::Key requestKey{requested, mono};
 		if (m_Impl->ProjectContent)
 		{
 			const uint64 revision = Paths::GetAssets().Fingerprint(reference);
-			const auto previous = m_Impl->AssetRevisions.find(requested);
+			const auto previous = m_Impl->AssetRevisions.find(requestKey);
 			if (previous != m_Impl->AssetRevisions.end() && previous->second != revision)
 			{
 				reload = true;
-				m_Impl->Failures.erase(requested);
+				m_Impl->Failures.erase(requestKey);
 			}
-			m_Impl->AssetRevisions[requested] = revision;
+			m_Impl->AssetRevisions[requestKey] = revision;
+		}
+		if (reload)
+		{
+			// Reloading either view also invalidates the other channel layout.
+			for (bool layout : {false, true})
+			{
+				const Impl::Key variant{requested, layout};
+				m_Impl->Failures.erase(variant);
+				if (const auto alias = m_Impl->Aliases.find(variant); alias != m_Impl->Aliases.end())
+				{
+					const Impl::Key other{alias->second.first, !mono};
+					if (auto found = m_Impl->Clips.find(other); found != m_Impl->Clips.end()) found->second.Stale = true;
+				}
+			}
 		}
 		if (!reload)
 		{
-			if (const auto alias = m_Impl->Aliases.find(requested); alias != m_Impl->Aliases.end())
+			if (const auto alias = m_Impl->Aliases.find(requestKey); alias != m_Impl->Aliases.end())
 				if (auto found = m_Impl->Clips.find(alias->second); found != m_Impl->Clips.end())
 				{
-					found->second.Used = ++m_Impl->Serial;
-					return {{}, found->second.Clip};
+					if (!found->second.Stale)
+					{
+						found->second.Used = ++m_Impl->Serial;
+						return {{}, found->second.Clip};
+					}
+					reload = true;
 				}
-			if (const auto failure = m_Impl->Failures.find(requested); failure != m_Impl->Failures.end()) return {failure->second, {}};
+			if (const auto failure = m_Impl->Failures.find(requestKey); failure != m_Impl->Failures.end()) return {failure->second, {}};
 		}
 		auto fail = [&](AudioClipResult result)
 		{
-			const auto alias = m_Impl->Aliases.find(requested);
+			const auto alias = m_Impl->Aliases.find(requestKey);
 			const bool hasGood = alias != m_Impl->Aliases.end() && m_Impl->Clips.contains(alias->second);
-			if (!m_Impl->Failures.contains(requested)) FP_LOG_WARN("Audio '%s': %s", path.CStr(), result.Result.Message.CStr());
-			if (!hasGood && result.Result.Code != AudioError::BudgetExceeded) m_Impl->Failures[requested] = result.Result;
+			if (hasGood) m_Impl->Clips.at(alias->second).Stale = false;
+			if (!m_Impl->Failures.contains(requestKey)) FP_LOG_WARN("Audio '%s': %s", path.CStr(), result.Result.Message.CStr());
+			if (!hasGood && result.Result.Code != AudioError::BudgetExceeded) m_Impl->Failures[requestKey] = result.Result;
 			return result;
 		};
 		try
@@ -159,15 +180,15 @@ namespace FP
 				if (!exact) return fail(Error(AudioError::InvalidSettings, "Clip path capitalization differs from disk; select it again."));
 				walk /= part;
 			}
-			const std::string key(Utf8(absolute).View());
+			const Impl::Key key{std::string(Utf8(absolute).View()), mono};
 			auto found = m_Impl->Clips.find(key);
-			if (!reload && found != m_Impl->Clips.end())
+			if (!reload && found != m_Impl->Clips.end() && !found->second.Stale)
 			{
-				m_Impl->Aliases[requested] = key;
+				m_Impl->Aliases[requestKey] = key;
 				found->second.Used = ++m_Impl->Serial;
 				return {{}, found->second.Clip};
 			}
-			auto decoded = Decode(absolute, m_Impl->Transient);
+			auto decoded = Decode(absolute, m_Impl->Transient, mono);
 			if (!decoded) return fail(std::move(decoded));
 			const uint64 required = decoded.Clip->Samples.size() * sizeof(float);
 			std::erase_if(m_Impl->Retired, [](const auto& weak) { return weak.expired(); });
@@ -188,8 +209,8 @@ namespace FP
 			publication->Revision = ++m_Impl->Revision;
 			if (found != m_Impl->Clips.end() && found->second.Clip.use_count() > 1) m_Impl->Retired.emplace_back(found->second.Clip);
 			m_Impl->Clips[key] = {decoded.Clip, ++m_Impl->Serial};
-			m_Impl->Aliases[requested] = key;
-			m_Impl->Failures.erase(requested);
+			m_Impl->Aliases[requestKey] = key;
+			m_Impl->Failures.erase(requestKey);
 			if (publication->ClippedSamples) FP_LOG_WARN("Audio '%s': clamped %llu out-of-range float samples.", path.CStr(), static_cast<unsigned long long>(publication->ClippedSamples));
 			return decoded;
 		}

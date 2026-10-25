@@ -791,7 +791,7 @@ component MovingAudio
   Distance 40
   Speed 30
 component AudioSource
-  Clip "Audio/Misery-Mono.mp3"
+  Clip "Audio/Misery.mp3"
   Enabled false
   Volume 0.55
   Pitch 1

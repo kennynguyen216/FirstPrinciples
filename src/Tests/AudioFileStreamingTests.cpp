@@ -103,6 +103,32 @@ FP_TEST(AudioFileStreaming_LongWavAndMp3StayBoundedPastSixtySeconds)
 	FP_EXPECT(cache.ResidentBytes() == 0);
 }
 
+FP_TEST(AudioFileStreaming_LongStereoWavAutomaticallyMixesToBoundedMono)
+{
+	Fixture fixture;
+	fixture.Wav("LongStereo.wav");
+	AudioClipCache cache(Utf8(fixture.Directory));
+	const auto mono = cache.Load("LongStereo.wav", false, true);
+	FP_EXPECT(mono && mono.Clip->Channels == 1 && mono.Clip->IsStreaming() && mono.Clip->Samples.empty());
+	if (!mono) return;
+	AudioResult result;
+	auto stream = AudioFileStream::Open(*mono.Clip, false, result);
+	FP_EXPECT(stream && result);
+	if (!stream) return;
+	FP_EXPECT(stream->BufferBytes() == uint64(mono.Clip->SampleRate) * sizeof(float));
+	std::array<float, 1024> samples{};
+	uint64 frames = 0;
+	const uint64 deadline = SDL_GetTicks() + 10000;
+	while ((!stream->Finished() || stream->BufferedFrames()) && !stream->Failed() && SDL_GetTicks() < deadline)
+	{
+		const uint32 count = stream->Read(samples.data(), uint32(samples.size()));
+		for (uint32 frame = 0; frame < count; ++frame) FP_EXPECT(samples[frame] == -.125f);
+		frames += count;
+		if (!count) SDL_Delay(1);
+	}
+	FP_EXPECT(frames == mono.Clip->Frames && stream->Finished() && !stream->Failed());
+}
+
 FP_TEST(AudioFileStreaming_LoopWrapsWithoutDroppingSamplesAndCanStopLooping)
 {
 	Fixture fixture;
@@ -181,29 +207,39 @@ FP_TEST(AudioFileStreaming_DevicePauseResumeReplaceStopAndShutdown)
 	if (saved.IsEmpty()) SDL_ResetHint(SDL_HINT_AUDIO_DRIVER); else SDL_SetHint(SDL_HINT_AUDIO_DRIVER, saved.CStr());
 }
 
-FP_TEST(AudioFileStreaming_StereoVbrMp3LoopsMatchCachedSamples)
+FP_TEST(AudioFileStreaming_StereoAndMonoVbrMp3LoopsMatchCachedSamples)
 {
 	Fixture fixture;
 	const auto path = fixture.Directory / "Stereo.mp3";
 	fs::copy_file(Native(Paths::GetEngineDir()).parent_path() / "src/Tests/Fixtures/Audio/StereoVbr.mp3", path);
 	const auto cached = AudioClipCache::ValidateFile(Utf8(path)); FP_EXPECT(cached);
 	if (!cached) return;
-	AudioClip clip = *cached.Clip; clip.StreamPath = Utf8(path);
-	AudioResult result; auto stream = AudioFileStream::Open(clip, true, result); FP_EXPECT(stream && result);
-	if (!stream) return;
-	std::array<float, 1024> samples{};
-	uint64 frames = 0;
-	const uint64 deadline = SDL_GetTicks() + 5000;
-	while (frames < clip.Frames * 3 && !stream->Failed() && SDL_GetTicks() < deadline)
+	AudioClipCache cache(Utf8(fixture.Directory));
+	for (bool mono : {false, true})
 	{
-		const uint32 count = stream->Read(samples.data(), uint32(std::min<uint64>(512, clip.Frames * 3 - frames)));
-		for (uint32 frame = 0; frame < count; ++frame)
-			for (int channel = 0; channel < 2; ++channel)
-				FP_EXPECT(samples[frame * 2 + channel] == clip.Samples[((frames + frame) % clip.Frames) * 2 + channel]);
-		frames += count;
-		if (!count) SDL_Delay(1);
+		const auto loaded = cache.Load("Stereo.mp3", false, mono); FP_EXPECT(loaded);
+		if (!loaded) continue;
+		AudioClip clip = *loaded.Clip; clip.StreamPath = Utf8(path);
+		AudioResult result; auto stream = AudioFileStream::Open(clip, true, result); FP_EXPECT(stream && result);
+		if (!stream) continue;
+		std::array<float, 1024> samples{};
+		uint64 frames = 0;
+		const uint64 deadline = SDL_GetTicks() + 5000;
+		while (frames < clip.Frames * 3 && !stream->Failed() && SDL_GetTicks() < deadline)
+		{
+			const uint32 count = stream->Read(samples.data(), uint32(std::min<uint64>(512, clip.Frames * 3 - frames)));
+			for (uint32 frame = 0; frame < count; ++frame)
+			{
+				const size_t original = size_t((frames + frame) % clip.Frames) * 2;
+				if (mono) FP_EXPECT(samples[frame] == (cached.Clip->Samples[original] + cached.Clip->Samples[original + 1]) * .5f);
+				else for (int channel = 0; channel < 2; ++channel)
+					FP_EXPECT(samples[frame * 2 + channel] == cached.Clip->Samples[original + channel]);
+			}
+			frames += count;
+			if (!count) SDL_Delay(1);
+		}
+		FP_EXPECT(frames == clip.Frames * 3 && !stream->Failed());
 	}
-	FP_EXPECT(frames == clip.Frames * 3 && !stream->Failed());
 }
 
 FP_TEST(AudioFileStreaming_TruncationDuringPlaybackReportsWorkerFailure)

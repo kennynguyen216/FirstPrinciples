@@ -88,6 +88,56 @@ FP_TEST(Audio_WavFormatsAndUnicode)
 	FP_EXPECT(!cache.Load("audio/音声 café.wav"));
 }
 
+FP_TEST(Audio_MonoMixPreservesStereoAndRefreshesBothCachedLayouts)
+{
+	Fixtures fixtures;
+	for (bool floating : {false, true})
+	{
+		fixtures.Write("stereo.wav", Wav(2, 8000, floating));
+		AudioClipCache cache(Utf8(fixtures.Root));
+		const auto stereo = cache.Load("stereo.wav");
+		const auto mono = cache.Load("stereo.wav", false, true);
+		FP_EXPECT(stereo && mono);
+		if (!stereo || !mono) continue;
+		FP_EXPECT(stereo.Clip->Channels == 2 && mono.Clip->Channels == 1);
+		FP_EXPECT(mono.Clip->Frames == stereo.Clip->Frames && mono.Clip->SampleRate == stereo.Clip->SampleRate);
+		for (size_t i = 0; i < mono.Clip->Samples.size(); ++i)
+			FP_EXPECT(mono.Clip->Samples[i] == (stereo.Clip->Samples[i * 2] + stereo.Clip->Samples[i * 2 + 1]) * .5f);
+		FP_EXPECT(cache.Load("stereo.wav", false, true).Clip == mono.Clip);
+		FP_EXPECT(cache.Load("stereo.wav").Clip == stereo.Clip);
+		FP_EXPECT(cache.ResidentBytes() == (mono.Clip->Samples.size() + stereo.Clip->Samples.size()) * sizeof(float));
+		fixtures.Write("stereo.wav", Wav(2, 8000, floating, 20));
+		const auto reloaded = cache.Load("stereo.wav", true);
+		const auto refreshed = cache.Load("stereo.wav", false, true);
+		FP_EXPECT(reloaded && reloaded.Clip->Frames == 20 && reloaded.Clip != stereo.Clip);
+		FP_EXPECT(refreshed && refreshed.Clip->Frames == 20 && refreshed.Clip != mono.Clip);
+		FP_EXPECT(stereo.Clip->Frames == 16 && mono.Clip->Frames == 16);
+		fixtures.Write("stereo.wav", Wav(2, 8000, floating, 24));
+		const auto monoReload = cache.Load("stereo.wav", true, true);
+		const auto stereoRefresh = cache.Load("stereo.wav");
+		FP_EXPECT(monoReload && monoReload.Clip->Frames == 24);
+		FP_EXPECT(stereoRefresh && stereoRefresh.Clip->Frames == 24);
+	}
+}
+
+FP_TEST(Audio_MonoMixHonoursPinnedBudgetAndValidatesBothChannels)
+{
+	Fixtures fixtures;
+	fixtures.Write("stereo.wav", Wav(2));
+	AudioClipCache cache(Utf8(fixtures.Root), 128);
+	auto stereo = cache.Load("stereo.wav");
+	FP_EXPECT(stereo);
+	FP_EXPECT(cache.Load("stereo.wav", false, true).Result.Code == AudioError::BudgetExceeded);
+	stereo.Clip.reset();
+	const auto mono = cache.Load("stereo.wav", false, true);
+	FP_EXPECT(mono && mono.Clip->Channels == 1 && cache.ResidentBytes() == 64);
+	auto bytes = Wav(2, 8000, true);
+	const uint32 invalid = std::bit_cast<uint32>(std::numeric_limits<float>::quiet_NaN());
+	for (int i = 0; i < 4; ++i) bytes[size_t(i) + 48] = uint8(invalid >> (i * 8));
+	fixtures.Write("invalid.wav", bytes);
+	FP_EXPECT(cache.Load("invalid.wav", false, true).Result.Code == AudioError::DecodeFailed);
+}
+
 FP_TEST(Audio_WavRejectsMalformedAndNonfinite)
 {
 	Fixtures fixtures;

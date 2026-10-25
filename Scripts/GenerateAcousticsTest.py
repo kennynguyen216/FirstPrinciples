@@ -161,7 +161,7 @@ component AudioSource
         sign("ClapSourceSign", "CLAP SOURCE", ["Walk around this object",
              "SPACE clap / T auto-clap", "B overlap test"], "#ffce80", (x, 2.8, -1), 2.4)
     material("DopplerEmitter", "0.1 0.75 1", unlit=True)
-    doppler_clip = "Misery-Mono.mp3" if (ROOT / "Audio/Misery-Mono.mp3").is_file() else "DopplerTone.wav"
+    doppler_clip = "Misery.mp3" if (ROOT / "Audio/Misery.mp3").is_file() else "DopplerTone.wav"
     entity("Moving Doppler emitter", (12, 1.7, 18), (1.2, 1.2, 1.2), components=f'''component Mesh
   Mesh "Sphere"
 component Material
