@@ -27,6 +27,6 @@ struct CabBounds
 	float DoorZ = 0;
 };
 
-void StepOnFoot(DriverState& driver, FP::Vec2 look, FP::Vec2 moveAxis, const CabBounds& bounds, const DriverSettings& settings, float deltaTime);
+void StepOnFoot(DriverState& driver, FP::Vec2 look, FP::Vec2 moveAxis, const CabBounds& bounds, const DriverSettings& settings, float deltaTime, bool sprinting = false);
 
 bool CanReach(const DriverState& driver, FP::Vec3 point, const DriverSettings& settings);

@@ -38,6 +38,8 @@ FetchTimeout 4
 SteadyTime 1
 DriftRampTime 15
 WalkSpeed 3
+SprintScale 1.8 # walk speed times this while holding Shift
+SprintFov 5 # degrees the view widens while sprinting
 LookSensitivity 0.15
 EyeHeight 2.4
 InteractRange 2

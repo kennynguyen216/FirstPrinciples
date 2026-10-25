@@ -7,7 +7,7 @@
 	X(CalmSolarWind) X(StormSolarWind) X(CalmWobble) X(StormWobble) X(WobbleFrequency) \
 	X(CalmKp) X(StormKp) X(CalmJerkInterval) X(StormJerkInterval) X(JerkStrength) X(JerkDecay) \
 	X(FetchLive) X(FetchTimeout) \
-	X(SteadyTime) X(DriftRampTime) X(WalkSpeed) X(LookSensitivity) X(EyeHeight) X(InteractRange) X(CabWallMargin) \
+	X(SteadyTime) X(DriftRampTime) X(WalkSpeed) X(SprintScale) X(SprintFov) X(LookSensitivity) X(EyeHeight) X(InteractRange) X(CabWallMargin) \
 	X(ScrubberRepairTime) X(SpareCanisters) X(Co2RiseTime) X(Co2FallTime) X(BlackoutTime) X(Co2AfterBlackout) X(Co2DarkenMax) X(Co2WobbleBoost) \
 	X(CabReserveTime) X(PowerFlickerTime) X(PowerFlickerLevel) \
 	X(TicketCostFraction) X(CalmHandsTime) X(JackpotTickets) X(BoostTime) X(BoostSpeedScale) X(BoostAccel) X(BoostFov) X(BoostShake) X(BoostJerkInterval) X(BoostJerkStrength) X(PrizeDud) X(PrizeCalmHands) X(PrizeFreeFix) X(PrizeJackpot) \

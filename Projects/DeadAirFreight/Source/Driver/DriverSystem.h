@@ -103,6 +103,7 @@ private:
 	std::vector<CabPart> m_CabParts;
 	float m_Bank = 0;
 	float m_BaseFieldOfView = 60;
+	float m_SprintFov = 0;
 
 	bool m_CursorFree = false;
 	float m_WindNow = 0;

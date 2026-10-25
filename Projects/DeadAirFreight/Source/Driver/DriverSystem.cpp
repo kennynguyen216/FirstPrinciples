@@ -216,6 +216,7 @@ void DriverSystem::OnStart(World& world)
 
 	m_CursorFree = false;
 	m_Bank = 0;
+	m_SprintFov = 0;
 	m_BaseFieldOfView = 60;
 	m_HudCamera = NullEntity;
 	for (auto [entity, camera] : world.View<CameraComponent>().each())
@@ -368,8 +369,12 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 	if (scrubberWasBroken && !life.ScrubberBroken)
 		Notify("SCRUBBER FIXED", Good, 2.5f);
 
-	if (driver && driver->InCab && !driver->Seated && awake)
-		StepOnFoot(*driver, mouseMove * m_Settings.LookSensitivity, Input::GetMoveAxis(), m_CabBounds, m_Settings, deltaTime);
+	const bool walking = driver && driver->InCab && !driver->Seated && awake;
+	const bool sprinting = walking && Input::IsKeyDown(SDL_SCANCODE_LSHIFT) && Input::GetMoveAxis().LengthSquared() > 0;
+	if (walking)
+		StepOnFoot(*driver, mouseMove * m_Settings.LookSensitivity, Input::GetMoveAxis(), m_CabBounds, m_Settings, deltaTime, sprinting);
+	// Eases the sprint's slight FOV widening in and out over about a fifth of a second.
+	m_SprintFov += ((sprinting ? 1.0f : 0.0f) - m_SprintFov) * std::min(1.0f, 10 * deltaTime);
 
 	// The host decides when the match ends; everyone else hears it from the host (ShowResults).
 	if (!m_Net.Authority)
@@ -560,7 +565,7 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 			cameraTransformIt.Rotation = (truckRotation * Quat::FromEuler({ driver->Pitch, driver->Yaw, 0 })).ToEuler();
 		}
 		const float overdrive = m_Settings.BoostSpeedScale > 1 ? std::clamp((GetSpeedRatio(truck) - 1) / (m_Settings.BoostSpeedScale - 1), 0.0f, 1.0f) : 0;
-		camera.FieldOfView = m_BaseFieldOfView + m_Settings.BoostFov * overdrive;
+		camera.FieldOfView = m_BaseFieldOfView + m_Settings.BoostFov * overdrive + m_Settings.SprintFov * m_SprintFov;
 		const float shake = m_Settings.BoostShake * overdrive;
 		const float phase = truck.Time * 2 * Pi;
 		cameraTransformIt.Rotation += Vec3{ std::sin(phase * 23) + 0.5f * std::sin(phase * 37 + 1), std::sin(phase * 19 + 2) + 0.5f * std::sin(phase * 41), 0 } * (shake / 1.5f);

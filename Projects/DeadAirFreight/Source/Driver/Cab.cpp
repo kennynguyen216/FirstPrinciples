@@ -5,7 +5,7 @@
 
 using namespace FP;
 
-void StepOnFoot(DriverState& driver, Vec2 look, Vec2 moveAxis, const CabBounds& bounds, const DriverSettings& settings, float deltaTime)
+void StepOnFoot(DriverState& driver, Vec2 look, Vec2 moveAxis, const CabBounds& bounds, const DriverSettings& settings, float deltaTime, bool sprinting)
 {
 	driver.Yaw -= look.X;
 	driver.Pitch = std::clamp(driver.Pitch - look.Y, -89.0f, 89.0f);
@@ -16,7 +16,7 @@ void StepOnFoot(DriverState& driver, Vec2 look, Vec2 moveAxis, const CabBounds& 
 	const Vec3 move = forward * moveAxis.Y + right * moveAxis.X;
 	const bool inDoorway = driver.Position.Z > bounds.Max.Z;
 	if (move.Length() > 0)
-		driver.Position += move.Normalized() * (settings.WalkSpeed * deltaTime);
+		driver.Position += move.Normalized() * (settings.WalkSpeed * (sprinting ? settings.SprintScale : 1) * deltaTime);
 
 	// Inside the doorway the walls are its sides.
 	if (inDoorway)
