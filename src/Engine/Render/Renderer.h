@@ -44,15 +44,17 @@ namespace FP
 		int32 LightCount[4] = {};
 		Vec4 LightPosition[MaxLights];
 		Vec4 LightColor[MaxLights];
-		Mat4 ShadowMatrix; // world to shadow map UV and depth
-		Vec4 ShadowParams; // x strength (0 is off), y one texel in UV, z normal offset in world units, w light index
+		Vec4 LightDirection[MaxLights]; // spot axis
+		Vec4 LightCone[MaxLights]; // x cos(inner), y cos(outer)
+		Mat4 ShadowMatrix[8]; // directional, spot, then six point faces
+		Vec4 ShadowParams[3]; // x strength, y texel in UV, z normal offset, w light index
 	};
 
 	// Editors pick colors in sRGB. Shaders work in linear.
 	Vec4 ToLinear(const Color& color);
 
-	// Draws a World with SDL_GPU into an HDR scene buffer. The first shadowed directional light
-	// renders a small depth map of the meshes near the camera first. Opaque meshes go first with depth,
+	// Draws a World with SDL_GPU into an HDR scene buffer. The first shadowed light of each type
+	// renders depth maps before the scene. Opaque meshes go first with depth,
 	// then sprites blend on top by layer, then glass refracts a copy of the scene, and a present
 	// pass tonemaps into the target.
 	class Renderer
@@ -176,9 +178,9 @@ namespace FP
 
 		// Depth only pipelines for Mesh and SkinnedMesh. Missing ones just mean no shadows.
 		SDL_GPUGraphicsPipeline* m_ShadowPipelines[2] = {};
-		RefPtr<GPUTexture> m_ShadowMap;
-		bool m_ShadowMapCleared = false;
-		Entity m_ShadowCaster = NullEntity; // the light casting shadows this frame
-		int32 m_ShadowLight = -1;           // its index in FrameUniforms
+		RefPtr<GPUTexture> m_ShadowMaps[8];
+		bool m_ShadowMapCleared[8] = {};
+		Entity m_ShadowCasters[3] = { NullEntity, NullEntity, NullEntity };
+		int32 m_ShadowLights[3] = { -1, -1, -1 };
 	};
 }

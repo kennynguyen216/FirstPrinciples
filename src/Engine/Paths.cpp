@@ -4,6 +4,7 @@
 #include "Core/Misc/ModuleContext.h"
 
 #include <SDL3/SDL_filesystem.h>
+#include <SDL3/SDL_stdinc.h>
 
 #include <filesystem>
 
@@ -68,9 +69,11 @@ namespace FP::Paths
 		State& GetState()
 		{
 			// Scripts use the host's extracted content and current project.
-			const ModuleContext* context = GetModuleContext();
-			if (context && context->Paths)
-				return *static_cast<State*>(context->Paths);
+			if (const ModuleContext* context = GetModuleContext())
+			{
+				if (context->Paths)
+					return *static_cast<State*>(context->Paths);
+			}
 			static State state = []() {
 				State found;
 				Project project;
@@ -113,11 +116,6 @@ namespace FP::Paths
 		state.Packaged = true;
 	}
 
-	void* GetSharedState()
-	{
-		return &GetState();
-	}
-
 	bool IsPackaged()
 	{
 		return GetState().Packaged;
@@ -143,6 +141,16 @@ namespace FP::Paths
 		return GetState().ContentDir;
 	}
 
+	String GetSaveDir()
+	{
+		char* path = SDL_GetPrefPath("FirstPrinciples", GetProject().Name.CStr());
+		if (!path)
+			return {};
+		const String dir = String(path) + "Saves";
+		SDL_free(path);
+		return dir;
+	}
+
 	String Content(std::string_view relative)
 	{
 		return GetContentDir() + "/" + relative;
@@ -162,5 +170,10 @@ namespace FP::Paths
 	String EngineContent(std::string_view relative)
 	{
 		return GetEngineDir() + "/Content/" + relative;
+	}
+
+	void* GetSharedState()
+	{
+		return &GetState();
 	}
 }

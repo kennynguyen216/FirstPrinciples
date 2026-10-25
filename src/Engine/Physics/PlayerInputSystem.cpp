@@ -7,19 +7,20 @@ namespace FP
 	void PlayerInputSystem::Update(World& world, float)
 	{
 		Physics& physics = world.GetPhysics();
-		const Vec2 mouse = Input::GetMouseDelta();
-		const Vec2 axis = Input::GetMoveAxis();
-		const bool running = Input::IsKeyDown(SDL_SCANCODE_LSHIFT) || Input::IsKeyDown(SDL_SCANCODE_RSHIFT);
-		const bool jump = Input::WasKeyPressed(SDL_SCANCODE_SPACE);
+		// Actions, so keyboard and mouse or a gamepad both play.
+		const Vec2 look = Input::GetActionAxis("Look");
+		const Vec2 axis = Input::GetActionAxis("Move");
+		const bool running = Input::IsActionDown("Run");
+		const bool jump = Input::WasActionPressed("Jump");
 
 		for (auto [entity, player, transform] : world.View<PlayerInputComponent, TransformComponent>().each())
 		{
 			if (!world.Has<CharacterControllerComponent>(entity))
 				continue;
 
-			transform.Rotation.Y -= mouse.X * player.LookSpeed;
+			transform.Rotation.Y -= look.X * player.LookSpeed;
 			if (TransformComponent* camera = world.TryGet<TransformComponent>(world.FindChild(entity, player.Camera.View())))
-				camera->Rotation.X = Clamp(camera->Rotation.X - mouse.Y * player.LookSpeed, -60.0f, 30.0f);
+				camera->Rotation.X = Clamp(camera->Rotation.X + look.Y * player.LookSpeed, -60.0f, 30.0f);
 
 			// Forward and right along the ground, wherever the player faces.
 			Vec3 forward = transform.GetForward();

@@ -15,6 +15,7 @@ class QTabWidget;
 class QDockWidget;
 class QPlainTextEdit;
 class QTimer;
+class QTableWidget;
 
 namespace FP
 {
@@ -45,9 +46,12 @@ namespace FP::Editor
 		void Set3DView(bool enabled);
 		void SetViewMode(ViewMode mode);
 		void Play();
+		void SetPaused(bool paused);
+		void StepFrame();
 		void Stop();
 		void Select(Entity entity);
 		void ShowAudioDebugger();
+		void ShowProfiler();
 
 		// Creates an entity from a Place Entities kind such as "Point Light" or "Cube" and selects it.
 		Entity CreateEntity(const QString& kind);
@@ -124,6 +128,7 @@ namespace FP::Editor
 		void RestoreHistoryStep();
 		void UpdateUndoActions();
 		void UpdateTitle();
+		void RefreshProfiler();
 		bool ConfirmDiscard();
 
 		void NewScene();
@@ -185,6 +190,8 @@ namespace FP::Editor
 		QAction* m_UndoAction = nullptr;
 		QAction* m_RedoAction = nullptr;
 		QAction* m_PlayAction = nullptr;
+		QAction* m_PauseAction = nullptr;
+		QAction* m_StepAction = nullptr;
 		QAction* m_StopAction = nullptr;
 		QAction* m_View3DAction = nullptr;
 		QAction* m_ImportAudioAction = nullptr;
@@ -197,6 +204,9 @@ namespace FP::Editor
 		ContentBrowser* m_ContentBrowser = nullptr;
 		QDockWidget* m_ConsoleDock = nullptr;
 		QDockWidget* m_ContentDock = nullptr;
+		QDockWidget* m_ProfilerDock = nullptr;
+		QTableWidget* m_ProfilerTable = nullptr;
+		QLabel* m_ProfilerSummary = nullptr;
 		QDockWidget* m_AudioDebugger = nullptr;
 		bool m_DockTitlesPending = false;
 		QByteArray m_DefaultLayout;

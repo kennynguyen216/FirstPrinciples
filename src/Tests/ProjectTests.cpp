@@ -57,6 +57,7 @@ FP_TEST(Project_CreateAndLoad)
 FP_TEST(Project_PackagedPathsKeepSavedDataSeparate)
 {
 	const String original = Paths::GetProject().GetFilePath();
+	const String saves = Paths::GetSaveDir();
 	const String directory = Paths::GetProjectDir() + "/CookedTest";
 	const String saved = Paths::GetProjectDir() + "/UserDataTest";
 	Paths::UsePackagedContent(directory, saved);
@@ -66,6 +67,7 @@ FP_TEST(Project_PackagedPathsKeepSavedDataSeparate)
 	FP_EXPECT(Paths::EngineContent("Shaders/Lit.frag.msl") == directory + "/Engine/Content/Shaders/Lit.frag.msl");
 	FP_EXPECT(Paths::Content("Scenes/Main.scene") == directory + "/Content/Scenes/Main.scene");
 	FP_EXPECT(Paths::GetSavedDir() == saved + "/Saved");
+	FP_EXPECT(Paths::GetSaveDir() == saves);
 	FP_EXPECT(Paths::OpenProject(original));
 	FP_EXPECT(!Paths::IsPackaged());
 	FP_EXPECT(Paths::GetSavedDir() == Paths::GetProjectDir() + "/Saved");

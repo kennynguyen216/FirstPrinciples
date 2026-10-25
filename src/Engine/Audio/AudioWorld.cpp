@@ -178,6 +178,7 @@ namespace FP
 		if (m_Playing) return;
 		ResetScene();
 		m_Playing = true;
+		m_Paused = false;
 		m_Context = AllocateAudioContext();
 		if (GetDevice()) m_Device->GetClipCache().ClearFailures();
 		for (auto [entity, source] : m_World.View<AudioSourceComponent>().each())
@@ -191,14 +192,40 @@ namespace FP
 		m_DebugSources.clear();
 		StopAll();
 		m_Playing = false;
+		m_Paused = false;
 		m_Context = 0;
 		m_Sources.clear();
+	}
+
+	void AudioWorld::SetPaused(bool paused)
+	{
+		if (!m_Playing || m_Paused == paused) return;
+		m_Paused = paused;
+		if (paused)
+		{
+			m_PausedForWorld.clear();
+			if (!GetDevice()) return;
+			for (const Voice& voice : m_Voices)
+			{
+				const VoiceState state = m_Device->GetState(voice.Handle);
+				if ((state == VoiceState::Playing || state == VoiceState::Draining) && m_Device->Pause(voice.Handle))
+					m_PausedForWorld.push_back(voice.Handle);
+			}
+		}
+		else
+		{
+			if (GetDevice())
+				for (VoiceHandle voice : m_PausedForWorld)
+					if (m_Device->GetState(voice) == VoiceState::Paused) m_Device->Resume(voice);
+			m_PausedForWorld.clear();
+		}
 	}
 
 	void AudioWorld::StopAll()
 	{
 		if (GetDevice() && m_Context) m_Device->StopContext(m_Context);
 		m_Voices.clear();
+		m_PausedForWorld.clear();
 		for (Source& source : m_Sources) source.Voice = {};
 		m_Context = m_Playing ? AllocateAudioContext() : 0;
 	}
@@ -247,9 +274,13 @@ namespace FP
 		SelectListener();
 		ApplySpatial(voice);
 		const VoiceHandle previous = tracked.Voice;
-		const bool paused = preservePause && GetState(previous) == VoiceState::Paused;
-		auto result = m_Device->Play(m_Context, loaded.Clip, voice.Params, previous, paused);
+		const bool previouslyPaused = GetState(previous) == VoiceState::Paused;
+		const bool pauseWithWorld = m_Paused && !(preservePause && previouslyPaused
+			&& std::find(m_PausedForWorld.begin(), m_PausedForWorld.end(), previous) == m_PausedForWorld.end());
+		auto result = m_Device->Play(m_Context, loaded.Clip, voice.Params, previous, m_Paused || (preservePause && previouslyPaused));
 		if (!result) return result;
+		std::erase(m_PausedForWorld, previous);
+		if (pauseWithWorld) m_PausedForWorld.push_back(result.Voice);
 		std::erase_if(m_Voices, [previous](const Voice& v) { return v.Handle == previous; });
 		voice.Handle = result.Voice;
 		BindDebugVoice(voice.Owner, result.Voice.Generation);
@@ -279,8 +310,14 @@ namespace FP
 		voice.BasePitch = p.Pitch; voice.DopplerScale = p.DopplerScale;
 		SelectListener();
 		ApplySpatial(voice);
-		auto result = m_Device->Play(m_Context, loaded.Clip, voice.Params);
-		if (result) { voice.Handle = result.Voice; BindDebugVoice(voice.Owner, result.Voice.Generation); m_Voices.push_back(voice); }
+		auto result = m_Device->Play(m_Context, loaded.Clip, voice.Params, {}, m_Paused);
+		if (result)
+		{
+			voice.Handle = result.Voice;
+			BindDebugVoice(voice.Owner, result.Voice.Generation);
+			m_Voices.push_back(voice);
+			if (m_Paused) m_PausedForWorld.push_back(result.Voice);
+		}
 		return result;
 	}
 
@@ -319,8 +356,14 @@ namespace FP
 		return m_Playing && GetDevice() && voice.Context == m_Context && bool(voice);
 	}
 	bool AudioWorld::Stop(VoiceHandle voice) { return Owns(voice) && m_Device->Stop(voice); }
-	bool AudioWorld::Pause(VoiceHandle voice) { return Owns(voice) && m_Device->Pause(voice); }
-	bool AudioWorld::Resume(VoiceHandle voice) { return Owns(voice) && m_Device->Resume(voice); }
+	bool AudioWorld::Pause(VoiceHandle voice)
+	{
+		if (!Owns(voice) || !m_Device->Pause(voice)) return false;
+		// An explicit pause remains in effect after the world resumes.
+		std::erase(m_PausedForWorld, voice);
+		return true;
+	}
+	bool AudioWorld::Resume(VoiceHandle voice) { return !m_Paused && Owns(voice) && m_Device->Resume(voice); }
 	VoiceState AudioWorld::GetState(VoiceHandle voice) const { return Owns(voice) ? m_Device->GetState(voice) : VoiceState::Invalid; }
 	VoiceHandle AudioWorld::GetSourceVoice(Entity entity) const
 	{

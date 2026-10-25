@@ -14,6 +14,7 @@
 #include <QPainter>
 #include <QWheelEvent>
 
+#include <algorithm>
 #include <cmath>
 
 #ifdef __APPLE__
@@ -114,6 +115,7 @@ namespace FP::Editor
 	void ViewportWidget::SetPlaying(bool playing)
 	{
 		m_Playing = playing;
+		m_Paused = false;
 		m_Dragging = false;
 		m_Flying = false;
 		m_FlyKeys = 0;
@@ -125,10 +127,22 @@ namespace FP::Editor
 		UpdateCursor();
 	}
 
+	void ViewportWidget::SetPaused(bool paused)
+	{
+		if (!m_Playing || m_Paused == paused)
+			return;
+		m_Paused = paused;
+		m_CursorFreed = false;
+		Input::Reset();
+		if (!paused)
+			setFocus();
+		UpdateCursor();
+	}
+
 	void ViewportWidget::UpdateCursor()
 	{
 		const CursorMode mode = Input::GetCursorMode();
-		const bool active = m_Playing && hasFocus() && isActiveWindow() && !m_CursorFreed;
+		const bool active = m_Playing && !m_Paused && hasFocus() && isActiveWindow() && !m_CursorFreed;
 		const bool hide = active && mode != CursorMode::Visible;
 		const bool lock = active && mode == CursorMode::Locked;
 
@@ -319,6 +333,27 @@ namespace FP::Editor
 			m_Lines.AddLine(tip, tip - (forward + placed.GetRight() * 0.5f) * handle, color);
 			m_Lines.AddLine(tip, tip - (forward - placed.GetRight() * 0.5f) * handle, color);
 		}
+		for (auto [entity, transform, light] : m_World->View<TransformComponent, SpotLightComponent>().each())
+		{
+			const Color color{ light.Color.R, light.Color.G, light.Color.B, 0.9f };
+			const TransformComponent placed = m_World->GetWorldTransform(entity);
+			const Vec3 p = placed.Position;
+			const float handle = 10.0f * dpr * view.WorldPerPixel(p);
+			m_Lines.AddCircle(p, handle, color, 16, view.CameraRight, view.CameraUp);
+			const Vec3 tip = p + placed.GetForward() * handle * 3.0f;
+			m_Lines.AddLine(p, tip, color);
+			if (entity == m_Selected)
+			{
+				const float radius = std::tan(std::clamp(light.OuterAngle, 1.0f, 89.0f) * DegToRad) * light.Range;
+				const Vec3 end = p + placed.GetForward() * light.Range;
+				const Color faint{ color.R, color.G, color.B, 0.35f };
+				m_Lines.AddCircle(end, radius, faint, 64, placed.GetRight(), placed.GetUp());
+				m_Lines.AddLine(p, end + placed.GetRight() * radius, faint);
+				m_Lines.AddLine(p, end - placed.GetRight() * radius, faint);
+				m_Lines.AddLine(p, end + placed.GetUp() * radius, faint);
+				m_Lines.AddLine(p, end - placed.GetUp() * radius, faint);
+			}
+		}
 
 		for (auto [entity, transform, camera] : m_World->View<TransformComponent, CameraComponent>().each())
 		{
@@ -457,6 +492,8 @@ namespace FP::Editor
 			}
 		};
 		for (auto [entity, transform, light] : m_World->View<TransformComponent, PointLightComponent>().each())
+			consider(entity, transform);
+		for (auto [entity, transform, light] : m_World->View<TransformComponent, SpotLightComponent>().each())
 			consider(entity, transform);
 		for (auto [entity, transform, light] : m_World->View<TransformComponent, DirectionalLightComponent>().each())
 			consider(entity, transform);
@@ -650,6 +687,7 @@ namespace FP::Editor
 		m_LastMouse = event->position();
 		if (m_Playing)
 		{
+			if (m_Paused) return;
 			// The click that takes the mouse back is not a game click.
 			if (m_CursorFreed && Input::GetCursorMode() != CursorMode::Visible)
 			{
@@ -725,6 +763,7 @@ namespace FP::Editor
 	{
 		if (m_Playing)
 		{
+			if (m_Paused) return;
 			if (event->button() == Qt::LeftButton) Input::SetMouseButton(MouseButton::Left, false);
 			if (event->button() == Qt::RightButton) Input::SetMouseButton(MouseButton::Right, false);
 			if (event->button() == Qt::MiddleButton) Input::SetMouseButton(MouseButton::Middle, false);
@@ -748,6 +787,7 @@ namespace FP::Editor
 		const QPointF position = event->position();
 		if (m_Playing)
 		{
+			if (m_Paused) return;
 			// UpdateCursor keeps a locked mouse at the center.
 			if (!m_CursorLocked)
 				Input::SetMousePosition(ToPixels(position));
@@ -836,6 +876,7 @@ namespace FP::Editor
 	{
 		if (m_Playing)
 		{
+			if (m_Paused) return;
 			// One notch is 120, the same as one SDL wheel step.
 			Input::AddScroll(Vec2(static_cast<float>(event->angleDelta().x()), static_cast<float>(event->angleDelta().y())) / 120.0f);
 			return;
@@ -864,6 +905,7 @@ namespace FP::Editor
 	{
 		if (m_Playing)
 		{
+			if (m_Paused) return;
 			// Escape frees the mouse so the editor can be used. The game still sees the key.
 			if (event->key() == Qt::Key_Escape)
 			{
@@ -907,6 +949,7 @@ namespace FP::Editor
 	{
 		if (m_Playing)
 		{
+			if (m_Paused) return;
 			if (!event->isAutoRepeat())
 				Input::SetKey(ToScancode(event->key()), false);
 			return;

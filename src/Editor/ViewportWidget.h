@@ -31,6 +31,7 @@ namespace FP::Editor
 		void SetWorld(World* world) { m_World = world; }
 		void SetSelected(Entity entity) { m_Selected = entity; }
 		void SetPlaying(bool playing);
+		void SetPaused(bool paused);
 
 		// Hides, holds and re-centers the mouse as the game's cursor mode asks, and turns its
 		// movement into mouse delta. Call every tick before the world updates.
@@ -124,6 +125,7 @@ namespace FP::Editor
 		World* m_World = nullptr;
 		Entity m_Selected = NullEntity;
 		bool m_Playing = false;
+		bool m_Paused = false;
 		bool m_CursorFreed = false;  // Escape gave the mouse back until the next click
 		bool m_CursorHidden = false;
 		bool m_CursorLocked = false;

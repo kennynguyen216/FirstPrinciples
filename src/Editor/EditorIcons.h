@@ -10,7 +10,9 @@ namespace FP::Editor
 	{
 		Save,
 		Play,
+		Pause,
 		Step,
+		Profiler,
 		Stop,
 		Eject,
 		More,

@@ -46,3 +46,28 @@ FP_TEST(Shadow_CenterSnapsToTexels)
 	const ShadowView c = FitShadowView(LookingDownZ({ 0.131f, 2, 10 }), down, 20, 1000);
 	FP_EXPECT(std::fabs(std::fabs(c.Center.X - a.Center.X) - 0.02f) < 1e-4f);
 }
+
+FP_TEST(Shadow_SpotProjectionUsesPerspectiveDepth)
+{
+	const ShadowView shadow = PerspectiveShadowView({ 0, 0, 0 }, Quat(), 30, 10);
+	const Vec4 nearPoint = shadow.ToTexture * Vec4(0, 0, -1, 1);
+	const Vec4 farPoint = shadow.ToTexture * Vec4(0, 0, -9, 1);
+	FP_EXPECT(std::fabs(nearPoint.X / nearPoint.W - 0.5f) < 1e-5f);
+	FP_EXPECT(std::fabs(nearPoint.Y / nearPoint.W - 0.5f) < 1e-5f);
+	FP_EXPECT(nearPoint.Z / nearPoint.W > 0 && nearPoint.Z / nearPoint.W < farPoint.Z / farPoint.W);
+	FP_EXPECT(farPoint.Z / farPoint.W < 1);
+}
+
+FP_TEST(Shadow_PointFacesLookAlongEachAxis)
+{
+	const Vec3 directions[6] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 1, 0 }, { 0, -1, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
+	for (int32 face = 0; face < 6; ++face)
+	{
+		const Quat rotation = PointShadowFaceRotation(face);
+		FP_EXPECT((rotation.Rotate({ 0, 0, -1 }) - directions[face]).Length() < 1e-4f);
+		const ShadowView shadow = PerspectiveShadowView({}, rotation, 46, 10);
+		const Vec4 center = shadow.ToTexture * Vec4(directions[face] * 5, 1);
+		FP_EXPECT(std::fabs(center.X / center.W - 0.5f) < 1e-4f);
+		FP_EXPECT(std::fabs(center.Y / center.W - 0.5f) < 1e-4f);
+	}
+}

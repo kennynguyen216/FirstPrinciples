@@ -16,7 +16,6 @@ namespace FP::Paths
 	// Redirects content to an extracted package and keeps saved data outside the app.
 	void UsePackagedContent(const String& directory, const String& savedDirectory);
 	bool IsPackaged();
-	void* GetSharedState();
 
 	// The open project. Without OpenProject it is found by walking up from the executable or
 	// the working folder to a .fpproject file, then falls back to the one the build was made for.
@@ -30,6 +29,9 @@ namespace FP::Paths
 	// The open project's Content folder.
 	const String& GetContentDir();
 
+	// Writable per user folder for this project's saves. Empty if it cannot be opened.
+	String GetSaveDir();
+
 	// Absolute path for a path relative to Content.
 	String Content(std::string_view relative);
 
@@ -38,4 +40,7 @@ namespace FP::Paths
 
 	// Absolute path for a path relative to Engine/Content, like Shaders/Lit.frag.msl.
 	String EngineContent(std::string_view relative);
+
+	// For ModuleContext so scripts use the project opened by the host.
+	void* GetSharedState();
 }

@@ -172,6 +172,35 @@ FP_TEST(AudioWorld_LifecycleAndIsolation)
 	world->GetAudio().Attach(nullptr); other->GetAudio().Attach(nullptr);
 }
 
+FP_TEST(AudioWorld_PauseHoldsOnlyGameVoices)
+{
+	Engine::RegisterEngineComponents();
+	DummyAudio audio;
+	StrongObjectPtr<World> world(NewObject<World>());
+	world->GetAudio().Attach(&audio.Device);
+	const Entity firstSource = AddLoop(*world.Get());
+	const Entity secondSource = AddLoop(*world.Get());
+	world->BeginPlay();
+	const VoiceHandle first = world->GetAudio().GetSourceVoice(firstSource);
+	const VoiceHandle second = world->GetAudio().GetSourceVoice(secondSource);
+	FP_EXPECT(bool(first) && bool(second));
+	FP_EXPECT(world->GetAudio().Pause(second));
+
+	world->SetPaused(true);
+	FP_EXPECT(world->GetAudio().GetState(first) == VoiceState::Paused);
+	FP_EXPECT(world->GetAudio().GetState(second) == VoiceState::Paused);
+	const auto duringPause = world->GetAudio().PlayOneShot("Audio/Hum.wav");
+	FP_EXPECT(bool(duringPause));
+	FP_EXPECT(world->GetAudio().GetState(duringPause.Voice) == VoiceState::Paused);
+
+	world->SetPaused(false);
+	FP_EXPECT(world->GetAudio().GetState(first) == VoiceState::Playing);
+	FP_EXPECT(world->GetAudio().GetState(second) == VoiceState::Paused);
+	FP_EXPECT(world->GetAudio().GetState(duringPause.Voice) == VoiceState::Playing);
+	world->EndPlay();
+	FP_EXPECT(world->GetAudio().GetState(first) == VoiceState::Invalid);
+}
+
 FP_TEST(AudioWorld_SceneReplacementAndListenerFallback)
 {
 	Engine::RegisterEngineComponents();
