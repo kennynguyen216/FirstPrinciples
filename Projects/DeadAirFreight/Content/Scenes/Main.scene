@@ -48,6 +48,62 @@ component Camera
   Exposure 1
   Tonemap true
 
+entity e787b3bf-233c-4e6a-a049-72163c0ecb8a
+component Name
+  Name "Space Sky"
+component Transform
+  Position 0 0 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component Skybox
+  Texture "Environments/Space.png"
+  Intensity 1
+  Rotation 0
+  Visible true
+  Enabled true
+
+entity 0aedaa34-b69b-49ca-9384-53dfd8ccf5be
+component Name
+  Name "Stars Dim"
+component Transform
+  Position 0 0 0
+  Rotation 0 0 0
+  Scale 15000 15000 15000
+component Mesh
+  Mesh "Meshes/Stars/StarsDim.obj"
+component Material
+  Material "Materials/StarDim.material"
+component Starfield
+  Radius 15000
+
+entity 7b0f97ca-d24e-4454-b057-3156ee846123
+component Name
+  Name "Stars Bright"
+component Transform
+  Position 0 0 0
+  Rotation 0 0 0
+  Scale 15000 15000 15000
+component Mesh
+  Mesh "Meshes/Stars/StarsBright.obj"
+component Material
+  Material "Materials/StarBright.material"
+component Starfield
+  Radius 15000
+
+entity bdd7862d-e299-4d2a-81a1-ef71febbfba5
+component Name
+  Name "Stars Tinted"
+component Transform
+  Position 0 0 0
+  Rotation 0 0 0
+  Scale 15000 15000 15000
+component Mesh
+  Mesh "Meshes/Stars/StarsTinted.obj"
+component Material
+  Material "Materials/StarTinted.material"
+component Starfield
+  Radius 15000
+
 entity 1107143b-bfc8-412c-849c-93b43425188f
 component Name
   Name "Depot"

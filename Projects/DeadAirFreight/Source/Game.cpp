@@ -2,6 +2,7 @@
 #include "Audio/Sounds.h"
 #include "Crew/OnFootSystem.h"
 #include "Effects/CombatEffects.h"
+#include "Effects/Starfield.h"
 #include "Enemies/Airlock.h"
 #include "Enemies/SiphonSystems.h"
 #include "LifeSupport/LifeSupportSystems.h"
@@ -88,6 +89,9 @@ namespace Game
 		registry.Register<AirlockComponent>("Airlock")
 			.Field("Crew", &AirlockComponent::Crew);
 
+		registry.Register<StarfieldComponent>("Starfield")
+			.Field("Radius", &StarfieldComponent::Radius);
+
 		registry.Register<BlastDoorComponent>("BlastDoor")
 			.Field("Crew", &BlastDoorComponent::Crew)
 			.Field("Drop", &BlastDoorComponent::Drop)
@@ -170,5 +174,7 @@ namespace Game
 		// Starts the Driver's own systems at GO for a seated Driver, and the hatch between cab and bay.
 		world.AddSystem<DriverLauncherSystem>();
 		world.AddSystem<LifeSupportReadoutSystem>();
+		// Last, after everything that moves the camera before GO.
+		world.AddSystem<StarfieldSystem>();
 	}
 }

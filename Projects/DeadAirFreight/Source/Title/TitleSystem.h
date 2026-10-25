@@ -28,6 +28,8 @@ private:
 	void ShowPage(FP::World& world);
 	// The truck bobbing in space behind the join list and lobby. Off puts it and the camera back.
 	void ShowTruck(FP::World& world, bool on, float deltaTime);
+	// Behind the first screen: the camera drifts slowly across the brightest nebula.
+	void ShowSky(FP::World& world, bool on, float deltaTime);
 	// Black while the match loads, then fading into the game with the countdown on top, then the
 	// page goes after GO.
 	void Reveal(FP::World& world, float deltaTime);
@@ -50,6 +52,8 @@ private:
 	FP::TransformComponent m_CameraRest;
 	bool m_ShowingTruck = false;
 	float m_BobTime = 0;
+	bool m_ShowingSky = false;
+	float m_SkyTime = 0;
 
 	enum class Fade { None, Black, Clearing, Done };
 	Fade m_Fade = Fade::None;

@@ -34,6 +34,12 @@ namespace
 	constexpr float BobPitch = 1.2f; // degrees
 	constexpr float BobRoll = 1.6f;
 
+	// The first screen looks up and out along +X, where Tools/MakeSky.py puts the biggest nebula, and
+	// drifts across it very slowly.
+	constexpr float SkyPitch = 15;
+	constexpr float SkyYaw = -90;
+	constexpr float SkyDrift = 8; // degrees each way
+
 	// The fade into the game. Black holds at least this long, and until this many frames in a row
 	// come quickly, so the hitch of the match loading happens out of sight. Then it clears over the
 	// last time (the page's own CSS transition matches it).
@@ -145,12 +151,23 @@ void TitleSystem::Update(World& world, float deltaTime)
 	if (state->Phase == MatchPhase::Countdown || state->Phase == MatchPhase::Racing || state->Phase == MatchPhase::Results)
 	{
 		ShowTruck(world, false, deltaTime);
+		ShowSky(world, false, deltaTime);
 		if (state->Phase == MatchPhase::Countdown)
 			PreviewCab(world);
 		Reveal(world, deltaTime);
 		return;
 	}
-	ShowTruck(world, state->Phase == MatchPhase::Lobby || m_Joining, deltaTime);
+	// Each view puts the camera back as it ends, so the one ending goes first.
+	if (state->Phase == MatchPhase::Lobby || m_Joining)
+	{
+		ShowSky(world, false, deltaTime);
+		ShowTruck(world, true, deltaTime);
+	}
+	else
+	{
+		ShowTruck(world, false, deltaTime);
+		ShowSky(world, true, deltaTime);
+	}
 
 	// What the player picked on the page.
 	if (TitleRequestComponent* request = world.TryGet<TitleRequestComponent>(m_Screen); request && !request->Action.IsEmpty())
@@ -230,6 +247,26 @@ void TitleSystem::ShowTruck(World& world, bool on, float deltaTime)
 	const float t = m_BobTime * BobRate;
 	truck.Position = m_TruckRest.Position + Vec3{ 0, BobHeight * std::sin(t), 0 };
 	truck.Rotation = m_TruckRest.Rotation + Vec3{ BobPitch * std::sin(t * 0.8f + 0.6f), 0, BobRoll * std::sin(t * 0.6f + 1.9f) };
+}
+
+void TitleSystem::ShowSky(World& world, bool on, float deltaTime)
+{
+	if (!world.IsValid(m_Camera))
+		return;
+	TransformComponent& camera = world.Get<TransformComponent>(m_Camera);
+	if (!on)
+	{
+		if (m_ShowingSky)
+		{
+			camera = m_CameraRest;
+			m_ShowingSky = false;
+		}
+		return;
+	}
+	m_ShowingSky = true;
+	m_SkyTime += deltaTime;
+	camera.Position = m_CameraRest.Position;
+	camera.Rotation = { SkyPitch + 3 * std::sin(m_SkyTime * 0.07f), SkyYaw + SkyDrift * std::sin(m_SkyTime * 0.05f), 1.5f * std::sin(m_SkyTime * 0.04f + 1) };
 }
 
 void TitleSystem::Reveal(World& world, float deltaTime)

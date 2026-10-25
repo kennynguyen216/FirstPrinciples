@@ -1,6 +1,7 @@
 #include "Bridge/DriverBridge.h"
 #include "Crew/CrewComponents.h"
 #include "Crew/TransitSystem.h"
+#include "Effects/Starfield.h"
 #include "Driver/Cab.h"
 #include "Driver/DriverSystem.h"
 #include "LifeSupport/Cargo.h"
@@ -150,6 +151,8 @@ void DriverLauncherSystem::Update(World& world, float)
 	world.AddSystem<CargoBridgeOutSystem>(TruckCrew);
 	// After the Driver's systems, so the hatch's ghosts follow where the cab is this frame.
 	world.AddSystem<TransitSystem>();
+	// And so the stars stay centered on the cab camera, which the Driver's systems just moved.
+	world.AddSystem<StarfieldSystem>();
 	if (host)
 		SendPackage(world, link->Driver->GetPackage());
 
