@@ -38,8 +38,9 @@ local HasUltralight = os.isdir(UltralightDir .. "/include/Ultralight")
 if not HasUltralight then
 	premake.warn("Ultralight is missing, so game UI will not draw. Run Scripts/GetUltralight to get it.")
 end
+local MeshoptimizerDir = Root .. "/ThirdParty/meshoptimizer"
 local ImGuiDir = Root .. "/ThirdParty/imgui"
-if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) or not os.isdir(SpdlogInclude) or not os.isdir(CgltfInclude) or not os.isfile(ImGuiDir .. "/imgui.h") or not os.isdir(JoltDir .. "/Jolt") or not os.isfile(DrLibsDir .. "/dr_mp3.h") then
+if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) or not os.isdir(SpdlogInclude) or not os.isdir(CgltfInclude) or not os.isfile(ImGuiDir .. "/imgui.h") or not os.isdir(JoltDir .. "/Jolt") or not os.isfile(DrLibsDir .. "/dr_mp3.h") or not os.isfile(MeshoptimizerDir .. "/src/meshoptimizer.h") then
 	premake.warn("Submodules are missing. Run: git submodule update --init")
 end
 
@@ -93,7 +94,7 @@ local ProjectName = io.readfile(ProjectFile):match('Name%s+"?([%w_]+)"?') or pat
 
 -- Include paths every project that touches engine headers needs.
 local function EngineIncludes()
-	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir, SpdlogInclude, CgltfInclude, ImGuiDir, JoltDir, OpusDir .. "/include", DrLibsDir }
+	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir, SpdlogInclude, CgltfInclude, ImGuiDir, MeshoptimizerDir .. "/src", JoltDir, OpusDir .. "/include", DrLibsDir }
 	if HasUltralight then
 		externalincludedirs { UltralightDir .. "/include" }
 		defines { "FP_WITH_ULTRALIGHT=1" }
@@ -289,7 +290,7 @@ project "Engine"
 		"src/CoreObject/**.h", "src/CoreObject/**.cpp",
 		"src/Engine/**.h", "src/Engine/**.cpp",
 	}
-	files { MonocypherDir .. "/monocypher.c" }
+	files { MonocypherDir .. "/monocypher.c", MeshoptimizerDir .. "/src/**.cpp", MeshoptimizerDir .. "/src/**.h" }
 	-- Module entry points belong to the scripts library only.
 	removefiles { "src/Engine/Scripting/Module/**" }
 	-- Shader sources are compiled by Scripts/CompileShaders, not by the C++ build.
