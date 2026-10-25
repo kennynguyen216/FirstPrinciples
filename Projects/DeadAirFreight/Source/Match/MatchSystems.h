@@ -2,6 +2,10 @@
 
 #include "Match/MatchComponents.h"
 
+// Gives an entity a crew's character model, sized like a walker. Its feet are at its position and
+// it faces +X.
+void DressCrewCharacter(FP::World& world, FP::Entity entity, FP::int32 crew);
+
 // Seats players as P1..P4 and gives each a crew and a role: P1/P2 are Crew A's Driver and
 // Defender, P3/P4 are Crew B's. Seats are ordered by peer id, which every peer sees the same,
 // so all of them agree without sending anything. Seats lock once the countdown starts.

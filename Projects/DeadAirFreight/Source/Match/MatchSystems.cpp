@@ -1,6 +1,7 @@
 #include "Match/MatchSystems.h"
 #include "Audio/Sounds.h"
 #include "Crew/CrewComponents.h"
+#include "Effects/FreeCam.h"
 #include "Match/MatchQueries.h"
 #include "Net/GameNet.h"
 #include "LifeSupport/Cargo.h"
@@ -76,10 +77,11 @@ namespace
 		}
 	}
 
-	// Other players walking a bay. Walking is only known to its owner, so it is read from the shared scale.
+	// Other players walking a bay, and this one too while the trailer camera is on. Walking is only
+	// known to its owner, so it is read from the shared scale.
 	bool ShowsCharacter(World& world, Entity entity, const CrewMemberComponent& member)
 	{
-		return member.Slot >= 0 && entity != FindLocalMember(world) && world.Get<TransformComponent>(entity).Scale.Y > HiddenScale.Y * 10;
+		return member.Slot >= 0 && (entity != FindLocalMember(world) || FreeCam::IsOn()) && world.Get<TransformComponent>(entity).Scale.Y > HiddenScale.Y * 10;
 	}
 
 	// Stands the character on the body's feet, facing where the body faces.
@@ -89,10 +91,8 @@ namespace
 		TransformComponent& transform = world.Get<TransformComponent>(character);
 		transform.Position = body.Position - Vec3{ 0, body.Scale.Y * 0.5f, 0 };
 		transform.Rotation = { 0, body.Rotation.Y + 90, 0 };
+		DressCrewCharacter(world, character, member.Crew);
 		transform.Scale = Vec3{ 1, 1, 1 } * (body.Scale.Y / CharacterHeight);
-		SetLook(world, character, CharacterMesh, "Materials/Characters/Base.material",
-			{ "", CharacterCaps[member.Crew], "Materials/Characters/Helmet.material", "Materials/Characters/Denim.material",
-				CharacterShirts[member.Crew], "Materials/Characters/Button.material", "Materials/Characters/Belt.material" });
 	}
 
 	void UpdateCharacters(World& world)
@@ -122,6 +122,14 @@ namespace
 			PlaceCharacter(world, character, entity, member);
 		}
 	}
+}
+
+void DressCrewCharacter(World& world, Entity entity, int32 crew)
+{
+	SetLook(world, entity, CharacterMesh, "Materials/Characters/Base.material",
+		{ "", CharacterCaps[crew], "Materials/Characters/Helmet.material", "Materials/Characters/Denim.material",
+			CharacterShirts[crew], "Materials/Characters/Button.material", "Materials/Characters/Belt.material" });
+	world.Get<TransformComponent>(entity).Scale = Vec3{ 1, 1, 1 } * (WalkerSize.Y / CharacterHeight);
 }
 
 void CrewSystem::Update(World& world, float)

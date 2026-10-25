@@ -23,3 +23,10 @@ Windows 10+). If curl is missing or offline, the saved fallback bundle plays ins
 **Meanwhile:** the cab is laid out at y=-5000 in the scene, and every frame `DriverSystem` moves each
 cab part (names starting "Cab", plus "Wheel" and "Scrubber") to the truck's position and rotation.
 Driver walking and reach checks stay in that layout. Anything added to the cab needs one of those names.
+
+## Portals (a camera rendered into a texture)
+
+**Needed for:** seeing into the truck from outside. The cab and the bay are bigger than the hull,
+so a window on the hull should show the rooms through a second camera, as a non-euclidean portal.
+
+**Meanwhile:** from outside, `FreeCam` shows only the truck's model and hides the rooms behind it.

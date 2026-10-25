@@ -2,6 +2,7 @@
 #include "Audio/Sounds.h"
 #include "Crew/OnFootSystem.h"
 #include "Effects/CombatEffects.h"
+#include "Effects/FreeCam.h"
 #include "Effects/Starfield.h"
 #include "Enemies/Airlock.h"
 #include "Enemies/SiphonSystems.h"
@@ -188,5 +189,6 @@ namespace Game
 		world.AddSystem<LifeSupportReadoutSystem>();
 		// Last, after everything that moves the camera before GO.
 		world.AddSystem<StarfieldSystem>();
+		world.AddSystem<FreeCamSystem>();
 	}
 }

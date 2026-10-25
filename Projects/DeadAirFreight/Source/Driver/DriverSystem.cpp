@@ -1,5 +1,6 @@
 #include "DriverSystem.h"
 #include "Audio/Sounds.h"
+#include "Effects/FreeCam.h"
 
 #include "WeatherFetch.h"
 
@@ -282,7 +283,7 @@ void DriverSystem::Update(World& world, float deltaTime)
 		!m_Finished && ticket.Active && !ticket.Revealed && !IsBlackedOut(life) && Input::IsMouseDown(MouseButton::Left));
 	if (driver && driver->InCab)
 	{
-		const bool walking = !driver->Seated && !m_Finished && !IsBlackedOut(life) && Input::GetMoveAxis().LengthSquared() > 0;
+		const bool walking = !driver->Seated && !m_Finished && !IsBlackedOut(life) && !FreeCam::IsFlying() && Input::GetMoveAxis().LengthSquared() > 0;
 		Sounds::SetLoop(world, LoopSlot::Footsteps, Input::IsKeyDown(SDL_SCANCODE_LSHIFT) ? SoundCue::Run : SoundCue::Walk, walking);
 	}
 	if (m_Finished)
@@ -305,7 +306,10 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 	else if (Input::WasMousePressed(MouseButton::Left))
 		m_CursorFree = false;
 	Input::SetCursorMode(m_CursorFree ? CursorMode::Visible : CursorMode::Locked);
-	const Vec2 mouseMove = Input::GetMouseDelta();
+	// The trailer camera has the mouse and WASD while it flies.
+	const bool listening = !FreeCam::IsFlying();
+	const Vec2 mouseMove = listening ? Input::GetMouseDelta() : Vec2{};
+	const Vec2 moveAxis = listening ? Input::GetMoveAxis() : Vec2{};
 
 	const bool awake = !IsBlackedOut(life);
 	bool repairing = false;
@@ -407,9 +411,9 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 		Notify("SCRUBBER FIXED", Good, 2.5f);
 
 	const bool walking = driver && driver->InCab && !driver->Seated && awake;
-	const bool sprinting = walking && Input::IsKeyDown(SDL_SCANCODE_LSHIFT) && Input::GetMoveAxis().LengthSquared() > 0;
+	const bool sprinting = walking && Input::IsKeyDown(SDL_SCANCODE_LSHIFT) && moveAxis.LengthSquared() > 0;
 	if (walking)
-		StepOnFoot(*driver, mouseMove * m_Settings.LookSensitivity, Input::GetMoveAxis(), m_CabBounds, m_Settings, deltaTime, sprinting);
+		StepOnFoot(*driver, mouseMove * m_Settings.LookSensitivity, moveAxis, m_CabBounds, m_Settings, deltaTime, sprinting);
 	// Eases the sprint's slight FOV widening in and out over about a fifth of a second.
 	m_SprintFov += ((sprinting ? 1.0f : 0.0f) - m_SprintFov) * std::min(1.0f, 10 * deltaTime);
 

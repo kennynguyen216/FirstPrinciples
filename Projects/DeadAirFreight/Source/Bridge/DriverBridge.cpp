@@ -1,6 +1,7 @@
 #include "Bridge/DriverBridge.h"
 #include "Crew/CrewComponents.h"
 #include "Crew/TransitSystem.h"
+#include "Effects/FreeCam.h"
 #include "Effects/Starfield.h"
 #include "Driver/Cab.h"
 #include "Driver/DriverSystem.h"
@@ -407,6 +408,8 @@ void DriverLauncherSystem::Update(World& world, float)
 	world.AddSystem<TransitSystem>();
 	// And so the stars stay centered on the cab camera, which the Driver's systems just moved.
 	world.AddSystem<StarfieldSystem>();
+	// Last of all, so the trailer camera overrides the cab camera.
+	world.AddSystem<FreeCamSystem>();
 	if (host)
 		SendPackage(world, link->Driver->GetPackage());
 
