@@ -1,7 +1,7 @@
 #pragma once
 
 #define DRIVER_SETTINGS(X) \
-	X(MatchLength) X(CrossingTime) X(WeatherWindowHours) X(TimeBonusPerSecond) \
+	X(MatchLength) X(CrossingTime) X(WeatherWindowHours) X(TimeBonusPerSecond) X(ParTime) \
 	X(OxygenPerPersonPerDay) X(CrewSize) X(ColonyCrew) X(ColonyReserveKg) X(StartingCargo) \
 	X(CruiseSpeed) X(ThrustAccel) X(MouseSensitivity) X(MaxPitch) X(TurnTime90) \
 	X(CalmSolarWind) X(StormSolarWind) X(CalmWobble) X(StormWobble) X(WobbleFrequency) \
@@ -16,7 +16,7 @@
 	X(MaxClusters) X(RocksPerCluster) X(ClusterSpread) X(MinRockDiameter) X(MaxRockDiameter) X(MinRockSize) X(MaxRockSize) \
 	X(MinFlybySpeed) X(MaxFlybySpeed) X(MinDrift) X(MaxDrift) X(MaxMissLunar) X(MaxRouteOffset) X(RouteClusterStart) X(RouteClusterEnd) \
 	X(TruckRadius) X(BounceSpeedKeep) X(BounceJerk) \
-	X(ChaseDistance) X(ChaseHeight) X(SeatedEyeHeight) X(BankPerTurn) X(BankMax) X(BankSmoothing) X(DustCount) X(DustSpread) X(StreakLength) X(StreakSpeed) X(HudDistance) X(HudAspect) X(HudTextSize)
+	X(ChaseDistance) X(ChaseHeight) X(SeatedEyeHeight) X(BankPerTurn) X(BankMax) X(BankSmoothing) X(DustCount) X(DustSpread) X(StreakLength) X(StreakSpeed)
 
 struct DriverSettings
 {

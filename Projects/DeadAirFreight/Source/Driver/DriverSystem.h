@@ -2,7 +2,6 @@
 
 #include "Asteroids.h"
 #include "Cab.h"
-#include "Hud.h"
 #include "LifeSupport.h"
 #include "SpaceWeather.h"
 #include "Tickets.h"
@@ -45,8 +44,6 @@ private:
 	FP::Vec3 CabToWorld(const TruckState& truck, FP::Vec3 cabPoint) const;
 	void Display(FP::World& world, const TruckState& truck, const LifeSupport& life, const Ticket& ticket, const DriverState* driver, float deltaTime);
 	void DrawHud(FP::World& world, const TruckState& truck, const LifeSupport& life, const Ticket& ticket, const DriverState* driver);
-	void DrawTicket(FP::World& world, const Ticket& ticket);
-	void DrawResults(FP::World& world);
 
 	DriverSettings m_Settings;
 	MatchPackage m_Package;
@@ -76,5 +73,5 @@ private:
 	std::vector<Message> m_Messages;
 	bool m_Finished = false;
 	std::vector<std::string> m_Results;
-	Hud m_Hud;
+	FP::Entity m_HudCamera = FP::NullEntity;
 };

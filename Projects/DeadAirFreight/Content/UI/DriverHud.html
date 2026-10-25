@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- The Driver's HUD, drawn flat over this player's own camera. DriverSystem sends everything as
+     engine.state.hud once a frame; this page only lays it out. Sizes are in vh so any window works. -->
+<style>
+	html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+	body { font-family: Menlo, Consolas, "Courier New", monospace; font-size: 2.5vh; color: #fff;
+		text-shadow: 0 0 0.4vh #000, 0 0 0.2vh #000; }
+	.layer { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+	#dark { background: #000; opacity: 0; }
+	#left { position: absolute; left: 2vh; top: 2vh; line-height: 1.5; }
+	#clock { position: absolute; left: 0; right: 0; top: 1.5vh; text-align: center; font-size: 4vh; }
+	#right { position: absolute; right: 2vh; top: 2vh; text-align: right; line-height: 1.5; }
+	#center { position: absolute; left: 0; right: 0; top: 27%; text-align: center; line-height: 1.5; }
+	#blackout { position: absolute; left: 0; right: 0; top: 45%; text-align: center; display: none; }
+	#blackout .big { font-size: 5vh; color: #ff4d40; }
+	#blackout .dim { color: #a6b3cc; }
+	#prompts { position: absolute; left: 0; right: 0; top: 76%; text-align: center; line-height: 1.5; }
+	#nav { position: absolute; left: 50%; width: 70vh; margin-left: -35vh; top: 85%; text-align: center; }
+	.track { position: relative; height: 1.2vh; background: rgba(38, 38, 51, 0.8); margin: 0.6vh 0; }
+	.fill { position: absolute; left: 0; top: 0; bottom: 0; }
+	.end { position: absolute; top: -0.7vh; font-size: 2vh; color: #a6b3cc; }
+	.bar { display: inline-block; width: 12vh; height: 1.4vh; margin-left: 1.5vh; vertical-align: middle;
+		background: rgba(38, 38, 51, 0.8); position: relative; }
+	#arrow { position: absolute; font-size: 6vh; color: #ffcc40; display: none; margin: -3vh 0 0 -1.5vh; }
+	#ticket { position: absolute; right: 3vh; top: 30%; text-align: center; padding: 1vh;
+		background: #f2d980; color: #991a33; text-shadow: none; box-shadow: 0 1vh 3vh rgba(0, 0, 0, 0.6);
+		transform: translate(0, 0) rotate(-4deg); transition: transform 0.45s cubic-bezier(0.2, 1.4, 0.4, 1); }
+	/* Tucked away below the right edge, like it is still in your pocket. */
+	#ticket.pocket { transform: translate(140%, 70vh) rotate(35deg); transition: transform 0.3s ease-in; }
+	#ticket .title { color: #b37a00; font-size: 3vh; margin-bottom: 0.5vh; }
+	#ticket .card { position: relative; background: #faf5e0; }
+	#ticket .prize { position: absolute; left: 0; right: 0; top: 50%; margin-top: -2.5vh; font-size: 5vh; }
+	#ticket canvas { position: relative; display: block; }
+	#ticket .coin { position: absolute; width: 3vh; height: 3vh; margin: -1.5vh 0 0 -1.5vh; border-radius: 50%;
+		background: #ffcc33; box-shadow: 0 0 0.5vh #000; }
+	#ticket .won { color: #2e9e45; font-size: 3vh; margin-top: 0.5vh; }
+	#results { background: rgba(0, 0, 8, 0.85); display: none; text-align: center; padding-top: 20vh; line-height: 1.6; }
+	#results .footer { position: absolute; left: 0; right: 0; bottom: 5vh; color: #a6b3cc; font-size: 2vh; }
+</style>
+</head>
+<body>
+	<div id="dark" class="layer"></div>
+	<div id="left"></div>
+	<div id="clock"></div>
+	<div id="right"></div>
+	<div id="center"></div>
+	<div id="blackout"><div class="big">BLACKED OUT</div><div class="dim">THE TRUCK IS DRIFTING...</div></div>
+	<div id="prompts"></div>
+	<div id="nav">
+		<div id="distance"></div>
+		<div class="track"><span class="end" style="right: 102%">DEPOT</span><div id="progress" class="fill" style="background: #66ff80"></div><span class="end" style="left: 102%">COLONY</span></div>
+		<div id="course"></div>
+		<div class="track" style="height: 0.7vh"><div id="gauge" class="fill"></div></div>
+	</div>
+	<div id="arrow">&gt;</div>
+	<div id="ticket" class="pocket">
+		<div class="title">SPACE SCRATCHER</div>
+		<div class="card"><div class="prize"></div><canvas></canvas><div class="coin"></div></div>
+		<div class="won"></div>
+	</div>
+	<div id="results" class="layer"><div class="lines"></div><div class="footer">PRESS STOP, THEN PLAY TO RACE AGAIN</div></div>
+
+<script>
+	function line(l) {
+		var bar = l.bar >= 0 ? '<span class="bar"><span class="fill" style="width:' + (l.bar * 100) + '%;background:' + l.c + '"></span></span>' : "";
+		var size = l.size && l.size !== 1 ? "font-size:" + l.size + "em;" : "";
+		return '<div style="white-space:pre;' + size + "color:" + l.c + '">' + esc(l.t) + bar + "</div>";
+	}
+	function esc(text) { return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+	function lines(id, list) { document.getElementById(id).innerHTML = (list || []).map(line).join(""); }
+	function show(id, on) { document.getElementById(id).style.display = on ? "block" : "none"; }
+
+	var cell = 0;
+	function drawTicket(t) {
+		// Put away, it keeps the last card so it slides back into the pocket intact.
+		var box = document.getElementById("ticket");
+		box.classList.toggle("pocket", !t);
+		if (!t) return;
+		cell = window.innerHeight * 0.3 / t.cols;
+		var canvas = box.querySelector("canvas");
+		canvas.width = t.cols * cell;
+		canvas.height = t.rows * cell;
+		var context = canvas.getContext("2d");
+		context.clearRect(0, 0, canvas.width, canvas.height);
+		context.fillStyle = "#8c9199";
+		for (var i = 0; i < t.coating.length; ++i)
+			if (t.coating[i] === "1")
+				context.fillRect((i % t.cols) * cell, Math.floor(i / t.cols) * cell, cell + 1, cell + 1);
+		box.querySelector(".prize").textContent = t.prize;
+		var coin = box.querySelector(".coin");
+		coin.style.display = t.revealed ? "none" : "block";
+		coin.style.left = (t.x * 100) + "%";
+		coin.style.top = (t.y * 100) + "%";
+		box.querySelector(".won").textContent = t.revealed ? "YOU WON: " + t.prize : "";
+	}
+
+	engine.watch("hud", function (hud) {
+		document.getElementById("dark").style.opacity = hud.dark;
+		lines("left", hud.left);
+		document.getElementById("clock").innerHTML = line(hud.clock);
+		lines("right", hud.right);
+		lines("center", hud.center);
+		show("blackout", hud.blackout);
+		lines("prompts", hud.prompts);
+
+		document.getElementById("distance").innerHTML = line(hud.distance);
+		document.getElementById("progress").style.width = (hud.progress * 100) + "%";
+		document.getElementById("course").innerHTML = line({ t: hud.course.t, c: hud.course.c });
+		var gauge = document.getElementById("gauge");
+		gauge.style.width = (hud.course.bar * 100) + "%";
+		gauge.style.background = hud.course.c;
+
+		// Sits on an ellipse inside the screen's edge, pointing out toward the colony.
+		var arrow = document.getElementById("arrow");
+		arrow.style.display = hud.arrow ? "block" : "none";
+		if (hud.arrow) {
+			arrow.style.left = (50 + hud.arrow.x * 45) + "%";
+			arrow.style.top = (50 - hud.arrow.y * 40) + "%";
+			arrow.style.transform = "rotate(" + (-Math.atan2(hud.arrow.y, hud.arrow.x) * 180 / Math.PI) + "deg)";
+		}
+
+		drawTicket(hud.ticket);
+		show("results", !!hud.results);
+		if (hud.results)
+			document.querySelector("#results .lines").innerHTML = hud.results.map(line).join("");
+	});
+</script>
+</body>
+</html>

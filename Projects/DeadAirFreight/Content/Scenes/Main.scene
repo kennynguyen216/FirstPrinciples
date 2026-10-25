@@ -7,11 +7,16 @@ component Name
 component Transform
   Position 0 0 -60
   Rotation 0 0 0
-  Scale 2.5 2.5 7
+  Scale 3.5 3.5 3.5
 component Mesh
-  Mesh "Cube"
+  Mesh "Meshes/SpaceTruck/SpaceTruckV1.obj"
 component Material
-  Material "Materials/Gold.material"
+  Material "Materials/SpaceTruck/GrayMetal.material"
+  Slot 1 "Materials/SpaceTruck/RedMetal.material"
+  Slot 2 "Materials/Windshield.material"
+  Slot 3 "Materials/SpaceTruck/LighterGrayMetal.material"
+  Slot 4 "Materials/SpaceTruck/Yellow.material"
+  Slot 5 "Materials/SpaceTruck/DarkGrey.material"
 
 entity aae47f15-856b-4c5b-b5e1-8010acd59eba
 component Name
@@ -29,8 +34,8 @@ entity 498ad1e0-20b3-43f7-8c15-2f066b7eb746
 component Name
   Name "DriverCamera"
 component Transform
-  Position 0 4 -44
-  Rotation 0 0 0
+  Position 0 12 -12
+  Rotation -10 0 0
   Scale 1 1 1
 component Camera
   Perspective true
@@ -304,7 +309,7 @@ component MatchConfig
   ColonyOxygenDays 30
   CargoOxygenTanks 14
   CargoWaterTanks 6
-  ParTimeSeconds 180
+  ParTimeSeconds 220
   TimeBonusPerSecond 1
   StatusLogSeconds 5
 component LifeSupportConfig
