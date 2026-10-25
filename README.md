@@ -310,7 +310,11 @@ looks, WASD flies, left click pushes, F picks things up and right click blows th
 A **CharacterController** makes a walking capsule for players and enemies, used instead of a
 collider and rigid body. It slides along walls, climbs steps up to `StepHeight`, walks up slopes
 up to `MaxSlope`, rides moving platforms and pushes crates. Rays and triggers find it like any
-body. **Entity > Create Character** (or Place Entities) adds one with a pill mesh, ready to walk.
+body.
+
+**Entity > Create Character** (or Character in Place Entities) adds a pill with a follow camera
+that plays with no code in any project. Its **PlayerInput** component walks it with WASD, runs with
+Shift, jumps with Space and turns it with the mouse. Remove PlayerInput to drive it from a script:
 
 ```cpp
 void OnUpdate(float) override
@@ -324,7 +328,7 @@ void OnUpdate(float) override
 
 `AirControl` sets how much `Move` steers mid jump. `SetVelocity` and `AddImpulse` knock a
 character about, and explosions push it too. `Content/Scenes/Character.scene` has a third person
-player (`PlayerController`) with stairs, a walkable and a too steep ramp, a lift, crates and a zone
+player with stairs, a walkable and a too steep ramp, a lift, crates and a zone
 that counts the player walking in.
 
 ### Game UI
