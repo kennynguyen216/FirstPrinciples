@@ -557,6 +557,7 @@ namespace FP::Editor
 		if (suffix == "actions") return "Input Actions";
 		if (suffix == "scene") return "Scene";
 		if (suffix == "material") return "Material";
+		if (suffix == "hdr") return "Environment";
 		if (suffix == "wav" || suffix == "mp3") return "Audio";
 		if (QStringList{ "png", "jpg", "jpeg", "tga", "bmp" }.contains(suffix)) return "Texture";
 		if (QStringList{ "obj", "gltf", "glb" }.contains(suffix)) return "Mesh";
@@ -737,7 +738,7 @@ namespace FP::Editor
 
 	void ContentBrowser::ImportFiles()
 	{
-		const QStringList files = QFileDialog::getOpenFileNames(this, "Import", QString(), "Assets (*.actions *.png *.jpg *.jpeg *.tga *.bmp *.obj *.gltf *.glb *.bin *.material *.scene);;All files (*)");
+		const QStringList files = QFileDialog::getOpenFileNames(this, "Import", QString(), "Assets (*.actions *.hdr *.png *.jpg *.jpeg *.tga *.bmp *.obj *.gltf *.glb *.bin *.material *.scene);;All files (*)");
 		QString last;
 		for (const QString& file : files)
 		{
@@ -884,6 +885,7 @@ namespace FP::Editor
 			m_PendingThumbnails.append(path);
 			return kind == "Material" ? TileIcon(EditorIcon::Material, QColor(0x80, 0xc0, 0x60)) : TileIcon(EditorIcon::Mesh, QColor(0x3a, 0xa0, 0xd0));
 		}
+		else if (kind == "Environment") icon = TileIcon(EditorIcon::Texture, QColor(0x60, 0xb0, 0xc0));
 		else if (kind == "Scene") icon = TileIcon(EditorIcon::Scene, QColor(0xf0, 0xa0, 0x30));
 		else if (kind == "Input Actions") icon = TileIcon(EditorIcon::Script, QColor(0x60, 0xc0, 0xb0));
 		else if (kind == "Script") icon = TileIcon(EditorIcon::Script, QColor(0x4f, 0xa3, 0xe0));

@@ -405,6 +405,7 @@ namespace FP::Editor
 			const QString name = shape;
 			meshes->addAction(name, this, [this, name]() { CreateEntity(name); });
 		}
+		entity->addAction("Create Skybox", this, [this]() { CreateEntity("Skybox"); });
 		entity->addAction("Create &Point Light", this, [this]() { CreateEntity("Point Light"); });
 		entity->addAction("Create &Spot Light", this, [this]() { CreateEntity("Spot Light"); });
 		entity->addAction("Create &Character", this, [this]() { CreateEntity("Character"); });
@@ -1551,6 +1552,11 @@ namespace FP::Editor
 			entity = m_World->CreateEntity(name);
 			m_World->Get<TransformComponent>(entity).Rotation = { -40, 30, 0 };
 			m_World->Add<DirectionalLightComponent>(entity);
+		}
+		else if (kind == "Skybox")
+		{
+			entity = m_World->CreateEntity(name);
+			m_World->Add<SkyboxComponent>(entity);
 		}
 		else if (kind == "Ambient Light")
 		{

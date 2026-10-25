@@ -10,7 +10,7 @@ template<typename T, size_t Num>
 struct spvUnsafeArray
 {
     T elements[Num ? Num : 1];
-    
+
     thread T& operator [] (size_t pos) thread
     {
         return elements[pos];
@@ -19,7 +19,7 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     device T& operator [] (size_t pos) device
     {
         return elements[pos];
@@ -28,12 +28,12 @@ struct spvUnsafeArray
     {
         return elements[pos];
     }
-    
+
     constexpr const constant T& operator [] (size_t pos) const constant
     {
         return elements[pos];
     }
-    
+
     threadgroup T& operator [] (size_t pos) threadgroup
     {
         return elements[pos];
@@ -43,6 +43,14 @@ struct spvUnsafeArray
         return elements[pos];
     }
 };
+
+// Implementation of signed integer mod accurate to SPIR-V specification
+template<typename Tx, typename Ty>
+inline Tx spvSMod(Tx x, Ty y)
+{
+    Tx remainder = x - y * (x / y);
+    return select(Tx(remainder + y), remainder, remainder == 0 || (x >= 0) == (y >= 0));
+}
 
 struct FrameData
 {
@@ -59,6 +67,14 @@ struct FrameData
     float4 LightCone[16];
     float4x4 ShadowMatrix[8];
     float4 ShadowParams[3];
+    float4 EnvironmentParams;
+    float4 EnvironmentSize;
+    float4 EnvironmentDiffuse[9];
+};
+
+struct EnvironmentData
+{
+    float4 Pixels[1];
 };
 
 struct MaterialData
@@ -70,7 +86,7 @@ struct MaterialData
     float4 Params2;
 };
 
-constant spvUnsafeArray<float2, 8> _539 = spvUnsafeArray<float2, 8>({ float2(0.707099974155426025390625), float2(-0.707099974155426025390625, 0.707099974155426025390625), float2(0.707099974155426025390625, -0.707099974155426025390625), float2(-0.707099974155426025390625), float2(1.0, 0.0), float2(-1.0, 0.0), float2(0.0, 1.0), float2(0.0, -1.0) });
+constant spvUnsafeArray<float2, 8> _807 = spvUnsafeArray<float2, 8>({ float2(0.707099974155426025390625), float2(-0.707099974155426025390625, 0.707099974155426025390625), float2(0.707099974155426025390625, -0.707099974155426025390625), float2(-0.707099974155426025390625), float2(1.0, 0.0), float2(-1.0, 0.0), float2(0.0, 1.0), float2(0.0, -1.0) });
 
 struct main0_out
 {
@@ -93,10 +109,10 @@ float3 ApplyNormalMap(thread const float3& normal, thread const float4& tangent,
     float3 t = fast::normalize(tangent.xyz - (n * dot(n, tangent.xyz)));
     float3 b = cross(n, t) * tangent.w;
     float3 local = (sampled * 2.0) - float3(1.0);
-    float3 _127 = local;
-    float2 _129 = _127.xy * strength;
-    local.x = _129.x;
-    local.y = _129.y;
+    float3 _160 = local;
+    float2 _162 = _160.xy * strength;
+    local.x = _162.x;
+    local.y = _162.y;
     return fast::normalize(((t * local.x) + (b * local.y)) + (n * local.z));
 }
 
@@ -114,6 +130,82 @@ static inline __attribute__((always_inline))
 float3 FresnelSchlick(thread const float& cosTheta, thread const float3& f0)
 {
     return f0 + ((float3(1.0) - f0) * powr(1.0 - cosTheta, 5.0));
+}
+
+static inline __attribute__((always_inline))
+float3 EnvironmentDirection(thread const float3& direction, thread const float& rotation)
+{
+    float c = cos(rotation);
+    float s = sin(rotation);
+    return float3((c * direction.x) - (s * direction.z), direction.y, (s * direction.x) + (c * direction.z));
+}
+
+static inline __attribute__((always_inline))
+float3 EnvironmentPixel(thread int2& pixel, thread const int2& size, thread const int& offset, const device EnvironmentData& Environment)
+{
+    pixel.x = spvSMod(spvSMod(pixel.x, size.x) + size.x, size.x);
+    pixel.y = clamp(pixel.y, 0, size.y - 1);
+    return Environment.Pixels[(offset + (pixel.y * size.x)) + pixel.x].xyz;
+}
+
+static inline __attribute__((always_inline))
+float3 EnvironmentLevel(thread const float3& direction, thread const int& level0, thread const float4& dimensions, const device EnvironmentData& Environment)
+{
+    int2 size = int2(dimensions.xy);
+    int offset = 0;
+    for (int i = 0; i < level0; i++)
+    {
+        offset += (size.x * size.y);
+        size = max((size / int2(2)), int2(1));
+    }
+    float2 uv = float2((precise::atan2(direction.z, direction.x) / 6.283185482025146484375) + 0.5, acos(fast::clamp(direction.y, -1.0, 1.0)) / 3.1415927410125732421875);
+    float2 coordinate = (uv * float2(size)) - float2(0.5);
+    int2 pixel = int2(floor(coordinate));
+    float2 f = fract(coordinate);
+    int2 param = pixel;
+    int2 param_1 = size;
+    int param_2 = offset;
+    float3 _545 = EnvironmentPixel(param, param_1, param_2, Environment);
+    int2 param_3 = pixel + int2(1, 0);
+    int2 param_4 = size;
+    int param_5 = offset;
+    float3 _554 = EnvironmentPixel(param_3, param_4, param_5, Environment);
+    int2 param_6 = pixel + int2(0, 1);
+    int2 param_7 = size;
+    int param_8 = offset;
+    float3 _567 = EnvironmentPixel(param_6, param_7, param_8, Environment);
+    int2 param_9 = pixel + int2(1);
+    int2 param_10 = size;
+    int param_11 = offset;
+    float3 _575 = EnvironmentPixel(param_9, param_10, param_11, Environment);
+    return mix(mix(_545, _554, float3(f.x)), mix(_567, _575, float3(f.x)), float3(f.y));
+}
+
+static inline __attribute__((always_inline))
+float3 EnvironmentRadiance(thread const float3& direction, thread const float& roughness, thread const float4& dimensions, const device EnvironmentData& Environment)
+{
+    float level0 = fast::clamp(roughness, 0.0, 1.0) * (dimensions.z - 1.0);
+    int low = int(floor(level0));
+    int high = min((low + 1), (int(dimensions.z) - 1));
+    float3 param = direction;
+    int param_1 = low;
+    float4 param_2 = dimensions;
+    float3 param_3 = direction;
+    int param_4 = high;
+    float4 param_5 = dimensions;
+    return mix(EnvironmentLevel(param, param_1, param_2, Environment), EnvironmentLevel(param_3, param_4, param_5, Environment), float3(fract(level0)));
+}
+
+static inline __attribute__((always_inline))
+float3 EnvironmentReflection(thread const float3& normal, thread const float3& view, thread const float& roughness, constant FrameData& Frame, const device EnvironmentData& Environment)
+{
+    float3 param = reflect(-view, normal);
+    float param_1 = Frame.EnvironmentParams.y;
+    float3 direction = EnvironmentDirection(param, param_1);
+    float3 param_2 = direction;
+    float param_3 = roughness;
+    float4 param_4 = Frame.EnvironmentSize;
+    return EnvironmentRadiance(param_2, param_3, param_4, Environment) * Frame.EnvironmentParams.x;
 }
 
 static inline __attribute__((always_inline))
@@ -177,7 +269,7 @@ float3 SpecularOnly(thread const float3& n, thread const float3& v, thread const
     return (((f * (DistributionGGX(param_2, param_3) * VisibilitySmith(param_4, param_5, param_6))) * radiance) * nDotL) * 3.1415927410125732421875;
 }
 
-fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Material [[buffer(0)]], constant FrameData& Frame [[buffer(1)]], texture2d<float> BaseColorMap [[texture(0)]], texture2d<float> NormalMap [[texture(1)]], texture2d<float> RoughnessMap [[texture(2)]], texture2d<float> SceneColor [[texture(3)]], sampler BaseColorMapSmplr [[sampler(0)]], sampler NormalMapSmplr [[sampler(1)]], sampler RoughnessMapSmplr [[sampler(2)]], sampler SceneColorSmplr [[sampler(3)]], float4 gl_FragCoord [[position]])
+fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Material [[buffer(0)]], constant FrameData& Frame [[buffer(1)]], const device EnvironmentData& Environment [[buffer(2)]], texture2d<float> BaseColorMap [[texture(0)]], texture2d<float> NormalMap [[texture(1)]], texture2d<float> RoughnessMap [[texture(2)]], texture2d<float> SceneColor [[texture(3)]], sampler BaseColorMapSmplr [[sampler(0)]], sampler NormalMapSmplr [[sampler(1)]], sampler RoughnessMapSmplr [[sampler(2)]], sampler SceneColorSmplr [[sampler(3)]], float4 gl_FragCoord [[position]])
 {
     main0_out out = {};
     float4 tint = (BaseColorMap.sample(BaseColorMapSmplr, in.InUV) * Material.BaseColor) * in.InTint;
@@ -207,7 +299,7 @@ fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Materi
     {
         for (int i = 0; i < 8; i++)
         {
-            behind += SceneColor.sample(SceneColorSmplr, (screenUV + (_539[i] * blur))).xyz;
+            behind += SceneColor.sample(SceneColorSmplr, (screenUV + (_807[i] * blur))).xyz;
         }
         behind /= float3(9.0);
     }
@@ -219,25 +311,31 @@ fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Materi
     float3 fresnel = FresnelSchlick(param_5, param_6);
     float3 color = (behind * transmittance) * (float3(1.0) - fresnel);
     color += ((fresnel * Frame.Ambient.xyz) * 4.0);
-    float3 param_9;
-    float3 param_10;
+    if (Frame.EnvironmentSize.z > 0.0)
+    {
+        float3 param_7 = n;
+        float3 param_8 = v;
+        float param_9 = roughness;
+        color += (fresnel * EnvironmentReflection(param_7, param_8, param_9, Frame, Environment));
+    }
+    float3 param_12;
+    float3 param_13;
     for (int i_1 = 0; i_1 < Frame.LightCount.x; i_1++)
     {
-        int param_7 = i_1;
-        float3 param_8 = in.InWorldPosition;
-        GetLight(param_7, param_8, param_9, param_10, Frame);
-        float3 l = param_9;
-        float3 radiance = param_10;
-        float3 param_11 = n;
-        float3 param_12 = v;
-        float3 param_13 = l;
-        float3 param_14 = radiance;
-        float param_15 = roughness;
-        float3 param_16 = f0;
-        color += SpecularOnly(param_11, param_12, param_13, param_14, param_15, param_16);
+        int param_10 = i_1;
+        float3 param_11 = in.InWorldPosition;
+        GetLight(param_10, param_11, param_12, param_13, Frame);
+        float3 l = param_12;
+        float3 radiance = param_13;
+        float3 param_14 = n;
+        float3 param_15 = v;
+        float3 param_16 = l;
+        float3 param_17 = radiance;
+        float param_18 = roughness;
+        float3 param_19 = f0;
+        color += SpecularOnly(param_14, param_15, param_16, param_17, param_18, param_19);
     }
     color += Material.Emissive.xyz;
     out.OutColor = float4(color, 1.0);
     return out;
 }
-

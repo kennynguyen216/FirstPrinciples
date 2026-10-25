@@ -2,6 +2,7 @@
 
 #include "Engine/Render/DebugLines.h"
 #include "Engine/Render/GPUDevice.h"
+#include "Engine/Render/EnvironmentMap.h"
 #include "Engine/Render/MeshData.h"
 #include "Engine/Render/MeshletCulling.h"
 #include "Engine/Render/MeshLibrary.h"
@@ -49,6 +50,9 @@ namespace FP
 		Vec4 LightCone[MaxLights]; // x cos(inner), y cos(outer)
 		Mat4 ShadowMatrix[8]; // directional, spot, then six point faces
 		Vec4 ShadowParams[3]; // x strength, y texel in UV, z normal offset, w light index
+		Vec4 EnvironmentParams; // x intensity, y rotation, z visible
+		Vec4 EnvironmentSize; // width, height, level count
+		Vec4 EnvironmentDiffuse[9];
 	};
 
 	// Editors pick colors in sRGB. Shaders work in linear.
@@ -125,6 +129,8 @@ namespace FP
 		SDL_GPUGraphicsPipeline* GetPipeline(const Draw& draw) const;
 		void EnsureTargets(uint32 width, uint32 height);
 		void UploadLines(SDL_GPUCommandBuffer* cmd, const DebugLines& lines);
+		void PrepareEnvironment(World& world);
+		void DrawSkybox(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, const RenderView& view);
 		void BuildFrameUniforms(World& world, const RenderView& view, uint32 width, uint32 height);
 		void DrawObject(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, World& world, const Draw& draw, const Mat4& viewProjection);
 		void PushBones(SDL_GPUCommandBuffer* cmd, const Array<Mat4>* skin);
@@ -160,6 +166,12 @@ namespace FP
 		SDL_GPUGraphicsPipeline* m_WirePipelines[3] = {};
 		ViewMode m_Mode = ViewMode::Lit;
 		SDL_GPUGraphicsPipeline* m_PresentPipeline = nullptr;
+		SDL_GPUGraphicsPipeline* m_SkyboxPipeline = nullptr;
+		EnvironmentMap m_Environment;
+		RefPtr<GPUBuffer> m_EnvironmentBuffer;
+		RefPtr<GPUBuffer> m_EmptyEnvironment;
+		String m_EnvironmentPath;
+		int64 m_EnvironmentModified = 0;
 		SDL_GPUGraphicsPipeline* m_UIPipeline = nullptr; // optional, no UI without it
 
 		// One texture per UI page, refilled when the page's version changes.

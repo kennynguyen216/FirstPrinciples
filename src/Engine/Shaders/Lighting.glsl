@@ -79,8 +79,7 @@ vec3 SpecularOnly(vec3 n, vec3 v, vec3 l, vec3 radiance, float roughness, vec3 f
 	return DistributionGGX(nDotH, roughness) * VisibilitySmith(nDotV, nDotL, roughness) * f * radiance * nDotL * PI;
 }
 
-// Karis' fit of the split sum environment BRDF. Lets ambient light give metals their color
-// without an environment map.
+// Karis' fit of the split sum environment BRDF.
 vec3 EnvironmentBRDF(vec3 f0, float roughness, float nDotV)
 {
 	const vec4 c0 = vec4(-1.0, -0.0275, -0.572, 0.022);
