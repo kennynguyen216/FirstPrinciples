@@ -166,6 +166,31 @@ FP_TEST(Scene_RoundTrip)
 	FP_EXPECT(SceneSerializer::SaveToString(*loaded.Get()) == text);
 }
 
+FP_TEST(Scene_ShadowLightsRoundTrip)
+{
+	RegisterTestComponents();
+	StrongObjectPtr<World> world(NewObject<World>());
+	const Entity point = world->CreateEntity("Point");
+	PointLightComponent& pointLight = world->Add<PointLightComponent>(point);
+	pointLight.ShadowResolution = 256;
+	pointLight.ShadowStrength = 0.7f;
+	const Entity spot = world->CreateEntity("Spot");
+	SpotLightComponent& spotLight = world->Add<SpotLightComponent>(spot);
+	spotLight.Range = 12;
+	spotLight.InnerAngle = 15;
+	spotLight.OuterAngle = 30;
+	spotLight.ShadowResolution = 512;
+	const String text = SceneSerializer::SaveToString(*world.Get());
+
+	StrongObjectPtr<World> loaded(NewObject<World>());
+	FP_EXPECT(SceneSerializer::LoadFromString(*loaded.Get(), text.View()));
+	const auto& loadedPoint = loaded->Get<PointLightComponent>(loaded->FindEntityByName("Point"));
+	const auto& loadedSpot = loaded->Get<SpotLightComponent>(loaded->FindEntityByName("Spot"));
+	FP_EXPECT(loadedPoint.CastShadows && loadedPoint.ShadowResolution == 256 && loadedPoint.ShadowStrength == 0.7f);
+	FP_EXPECT(loadedSpot.CastShadows && loadedSpot.Range == 12 && loadedSpot.InnerAngle == 15);
+	FP_EXPECT(loadedSpot.OuterAngle == 30 && loadedSpot.ShadowResolution == 512);
+}
+
 FP_TEST(Scene_CopiesOneEntity)
 {
 	RegisterTestComponents();
@@ -511,6 +536,30 @@ FP_TEST(Input_MouseDeltaLastsOneFrameAndResetKeepsCursorMode)
 	world->EndPlay();
 }
 
+FP_TEST(Input_GamepadsReadPastTheDeadZone)
+{
+	Input::Reset();
+	Input::SetGamepadButton(GamepadButton::South, true);
+	FP_EXPECT(Input::IsGamepadButtonDown(GamepadButton::South) && Input::WasGamepadButtonPressed(GamepadButton::South));
+	Input::EndFrame();
+	FP_EXPECT(Input::IsGamepadButtonDown(GamepadButton::South) && !Input::WasGamepadButtonPressed(GamepadButton::South));
+	Input::SetGamepadButton(GamepadButton::South, false);
+	FP_EXPECT(Input::WasGamepadButtonReleased(GamepadButton::South));
+
+	// A resting stick reads zero, a full push reads one with up positive.
+	Input::SetGamepadAxis(GamepadAxis::LeftX, 0.1f);
+	FP_EXPECT(Input::GetGamepadAxis(GamepadAxis::LeftX) == 0 && Input::GetGamepadStick(false).Length() == 0);
+	Input::SetGamepadAxis(GamepadAxis::LeftX, 0);
+	Input::SetGamepadAxis(GamepadAxis::LeftY, -1);
+	const Vec2 stick = Input::GetGamepadStick(false);
+	FP_EXPECT(std::fabs(stick.Y - 1) < 1e-4f && std::fabs(stick.X) < 1e-4f);
+	Input::SetGamepadAxis(GamepadAxis::RightTrigger, 0.5f);
+	FP_EXPECT(Input::GetGamepadAxis(GamepadAxis::RightTrigger) > 0.4f && Input::GetGamepadAxis(GamepadAxis::RightTrigger) < 0.5f);
+
+	Input::Reset();
+	FP_EXPECT(Input::GetGamepadStick(false).Length() == 0 && !Input::IsGamepadButtonDown(GamepadButton::South));
+}
+
 #include "Engine/Json.h"
 
 FP_TEST(Json_ReadsWhatPagesSend)
@@ -558,4 +607,52 @@ FP_TEST(Cameras_SwitchingCutsTheView)
 
 	world->Get<CameraComponent>(second).Primary = false;
 	FP_EXPECT(world->GetActiveCamera() == NullEntity);
+}
+
+FP_TEST(Input_ActionsCombineKeysMouseAndPads)
+{
+	Input::Reset();
+	std::vector<std::string> errors;
+	FP_EXPECT(Input::LoadActions(Input::GetDefaultActions(), &errors) && errors.empty());
+
+	// Keys and the stick both move, right and up positive.
+	Input::SetKey(SDL_SCANCODE_W, true);
+	FP_EXPECT(Input::GetActionAxis("Move").Y == 1 && Input::IsActionDown("move"));
+	Input::SetKey(SDL_SCANCODE_W, false);
+	Input::SetGamepadAxis(GamepadAxis::LeftX, -1);
+	FP_EXPECT(Input::GetActionAxis("Move").X < -0.99f);
+	Input::SetGamepadAxis(GamepadAxis::LeftX, 0);
+
+	// A press shows for one frame from either device.
+	Input::EndFrame();
+	Input::SetGamepadButton(GamepadButton::South, true);
+	FP_EXPECT(Input::WasActionPressed("Jump") && Input::IsActionDown("Jump"));
+	Input::EndFrame();
+	FP_EXPECT(!Input::WasActionPressed("Jump") && Input::IsActionDown("Jump"));
+	Input::SetGamepadButton(GamepadButton::South, false);
+	FP_EXPECT(Input::WasActionReleased("Jump"));
+	Input::EndFrame();
+
+	// Triggers give a value. The scaled right stick turns at a steady speed.
+	Input::SetGamepadAxis(GamepadAxis::RightTrigger, 1);
+	FP_EXPECT(Input::GetActionValue("Fire") > 0.99f && Input::IsActionDown("Fire"));
+	Input::SetGamepadAxis(GamepadAxis::RightTrigger, 0);
+	Input::SetDeltaTime(0.5f);
+	Input::SetGamepadAxis(GamepadAxis::RightX, 1);
+	FP_EXPECT(std::fabs(Input::GetActionAxis("Look").X - 400) < 1);
+	Input::SetGamepadAxis(GamepadAxis::RightX, 0);
+	Input::AddMouseDelta({ 3, 4 });
+	FP_EXPECT(Input::GetActionAxis("Look").X == 3 && Input::GetActionAxis("Look").Y == -4);
+	Input::EndFrame();
+	Input::SetDeltaTime(1.0f / 60.0f);
+
+	// Bad lines are reported and skipped, the rest still load.
+	errors.clear();
+	FP_EXPECT(!Input::LoadActions("Shoot Key:F\nShoot Key:NotAKey\nDash Pad:Who\n", &errors));
+	FP_EXPECT(errors.size() == 2 && Input::GetActionNames().size() == 1);
+	Input::SetKey(SDL_SCANCODE_F, true);
+	FP_EXPECT(Input::IsActionDown("Shoot") && !Input::IsActionDown("Jump"));
+	Input::SetKey(SDL_SCANCODE_F, false);
+	Input::EndFrame();
+	Input::LoadActions(Input::GetDefaultActions());
 }

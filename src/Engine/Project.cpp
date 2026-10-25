@@ -1,4 +1,5 @@
 #include "Engine/Project.h"
+#include "Engine/Input.h"
 #include "Engine/FieldSerializer.h"
 #include "Core/Log.h"
 #include "Core/Misc/File.h"
@@ -158,7 +159,8 @@ namespace Game
 			&& project.Save()
 			&& File::WriteAllText((project.GetContentDir() + "/" + project.StartScene).CStr(), EmptyScene)
 			&& File::WriteAllText((project.GetSourceDir() + "/Game.h").CStr(), GameHeader)
-			&& File::WriteAllText((project.GetSourceDir() + "/Game.cpp").CStr(), GameSource);
+			&& File::WriteAllText((project.GetSourceDir() + "/Game.cpp").CStr(), GameSource)
+			&& File::WriteAllText((project.GetContentDir() + "/Input.actions").CStr(), String(Input::GetDefaultActions()));
 		if (!written)
 		{
 			error = String::Format("Could not write %s", project.Dir.CStr());

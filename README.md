@@ -104,8 +104,9 @@ Game code lives in your project's `Source` folder. The editor and the runtime bo
    }
    ```
 
-4. **Input** works the same in the editor and the runtime. Use `FP::Input::IsKeyDown(SDL_SCANCODE_SPACE)`
-   or `FP::Input::GetMoveAxis()`.
+4. **Input** works the same in the editor and the runtime. Ask for actions like
+   `FP::Input::WasActionPressed("Jump")` so keys and gamepads both work, or read keys directly with
+   `FP::Input::IsKeyDown(SDL_SCANCODE_SPACE)`.
 
 5. **Scenes** live in the project's `Content/Scenes`. Build them in the editor and press Play to run your systems.
    Pause holds the current game state and audio. Step advances one 1/60-second game frame while
@@ -336,6 +337,7 @@ that `FP_SCRIPT` registers. There is nothing to list by hand.
 | Parents | `GetParent()`, `GetChildren()`, `FindChild(name, recursive)`, `SetParent(entity)`, `AddChild(entity)` |
 | World space | `GetWorldPosition()`, `SetWorldPosition(position)`, `GetWorldRotation()` |
 | Timers | `After(seconds, fn)`, `Every(seconds, fn)`, `CancelTimer(id)`, `CancelAllTimers()` |
+| Saving | `SaveData` holds typed values. `Save(slot)`, `Load(slot)`, `Exists(slot)`, `Delete(slot)` |
 | Physics | `AddForce(force)`, `AddImpulse(impulse)`, `AddForceAtPoint`, `AddImpulseAtPoint`, `GetVelocity()`, `SetVelocity(velocity)`, `GetMass()`, `GetPhysics()` for the rest |
 | Characters | `Move(velocity)` every frame, `Jump(speed)`, `IsGrounded()` |
 | Particles | `EmitParticles(count)` bursts from this entity's emitter, or another's |
@@ -343,6 +345,8 @@ that `FP_SCRIPT` registers. There is nothing to list by hand.
 | Cameras | `SetActiveCamera(entity or name)` (this entity by default), `GetActiveCamera()`, `IsActiveCamera()` |
 | Physics events | `OnCollisionEnter(other, collision)`, `OnCollisionExit(other)`, `OnTriggerEnter(other)`, `OnTriggerExit(other)` |
 | Math | `Clamp`, `Lerp`, `InverseLerp`, `MoveTowards`, `Damp`, `Random::Range`, `Random::Chance`, `Random::Direction` |
+| Input actions | `Input::IsActionDown("Fire")`, `Input::WasActionPressed("Jump")`, `Input::GetActionValue("Fire")`, `Input::GetActionAxis("Move")` |
+| Gamepads | `Input::IsGamepadButtonDown(GamepadButton::South)`, `Input::GetGamepadAxis(GamepadAxis::RightTrigger)`, `Input::GetGamepadStick(right)`, `Input::Rumble(low, high, seconds)` |
 | Input and logs | `Input::IsKeyDown(SDL_SCANCODE_SPACE)`, `Input::GetMoveAxis()`, `Input::GetMouseDelta()`, `Input::SetCursorMode(mode)`, `FP_LOG("...")` |
 
 **Mouse and cameras**
@@ -355,8 +359,93 @@ the viewport takes it back.
 The game sees through the first camera with `Primary` on. `SetActiveCamera` cuts to another one
 by turning `Primary` off everywhere else.
 
+**Input actions and gamepads**
+
+Games ask for actions like Jump or Move instead of keys, so the keyboard, mouse and any gamepad
+all play. `Content/Input.actions` binds them, one input per line, and new projects get a copy of
+the defaults:
+
+```
+Jump   Key:Space
+Jump   Button:South          # A on Xbox, Cross on PlayStation
+Move   Key:W        +Y       # keys point a 2D action, right and up positive
+Move   Stick:Left
+Look   Mouse:Delta
+Look   Stick:Right  800      # a scale makes a stick turn at a steady speed
+Fire   Axis:RightTrigger
+```
+
+Devices are `Key` (SDL key names with `_` for spaces), `Mouse` (`Left`, `Right`, `Middle`, `Delta`),
+`Button` and `Axis` for gamepads (named by position, like `South`, `LeftShoulder`, `DpadUp` or
+`RightTrigger`) and `Stick` (`Left` or `Right`). The defaults bind Move, Look, Jump, Run, Fire, Aim,
+Interact and Pause. The editor reloads the file each time Play starts.
+
+```cpp
+if (Input::WasActionPressed("Jump"))
+    Jump(6);
+const Vec2 move = Input::GetActionAxis("Move"); // keys and the left stick
+if (Input::IsActionDown("Fire"))
+    Input::Rumble(0.3f, 0.6f, 0.1f);
+```
+
+Every connected pad counts, so whichever one is picked up plays. Sticks have a round dead zone so
+they read zero at rest.
+
 `SpawnScene` copies every entity in a scene file with new ids, so any scene works as a prefab and
 can be spawned many times. Timers stop when the script stops or reloads.
+
+**Saving and loading**
+
+`SaveData` saves progress and settings as named values. It is available from `Script.h`, or
+include `Engine/SaveData.h` in other game code. Use a separate slot for each profile or purpose:
+
+```cpp
+SaveData progress;
+progress.SetInt("score", Score);
+progress.SetVec3("position", GetWorldPosition());
+if (!progress.Save("player-1"))
+    FP_LOG_WARN("Could not save progress");
+
+SaveData loaded;
+if (loaded.Load("player-1"))
+{
+    Score = loaded.GetInt("score", 0);
+    SetWorldPosition(loaded.GetVec3("position", GetWorldPosition()));
+}
+
+SaveData settings;
+settings.Load("settings");
+float volume = settings.GetFloat("volume", 1.0f);
+settings.SetFloat("volume", volume);
+if (!settings.Save("settings"))
+    FP_LOG_WARN("Could not save settings");
+```
+
+Use `SetBool`, `SetInt`, `SetFloat`, `SetVec2`, `SetVec3`, `SetColor` and `SetString`, with matching
+`Get` functions. Getters return the fallback when a key is missing or has another type. This lets
+new settings have defaults when loading older saves. `Has(key)`, `Remove(key)`, `Clear()` and `Num()`
+inspect and edit the values. `SaveData::Exists(slot)` checks for a file and `SaveData::Delete(slot)`
+removes one. An existing file can still fail to load if it is damaged.
+
+Slot names use 1 to 64 lowercase letters, digits, underscores or hyphens. Files are readable text
+with a format version and keep their value types. Each project name gets its own folder under
+the current user's application data, so saves work when the game is installed in a read only
+folder. `Paths::GetSaveDir()` gives the folder. On macOS it is
+`~/Library/Application Support/FirstPrinciples/<ProjectName>/Saves`. On Windows it is under
+`%APPDATA%/FirstPrinciples/<ProjectName>/Saves`. Editor play and the runtime share these saves,
+including across script reloads. Projects with the same name share saves.
+
+Save and load calls are synchronous and return `false` on failure. A failed load leaves the
+current values alone. Saving writes and flushes a temporary file before replacing the previous
+save. Invalid slot names, nonfinite numbers, unsupported format versions and files over 16 MiB
+are rejected. `SaveToString()` and `LoadFromString(text)` use the same format in memory, and
+`SaveToFile(path)` and `LoadFromFile(path)` accept explicit paths for tools. Save at checkpoints
+or when settings change, since disk access can stall a frame. SaveData does not capture the
+world or script fields automatically.
+
+The Sample project's `Checkpoint` script saves a player's position and score. Attach it to an
+entity and use **Save Progress** and **Load Progress** in Details while playing. It loads its
+slot at play start. Run `Projects/Sample/Binaries/Debug/Tests Save_` for the save tests.
 
 **Scene scripts**
 
@@ -419,15 +508,16 @@ up to `MaxSlope`, rides moving platforms and pushes crates. Rays and triggers fi
 body.
 
 **Entity > Create Character** (or Character in Place Entities) adds a pill with a follow camera
-that plays with no code in any project. Its **PlayerInput** component walks it with WASD, runs with
-Shift, jumps with Space and turns it with the mouse. Remove PlayerInput to drive it from a script:
+that plays with no code in any project. Its **PlayerInput** component plays it from the Move, Look,
+Run and Jump actions: WASD or the left stick walks, Shift runs, Space or South jumps and the mouse
+or right stick turns it. Remove PlayerInput to drive it from a script:
 
 ```cpp
 void OnUpdate(float) override
 {
-    const Vec2 axis = Input::GetMoveAxis();
+    const Vec2 axis = Input::GetActionAxis("Move");
     Move(Vec3(axis.X, 0, -axis.Y) * 5); // meters per second, call it every frame
-    if (Input::WasKeyPressed(SDL_SCANCODE_SPACE))
+    if (Input::WasActionPressed("Jump"))
         Jump(6);                        // only works on the ground
 }
 ```
@@ -570,18 +660,21 @@ down their local -Z axis.
 
 ### Shadows
 
-The first `DirectionalLight` with `CastShadows` on casts shadows from meshes and skeletal meshes onto
-anything using the `Lit` shader. Glass sections do not cast. It is kept cheap:
+The first shadow enabled `DirectionalLight`, `SpotLight`, and `PointLight` of each type cast shadows
+from meshes and skeletal meshes onto anything using the `Lit` shader. Glass sections do not
+cast. Each type has its own shadow maps, so a directional, spot, and point light can cast together.
+Point lights render six depth views to cover all directions. Spot lights render one cone view.
 
-- One small shadow map, `ShadowResolution` pixels square (1024 by default) in 16 bit depth.
-- It covers only `ShadowDistance` world units just ahead of the camera, so nearby shadows get the
-  detail. Meshes outside that box are skipped before drawing.
+- Each map is `ShadowResolution` pixels square (1024 for directional and spot, 512 for point) in 16 bit depth.
+- Directional shadows cover `ShadowDistance` world units just ahead of the camera. Point and spot
+  shadows cover their light's `Range`. Meshes outside each region are skipped before drawing.
 - Edges are softened by four hardware filtered taps instead of many manual ones.
-- The box snaps to whole shadow pixels so edges stay still while the camera moves.
+- The directional box snaps to whole shadow pixels so edges stay still while the camera moves.
 - Scenes with no meshes, and the Unlit and Wireframe view modes, skip the pass.
 
-Lower `ShadowResolution` for speed and softer edges, or lower `ShadowDistance` for sharper shadows
-close up. `ShadowStrength` fades them. Point lights do not cast shadows.
+Lower `ShadowResolution` for speed and softer edges. For directional lights, lower `ShadowDistance`
+for sharper shadows close up. For point and spot lights, `Range` bounds the shadowed region.
+`InnerAngle` and `OuterAngle` control the spot cone. `ShadowStrength` fades shadows for each light.
 
 ### Skeletal meshes and animation
 

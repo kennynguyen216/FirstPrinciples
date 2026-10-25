@@ -37,6 +37,7 @@ namespace FP::Editor
 			{ "Character", "Basic", EditorIcon::Entity, "A pill shaped player with a follow camera. WASD walks, Space jumps and the mouse looks, no script needed" },
 			{ "Particle Emitter", "Basic", EditorIcon::Entity, "Sprays glowing particles. Tune rate, speed, size and color for fire, smoke or sparks" },
 			{ "Point Light", "Lights", EditorIcon::PointLight, "Light that shines in every direction from a point" },
+			{ "Spot Light", "Lights", EditorIcon::DirectionalLight, "Cone of light along the transform's forward axis" },
 			{ "Directional Light", "Lights", EditorIcon::DirectionalLight, "Sun style light that comes from one direction" },
 			{ "Ambient Light", "Lights", EditorIcon::AmbientLight, "Flat light that fills every shadow" },
 			{ "Cube", "Shapes", EditorIcon::Mesh, "A 1 unit cube mesh" },

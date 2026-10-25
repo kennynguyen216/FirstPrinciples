@@ -1,8 +1,10 @@
 #include "Engine/Paths.h"
 #include "Engine/Project.h"
 #include "Core/Log.h"
+#include "Core/Misc/ModuleContext.h"
 
 #include <SDL3/SDL_filesystem.h>
+#include <SDL3/SDL_stdinc.h>
 
 #include <filesystem>
 
@@ -60,6 +62,11 @@ namespace FP::Paths
 
 		State& GetState()
 		{
+			if (const ModuleContext* context = GetModuleContext())
+			{
+				if (context->Paths)
+					return *static_cast<State*>(context->Paths);
+			}
 			static State state = []() {
 				State found;
 				Project project;
@@ -107,6 +114,16 @@ namespace FP::Paths
 		return GetState().ContentDir;
 	}
 
+	String GetSaveDir()
+	{
+		char* path = SDL_GetPrefPath("FirstPrinciples", GetProject().Name.CStr());
+		if (!path)
+			return {};
+		const String dir = String(path) + "Saves";
+		SDL_free(path);
+		return dir;
+	}
+
 	String Content(std::string_view relative)
 	{
 		return GetContentDir() + "/" + relative;
@@ -124,5 +141,10 @@ namespace FP::Paths
 	String EngineContent(std::string_view relative)
 	{
 		return GetEngineDir() + "/Content/" + relative;
+	}
+
+	void* GetSharedState()
+	{
+		return &GetState();
 	}
 }

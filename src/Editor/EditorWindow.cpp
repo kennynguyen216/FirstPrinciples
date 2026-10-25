@@ -374,6 +374,7 @@ namespace FP::Editor
 			meshes->addAction(name, this, [this, name]() { CreateEntity(name); });
 		}
 		entity->addAction("Create &Point Light", this, [this]() { CreateEntity("Point Light"); });
+		entity->addAction("Create &Spot Light", this, [this]() { CreateEntity("Spot Light"); });
 		entity->addAction("Create &Character", this, [this]() { CreateEntity("Character"); });
 		entity->addAction("Create Particle E&mitter", this, [this]() { CreateEntity("Particle Emitter"); });
 		entity->addAction("Create &Directional Light", this, [this]() { CreateEntity("Directional Light"); });
@@ -1100,7 +1101,22 @@ namespace FP::Editor
 	{
 		SDL_Event event;
 		while (SDL_PollEvent(&event))
+		{
 			m_Audio.ProcessEvent(event);
+			// Qt brings the keyboard and mouse. Gamepads come through SDL.
+			switch (event.type)
+			{
+				case SDL_EVENT_GAMEPAD_ADDED:
+				case SDL_EVENT_GAMEPAD_REMOVED:
+				case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+				case SDL_EVENT_GAMEPAD_BUTTON_UP:
+				case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+					Input::ProcessEvent(event);
+					break;
+				default:
+					break;
+			}
+		}
 		m_Audio.Update();
 		m_AudioStatus->setText(m_Audio.IsReady() ? "Audio ready" : "Audio unavailable");
 		m_AudioStatus->setToolTip(ToQString(m_Audio.GetStatusText()));
@@ -1114,6 +1130,7 @@ namespace FP::Editor
 		// Emitters run while editing too, so effects can be tuned without playing.
 		if (!m_World->IsPlaying())
 			Particles::Simulate(*m_World.Get(), deltaTime, true);
+		Input::SetDeltaTime(deltaTime);
 		m_World->Update(deltaTime);
 		Input::EndFrame();
 
@@ -1428,6 +1445,12 @@ namespace FP::Editor
 			m_World->Get<TransformComponent>(entity).Position.Z = 1.5f; // above the sprites so it lights their faces
 			m_World->Add<PointLightComponent>(entity);
 		}
+		else if (kind == "Spot Light")
+		{
+			entity = m_World->CreateEntity(name);
+			m_World->Get<TransformComponent>(entity).Rotation = { -40, 0, 0 };
+			m_World->Add<SpotLightComponent>(entity);
+		}
 		else if (kind == "Directional Light")
 		{
 			entity = m_World->CreateEntity(name);
@@ -1519,6 +1542,8 @@ namespace FP::Editor
 		CommitHistory();
 		// Snapshot the scene so Stop can put everything back.
 		m_PlaySnapshot = SceneSerializer::SaveToString(*m_World.Get());
+		// Picks up edits to the controls since the last play.
+		Input::LoadActionsFile(Paths::Content("Input.actions").CStr());
 		// Play starts from no particles, so bursts fire again.
 		Particles::Clear(*m_World.Get());
 		m_World->AddSystem<ScriptSystem>();
@@ -1560,6 +1585,7 @@ namespace FP::Editor
 	{
 		if (!m_World->IsPlaying() || !m_World->IsPaused())
 			return;
+		Input::SetDeltaTime(1.0f / 60.0f);
 		m_World->Step(1.0f / 60.0f);
 		RefreshProfiler();
 		FP_LOG("Step frame");

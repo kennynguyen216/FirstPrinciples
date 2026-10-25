@@ -184,8 +184,9 @@ namespace FP
 		float GravityScale = 1;
 	};
 
-	// Plays a character controller from the keyboard and mouse with no script: WASD walks, Shift
-	// runs, Space jumps and the mouse turns it. A child camera named Camera tilts with the mouse.
+	// Plays a character controller with no script, from the Move, Look, Run and Jump input
+	// actions, so the keyboard and mouse or a gamepad both work. A child camera named Camera
+	// tilts as it looks up and down.
 	struct PlayerInputComponent
 	{
 		float WalkSpeed = 5;
@@ -201,6 +202,22 @@ namespace FP
 		::FP::Color Color{ 1, 1, 1, 1 }; // qualified so the member can share the type name
 		float Intensity = 1;
 		float Range = 6;
+		bool CastShadows = true;
+		int32 ShadowResolution = 512;
+		float ShadowStrength = 1;
+	};
+
+	// Cone of light along the transform's forward (-Z) axis.
+	struct SpotLightComponent
+	{
+		::FP::Color Color{ 1, 1, 1, 1 };
+		float Intensity = 1;
+		float Range = 10;
+		float InnerAngle = 25; // degrees from the cone axis
+		float OuterAngle = 35;
+		bool CastShadows = true;
+		int32 ShadowResolution = 1024;
+		float ShadowStrength = 1;
 	};
 
 	// Light from far away, shining along the transform's forward (-Z) axis.

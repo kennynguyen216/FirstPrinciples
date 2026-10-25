@@ -77,7 +77,7 @@ int main(int argc, char** argv)
 {
 	Log::OpenFile((Paths::GetProjectDir() + "/Saved/Logs/Runtime.log").CStr());
 
-	if (!SDL_Init(SDL_INIT_VIDEO))
+	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
 	{
 		FP_LOG_ERROR("SDL_Init failed: %s", SDL_GetError());
 		return 1;
@@ -149,6 +149,8 @@ int main(int argc, char** argv)
 
 	StrongObjectPtr<World> world(NewObject<World>(nullptr, "GameWorld"));
 	world->GetAudio().Attach(&audio);
+	// The game's controls. Projects without the file get the defaults.
+	Input::LoadActionsFile(Paths::Content("Input.actions").CStr());
 	const String scenePath = Paths::Content(scene);
 	if (!SceneSerializer::LoadFromFile(*world.Get(), scenePath.CStr()))
 		FP_LOG_WARN("Starting with an empty world");
@@ -226,6 +228,7 @@ int main(int argc, char** argv)
 			if (deltaTime > 0.1f)
 				deltaTime = 0.1f; // avoid huge steps after a stall
 
+			Input::SetDeltaTime(deltaTime);
 			world->Update(deltaTime);
 			audio.Update();
 			Input::EndFrame();
