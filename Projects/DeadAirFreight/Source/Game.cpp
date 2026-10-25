@@ -22,7 +22,7 @@ namespace Game
 			return;
 
 		registry.Register<MatchConfigComponent>("MatchConfig")
-			.Field("PlayersRequired", &MatchConfigComponent::PlayersRequired)
+			.Field("LobbySeconds", &MatchConfigComponent::LobbySeconds)
 			.Field("CountdownSeconds", &MatchConfigComponent::CountdownSeconds)
 			.Field("SecondsPerRealDay", &MatchConfigComponent::SecondsPerRealDay)
 			.Field("ColonyCrewSize", &MatchConfigComponent::ColonyCrewSize)
@@ -123,6 +123,8 @@ namespace Game
 			.Field("ShakeDegrees", &OnFootConfigComponent::ShakeDegrees)
 			.Field("ShakeRollDegrees", &OnFootConfigComponent::ShakeRollDegrees)
 			.Field("RecoilDegrees", &OnFootConfigComponent::RecoilDegrees)
+			.Field("OverheatAfterSeconds", &OnFootConfigComponent::OverheatAfterSeconds)
+			.Field("OverheatSeconds", &OnFootConfigComponent::OverheatSeconds)
 			.Field("PatchSecondsPerHole", &OnFootConfigComponent::PatchSecondsPerHole);
 
 		registry.Register<SiphonConfigComponent>("SiphonConfig")

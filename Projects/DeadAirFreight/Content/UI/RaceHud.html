@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- Where the rival truck is, drawn over this player's view (RivalTruckSystem sends engine.state.rivals
+     once a frame). Out of view it is an arrow at the screen's edge like the Driver's yellow colony
+     arrow, in the rival crew's color; in view, a marker over the truck with how far off it is. -->
+<style>
+	html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+	body { font-family: Menlo, Consolas, "Courier New", monospace; color: #fff; text-shadow: 0 0 0.4vh #000, 0 0 0.2vh #000; }
+	.rival { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: none; }
+	.rival.a { color: #ff9a4d; }
+	.rival.b { color: #4dd8ff; }
+	/* Out of view: the same size and spot as the colony arrow, turned to point the way. */
+	.arrow { position: absolute; font-size: 6vh; margin: -3vh 0 0 -1.5vh; }
+	.arrow .crew { position: absolute; left: 0.2vh; top: 0.6vh; font-size: 1.8vh; }
+	/* In view: a diamond over the truck with its crew and distance. */
+	.mark { position: absolute; text-align: center; transform: translate(-50%, -100%); white-space: nowrap; }
+	.mark .label { font-size: 1.8vh; letter-spacing: 0.2vh; }
+	.mark .diamond { width: 1.4vh; height: 1.4vh; margin: 0.4vh auto 0; border: 0.3vh solid currentColor; transform: rotate(45deg);
+		animation: pulse 1.2s ease-in-out infinite; }
+	@keyframes pulse { 50% { opacity: 0.45; } }
+	/* An overheated laser: a red warning low in the middle, its bar draining as the gun cools. */
+	#overheat { position: absolute; left: 0; right: 0; top: 66%; text-align: center; color: #ff4d40; display: none; }
+	#overheat .text { font-size: 2.6vh; letter-spacing: 0.4vh; animation: pulse 0.25s steps(2) infinite; }
+	#overheat .track { width: 22vh; height: 0.8vh; margin: 0.8vh auto 0; background: rgba(60, 20, 20, 0.8); }
+	#overheat .fill { height: 100%; background: #ff4d40; }
+</style>
+</head>
+<body>
+	<div class="rival" id="rival0"><div class="arrow"><span class="glyph">&gt;</span><span class="crew"></span></div><div class="mark"><div class="label"></div><div class="diamond"></div></div></div>
+	<div class="rival" id="rival1"><div class="arrow"><span class="glyph">&gt;</span><span class="crew"></span></div><div class="mark"><div class="label"></div><div class="diamond"></div></div></div>
+	<div id="overheat"><div class="text">LASER OVERHEATED</div><div class="track"><div class="fill"></div></div></div>
+	<script>
+		engine.watch("overheat", function (left) {
+			var warning = document.getElementById("overheat");
+			warning.style.display = left > 0 ? "block" : "none";
+			warning.querySelector(".fill").style.width = Math.round((left || 0) * 100) + "%";
+		});
+		engine.watch("rivals", function (rivals) {
+			rivals = rivals || [];
+			for (var i = 0; i < 2; ++i) {
+				var shown = document.getElementById("rival" + i);
+				var rival = rivals[i];
+				shown.style.display = rival ? "block" : "none";
+				if (!rival)
+					continue;
+				shown.className = "rival " + rival.crew.toLowerCase();
+				var arrow = shown.querySelector(".arrow");
+				var mark = shown.querySelector(".mark");
+				arrow.style.display = rival.on ? "none" : "block";
+				mark.style.display = rival.on ? "block" : "none";
+				if (rival.on) {
+					mark.style.left = (50 + rival.x * 50) + "%";
+					mark.style.top = (50 - rival.y * 50) + "%";
+					mark.querySelector(".label").textContent = "CREW " + rival.crew + " · " + rival.meters + " M";
+				} else {
+					arrow.style.left = (50 + rival.x * 45) + "%";
+					arrow.style.top = (50 - rival.y * 40) + "%";
+					arrow.querySelector(".glyph").style.display = "inline-block";
+					arrow.querySelector(".glyph").style.transform = "rotate(" + (-Math.atan2(rival.y, rival.x) * 180 / Math.PI) + "deg)";
+					arrow.querySelector(".crew").textContent = rival.crew;
+				}
+			}
+		});
+	</script>
+</body>
+</html>

@@ -128,6 +128,28 @@
 		border-radius: 6px;
 	}
 	.status { min-height: 22px; color: #ffcf8a; }
+	/* The lobby's seats: two crews facing off, each with a driver and a crewmate. */
+	.teams { display: flex; align-items: center; gap: 28px; }
+	.team { display: flex; flex-direction: column; gap: 10px; }
+	.team h3 { margin: 0 0 4px; font-size: 18px; letter-spacing: 3px; text-align: center; }
+	.team.a h3 { color: #ff9a4d; }
+	.team.b h3 { color: #4dd8ff; }
+	.vs { font-size: 26px; font-weight: 800; color: #9fb3d9; }
+	.seat {
+		width: 290px; height: 64px; box-sizing: border-box;
+		display: flex; align-items: center; gap: 12px; padding: 0 14px;
+		background: rgba(10, 16, 34, 0.8); border: 2px solid #3d5a99; border-radius: 6px;
+	}
+	.team.a .seat.taken { border-color: #ff9a4d; box-shadow: 0 0 14px rgba(255, 154, 77, 0.35); }
+	.team.b .seat.taken { border-color: #4dd8ff; box-shadow: 0 0 14px rgba(77, 216, 255, 0.35); }
+	.seat.empty { border-style: dashed; opacity: 0.6; animation: waiting 1.6s ease-in-out infinite; }
+	@keyframes waiting { 50% { opacity: 0.3; } }
+	.seat .number { font-size: 26px; font-weight: 800; width: 44px; }
+	.seat .who { display: flex; flex-direction: column; font-size: 15px; letter-spacing: 1px; }
+	.seat .tags { font-size: 12px; color: #ffcf8a; }
+	.seat.joined { animation: joined 0.5s ease-out; }
+	@keyframes joined { 0% { transform: scale(1.12); } 100% { transform: scale(1); } }
+	.timer { font-size: 22px; letter-spacing: 2px; color: #e8ecf4; }
 	.hint { color: #9fb3d9; font-size: 15px; text-align: center; max-width: 520px; }
 	.players { font-size: 22px; }
 </style>
@@ -158,8 +180,13 @@
 	<!-- Waiting for the match to start. -->
 	<div class="screen" id="lobby">
 		<h2 id="lobbyTitle">Lobby</h2>
-		<div class="players"><span data-bind="players">0</span> in the lobby</div>
-		<button id="start" onclick="startMatch()">Start</button>
+		<div class="timer" id="lobbyTimer"></div>
+		<div class="teams">
+			<div class="team a"><h3>CREW A</h3><div class="seat" id="seat0"></div><div class="seat" id="seat2"></div></div>
+			<div class="vs">VS</div>
+			<div class="team b"><h3>CREW B</h3><div class="seat" id="seat1"></div><div class="seat" id="seat3"></div></div>
+		</div>
+		<button id="start" onclick="startMatch()">Skip Wait</button>
 		<div class="hint" id="lobbyHint"></div>
 		<div class="status" data-bind="status"></div>
 		<button class="small" onclick="engine.send('back')">Back</button>
@@ -207,12 +234,36 @@
 			document.getElementById("lobbyTitle").textContent = isHost ? "Hosting" : connected ? "Joined" : "Joining";
 			document.getElementById("start").style.display = isHost ? "inline-block" : "none";
 			document.getElementById("lobbyHint").textContent = isHost
-				? "Start when your crews are in. Playing alone, press 1 to 4 to pick your seat first."
+				? "Skip the wait once everyone is in. Playing alone, press 1 to 4 to pick your seat first."
 				: connected ? "Waiting for the host to start." : "Looking for the host...";
 		}
 
 		engine.watch("screen", function (screen) { show(screen); updateLobby(); });
 		engine.watch("fade", setFade);
+
+		// Seats fill in as players join; a newly filled one pops.
+		var shownSeats = [];
+		engine.watch("seats", function (seats) {
+			(seats || []).forEach(function (seat, slot) {
+				var card = document.getElementById("seat" + slot);
+				var key = JSON.stringify(seat);
+				if (shownSeats[slot] === key)
+					return;
+				var arrived = seat.taken && !(shownSeats[slot] && JSON.parse(shownSeats[slot]).taken);
+				shownSeats[slot] = key;
+				card.className = "seat " + (seat.taken ? "taken" : "empty") + (arrived ? " joined" : "");
+				var tags = [];
+				if (seat.you) tags.push("YOU");
+				if (seat.host) tags.push("HOST");
+				card.innerHTML = '<span class="number">P' + (slot + 1) + '</span><span class="who"><span></span><span class="tags"></span></span>';
+				card.querySelector(".who span").textContent = seat.taken ? "PLAYER " + (slot + 1) + " \u00b7 " + seat.role : "WAITING...";
+				card.querySelector(".tags").textContent = tags.join(" \u00b7 ");
+			});
+		});
+		engine.watch("lobbyLeft", function (left) {
+			var timer = document.getElementById("lobbyTimer");
+			timer.textContent = left > 0 ? "STARTING IN " + Math.floor(left / 60) + ":" + ("0" + (left % 60)).slice(-2) : "";
+		});
 		engine.watch("countdown", function (label) {
 			var shown = document.getElementById("countdown");
 			shown.textContent = label || "";

@@ -21,6 +21,9 @@ struct OnFootConfigComponent
 	float ShakeDegrees = 1.2f; // the view's wander at full heat
 	float ShakeRollDegrees = 0.8f;
 	float RecoilDegrees = 0.35f; // each shot's kick
+	// Shaking at full heat this long overheats the gun, which then cannot fire for a while.
+	float OverheatAfterSeconds = 3;
+	float OverheatSeconds = 1.5f;
 	// Repair mode: hold the beam on a tank to patch it.
 	float PatchSecondsPerHole = 1.5f;
 };
@@ -54,9 +57,12 @@ struct OnFootComponent
 	float RepairSoundIn = 0;
 	float Heat = 0; // 0 cold to 1 fully hot, from holding the trigger
 	float Kick = 0; // the latest shot's recoil, dying away
+	float MaxedFor = 0; // seconds fired at full heat without a break
+	float OverheatLeft = 0; // seconds until an overheated gun fires again
 	float Time = 0; // drives the shake and the beam's flicker
 	FP::Entity Beam = FP::NullEntity;
 	FP::Entity Crosshair = FP::NullEntity;
 	FP::Entity Embers = FP::NullEntity; // off the hot gun
 	FP::Entity Sparkle = FP::NullEntity; // where the repair beam touches
+	FP::Entity Steam = FP::NullEntity; // venting from an overheated gun
 };

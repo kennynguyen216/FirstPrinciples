@@ -1,5 +1,4 @@
 #include "Title/TitleSystem.h"
-#include "Bridge/DriverBridge.h"
 #include "Driver/DriverSettings.h"
 #include "Driver/WeatherFetch.h"
 #include "Engine/Net/NetworkComponent.h"
@@ -333,7 +332,7 @@ void TitleSystem::PreviewCab(World& world)
 	const Entity local = FindLocalMember(world);
 	const CrewMemberComponent* member = local == NullEntity ? nullptr : world.TryGet<CrewMemberComponent>(local);
 	const Entity body = world.FindEntityByName(CabBodyName);
-	if (!member || member->Slot < 0 || member->Role != CrewRole::Driver || member->Crew != TruckCrew || !world.IsValid(body) || !world.IsValid(m_Camera))
+	if (!member || member->Slot < 0 || member->Role != CrewRole::Driver || !world.IsValid(body) || !world.IsValid(m_Camera))
 		return;
 
 	// The same look as walking the cab, so nothing changes at GO.
@@ -432,6 +431,23 @@ void TitleSystem::ShowPage(World& world)
 	page->Set("status", m_Status);
 	page->Set("isHost", GameNet::IsHost(world));
 	page->Set("players", CountPlayers(world));
+	// The lobby's seats, Fortnite style: who is in, on which crew, and who is this player.
+	const Entity local = FindLocalMember(world);
+	const uint64 me = local != NullEntity ? GetOwner(world, local) : 0;
+	const uint64 hostId = GameNet::IsHost(world) ? me : GameNet::GetHostId(world);
+	std::string seats = "[";
+	for (int32 slot = 0; slot < MaxSlots; ++slot)
+	{
+		const bool taken = state->SeatTaken[slot];
+		const uint64 owner = state->SeatOwners[slot];
+		char seat[160];
+		std::snprintf(seat, sizeof(seat), "%s{\"taken\":%s,\"you\":%s,\"host\":%s,\"crew\":\"%s\",\"role\":\"%s\"}",
+			slot > 0 ? "," : "", taken ? "true" : "false", taken && owner == me ? "true" : "false", taken && owner == hostId ? "true" : "false",
+			GetCrewName(GetSlotCrew(slot)), slot < CrewCount ? "DRIVER" : "CREW");
+		seats += seat;
+	}
+	page->SetJson("seats", seats + "]");
+	page->Set("lobbyLeft", state->Phase == MatchPhase::Lobby ? static_cast<int>(std::ceil(std::max(state->Countdown, 0.0f))) : 0);
 	// Away from the host the lobby waits until the host has been heard from.
 	page->Set("connected", GameNet::IsHost(world) || GameNet::GetHostId(world) != 0);
 

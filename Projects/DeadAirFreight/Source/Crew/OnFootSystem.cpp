@@ -3,6 +3,7 @@
 #include "Crew/BayActions.h"
 #include "Effects/CombatEffects.h"
 #include "Engine/Physics/Physics.h"
+#include "Engine/UI/UISystem.h"
 #include "Enemies/Airlock.h"
 #include "Enemies/SiphonComponents.h"
 #include "LifeSupport/LifeSupportComponents.h"
@@ -27,6 +28,8 @@ namespace
 	// The repair beam's sound repeats this often while it is held.
 	constexpr float RepairSoundInterval = 0.4f;
 	const char* const BeamMaterials[] = { "Materials/LaserBeam.material", "Materials/RepairBeam.material" };
+	// The race HUD page's entity, made by RivalTruckSystem once the race is on.
+	constexpr const char* RaceHudName = "Race HUD";
 
 	OnFootConfigComponent GetConfig(World& world)
 	{
@@ -83,6 +86,18 @@ namespace
 		const float width = BeamWidth * (1 + 0.9f * heat) * (1 + (0.05f + 0.15f * heat) * std::sin(time * 70));
 	transform.Scale = { width, width, length };
 		world.Get<MaterialComponent>(beam).Material = BeamMaterials[static_cast<int32>(mode)];
+	}
+
+	// An overheated gun: the crosshair blinks, and the race HUD (Content/UI/RaceHud.html) warns with
+	// a bar that drains as it cools.
+	void ShowOverheat(World& world, const OnFootComponent& onFoot, const OnFootConfigComponent& config)
+	{
+		const float left = onFoot.OverheatLeft > 0 && config.OverheatSeconds > 0 ? onFoot.OverheatLeft / config.OverheatSeconds : 0;
+		if (left > 0 && std::fmod(onFoot.Time, 0.25f) < 0.125f)
+			world.Get<TransformComponent>(onFoot.Crosshair).Scale = {};
+		const Entity hud = world.FindEntityByName(RaceHudName);
+		if (UIDocumentInstance* page = world.IsValid(hud) ? UISystem::For(world, hud) : nullptr; page && page->IsReady())
+			page->Set("overheat", left);
 	}
 
 	const TransformComponent* FindHatch(World& world, int32 crew)
@@ -341,13 +356,16 @@ void OnFootSystem::Update(World& world, float deltaTime)
 
 	onFoot.Time += deltaTime;
 	onFoot.Cooldown = std::max(0.0f, onFoot.Cooldown - deltaTime);
+	onFoot.OverheatLeft = std::max(0.0f, onFoot.OverheatLeft - deltaTime);
+	const bool overheated = onFoot.OverheatLeft > 0;
 	const bool trigger = racing && Input::IsMouseDown(MouseButton::Left);
-	const bool firing = trigger && onFoot.Mode == LaserMode::Vaporize;
+	// An overheated gun will not shoot, but the repair beam still works.
+	const bool firing = trigger && onFoot.Mode == LaserMode::Vaporize && !overheated;
 	if (trigger)
 	{
 		if (onFoot.Mode == LaserMode::Repair)
 			Repair(world, config, onFoot, eye, walker, deltaTime);
-		else if (onFoot.Cooldown <= 0)
+		else if (firing && onFoot.Cooldown <= 0)
 			Vaporize(world, config, onFoot, eye, walker);
 	}
 	if (!trigger || onFoot.Mode != LaserMode::Repair)
@@ -356,6 +374,17 @@ void OnFootSystem::Update(World& world, float deltaTime)
 	// Heat builds while the trigger is held and bleeds off after.
 	onFoot.Heat = std::clamp(onFoot.Heat + (firing ? deltaTime / std::max(config.HeatUpSeconds, 0.01f) : -deltaTime / std::max(config.HeatDownSeconds, 0.01f)), 0.0f, 1.0f);
 	onFoot.Kick *= std::exp(-18 * deltaTime);
+
+	// Holding it at full heat, shaking as hard as it does, for too long overheats it: it stops
+	// shooting and cools off.
+	onFoot.MaxedFor = firing && onFoot.Heat >= 1 ? onFoot.MaxedFor + deltaTime : 0;
+	if (onFoot.MaxedFor >= config.OverheatAfterSeconds)
+	{
+		onFoot.MaxedFor = 0;
+		onFoot.OverheatLeft = config.OverheatSeconds;
+		FP_LOG("Laser: overheated");
+	}
+	ShowOverheat(world, onFoot, config);
 
 	// Embers drift off a hot gun.
 	const Vec3 muzzle = eye.Position + eye.GetRight() * MuzzleOffset.X + eye.GetUp() * MuzzleOffset.Y + eye.GetForward() * 0.15f;
@@ -378,6 +407,29 @@ void OnFootSystem::Update(World& world, float deltaTime)
 	}
 	else
 		Effects::Release(world, onFoot.Embers);
+
+	// Steam hisses out of an overheated gun, weaker as it cools.
+	if (onFoot.OverheatLeft > 0)
+	{
+		const float left = onFoot.OverheatLeft / std::max(config.OverheatSeconds, 0.01f);
+		ParticleEmitterComponent& steam = Effects::Hold(world, onFoot.Steam, "Laser Steam", muzzle);
+		steam.Emitting = true;
+		steam.Rate = 25 + 60 * left;
+		steam.Direction = (eye.GetUp() + eye.GetForward() * 0.4f).Normalized();
+		steam.Spread = 35;
+		steam.Speed = 0.6f + 1.2f * left;
+		steam.Gravity = -0.2f;
+		steam.Drag = 2;
+		steam.Lifetime = 0.7f;
+		steam.StartSize = 0.03f;
+		steam.EndSize = 0.08f + 0.05f * left;
+		steam.StartColor = { 0.85f, 0.88f, 0.9f, 0.4f };
+		steam.EndColor = { 0.8f, 0.82f, 0.85f, 0 };
+		steam.Blend = "Alpha";
+		steam.MaxParticles = 120;
+	}
+	else
+		Effects::Release(world, onFoot.Steam);
 
 	// Shake only moves the camera, never the aim: it builds with the square of the heat, so a
 	// tap is steady and a long burst rattles, plus a jolt from each shot.

@@ -1294,13 +1294,25 @@ entity 0dca165b-8441-42d3-899c-411019d7b446
 component Name
   Name "CabHatchStep"
 component Transform
-  Position 0 -4999.9502 5.5999999
+  Position 0 -4999.99 5.6
   Rotation 0 0 0
-  Scale 1.60000002 0.100000001 0.5
+  Scale 1.6 0.02 0.5
 component Mesh
   Mesh "Cube"
 component Material
   Material "asset://49282a8e-7b01-48b0-81b6-9add013b5010"
+
+entity ef2a804e-bbff-451f-ad99-db6f5e0261aa
+component Name
+  Name "CabHatchThreshold"
+component Transform
+  Position 0 -5000.01 6.05
+  Rotation 0 0 0
+  Scale 1.6 0.02 0.3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitFloor.material"
 
 entity 3e68d4ad-3365-4678-9ecd-2bba38634da5
 component Name
@@ -1663,7 +1675,7 @@ component Transform
   Rotation 0 0 0
   Scale 1 1 1
 component MatchConfig
-  PlayersRequired 4
+  LobbySeconds 30
   CountdownSeconds 3
   SecondsPerRealDay 10
   ColonyCrewSize 6
@@ -1714,6 +1726,8 @@ component OnFootConfig
   ShakeDegrees 1.20000005
   ShakeRollDegrees 0.800000012
   RecoilDegrees 0.349999994
+  OverheatAfterSeconds 3
+  OverheatSeconds 1.5
   PatchSecondsPerHole 1.5
 component SiphonConfig
   MitePoolPerCrew 24
@@ -2275,13 +2289,25 @@ entity a5700e5d-184f-4144-8af4-79a9d96d9e06
 component Name
   Name "Cargo Bay A Hatch Step"
 component Transform
-  Position -3000 -2999.94995 19.6000004
+  Position -3000 -2999.99 19.6
   Rotation 0 0 0
-  Scale 1.60000002 0.100000001 0.5
+  Scale 1.6 0.02 0.5
 component Mesh
   Mesh "Cube"
 component Material
   Material "asset://49282a8e-7b01-48b0-81b6-9add013b5010"
+
+entity d89912fb-3538-4ba7-9dee-24163c1d871a
+component Name
+  Name "Cargo Bay A Hatch Threshold"
+component Transform
+  Position -3000 -3000.01 20.2
+  Rotation 0 0 0
+  Scale 1.6 0.02 0.6
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitFloor.material"
 
 entity 3a97be75-a770-4228-8ca7-98b645657298
 component Name
@@ -2722,13 +2748,25 @@ entity 3ae11eb8-bd8a-4f35-9264-a28168ee5e6e
 component Name
   Name "Cargo Bay B Hatch Step"
 component Transform
-  Position 3000 -2999.94995 19.6000004
+  Position 3000 -2999.99 19.6
   Rotation 0 0 0
-  Scale 1.60000002 0.100000001 0.5
+  Scale 1.6 0.02 0.5
 component Mesh
   Mesh "Cube"
 component Material
   Material "asset://49282a8e-7b01-48b0-81b6-9add013b5010"
+
+entity adb71d5d-7fc6-463d-b642-701c1c696418
+component Name
+  Name "Cargo Bay B Hatch Threshold"
+component Transform
+  Position 3000 -3000.01 20.2
+  Rotation 0 0 0
+  Scale 1.6 0.02 0.6
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitFloor.material"
 
 entity f5a6fd64-66f7-43c0-997b-b67bfc36f08e
 component Name

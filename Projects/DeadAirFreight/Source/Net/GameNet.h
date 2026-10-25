@@ -4,10 +4,12 @@
 #include "Engine/Net/NetBuffer.h"
 #include "Engine/Net/NetSession.h"
 
-// The host runs the whole match: the trucks, the bays, the creatures and the cargo. Everyone else
-// sends what they do to the host and shows what the host sends back. The host is the machine that
-// hosted the session (everyone else joined it), and it tells the others so. Without a network
-// session this machine is the host, so playing alone works the same.
+// Each truck runs on the machine of its crew's first player, the captain, who tells everyone where
+// it is; a crewmate on another machine sends the captain what they do at the wheel and shows the
+// truck the captain sends back. The host runs the rest of the match: the phases, the seats, both
+// cargo bays, the creatures, the tanks, and who wins. The host is the machine that hosted the
+// session (everyone else joined it), and it tells the others so. Without a network session this
+// machine is the host and the captain, so playing alone works the same.
 namespace GameNet
 {
 	enum class Message : FP::uint8
@@ -16,13 +18,17 @@ namespace GameNet
 		HostClaim, // "I am the host", a few times a second
 		MatchState, // phase, countdown, race time, winner
 		DriverPackage, // the host's weather and asteroids, in pieces
-		TruckState, // the truck, its life support and who holds the wheel, every frame
-		BayState, // one crew's tanks, creatures and airlock
+		BayState, // some of one crew's tanks
+		BayCreatures, // one crew's creatures and airlock
 		DriverResults, // why the match ended
 		// Everyone to the host.
-		CrewInput, // seated, steering and repairing, every frame
+		CargoSpend, // oxygen a truck used (breathing, tickets) or won back, out of or into its tanks
+		TruckFinished, // a truck delivered, or is out of the race
 		// Everyone to everyone.
-		CrewInCab, // where a player stands in the cab, in cab space, so crewmates see them in their own copy
+		TruckPose, // captain: where its truck is, every frame, so the others can see it
+		TruckState, // captain: its whole truck, life support and who holds the wheel, for crewmates
+		CrewInput, // crewmate: seated, steering and repairing, for their captain
+		CrewInCab, // where a player stands in their cab, in cab space, so crewmates see them in their own copy
 		LaserHit, // vaporize: a creature hit or a tank punctured
 		LaserRepair, // repair beam time on a tank
 		Vent, // vent a crew's bay
