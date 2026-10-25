@@ -276,6 +276,126 @@ FP_TEST(AudioWorld_PausedReplacementAndDisable)
 	world->EndPlay(); world->GetAudio().Attach(nullptr);
 }
 
+FP_TEST(AudioWorld_StartsPendingLoopsWhenOutputBecomesReady)
+{
+	SDL_SetHint(SDL_HINT_AUDIO_DRIVER, "dummy");
+	{
+		AudioDevice device;
+		StrongObjectPtr<World> world(NewObject<World>());
+		world->GetAudio().Attach(&device);
+		const Entity loop = AddLoop(*world.Get());
+		const Entity effect = AddLoop(*world.Get());
+		world->Get<AudioSourceComponent>(effect).Loop = false;
+		const Entity stopped = AddLoop(*world.Get());
+		world->BeginPlay();
+		FP_EXPECT(!world->GetAudio().GetSourceVoice(loop));
+		world->GetAudio().StopSource(stopped);
+		FP_EXPECT(world->GetAudio().PlayOneShot("Audio/Click.wav").Result.Code == AudioError::NotReady);
+		FP_EXPECT(device.Initialize());
+		world->Update(0.016f);
+		const VoiceHandle voice = world->GetAudio().GetSourceVoice(loop);
+		FP_EXPECT(bool(voice));
+		FP_EXPECT(!world->GetAudio().GetSourceVoice(effect));
+		FP_EXPECT(!world->GetAudio().GetSourceVoice(stopped));
+		FP_EXPECT(device.GetVoices().Num() == 1);
+		world->Update(0.016f);
+		FP_EXPECT(world->GetAudio().GetSourceVoice(loop) == voice);
+		world->EndPlay();
+		world->GetAudio().Attach(nullptr);
+	}
+	SDL_ResetHint(SDL_HINT_AUDIO_DRIVER);
+}
+
+FP_TEST(AudioWorld_OutputRecoveryPreservesPausesStopsAndIsolation)
+{
+	DummyAudio audio;
+	StrongObjectPtr<World> world(NewObject<World>());
+	StrongObjectPtr<World> other(NewObject<World>());
+	world->GetAudio().Attach(&audio.Device); other->GetAudio().Attach(&audio.Device);
+	const Entity loop = AddLoop(*world.Get());
+	const Entity paused = AddLoop(*world.Get());
+	const Entity stopped = AddLoop(*world.Get());
+	const Entity disabled = AddLoop(*world.Get());
+	const Entity changed = AddLoop(*world.Get());
+	world->Get<AudioSourceComponent>(changed).Loop = false;
+	const Entity isolated = AddLoop(*other.Get());
+	world->BeginPlay(); other->BeginPlay();
+	const VoiceHandle before = world->GetAudio().GetSourceVoice(loop);
+	FP_EXPECT(world->GetAudio().Pause(world->GetAudio().GetSourceVoice(paused)));
+	FP_EXPECT(world->GetAudio().Stop(world->GetAudio().GetSourceVoice(stopped)));
+	world->Get<AudioSourceComponent>(disabled).Enabled = false;
+	world->Get<AudioSourceComponent>(changed).Loop = true;
+	world->Update(0.016f);
+	const auto shot = world->GetAudio().PlayOneShot("Audio/Hum.wav");
+	FP_EXPECT(shot);
+	world->SetPaused(true);
+	// Reopening between scene updates must still be detected.
+	audio.Device.Shutdown();
+	FP_EXPECT(audio.Device.Initialize());
+	world->Step(0.016f); other->Update(0.016f);
+	const VoiceHandle recovered = world->GetAudio().GetSourceVoice(loop);
+	const VoiceHandle recoveredPaused = world->GetAudio().GetSourceVoice(paused);
+	FP_EXPECT(bool(recovered) && recovered != before);
+	FP_EXPECT(world->GetAudio().GetState(recovered) == VoiceState::Paused);
+	FP_EXPECT(world->GetAudio().GetState(recoveredPaused) == VoiceState::Paused);
+	FP_EXPECT(!world->GetAudio().GetSourceVoice(stopped));
+	FP_EXPECT(!world->GetAudio().GetSourceVoice(disabled));
+	FP_EXPECT(bool(world->GetAudio().GetSourceVoice(changed)));
+	FP_EXPECT(world->GetAudio().GetState(shot.Voice) == VoiceState::Invalid);
+	FP_EXPECT(bool(other->GetAudio().GetSourceVoice(isolated)));
+	world->SetPaused(false);
+	FP_EXPECT(world->GetAudio().GetState(recovered) == VoiceState::Playing);
+	FP_EXPECT(world->GetAudio().GetState(recoveredPaused) == VoiceState::Paused);
+	FP_EXPECT(world->GetAudio().Resume(recoveredPaused));
+	// StopAll cancels recovery even while output is unavailable.
+	audio.Device.Shutdown(); world->GetAudio().StopAll();
+	world->Update(0.016f);
+	FP_EXPECT(audio.Device.Initialize());
+	world->Update(0.016f); other->Update(0.016f);
+	FP_EXPECT(!world->GetAudio().GetSourceVoice(loop));
+	FP_EXPECT(bool(other->GetAudio().GetSourceVoice(isolated)));
+	world->EndPlay(); other->EndPlay();
+	world->GetAudio().Attach(nullptr); other->GetAudio().Attach(nullptr);
+}
+
+FP_TEST(AudioWorld_ComponentQueriesPreserveCreationOrder)
+{
+	DummyAudio audio;
+	StrongObjectPtr<World> world(NewObject<World>());
+	world->GetAudio().Attach(&audio.Device);
+	const Entity recycled = world->CreateEntity("Recycled");
+	const Entity first = world->CreateEntity("First listener");
+	const Entity second = world->CreateEntity("Second listener");
+	world->Add<AudioListenerComponent>(second);
+	world->Add<AudioListenerComponent>(first);
+	world->DestroyEntity(recycled);
+	const Entity late = world->CreateEntity("Late listener");
+	world->Add<AudioListenerComponent>(late);
+	FP_EXPECT(world->GetCreationIndex(late) > world->GetCreationIndex(first));
+	for (int i = 0; i < 2000; ++i) world->CreateEntity("Unrelated");
+	std::vector<Entity> sources;
+	for (int i = 0; i < 65; ++i) sources.push_back(world->CreateEntity("Source"));
+	// Components may be inserted in a different order from their entities.
+	for (auto it = sources.rbegin(); it != sources.rend(); ++it)
+	{
+		auto& source = world->Add<AudioSourceComponent>(*it);
+		source.Clip = "Audio/Hum.wav"; source.Loop = source.PlayOnStart = true;
+	}
+	world->BeginPlay();
+	FP_EXPECT(world->GetAudio().GetListenerEntity() == first);
+	for (size_t i = 0; i < 64; ++i) FP_EXPECT(bool(world->GetAudio().GetSourceVoice(sources[i])));
+	FP_EXPECT(!world->GetAudio().GetSourceVoice(sources.back()));
+	world->Get<AudioListenerComponent>(first).Enabled = false;
+	world->Update(0.016f);
+	FP_EXPECT(world->GetAudio().GetListenerEntity() == second);
+	world->Remove<AudioListenerComponent>(second); world->Remove<AudioListenerComponent>(late);
+	const Entity camera = world->CreateEntity("Primary camera");
+	world->Add<CameraComponent>(camera);
+	world->Update(0.016f);
+	FP_EXPECT(world->GetAudio().GetListenerEntity() == camera);
+	world->EndPlay(); world->GetAudio().Attach(nullptr);
+}
+
 FP_TEST(AudioWorld_RepeatedPlayStopAndDeviceLifetime)
 {
 	DummyAudio audio;

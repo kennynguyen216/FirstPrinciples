@@ -80,6 +80,7 @@ namespace FP
 
 		// Every entity in creation order.
 		Array<Entity> GetEntities() const;
+		uint64 GetCreationIndex(Entity entity) const;
 
 		// The entity holding scene wide scripts, or NullEntity when the scene has none yet.
 		Entity GetSceneEntity() const;
@@ -206,6 +207,8 @@ namespace FP
 		Array<RefPtr<System>> m_Systems;
 		Array<Entity> m_PendingDestroy;
 		uint64 m_NextCreationIndex = 0;
+		mutable Array<Entity> m_EntityOrder;
+		mutable bool m_EntityOrderDirty = true;
 		double m_Time = 0;
 		bool m_Playing = false;
 		bool m_Paused = false;

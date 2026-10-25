@@ -2,6 +2,10 @@
 #extension GL_GOOGLE_include_directive : require
 #include "Common.glsl"
 #include "Lighting.glsl"
+#include "CelShading.glsl"
+#define FP_ENVIRONMENT_BINDING 4
+#define FP_ENVIRONMENT_LIGHTING
+#include "Environment.glsl"
 
 // Transparent glass. Bends the already drawn scene through the surface normal, tints it,
 // blurs it with roughness and adds fresnel reflection and highlights.
@@ -60,16 +64,24 @@ void main()
 	float f0Scalar = pow((ior - 1.0) / (ior + 1.0), 2.0);
 	vec3 f0 = vec3(f0Scalar);
 	vec3 fresnel = FresnelSchlick(max(dot(n, v), 0.0), f0);
+	if (IsCelShaded())
+		fresnel = clamp(CelBands(fresnel), 0.0, 1.0);
 
-	vec3 color = behind * transmittance * (1.0 - fresnel);
-	color += fresnel * Frame.Ambient.rgb * 4.0;
+	vec3 reflection = fresnel * Frame.Ambient.rgb * 4.0;
+	if (Frame.EnvironmentSize.z > 0.0)
+		reflection += fresnel * EnvironmentReflection(n, v, roughness);
 	for (int i = 0; i < Frame.LightCount.x; ++i)
 	{
 		vec3 l;
 		vec3 radiance;
 		GetLight(i, InWorldPosition, l, radiance);
-		color += SpecularOnly(n, v, l, radiance, roughness, f0);
+		reflection += SpecularOnly(n, v, l, radiance, roughness, f0);
 	}
+	if (IsCelShaded())
+		reflection = CelBands(reflection);
+	vec3 color = behind * transmittance * (1.0 - fresnel) + reflection;
+	if (IsCelShaded())
+		color *= CelEdge(max(dot(geometryNormal, v), 0.0));
 	color += Material.Emissive.rgb;
 	OutColor = vec4(color, 1.0);
 }

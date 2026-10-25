@@ -86,7 +86,7 @@ namespace FP
 		return SDL_GetGPUDeviceDriver(m_Device);
 	}
 
-	SDL_GPUShader* GPUDevice::LoadShader(const char* name, uint32 numSamplers, uint32 numUniformBuffers)
+	SDL_GPUShader* GPUDevice::LoadShader(const char* name, uint32 numSamplers, uint32 numUniformBuffers, uint32 numStorageBuffers)
 	{
 		const bool isMsl = m_ShaderFormat == SDL_GPU_SHADERFORMAT_MSL;
 		const String path = Paths::EngineContent(String::Format("Shaders/%s.%s", name, isMsl ? "msl" : "spv"));
@@ -106,6 +106,7 @@ namespace FP
 		info.stage = String(name).EndsWith(".frag") ? SDL_GPU_SHADERSTAGE_FRAGMENT : SDL_GPU_SHADERSTAGE_VERTEX;
 		info.num_samplers = numSamplers;
 		info.num_uniform_buffers = numUniformBuffers;
+		info.num_storage_buffers = numStorageBuffers;
 
 		SDL_GPUShader* shader = SDL_CreateGPUShader(m_Device, &info);
 		if (!shader)
@@ -227,7 +228,7 @@ namespace FP
 		return result;
 	}
 
-	void GPUDevice::UploadToBuffer(SDL_GPUCommandBuffer* cmd, GPUBuffer& buffer, const void* data, uint32 size)
+	void GPUDevice::UploadToBuffer(SDL_GPUCommandBuffer* cmd, GPUBuffer& buffer, const void* data, uint32 size, bool cycle)
 	{
 		FP_ASSERT(size <= buffer.GetSize());
 		SDL_GPUTransferBufferCreateInfo transferInfo = {};
@@ -243,7 +244,7 @@ namespace FP
 		SDL_GPUBufferRegion destination = {};
 		destination.buffer = buffer.GetHandle();
 		destination.size = size;
-		SDL_UploadToGPUBuffer(copy, &source, &destination, false);
+		SDL_UploadToGPUBuffer(copy, &source, &destination, cycle);
 		SDL_EndGPUCopyPass(copy);
 
 		// Safe to release now. SDL keeps it alive until the command buffer finishes.

@@ -63,6 +63,7 @@ namespace FP
 
 	Entity World::CreateEmptyEntity(const Guid& id)
 	{
+		m_EntityOrderDirty = true;
 		const Entity entity = m_Registry.create();
 		m_Registry.emplace<IdComponent>(entity, id);
 		m_Registry.emplace<CreationOrderComponent>(entity, m_NextCreationIndex++);
@@ -127,23 +128,33 @@ namespace FP
 		return name ? name->Name : String("Entity");
 	}
 
+	uint64 World::GetCreationIndex(Entity entity) const
+	{
+		return m_Registry.get<CreationOrderComponent>(entity).Index;
+	}
+
 	Array<Entity> World::GetEntities() const
 	{
+		const auto entities = m_Registry.view<CreationOrderComponent>();
+		if (!m_EntityOrderDirty && m_EntityOrder.Num() == static_cast<int32>(entities.size()))
+			return m_EntityOrder;
 		struct Item
 		{
 			uint64 Index;
 			Entity Value;
 		};
 		Array<Item> items;
-		for (auto [entity, order] : m_Registry.view<CreationOrderComponent>().each())
+		items.Reserve(static_cast<int32>(entities.size()));
+		for (auto [entity, order] : entities.each())
 			items.Add({ order.Index, entity });
 		items.Sort([](const Item& a, const Item& b) { return a.Index < b.Index; });
 
-		Array<Entity> result;
-		result.Reserve(items.Num());
+		m_EntityOrder.Clear();
+		m_EntityOrder.Reserve(items.Num());
 		for (const Item& item : items)
-			result.Add(item.Value);
-		return result;
+			m_EntityOrder.Add(item.Value);
+		m_EntityOrderDirty = false;
+		return m_EntityOrder;
 	}
 
 	Entity World::GetSceneEntity() const
@@ -183,12 +194,14 @@ namespace FP
 		if (!IsValid(entity))
 			return children;
 		const Guid id = m_Registry.get<IdComponent>(entity).Id;
-		for (Entity candidate : GetEntities())
+		for (auto [candidate, parent, order] : m_Registry.view<ParentComponent, CreationOrderComponent>().each())
 		{
-			const ParentComponent* parent = m_Registry.try_get<ParentComponent>(candidate);
-			if (parent && parent->Parent == id)
+			if (parent.Parent == id)
 				children.Add(candidate);
 		}
+		children.Sort([&](Entity a, Entity b) {
+			return m_Registry.get<CreationOrderComponent>(a).Index < m_Registry.get<CreationOrderComponent>(b).Index;
+		});
 		return children;
 	}
 
@@ -272,8 +285,19 @@ namespace FP
 	{
 		const TransformComponent* transform = IsValid(entity) ? m_Registry.try_get<TransformComponent>(entity) : nullptr;
 		const Mat4 local = transform ? transform->GetMatrix() : Mat4();
-		const Entity parent = GetParent(entity);
-		return parent != NullEntity && !IsDescendantOf(parent, entity) ? GetWorldMatrix(parent) * local : local;
+		Mat4 result = local;
+		Entity parent = GetParent(entity);
+		Entity fast = parent;
+		while (parent != NullEntity)
+		{
+			if (const auto* ancestor = m_Registry.try_get<TransformComponent>(parent))
+				result = ancestor->GetMatrix() * result;
+			parent = GetParent(parent);
+			fast = GetParent(GetParent(fast));
+			// Two traversal speeds detect cycles without allocating a visited set
+			if (parent != NullEntity && parent == fast) return local;
+		}
+		return result;
 	}
 
 	Vec3 World::GetWorldPosition(Entity entity) const
@@ -286,8 +310,18 @@ namespace FP
 	{
 		const TransformComponent* transform = IsValid(entity) ? m_Registry.try_get<TransformComponent>(entity) : nullptr;
 		const Quat local = transform ? transform->GetRotation() : Quat();
-		const Entity parent = GetParent(entity);
-		return parent != NullEntity && !IsDescendantOf(parent, entity) ? GetWorldRotation(parent) * local : local;
+		Quat result = local;
+		Entity parent = GetParent(entity);
+		Entity fast = parent;
+		while (parent != NullEntity)
+		{
+			if (const auto* ancestor = m_Registry.try_get<TransformComponent>(parent))
+				result = ancestor->GetRotation() * result;
+			parent = GetParent(parent);
+			fast = GetParent(GetParent(fast));
+			if (parent != NullEntity && parent == fast) return local;
+		}
+		return result;
 	}
 
 	TransformComponent World::GetWorldTransform(Entity entity) const
@@ -317,6 +351,8 @@ namespace FP
 		if (m_Physics) static_cast<PhysicsWorld&>(*m_Physics).Clear();
 		m_PendingDestroy.Clear();
 		m_NextCreationIndex = 0;
+		m_EntityOrder.Clear();
+		m_EntityOrderDirty = true;
 	}
 
 	void World::ReplaceScene(World& candidate)
@@ -331,6 +367,8 @@ namespace FP
 		if (m_Physics) static_cast<PhysicsWorld&>(*m_Physics).Clear();
 		if (candidate.m_Physics) static_cast<PhysicsWorld&>(*candidate.m_Physics).Clear();
 		m_Registry.swap(candidate.m_Registry);
+		m_EntityOrderDirty = true;
+		candidate.m_EntityOrderDirty = true;
 		std::swap(m_NextCreationIndex, candidate.m_NextCreationIndex);
 		m_PendingDestroy.Clear();
 		if (m_Audio) m_Audio->ConnectRegistry();

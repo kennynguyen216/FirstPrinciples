@@ -232,11 +232,55 @@ namespace FP
 		float ShadowStrength = 1; // 0 is no shadow, 1 is only ambient light in shadow
 	};
 
+	// One scene-wide settings entity for visual effects.
+	struct PostProcessComponent
+	{
+		bool FXAA = false;
+		bool Bloom = false;
+		float BloomIntensity = 0.15f;
+		float BloomThreshold = 1;
+		bool WideBloom = false; // eight octaves of glow out to 1/256 of the screen instead of one short blur
+	};
+
 	// Flat light added everywhere so unlit sides are not pure black.
 	struct AmbientLightComponent
 	{
 		::FP::Color Color{ 1, 1, 1, 1 }; // qualified so the member can share the type name
 		float Intensity = 0.15f;
+	};
+
+	// A panorama supplies the sky, diffuse lighting and reflections.
+	struct SkyboxComponent
+	{
+		String Texture;
+		float Intensity = 1;
+		float Rotation = 0; // degrees around Y
+		bool Visible = true;
+		bool Enabled = true;
+	};
+
+	// Schwarzschild black hole. The renderer bends light around it and draws its accretion disk,
+	// and BlackHoleSystem pulls every GravityBody. SpeedOfLight is a game-scale c in world units
+	// per second, so relativity shows up at game speeds.
+	struct BlackHoleComponent
+	{
+		float SchwarzschildRadius = 1; // event horizon, world units
+		float SpeedOfLight = 20;
+		bool AccretionDisk = true; // in the transform's local XY plane, from the innermost stable orbit (3 radii) out
+		float DiskOuterRadius = 12;
+		float DiskTemperature = 4500; // kelvin at the hottest ring, sets the color
+		float DiskBrightness = 1.5f;
+		float StarBrightness = 1; // procedural stars where no skybox covers the sky
+		Vec3 LastPosition; // runtime only, for measuring how fast the hole moves
+	};
+
+	// Anything a black hole should pull, like a racer. With a Dynamic RigidBody the pull goes through
+	// physics. Without one, Velocity moves the transform directly.
+	struct GravityBodyComponent
+	{
+		Vec3 Velocity;
+		float Thrust = 0; // acceleration from the Move action, 0 for no input
+		bool Captured = false; // set once it crosses a horizon, then the game decides what happens next
 	};
 
 	// An HTML page from Content drawn over the screen, written with HTML, CSS and JavaScript.

@@ -1,0 +1,69 @@
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+struct BloomData
+{
+    float4 Params;
+};
+
+struct main0_out
+{
+    float4 OutColor [[color(0)]];
+};
+
+struct main0_in
+{
+    float2 InUV [[user(locn0)]];
+};
+
+static inline __attribute__((always_inline))
+float3 Extract(thread const float2& uv, texture2d<float> Source, sampler SourceSmplr, constant BloomData& Bloom)
+{
+    float3 color = fast::max(Source.sample(SourceSmplr, uv).xyz, float3(0.0));
+    float peak = fast::max(color.x, fast::max(color.y, color.z));
+    return (color * fast::max(peak - Bloom.Params.z, 0.0)) / float3(fast::max(peak, 9.9999997473787516355514526367188e-05));
+}
+
+fragment main0_out main0(main0_in in [[stage_in]], constant BloomData& Bloom [[buffer(0)]], texture2d<float> Source [[texture(0)]], sampler SourceSmplr [[sampler(0)]])
+{
+    main0_out out = {};
+    float2 stepUV = Bloom.Params.xy;
+    float3 color;
+    if (Bloom.Params.w < 0.5)
+    {
+        float2 param = in.InUV + (stepUV * float2(-1.0));
+        float2 param_1 = in.InUV + (stepUV * float2(1.0, -1.0));
+        float2 param_2 = in.InUV + (stepUV * float2(-1.0, 1.0));
+        float2 param_3 = in.InUV + (stepUV * float2(1.0));
+        color = (((Extract(param, Source, SourceSmplr, Bloom) + Extract(param_1, Source, SourceSmplr, Bloom)) + Extract(param_2, Source, SourceSmplr, Bloom)) + Extract(param_3, Source, SourceSmplr, Bloom)) * 0.25;
+    }
+    else
+    {
+        if (Bloom.Params.w > 2.5)
+        {
+            color = Source.sample(SourceSmplr, in.InUV).xyz * 4.0;
+            color += ((((Source.sample(SourceSmplr, (in.InUV + (stepUV * float2(1.0, 0.0)))).xyz + Source.sample(SourceSmplr, (in.InUV - (stepUV * float2(1.0, 0.0)))).xyz) + Source.sample(SourceSmplr, (in.InUV + (stepUV * float2(0.0, 1.0)))).xyz) + Source.sample(SourceSmplr, (in.InUV - (stepUV * float2(0.0, 1.0)))).xyz) * 2.0);
+            color += (((Source.sample(SourceSmplr, (in.InUV + stepUV)).xyz + Source.sample(SourceSmplr, (in.InUV - stepUV)).xyz) + Source.sample(SourceSmplr, (in.InUV + (stepUV * float2(1.0, -1.0)))).xyz) + Source.sample(SourceSmplr, (in.InUV + (stepUV * float2(-1.0, 1.0)))).xyz);
+            color /= float3(16.0);
+        }
+        else
+        {
+            if (Bloom.Params.w > 1.5)
+            {
+                color = (((Source.sample(SourceSmplr, (in.InUV + (stepUV * float2(-1.0)))).xyz + Source.sample(SourceSmplr, (in.InUV + (stepUV * float2(1.0, -1.0)))).xyz) + Source.sample(SourceSmplr, (in.InUV + (stepUV * float2(-1.0, 1.0)))).xyz) + Source.sample(SourceSmplr, (in.InUV + (stepUV * float2(1.0)))).xyz) * 0.25;
+            }
+            else
+            {
+                color = Source.sample(SourceSmplr, in.InUV).xyz * 0.227026998996734619140625;
+                color += ((Source.sample(SourceSmplr, (in.InUV + (stepUV * 1.3846149444580078125))).xyz + Source.sample(SourceSmplr, (in.InUV - (stepUV * 1.3846149444580078125))).xyz) * 0.316215991973876953125);
+                color += ((Source.sample(SourceSmplr, (in.InUV + (stepUV * 3.2307689189910888671875))).xyz + Source.sample(SourceSmplr, (in.InUV - (stepUV * 3.2307689189910888671875))).xyz) * 0.070270001888275146484375);
+            }
+        }
+    }
+    out.OutColor = float4(color, 1.0);
+    return out;
+}

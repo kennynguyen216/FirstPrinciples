@@ -37,7 +37,8 @@ namespace FP::Editor
 		explicit CodeEditor(QWidget* parent = nullptr);
 
 		bool LoadFile(const QString& path);
-		bool Save();
+		virtual bool Save();
+		void SetHighlighter(QSyntaxHighlighter* highlighter);
 		const QString& GetPath() const { return m_Path; }
 		bool IsDirty() const { return document()->isModified(); }
 
@@ -56,7 +57,7 @@ namespace FP::Editor
 		void IndentSelection(bool indent);
 
 		QWidget* m_LineNumbers = nullptr;
-		CppHighlighter* m_Highlighter = nullptr;
+		QSyntaxHighlighter* m_Highlighter = nullptr;
 		QString m_Path;
 	};
 }

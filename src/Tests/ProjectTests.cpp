@@ -1,9 +1,14 @@
 #include "Tests/TestFramework.h"
+#include "Tests/TestProject.h"
+#include "Engine/Assets/AssetDatabase.h"
 #include "Engine/Project.h"
 #include "Engine/Paths.h"
 #include "Core/Misc/File.h"
 
 #include <filesystem>
+#include <array>
+#include <atomic>
+#include <thread>
 
 using namespace FP;
 
@@ -71,4 +76,27 @@ FP_TEST(Project_PackagedPathsKeepSavedDataSeparate)
 	FP_EXPECT(Paths::OpenProject(original));
 	FP_EXPECT(!Paths::IsPackaged());
 	FP_EXPECT(Paths::GetSavedDir() == Paths::GetProjectDir() + "/Saved");
+}
+
+FP_TEST(Project_ConcurrentAssetQueriesShareOneCompletedScan)
+{
+	Test::ScopedProject project;
+	FP_EXPECT(File::WriteAllText((Paths::GetContentDir() + "/source.bin").CStr(), "source"));
+	std::array<std::thread, 8> threads;
+	std::array<AssetDatabase*, 8> databases{};
+	std::array<uint64, 8> fingerprints{};
+	std::atomic<bool> start{ false };
+	for (usize i = 0; i < threads.size(); ++i)
+		threads[i] = std::thread([&, i] {
+			while (!start.load(std::memory_order_acquire)) std::this_thread::yield();
+			databases[i] = &Paths::GetAssets();
+			fingerprints[i] = databases[i]->Fingerprint("source.bin");
+		});
+	start.store(true, std::memory_order_release);
+	for (auto& thread : threads) thread.join();
+	for (usize i = 0; i < threads.size(); ++i)
+	{
+		FP_EXPECT(databases[i] == databases[0]);
+		FP_EXPECT(fingerprints[i] != 0 && fingerprints[i] == fingerprints[0]);
+	}
 }

@@ -72,7 +72,7 @@ namespace FP
 		float Master = 1;
 		std::array<float, 4> BusGains{1, 1, 1, 1};
 		std::array<bool, 4> BusMuted{};
-		uint64 Generation = 0, Serial = 0, Rejected = 0, Stolen = 0, Overruns = 0;
+		uint64 Generation = 0, OutputGeneration = 0, Serial = 0, Rejected = 0, Stolen = 0, Overruns = 0;
 		std::atomic<uint64> Clipped{0}, Nonfinite{0};
 		std::atomic<float> InputPeak{0}, OutputPeak{0}, Rms{0}, ReductionDb{0};
 		AudioLimiter Limiter;
@@ -548,6 +548,7 @@ namespace FP
 		SDL_AudioSpec actual{};
 		if (SDL_GetAudioDeviceFormat(m_Impl->Device, &actual, nullptr)) { m_Impl->OutputRate = actual.freq; m_Impl->OutputChannels = actual.channels; }
 		m_Impl->Error.Clear();
+		++m_Impl->OutputGeneration;
 		return {};
 	}
 	void AudioDevice::Shutdown()
@@ -558,6 +559,7 @@ namespace FP
 		m_Impl->RetryPending = false;
 	}
 	bool AudioDevice::IsReady() const { return m_Impl->Device != 0; }
+	uint64 AudioDevice::GetOutputGeneration() const { m_Impl->CheckThread(); return m_Impl->OutputGeneration; }
 	AudioClipCache& AudioDevice::GetClipCache() { m_Impl->CheckThread(); return m_Impl->Cache; }
 	std::weak_ptr<void> AudioDevice::GetLifetimeToken() const { return m_Impl->Lifetime; }
 

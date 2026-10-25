@@ -182,6 +182,9 @@ The inspector identifies streamed files. Keep these files available during playb
 stop and choose **Reload Clip**. Very slow storage can cause audible gaps, counted in the audio status overruns.
 Audio output uses SDL3 and MP3 decoding uses the bundled `dr_mp3` header; no external converter is required. Missing output hardware
 leaves the editor and game usable, with an audio status message and a retry control.
+When output recovers, active loops and pending PlayOnStart loops restart from the beginning.
+Explicit pauses, stops and disabled sources stay in effect; old one-shot effects are not replayed.
+Preloaded resident clips play from memory; choose **Reload Clip** to validate and use file changes.
 
 For positional sound, enable **Spatial** on a mono source and add an **AudioListener** to the player
 or another entity. The listener follows that entity's position and rotation. Without an explicit
@@ -253,7 +256,28 @@ Packets are tied to their peer's player, with size and rate limits. Proximity fi
 peer-replicated positions; a trusted server/relay is needed to enforce who may receive speech.
 The existing session has no relay for peers behind strict NATs.
 
-Open `Scenes/Acoustics3D.scene` in the editor and press Play, or run:
+Open `Scenes/Acoustics3D.scene` in the editor for the original room comparison.
+
+For a longer Doppler demonstration, open **`Scenes/DopplerFlyby.scene`**. The cyan emitter travels
+**500 meters at 45 m/s**, taking about **11 seconds each way** without teleporting at the ends.
+The listener starts 80 meters beside the route, with enough audio range to hear the full approach
+and departure. **P** toggles Doppler, **F** freezes motion while audio continues, and **R** restarts
+the pass. **WASD**, **Shift** and the mouse let you walk, run and look along the route.
+Assign a mono WAV/MP3 to **Long Doppler Emitter - assign mono MP3** to hear your own sound.
+This scene uses open air with no room effects or occlusion so the pitch shift is easy to compare.
+Regenerate its scene and distance markers with `python Scripts/GenerateDopplerFlyby.py` (Pillow required).
+
+For a ready-to-use MP3 test, open **`Scenes/AudioPlayground.scene`**. Import your file with
+**File > Import Audio...**, select **MP3 Music (M)** in the hierarchy, and replace its **AudioSource > Clip**.
+Press Play, click the viewport and press **M** to start/stop music. Stereo files are supported here;
+the included original 65-second MP3 demonstrates automatic streaming.
+Select **MP3 Doppler (5)** and assign a **mono** MP3 to test your own sound moving through space.
+Press **5** to start its sweep and **P** to compare Doppler on/off. **1–4**, **Space**, **T**, **R** and **B**
+keep the room, clap, dry/wet and overlap controls below. Open **Window > Audio Debugger** to inspect the result.
+The scene and bundled original sounds regenerate with `python Scripts/GenerateAudioPlayground.py`
+(FFmpeg and Pillow required only for regeneration).
+
+Run the original acoustics scene directly with:
 
 ```powershell
 Projects/Sample/Binaries/Debug/Runtime.exe Scenes/Acoustics3D.scene
@@ -307,7 +331,7 @@ handles become invalid immediately. Voice-chat mute/disconnect, scene cleanup an
 discard playback immediately. Stop fades have a separate pool of 65 tails so they do not consume
 active voice slots. These are digital sample peaks, not true-peak loudness mastering.
 
-Compressed music streaming and HRTF remain deferred.
+HRTF remains deferred.
 
 ### C++ scripts
 
@@ -408,6 +432,58 @@ The game sees through the first camera with `Primary` on. `SetActiveCamera` cuts
 by turning `Primary` off everywhere else.
 
 **Input actions and gamepads**
+
+Choose **Edit > Input Actions...** or double click `Input.actions` in the Content Browser to edit
+bindings in a tab. Each row has an action name, device, input, optional direction and scale.
+Use **Add Binding** and **Remove Selected** to change the rows. The input picker offers the names
+accepted by each device. Leave a scale blank to keep its default behavior, especially for sticks.
+
+The **Source** view edits the same document and preserves comments. Undo and redo work in both
+views. Save with Ctrl+S, the tab's **Save** button or **Save All**. Invalid lines are listed below
+the bindings and cannot be saved. Click an error to jump to its source. Unsaved edits are checked
+when closing a tab, quitting or packaging. Changes apply the next time Play starts and when the
+runtime next opens the project. Opening the editor from the Edit menu recreates a missing
+`Input.actions` with the defaults.
+
+Gameplay scripts can also change bindings immediately through `Input`:
+
+```cpp
+const auto names = Input::GetActionNames();
+const auto bindings = Input::GetActionBindings("Jump");
+Input::RebindAction("Jump", 0, "Key:G");
+Input::SetActionBindings("Jump", { "Key:G", "Button:South" });
+Input::SetActionBindings("Jump", {}); // leave the action unbound
+Input::ResetActionBindings("Jump");
+Input::ResetAllActionBindings();
+```
+
+Replacement strings use the same device, direction and scale syntax as `Input.actions`.
+Invalid replacements leave the current bindings alone. Reset restores the bindings from the most
+recent `LoadActions` or `LoadActionsFile`, so project defaults stay separate from player preferences.
+
+For a menu that asks the player to press a new control, call
+`Input::BeginActionRebind("Jump", 0)`, then check `Input::GetActionRebindStatus()` for `Listening`,
+`Complete` or `Cancelled`. `GetLastReboundInput()` returns the completed binding string.
+Capture accepts fresh keyboard, mouse button and gamepad button presses. Escape or
+`CancelActionRebind()` cancels, and losing focus cancels too. Held controls are ignored.
+Named actions are suppressed during capture and until the captured control is released.
+
+Pass `true` as the third argument to capture individual gamepad axes too. An axis must first
+return near its center and then move past 75 percent. Capturing preserves the binding's direction
+and scale, with negative axis movement inverted to match the chosen direction. Mouse motion is
+ignored during capture. Use `SetActionBindings` for whole sticks or mouse delta bindings.
+
+Use `Input::SaveActionBindings()` to save player overrides and `Input::LoadActionBindings()` at
+play start to restore them. Both accept an optional SaveData slot name for profiles. These files
+live in the project's user save folder and leave `Content/Input.actions` unchanged. Only changed
+actions are saved, so new project actions remain available. Failed loads leave current bindings
+alone. Saving after a reset keeps the reset for the next launch.
+
+Open `Scenes/InputBindings.scene` and press Play for a working menu, backed by the
+`InputRebindMenu` script and `UI/InputBindings.html`. It lists bindings, captures replacements,
+accepts typed bindings and saves or restores controls through the existing `engine.send` bridge.
+The Jump counter lets you try the new binding after releasing its capture press. The menu uses
+the same optional Ultralight SDK as other game UI pages.
 
 Games ask for actions like Jump or Move instead of keys, so the keyboard, mouse and any gamepad
 all play. `Content/Input.actions` binds them, one input per line, and new projects get a copy of
@@ -575,6 +651,32 @@ character about, and explosions push it too. `Content/Scenes/Character.scene` ha
 player with stairs, a walkable and a too steep ramp, a lift, crates and a zone
 that counts the player walking in.
 
+### Black holes
+
+A **BlackHole** bends light like the real thing. Every pixel's light ray is traced backwards through
+Schwarzschild spacetime, so you get the black shadow at 2.6 times the horizon radius, the photon ring,
+the far side of the accretion disk lensed up over the top and a thinner image wrapped underneath.
+A skybox is bent all the way around. Without one, procedural stars fill the sky.
+
+- `SchwarzschildRadius` is the event horizon in world units. `SpeedOfLight` is a game-scale c in world
+  units per second. Lower it and relativity shows up at slower speeds, and the disk spins faster.
+- The disk lies in the transform's local XY plane, so rotate the entity to tilt it. It starts at the
+  innermost stable orbit (3 radii) and runs to `DiskOuterRadius`. Each ring glows as a blackbody at
+  its own temperature, shifted by Doppler and gravitational redshift, so the side spinning toward
+  you is brighter and bluer. `DiskTemperature` sets the hottest ring (4500 K glows orange, 9000 K
+  white-blue).
+- Up to four holes render at once. Moving a hole is fine.
+
+A **GravityBody** is pulled by every black hole with the exact Schwarzschild orbit equation, so orbits
+precess, nothing stays in orbit inside 3 radii and anything under 1.5 radii spirals in. `Captured`
+turns on when it crosses a horizon, for your game to respawn it or end the race. With a Dynamic
+**RigidBody** the pull goes through physics (set `GravityScale` to 0 in space). Without one,
+`Velocity` moves the transform. `Thrust` lets the Move action push it.
+
+A still black hole bends a racer's path but hands back the same speed it came in with. Speed comes
+from thrusting at the closest pass, where you are fastest, or from swinging behind a moving hole.
+`Content/Scenes/BlackHole.scene` has a racer to fly around one with WASD.
+
 ### Particles
 
 A **ParticleEmitter** sprays small camera facing quads for fire, smoke, sparks, dust and magic.
@@ -683,6 +785,12 @@ Each material picks a base shader:
 | `Unlit` | Base color times tint plus emissive. No lights needed |
 | `Glass` | Transparent. Refracts what is behind it through the normal map, tints it, blurs it with roughness |
 
+Every material has a **Cel Shaded** checkbox, saved as `CelShaded true` in its `.material` file.
+Enable it for stepped lighting and dark silhouette edges on Lit and Glass surfaces. Lit materials
+keep their base color texture detail; Glass keeps its refracted background. Unlit materials band
+their base color instead. Emission stays smooth so glowing signs and lights keep their brightness.
+The toggle defaults to off, including for older material files.
+
 Every map is optional and its scalar multiplies it. `Tiling` and `Offset` move all maps together.
 Colors are picked in sRGB. Light comes from `PointLight`, `DirectionalLight` and `AmbientLight`
 components (Entity menu has shortcuts). In 2D a point light's `Position.Z` is its height above the
@@ -785,6 +893,9 @@ The editor follows Unreal Engine 5's layout and dark theme, using this engine's 
   editor UI time are not included. The status bar opens each panel and has a console box: type
   `help` for commands including play, pause, resume, step and stop.
 
+The Hierarchy tab is active when the editor opens. Selecting an entity or asset brings Details
+forward so its properties can be edited.
+
 ### Content browser
 
 The **Content Browser** tab next to the **Output Log** at the bottom of the editor shows everything in
@@ -801,9 +912,68 @@ Changes to assets or their texture and buffer files refresh the thumbnails autom
   and **Save All** saves the scene, materials and script tabs. Back, forward and the folder path
   above the files move between folders.
 - Right click an asset to Rename (F2), Duplicate, Delete, Copy Path or Show in Finder or Explorer.
-- Renaming rewrites references in every scene and material. Delete moves files to the system Trash.
+- Renaming keeps asset IDs and migrates old scene and material paths to IDs. Delete moves files and their metadata to the system Trash.
 - The browser refreshes on its own when files change, and the Output Log comes forward when a script
   build fails.
+
+### Asset pipeline
+
+Every file under a project's `Content` has a versioned `.fpmeta` file beside it. The editor creates
+missing metadata automatically. **Commit these files with the assets**. They contain the asset's
+stable ID and import settings. Moving an asset outside the editor requires moving its metadata too.
+Deleting metadata and importing again gives the asset a new ID.
+
+Scene and material asset fields save references as `asset://<guid>`. Inspectors show the resolved
+path, and loaders resolve the ID to the current file. Existing path references still load and
+convert to IDs when saved. Renaming in the Content Browser keeps the ID, updates legacy references
+on disk, and keeps unsaved scene and material edits usable. Duplicates get new IDs and retain their
+import settings. The project start scene is retained by ID when assets are renamed.
+
+Select a texture to edit **Generate mipmaps** and **Color space**, then choose **Apply and Reimport**.
+**Auto** uses sRGB for color maps and linear for data maps. **sRGB** and **Linear** override that choice
+for every use of the texture. The same settings are used in the editor and packaged games.
+Original files remain the import sources, so there are no machine-specific source paths to repair.
+Game code can call `Paths::AssetReference(path)` when a stored reference must survive a rename.
+
+The registry tracks scene and material asset fields, glTF and GLB external buffers and images,
+OBJ material libraries, MTL texture maps, exposed script asset fields, and static HTML, CSS and
+JavaScript resource links. Content changes refresh the registry and invalidate affected texture, mesh, skeletal model and
+material caches on their next use. UI pages reload when their tracked resources change. Material
+reimport preserves unsaved edits. Audio changes apply to subsequent loads and playback while existing voices retain their current audio snapshot.
+
+Use **Validate** in the Content Browser to report missing dependencies, duplicate IDs, invalid
+metadata, unsafe paths and names that differ only by case. The Output Log includes each issue's
+asset path. Packaging runs the same validation before staging a game. Cooked content includes the
+metadata, and the runtime reads it without writing into Content.
+
+Editor refreshes reuse source hashes when file size and modification time are unchanged. File-change
+notifications invalidate the affected source, including edits that preserve timestamps. Metadata and
+dependencies are still checked on every refresh. **Validate**, CLI validation and packaging reread
+all source bytes. Code can choose `AssetRefreshMode::ChangedFiles` for incremental scans, call
+`Invalidate(path)` for known changes, or use the default `Refresh()` for full verification.
+`GetLastScanStats()` reports how many files and source bytes were hashed.
+
+After building, the same pipeline is available without opening the editor:
+
+```bash
+Projects/Sample/Binaries/Debug/AssetTool --import
+Projects/Sample/Binaries/Debug/AssetTool --validate
+Projects/Sample/Binaries/Debug/AssetTool --dependencies Scenes/Showcase3D.scene
+Projects/Sample/Binaries/Debug/AssetTool --project Projects/MyGame --import
+Projects/Sample/Binaries/Debug/Tests Assets
+python3 Scripts/TestAssetPipeline.py
+```
+
+Use `AssetTool.exe` on Windows. `--import` creates missing metadata and preserves existing IDs and
+settings. Validation returns a nonzero exit code when issues are found. A read-only scan accepts
+legacy projects without metadata, but ID references require their matching metadata files.
+
+Dependency discovery covers static references. Script path discovery needs the corresponding built
+script types and fields marked with `Asset`. Explicit ID references are tracked even for unknown
+scripts. Paths constructed in game code or JavaScript need to be managed by the game. glTF, OBJ and web resources retain their format's relative references,
+so moves that would break those links are rejected. Move a self-contained resource folder together,
+or update its source references first. Imports and refreshes are synchronous, and the cooker still
+preserves source formats without compression or unused-asset removal.
 
 ### Undo and redo
 
@@ -937,7 +1107,58 @@ FP::JobSystem::ParallelFor(enemyCount, 32, [&](int32 i) { UpdateEnemy(i); });
 - Systems update on the main thread. Use jobs for work that does not touch the world from many
   jobs at once, such as math over arrays or loading.
 
+### Performance benchmarks
+
+Build and run the standalone CPU benchmarks in Release:
+
+```bash
+premake5 gmake
+make -C Projects/Sample/Build config=release -j8 Benchmarks
+Projects/Sample/Binaries/Release/Benchmarks
+```
+
+On Windows, build the `Benchmarks` target in Release and run `Benchmarks.exe`. The tool prints CSV,
+uses temporary assets, and reports median time per operation across seven batches. Build the same
+configuration and use the same hardware when comparing revisions.
+
+An Apple M2 run measured these changes from the engine before this optimization pass:
+
+| Operation | Before | After | Speedup |
+|---|---:|---:|---:|
+| World matrix through 128 ancestors | 0.0570 ms | 0.00600 ms | 9.5x |
+| World rotation through 128 ancestors | 0.0512 ms | 0.00258 ms | 19.9x |
+| Repeated creation-order query over 10,000 entities | 0.0750 ms | 0.00107 ms | 70.2x |
+| Query 16 children among 10,000 entities | 0.1768 ms | 0.00056 ms | 313.5x |
+| Refresh 129 unchanged assets including a 64 MiB source | 105.107 ms | 5.319 ms | 19.8x |
+| Lookup an asset fingerprint by ID | 0.661 microseconds | 0.117 microseconds | 5.6x |
+
+Hierarchy traversal is iterative with cycle detection. Creation order is sorted after structural
+changes and reused between queries. Child queries inspect parent components and sort only their
+matches. Asset ID lookups use parsed IDs and fingerprints stored directly in asset records.
+These are CPU microbenchmarks with warm filesystem caches. Frame time also depends on rendering,
+physics, audio, scene content and editor presentation.
+
 ### Editor controls
+
+Open **Settings > Engine Settings...** for color-blind assistance. Choose None, Protanopia,
+Deuteranopia, Tritanopia, Protanomaly, Deuteranomaly, Tritanomaly, Achromatopsia or Achromatomaly,
+then adjust **Strength** from 0 to 1. Changes preview live; **Save** keeps them in your per-user
+engine preferences across scenes, projects and editor/runtime restarts. **Cancel** restores the
+previous values. These preferences are independent of scene files and scene undo/redo.
+
+Use **Entity > Post Processing...** for scene FXAA and bloom. **BloomIntensity** controls glow
+(0-10), and **BloomThreshold** selects its minimum HDR brightness before exposure (default 1).
+**WideBloom** stacks eight octaves of blur for a soft halo that spreads across the screen, like film
+glare around very bright light. It is off by default, which keeps the tighter original glow.
+Both effects default to off. Save the scene to keep them. If more than one entity has PostProcess,
+the earliest created entity supplies the settings. Bloom is bypassed in Unlit and Wireframe views.
+
+The color modes assist contrast rather than simulate a deficiency. The first six redistribute
+lost color contrast using [Machado's linear RGB model](https://www.inf.ufrgs.br/~oliveira/pubs_files/CVD_Simulation/CVD_Simulation.html);
+the achromatic modes use a heuristic hue-to-brightness mapping. Check with affected players and
+use shapes or patterns for critical cues. Game UI and editor gizmos retain their own colors and
+stay sharp above post-processing. Run `Tests EngineSettings` and `Tests PostProcess` for persistence,
+scene independence, GPU effects, all modes, resizing and scene replacement checks.
 
 | Action | Control |
 |---|---|
@@ -981,6 +1202,29 @@ Projects/Sample/Binaries/Debug/Editor --drop Textures/Bricks_AO.png --undo --red
 Projects/Sample/Binaries/Debug/Editor --new-project MyGame
 ```
 
+### Skybox and environment lighting
+
+Create a **Skybox** from **Place Entities > Lights** or the **Entity** menu, then choose its
+**Texture** in Details. Use a 2:1 equirectangular panorama under `Content`, up to 8192 pixels wide.
+Radiance `.hdr` files retain values above white. PNG, JPG, TGA and BMP panoramas are read as sRGB.
+
+The panorama supplies the visible sky, diffuse light and roughness filtered reflections on lit
+materials and glass. **Intensity** scales the sky and lighting together. **Rotation** turns both
+around Y. Turn off **Visible** to keep the lighting while showing the camera background, or turn off
+**Enabled** to disable both. The first enabled Skybox in creation order is used. Existing ambient
+and direct lights add to the environment lighting.
+
+Open `Scenes/Environment.scene` to compare gold, plastic and glass with no direct or ambient lights.
+The original sunset panorama and demo regenerate with `python3 Scripts/GenerateEnvironmentDemo.py`.
+Run `Projects/Sample/Binaries/Debug/Tests Environment` for the environment tests.
+
+Panoramas are filtered to at most 512 by 256 for rendering. Diffuse light uses nine spherical
+harmonic coefficients and reflections use GGX filtered levels. Changes to the panorama reload it
+automatically. Loading and filtering happen on first use and can briefly pause rendering.
+Environment lighting does not cast shadows or capture nearby objects. Use direct lights for shadows
+and material ambient occlusion maps for local detail. Missing or invalid panoramas use the camera
+background and existing lights.
+
 ## Rendering
 
 Rendering uses SDL_GPU. macOS runs on Metal and Windows runs on Vulkan, so Windows machines need a
@@ -1002,6 +1246,35 @@ Scripts/CompileShaders.sh
 
 On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\CompileShaders.ps1`.
 
+### Batching and mesh instancing
+
+Static meshes and sprites batch automatically when neighboring draws share a mesh, section,
+material, shader and texture. Each instance supplies its own transform, normal matrix, UV transform
+and tint through a reusable vertex buffer. Full mesh draws use an instance count instead of one draw
+per object. The shadow maps and occlusion depth prepass also instance compatible static meshes,
+after checking each object's visibility for that pass.
+
+Meshlet rendering keeps separate visibility decisions for every object's clusters. Compatible
+indirect command ranges share an SDL draw submission, with each command selecting its instance data.
+This reduces CPU submissions and repeated state binding while retaining cluster culling. It does
+not combine those commands into a single GPU instance count or guarantee a frame time improvement.
+
+Batching preserves the existing draw order: opaque meshes front to back, sprites by layer and depth,
+then glass back to front. Incompatible neighbors split a batch. Animated meshes keep independent
+bone uniforms and draws. Meshlet color debugging uses separate draws to preserve cluster colors.
+Missing instance pipelines fall back to the existing object path.
+
+`Renderer::SetBatchingEnabled(false)` provides a comparison path. `GetRenderStats()` reports the
+latest view's scene SDL draw submissions, section instances, direct instanced groups, indirect
+commands, shadow submissions and occlusion prepass submissions. These counts exclude particles,
+UI, debug lines and fullscreen passes, and are not GPU timing measurements. The meshlet debugger
+includes the batching toggle and counters.
+
+GPU regression tests compare pixels with batching enabled and disabled. On the 12-cube test scene,
+scene submissions fall from 12 to 1, the occlusion prepass from 12 to 1, and eight directional, spot
+and point shadow maps from 96 to 8. Tests also cover transparency order, texture and material splits,
+animated poses, movement, resizing, and multiple views recorded into one command buffer.
+
 ### Meshlets and visibility debugging
 
 Every mesh upload (primitives, OBJ, and glTF) builds clusters using meshoptimizer v0.25.
@@ -1016,7 +1289,7 @@ occluded only when every tile touched by its projected bounds is nearer than the
 Near-plane crossings, partially filled edge tiles, and very large projected bounds fail open.
 This avoids stale visibility after camera/object movement and supports orthographic cameras.
 The depth prepass still submits full occluder geometry; the counters describe the main pass,
-not total frame geometry or a guaranteed speedup. Shadows retain their existing draws.
+not total frame geometry or a guaranteed speedup. Shadows batch compatible static mesh instances.
 
 Open **Window > Nanite / Meshlet Debugger** for an ImGui window with:
 
@@ -1068,9 +1341,12 @@ The committed Vulkan SPIR-V uses SDL's normal descriptor sets. See
 | Game | The project's components and systems (`Source`) |
 | Editor | Qt editor |
 | Runtime | Standalone player for a scene |
-| PackageTool | Cooks content and stages a Release game for distribution |
+| AssetTool | Imports metadata, validates assets and lists dependencies |
+| PackageTool | Validates assets, cooks content and stages a Release game for distribution |
 | GameScripts | Hot reloadable C++ scripts (`Source/Scripts`) |
+| Benchmarks | Repeatable CPU benchmarks. Run the Release executable |
 | Tests | Unit tests. Run `Projects/Sample/Binaries/Debug/Tests [filter]` |
+| EditorTests | Input actions editor tests. Run `Projects/Sample/Binaries/Debug/EditorTests` |
 
 ## Third party
 
@@ -1099,11 +1375,19 @@ Run `Projects/Sample/Binaries/Debug/Tests ImGui` for the headless docking and de
 
 ## Known limitations
 
-- The editor viewport renders offscreen and copies each frame back to Qt. Fine for editing, but slower than a native view.
-- File paths go through `fopen`, so non ASCII paths on Windows are not supported yet.
-- No undo yet.
-- The job queue uses a lock. A lock free queue will help when many tiny jobs are queued at once.
-- Glass draws after everything else, so glass behind glass is not refracted twice.
-- No shadows yet.
-- Editor grid and gizmo lines draw on top of everything.
-- Rotations are euler angles, so very large combined rotations can gimbal lock.
+- The editor viewport copies each rendered frame back to Qt, which adds GPU synchronization and CPU overhead.
+- Some file loaders still use `fopen`, so non-ASCII paths on Windows are not supported consistently.
+- Asset scans and imports run synchronously. There is no general asynchronous asset streaming or residency budget.
+- Dependency discovery cannot inspect paths built dynamically in code. Relative links in model and web files constrain asset moves.
+- Packaging preserves source asset formats and includes all content without compression or unused-asset removal.
+- Meshlets provide visibility culling, with no hierarchical LOD selection or virtualized geometry streaming. Animated meshes retain full draws.
+- Batching combines compatible neighboring draws. Material, texture and section changes split batches, and animated meshes do not instance their poses.
+- Games use the built-in material shaders. Custom game shaders are not supported yet. Lighting supports up to 16 lights and one shadow caster of each supported type.
+- Glass renders after opaque objects, so overlapping glass does not accumulate refraction through every surface.
+- Animation state machines are authored in C++. There is no animation graph editor, blend spaces, root motion or animation event authoring.
+- Scene spawning creates copies, with no linked prefab instances or overrides.
+- Networking trusts participating peers, supports up to 16 peers, and has no relay for strict NATs.
+- Scene undo stores full snapshots and retains up to 100 steps. Large scenes can increase its memory and serialization cost.
+- The job queue uses a lock.
+- Editor grid and gizmo lines draw on top of scene geometry.
+- Transform rotations are Euler angles and can gimbal lock under combined rotations.

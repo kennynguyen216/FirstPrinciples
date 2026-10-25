@@ -4,6 +4,7 @@
 #include "Editor/EditorWindow.h"
 #include "Editor/ScriptBuilder.h"
 #include "Engine/Engine.h"
+#include "Engine/Assets/AssetDatabase.h"
 #include "Engine/Audio/AudioDevice.h"
 #include "Core/Jobs/JobSystem.h"
 #include "Engine/Render/GPUDevice.h"
@@ -38,6 +39,7 @@ int main(int argc, char** argv)
 
 	FP::Engine::RegisterEngineComponents();
 	Game::RegisterComponents();
+	FP::Paths::GetAssets().Open(FP::Paths::GetContentDir(), true);
 	FP::ScriptRuntime::Get().LoadModule(FP::ScriptRuntime::GetDefaultModulePath());
 
 	FP::JobSystem::Initialize();

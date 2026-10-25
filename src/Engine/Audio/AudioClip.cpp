@@ -1,5 +1,6 @@
 #include "Engine/Audio/AudioClip.h"
 #include "Engine/Paths.h"
+#include "Engine/Assets/AssetDatabase.h"
 
 #include "Engine/Audio/AudioFileDecoder.h"
 #include <array>
@@ -57,6 +58,8 @@ namespace FP
 	{
 		struct Entry { std::shared_ptr<const AudioClip> Clip; uint64 Used = 0; };
 		fs::path Root;
+		bool ProjectContent = false;
+		std::map<std::string, uint64> AssetRevisions;
 		uint64 Budget, Transient, Serial = 0, Revision = 0;
 		std::map<std::string, Entry> Clips;
 		std::map<std::string, AudioResult> Failures;
@@ -69,6 +72,7 @@ namespace FP
 	AudioClipCache::AudioClipCache(const String& root, uint64 resident, uint64 transient) : m_Impl(std::make_unique<Impl>())
 	{
 		m_Impl->Root = Native(root.IsEmpty() ? Paths::GetContentDir() : root);
+		m_Impl->ProjectContent = root.IsEmpty() || root == Paths::GetContentDir();
 		m_Impl->Budget = resident;
 		m_Impl->Transient = transient;
 	}
@@ -95,24 +99,38 @@ namespace FP
 		try { return Decode(Native(path), 128 * MiB, true); }
 		catch (const std::exception&) { return Error(AudioError::DecodeFailed, "Could not allocate or access the audio snapshot."); }
 	}
-	AudioClipResult AudioClipCache::Load(const String& path, bool reload)
+	AudioClipResult AudioClipCache::Load(const String& reference, bool reload)
 	{
-		// shortcut: decoding is synchronous; add async loading if preloading cannot prevent measured stalls.
+		const String path = m_Impl->ProjectContent ? Paths::AssetPath(reference) : reference;
 		m_Impl->CheckThread();
 		const std::string requested(path.View());
-		if (!reload) if (const auto failure = m_Impl->Failures.find(requested); failure != m_Impl->Failures.end()) return {failure->second, {}};
+		if (m_Impl->ProjectContent)
+		{
+			const uint64 revision = Paths::GetAssets().Fingerprint(reference);
+			const auto previous = m_Impl->AssetRevisions.find(requested);
+			if (previous != m_Impl->AssetRevisions.end() && previous->second != revision)
+			{
+				reload = true;
+				m_Impl->Failures.erase(requested);
+			}
+			m_Impl->AssetRevisions[requested] = revision;
+		}
+		if (!reload)
+		{
+			if (const auto alias = m_Impl->Aliases.find(requested); alias != m_Impl->Aliases.end())
+				if (auto found = m_Impl->Clips.find(alias->second); found != m_Impl->Clips.end())
+				{
+					found->second.Used = ++m_Impl->Serial;
+					return {{}, found->second.Clip};
+				}
+			if (const auto failure = m_Impl->Failures.find(requested); failure != m_Impl->Failures.end()) return {failure->second, {}};
+		}
 		auto fail = [&](AudioClipResult result)
 		{
 			const auto alias = m_Impl->Aliases.find(requested);
 			const bool hasGood = alias != m_Impl->Aliases.end() && m_Impl->Clips.contains(alias->second);
-			if (hasGood && !reload)
-			{
-				auto& entry = m_Impl->Clips.at(alias->second);
-				entry.Used = ++m_Impl->Serial;
-				return AudioClipResult{{}, entry.Clip};
-			}
 			if (!m_Impl->Failures.contains(requested)) FP_LOG_WARN("Audio '%s': %s", path.CStr(), result.Result.Message.CStr());
-			if (!hasGood) m_Impl->Failures[requested] = result.Result;
+			if (!hasGood && result.Result.Code != AudioError::BudgetExceeded) m_Impl->Failures[requested] = result.Result;
 			return result;
 		};
 		try
@@ -143,7 +161,12 @@ namespace FP
 			}
 			const std::string key(Utf8(absolute).View());
 			auto found = m_Impl->Clips.find(key);
-			if (!reload && found != m_Impl->Clips.end()) { found->second.Used = ++m_Impl->Serial; return {{}, found->second.Clip}; }
+			if (!reload && found != m_Impl->Clips.end())
+			{
+				m_Impl->Aliases[requested] = key;
+				found->second.Used = ++m_Impl->Serial;
+				return {{}, found->second.Clip};
+			}
 			auto decoded = Decode(absolute, m_Impl->Transient);
 			if (!decoded) return fail(std::move(decoded));
 			const uint64 required = decoded.Clip->Samples.size() * sizeof(float);

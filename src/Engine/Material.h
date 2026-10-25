@@ -9,6 +9,7 @@ namespace FP
 	struct MaterialData
 	{
 		String Shader = "Lit"; // Lit, Unlit or Glass
+		bool CelShaded = false;
 
 		Color BaseColor;
 		String BaseColorMap;
@@ -100,6 +101,7 @@ namespace FP
 
 	private:
 		HashMap<String, RefPtr<Material>> m_Materials;
+		HashMap<String, uint64> m_Revisions;
 		Array<String> m_Failed;
 	};
 }

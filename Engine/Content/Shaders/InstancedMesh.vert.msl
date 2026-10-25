@@ -1,0 +1,64 @@
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+struct ObjectData
+{
+    float4x4 ViewProjection;
+    float4x4 Model;
+    float4x4 NormalMatrix;
+    float4 UVTransform;
+    float4 Tint;
+};
+
+struct main0_out
+{
+    float3 OutWorldPosition [[user(locn0)]];
+    float2 OutUV [[user(locn1)]];
+    float3 OutNormal [[user(locn2)]];
+    float4 OutTangent [[user(locn3)]];
+    float4 OutTint [[user(locn4)]];
+    float4 gl_Position [[position]];
+};
+
+struct main0_in
+{
+    float3 InPosition [[attribute(0)]];
+    float3 InNormal [[attribute(1)]];
+    float2 InUV [[attribute(2)]];
+    float4 InTangent [[attribute(3)]];
+    float4 Model_0 [[attribute(4)]];
+    float4 Model_1 [[attribute(5)]];
+    float4 Model_2 [[attribute(6)]];
+    float4 Model_3 [[attribute(7)]];
+    float4 NormalMatrix_0 [[attribute(8)]];
+    float4 NormalMatrix_1 [[attribute(9)]];
+    float4 NormalMatrix_2 [[attribute(10)]];
+    float4 NormalMatrix_3 [[attribute(11)]];
+    float4 UVTransform [[attribute(12)]];
+    float4 Tint [[attribute(13)]];
+};
+
+vertex main0_out main0(main0_in in [[stage_in]], constant ObjectData& Object [[buffer(0)]])
+{
+    main0_out out = {};
+    float4x4 Model = {};
+    float4x4 NormalMatrix = {};
+    Model[0] = in.Model_0;
+    Model[1] = in.Model_1;
+    Model[2] = in.Model_2;
+    Model[3] = in.Model_3;
+    NormalMatrix[0] = in.NormalMatrix_0;
+    NormalMatrix[1] = in.NormalMatrix_1;
+    NormalMatrix[2] = in.NormalMatrix_2;
+    NormalMatrix[3] = in.NormalMatrix_3;
+    float4 world = Model * float4(in.InPosition, 1.0);
+    out.OutWorldPosition = world.xyz;
+    out.OutUV = (in.InUV * in.UVTransform.xy) + in.UVTransform.zw;
+    out.OutNormal = fast::normalize(float3x3(NormalMatrix[0].xyz, NormalMatrix[1].xyz, NormalMatrix[2].xyz) * in.InNormal);
+    out.OutTangent = float4(fast::normalize(float3x3(Model[0].xyz, Model[1].xyz, Model[2].xyz) * in.InTangent.xyz), in.InTangent.w);
+    out.OutTint = in.Tint;
+    out.gl_Position = Object.ViewProjection * world;
+    return out;
+}

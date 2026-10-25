@@ -1,4 +1,5 @@
 #include "Engine/Engine.h"
+#include "Engine/Paths.h"
 #include "Engine/FieldSerializer.h"
 #include "Engine/Net/NetworkComponent.h"
 #include "Engine/Render/MeshData.h"
@@ -33,14 +34,14 @@ namespace FP::Engine
 		{
 			const MaterialComponent& material = *static_cast<const MaterialComponent*>(component);
 			out += "  Material ";
-			FieldSerializer::AppendQuoted(out, material.Material);
+			FieldSerializer::AppendQuoted(out, Paths::AssetReference(material.Material));
 			out += '\n';
 			for (int32 i = 0; i < material.Slots.Num(); ++i)
 			{
 				if (material.Slots[i].IsEmpty())
 					continue;
 				out.Appendf("  Slot %d ", i);
-				FieldSerializer::AppendQuoted(out, material.Slots[i]);
+				FieldSerializer::AppendQuoted(out, Paths::AssetReference(material.Slots[i]));
 				out += '\n';
 			}
 		}
@@ -50,12 +51,12 @@ namespace FP::Engine
 			MaterialComponent& material = *static_cast<MaterialComponent*>(component);
 			int64 index = 0;
 			if (tokens[0] == "Material" && tokens.Num() > 1)
-				material.Material = tokens[1];
+				material.Material = Paths::AssetReference(tokens[1]);
 			else if (tokens[0] == "Slot" && tokens.Num() > 2 && tokens[1].ToInt(index) && index >= 0 && index < MaxMaterialSlots)
 			{
 				if (material.Slots.Num() <= index)
 					material.Slots.Resize(static_cast<int32>(index) + 1);
-				material.Slots[static_cast<int32>(index)] = tokens[2];
+				material.Slots[static_cast<int32>(index)] = Paths::AssetReference(tokens[2]);
 			}
 			else
 				FP_LOG_WARN("Material component has no field %s", tokens[0].CStr());
@@ -119,6 +120,13 @@ namespace FP::Engine
 			.Field("Size", &SpriteComponent::Size)
 			.Field("Texture", &SpriteComponent::Texture).AssetPath(ImageFilter)
 			.Field("Layer", &SpriteComponent::Layer);
+
+		registry.Register<PostProcessComponent>("PostProcess")
+			.Field("FXAA", &PostProcessComponent::FXAA)
+			.Field("Bloom", &PostProcessComponent::Bloom)
+			.Field("BloomIntensity", &PostProcessComponent::BloomIntensity).Range(0, 10)
+			.Field("BloomThreshold", &PostProcessComponent::BloomThreshold).Range(0, 65504)
+			.Field("WideBloom", &PostProcessComponent::WideBloom).Tooltip("A soft halo that spreads across the screen, like film glare around very bright light");
 
 		registry.Register<CameraComponent>("Camera")
 			.Field("Perspective", &CameraComponent::Perspective)
@@ -252,6 +260,27 @@ namespace FP::Engine
 		registry.Register<AmbientLightComponent>("AmbientLight")
 			.Field("Color", &AmbientLightComponent::Color)
 			.Field("Intensity", &AmbientLightComponent::Intensity);
+
+		registry.Register<BlackHoleComponent>("BlackHole")
+			.Field("SchwarzschildRadius", &BlackHoleComponent::SchwarzschildRadius).Range(0.01f, 1000).Tooltip("Event horizon radius in world units")
+			.Field("SpeedOfLight", &BlackHoleComponent::SpeedOfLight).Range(0.1f, 10000).Tooltip("World units per second. Lower makes relativity stronger at game speeds")
+			.Field("AccretionDisk", &BlackHoleComponent::AccretionDisk)
+			.Field("DiskOuterRadius", &BlackHoleComponent::DiskOuterRadius).Range(0, 10000)
+			.Field("DiskTemperature", &BlackHoleComponent::DiskTemperature).Range(1000, 40000).Tooltip("Kelvin. 4500 glows orange, 9000 white-blue")
+			.Field("DiskBrightness", &BlackHoleComponent::DiskBrightness).Range(0, 100)
+			.Field("StarBrightness", &BlackHoleComponent::StarBrightness).Range(0, 10).Tooltip("Procedural stars where no skybox covers the sky");
+
+		registry.Register<GravityBodyComponent>("GravityBody")
+			.Field("Velocity", &GravityBodyComponent::Velocity).Tooltip("Ignored with a Dynamic RigidBody, which keeps its own")
+			.Field("Thrust", &GravityBodyComponent::Thrust).Range(0, 1000).Tooltip("Acceleration from the Move action")
+			.Field("Captured", &GravityBodyComponent::Captured);
+
+		registry.Register<SkyboxComponent>("Skybox")
+			.Field("Texture", &SkyboxComponent::Texture).AssetPath("Environment panoramas (*.hdr *.png *.jpg *.jpeg *.tga *.bmp)")
+			.Field("Intensity", &SkyboxComponent::Intensity).Range(0, 20)
+			.Field("Rotation", &SkyboxComponent::Rotation).Range(0, 360)
+			.Field("Visible", &SkyboxComponent::Visible)
+			.Field("Enabled", &SkyboxComponent::Enabled);
 
 	}
 }

@@ -1,5 +1,7 @@
 #include "Engine/Render/Renderer.h"
+#include "Engine/EngineSettings.h"
 #include "Engine/Material.h"
+#include "Engine/Paths.h"
 #include "Engine/Animation/SkeletalModel.h"
 #include "Engine/UI/UISystem.h"
 #include "Engine/Particles/ParticleSystem.h"
@@ -7,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 
 namespace FP
 {
@@ -41,6 +44,48 @@ namespace FP
 			return blend;
 		}
 
+		struct InstanceData
+		{
+			Mat4 Model;
+			Mat4 NormalMatrix;
+			Vec4 UVTransform;
+			Vec4 Tint;
+		};
+		static_assert(sizeof(InstanceData) == 160);
+
+		struct MeshInput
+		{
+			SDL_GPUVertexBufferDescription Buffers[2] = {};
+			SDL_GPUVertexAttribute Attributes[14] = {};
+			uint32 BufferCount = 1;
+			uint32 AttributeCount = 4;
+
+			MeshInput(bool skinned, bool instanced)
+			{
+				Buffers[0] = { 0, sizeof(MeshVertex), SDL_GPU_VERTEXINPUTRATE_VERTEX, 0 };
+				Attributes[0] = { 0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(MeshVertex, Position) };
+				Attributes[1] = { 1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(MeshVertex, Normal) };
+				Attributes[2] = { 2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(MeshVertex, UV) };
+				Attributes[3] = { 3, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(MeshVertex, Tangent) };
+				if (instanced)
+				{
+					Buffers[1] = { 1, sizeof(InstanceData), SDL_GPU_VERTEXINPUTRATE_INSTANCE, 0 };
+					for (uint32 i = 0; i < 10; ++i)
+						Attributes[4 + i] = { 4 + i, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, i * static_cast<uint32>(sizeof(Vec4)) };
+					BufferCount = 2;
+					AttributeCount = 14;
+				}
+				else if (skinned)
+				{
+					Buffers[1] = { 1, sizeof(SkinVertex), SDL_GPU_VERTEXINPUTRATE_VERTEX, 0 };
+					Attributes[4] = { 4, 1, SDL_GPU_VERTEXELEMENTFORMAT_USHORT4, offsetof(SkinVertex, Bones) };
+					Attributes[5] = { 5, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(SkinVertex, Weights) };
+					BufferCount = 2;
+					AttributeCount = 6;
+				}
+			}
+		};
+
 		struct ParticleVertex
 		{
 			Vec3 Position;
@@ -57,6 +102,22 @@ namespace FP
 		};
 		const uint16 QuadIndices[6] = { 0, 3, 2, 0, 2, 1 };
 
+		// Layout matches BlackHole.frag (std140).
+		constexpr int32 MaxBlackHoles = 4;
+		struct BlackHoleUniforms
+		{
+			Mat4 ViewProjection;
+			Mat4 InverseViewProjection;
+			Vec4 CameraForward;
+			Vec4 Background;
+			Vec4 Params;
+			Vec4 Environment;
+			Vec4 EnvironmentSize;
+			Vec4 Hole[MaxBlackHoles];
+			Vec4 Disk[MaxBlackHoles];
+			Vec4 DiskLight[MaxBlackHoles];
+		};
+
 		MaterialUniforms MakeMaterialUniforms(const MaterialData& data)
 		{
 			MaterialUniforms u;
@@ -66,6 +127,7 @@ namespace FP
 			u.Subsurface = { ToLinear(data.SubsurfaceColor).XYZ(), data.Subsurface };
 			u.Params = { data.Metallic, data.Roughness, data.Specular, data.NormalStrength };
 			u.Params2 = { data.AmbientOcclusionStrength, data.AlphaCutoff, data.IndexOfRefraction, data.Thickness };
+			u.Style.X = data.CelShaded ? 1.0f : 0.0f;
 			return u;
 		}
 	}
@@ -81,8 +143,12 @@ namespace FP
 		m_QuadVertices = device.CreateBuffer(SDL_GPU_BUFFERUSAGE_VERTEX, QuadVertices, sizeof(QuadVertices));
 		m_QuadIndices = device.CreateBuffer(SDL_GPU_BUFFERUSAGE_INDEX, QuadIndices, sizeof(QuadIndices));
 		m_BoneUpload.Resize(MaxSkinBones);
+		const Vec4 empty;
+		m_EmptyEnvironment = device.CreateBuffer(SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ, &empty, sizeof(empty));
 		CreatePipelines();
 		m_OcclusionPipeline = CreateShadowPipeline(Surface::Mesh, true);
+		m_InstancedOcclusionPipeline = CreateShadowPipeline(Surface::Mesh, true, true);
+		m_InstancedShadowPipeline = CreateShadowPipeline(Surface::Mesh, false, true);
 	}
 
 	Renderer::~Renderer()
@@ -97,7 +163,12 @@ namespace FP
 					SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
 			}
 		}
-		for (SDL_GPUGraphicsPipeline* pipeline : { m_OcclusionPipeline, m_PresentPipeline, m_UIPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1], m_ParticlePipelines[0], m_ParticlePipelines[1] })
+		for (auto& row : m_InstancedPipelines)
+			for (auto* pipeline : row)
+				if (pipeline) SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
+		for (auto* pipeline : m_InstancedWirePipelines)
+			if (pipeline) SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
+		for (SDL_GPUGraphicsPipeline* pipeline : { m_OcclusionPipeline, m_InstancedOcclusionPipeline, m_InstancedShadowPipeline, m_PresentPipeline, m_SkyboxPipeline, m_BlackHolePipeline, m_PostPipeline, m_FXAAPipeline, m_BloomPipeline, m_BloomAddPipeline, m_UIPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1], m_ParticlePipelines[0], m_ParticlePipelines[1] })
 		{
 			if (pipeline)
 				SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
@@ -114,22 +185,32 @@ namespace FP
 					return false;
 			}
 		}
-		return m_PresentPipeline && m_LinePipeline;
+		return m_PresentPipeline && m_PostPipeline && m_FXAAPipeline && m_BloomPipeline && m_BloomAddPipeline && m_SkyboxPipeline && m_LinePipeline && m_EmptyEnvironment;
 	}
 
 	SDL_GPUGraphicsPipeline* Renderer::GetPipeline(const Draw& draw) const
 	{
+		if (draw.InstanceIndex >= 0) return GetInstancedPipeline(draw);
 		if (m_Mode == ViewMode::Wireframe && m_WirePipelines[static_cast<int>(draw.Type)])
 			return m_WirePipelines[static_cast<int>(draw.Type)];
 		return m_ScenePipelines[static_cast<int>(draw.Kind)][static_cast<int>(draw.Type)];
 	}
 
-	SDL_GPUGraphicsPipeline* Renderer::CreateMeshPipeline(const char* fragment, uint32 numSamplers, uint32 numUniforms, Surface surface, bool glass, bool wireframe)
+	SDL_GPUGraphicsPipeline* Renderer::GetInstancedPipeline(const Draw& draw) const
+	{
+		if (draw.Type == Surface::SkinnedMesh) return nullptr;
+		const int surface = static_cast<int>(draw.Type);
+		if (m_Mode == ViewMode::Wireframe && m_WirePipelines[surface])
+			return m_InstancedWirePipelines[surface];
+		return m_InstancedPipelines[static_cast<int>(draw.Kind)][surface];
+	}
+
+	SDL_GPUGraphicsPipeline* Renderer::CreateMeshPipeline(const char* fragment, uint32 numSamplers, uint32 numUniforms, Surface surface, bool glass, bool wireframe, bool instanced)
 	{
 		SDL_GPUDevice* gpu = m_Device.GetHandle();
 		const bool skinned = surface == Surface::SkinnedMesh;
-		SDL_GPUShader* vert = skinned ? m_Device.LoadShader("SkinnedMesh.vert", 0, 2) : m_Device.LoadShader("Mesh.vert", 0, 1);
-		SDL_GPUShader* frag = m_Device.LoadShader(fragment, numSamplers, numUniforms);
+		SDL_GPUShader* vert = skinned ? m_Device.LoadShader("SkinnedMesh.vert", 0, 2) : m_Device.LoadShader(instanced ? "InstancedMesh.vert" : "Mesh.vert", 0, 1);
+		SDL_GPUShader* frag = m_Device.LoadShader(fragment, numSamplers, numUniforms, std::string_view(fragment) == "Unlit.frag" ? 0 : 1);
 		SDL_GPUGraphicsPipeline* pipeline = nullptr;
 		if (vert && frag)
 		{
@@ -141,30 +222,15 @@ namespace FP
 			if (!isMesh && !glass && !wireframe)
 				colorTarget.blend_state = AlphaBlend();
 
-			// Skinned meshes add a second buffer with bones and weights.
-			SDL_GPUVertexBufferDescription buffers[2] = {};
-			buffers[0].slot = 0;
-			buffers[0].pitch = sizeof(MeshVertex);
-			buffers[0].input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
-			buffers[1].slot = 1;
-			buffers[1].pitch = sizeof(SkinVertex);
-			buffers[1].input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
-
-			SDL_GPUVertexAttribute attributes[6] = {};
-			attributes[0] = { 0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(MeshVertex, Position) };
-			attributes[1] = { 1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(MeshVertex, Normal) };
-			attributes[2] = { 2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(MeshVertex, UV) };
-			attributes[3] = { 3, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(MeshVertex, Tangent) };
-			attributes[4] = { 4, 1, SDL_GPU_VERTEXELEMENTFORMAT_USHORT4, offsetof(SkinVertex, Bones) };
-			attributes[5] = { 5, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(SkinVertex, Weights) };
+			MeshInput input(skinned, instanced);
 
 			SDL_GPUGraphicsPipelineCreateInfo info = {};
 			info.vertex_shader = vert;
 			info.fragment_shader = frag;
-			info.vertex_input_state.vertex_buffer_descriptions = buffers;
-			info.vertex_input_state.num_vertex_buffers = skinned ? 2 : 1;
-			info.vertex_input_state.vertex_attributes = attributes;
-			info.vertex_input_state.num_vertex_attributes = skinned ? 6 : 4;
+			info.vertex_input_state.vertex_buffer_descriptions = input.Buffers;
+			info.vertex_input_state.num_vertex_buffers = input.BufferCount;
+			info.vertex_input_state.vertex_attributes = input.Attributes;
+			info.vertex_input_state.num_vertex_attributes = input.AttributeCount;
 			info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
 			// Wireframe shows back edges too, so it never culls.
 			info.rasterizer_state.fill_mode = wireframe ? SDL_GPU_FILLMODE_LINE : SDL_GPU_FILLMODE_FILL;
@@ -188,6 +254,33 @@ namespace FP
 		return pipeline;
 	}
 
+	SDL_GPUGraphicsPipeline* Renderer::CreateFullscreenPipeline(const char* fragment, uint32 samplers, SDL_GPUTextureFormat format, bool additive)
+	{
+		SDL_GPUDevice* gpu = m_Device.GetHandle();
+		SDL_GPUShader* vert = m_Device.LoadShader("Present.vert", 0, 0);
+		SDL_GPUShader* frag = m_Device.LoadShader(fragment, samplers, 1);
+		SDL_GPUGraphicsPipeline* pipeline = nullptr;
+		if (vert && frag)
+		{
+			SDL_GPUColorTargetDescription colorTarget = {};
+			colorTarget.format = format;
+			if (additive)
+				colorTarget.blend_state = AdditiveBlend();
+			SDL_GPUGraphicsPipelineCreateInfo info = {};
+			info.vertex_shader = vert;
+			info.fragment_shader = frag;
+			info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+			info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+			info.target_info.color_target_descriptions = &colorTarget;
+			info.target_info.num_color_targets = 1;
+			pipeline = SDL_CreateGPUGraphicsPipeline(gpu, &info);
+			if (!pipeline) FP_LOG_ERROR("Pipeline for %s failed: %s", fragment, SDL_GetError());
+		}
+		if (vert) SDL_ReleaseGPUShader(gpu, vert);
+		if (frag) SDL_ReleaseGPUShader(gpu, frag);
+		return pipeline;
+	}
+
 	void Renderer::CreatePipelines()
 	{
 		SDL_GPUDevice* gpu = m_Device.GetHandle();
@@ -198,6 +291,13 @@ namespace FP
 			m_ScenePipelines[static_cast<int>(ShaderKind::Lit)][column] = CreateMeshPipeline("Lit.frag", 16, 2, surface, false);
 			m_ScenePipelines[static_cast<int>(ShaderKind::Glass)][column] = CreateMeshPipeline("Glass.frag", 4, 2, surface, true);
 			m_WirePipelines[column] = CreateMeshPipeline("Unlit.frag", 1, 1, surface, false, true);
+			if (surface != Surface::SkinnedMesh)
+			{
+				m_InstancedPipelines[0][column] = CreateMeshPipeline("Unlit.frag", 1, 1, surface, false, false, true);
+				m_InstancedPipelines[1][column] = CreateMeshPipeline("Lit.frag", 16, 2, surface, false, false, true);
+				m_InstancedPipelines[2][column] = CreateMeshPipeline("Glass.frag", 4, 2, surface, true, false, true);
+				m_InstancedWirePipelines[column] = CreateMeshPipeline("Unlit.frag", 1, 1, surface, false, true, true);
+			}
 		}
 		if (!m_WirePipelines[0] || !m_WirePipelines[1] || !m_WirePipelines[2])
 			FP_LOG_WARN("This GPU cannot draw wireframes. The wireframe view mode will show normal shading.");
@@ -208,7 +308,7 @@ namespace FP
 		colorTarget.format = m_TargetFormat;
 
 		SDL_GPUShader* presentVert = m_Device.LoadShader("Present.vert", 0, 0);
-		SDL_GPUShader* presentFrag = m_Device.LoadShader("Present.frag", 1, 1);
+		SDL_GPUShader* presentFrag = m_Device.LoadShader("Present.frag", 2, 1);
 		if (presentVert && presentFrag)
 		{
 			SDL_GPUGraphicsPipelineCreateInfo info = {};
@@ -242,6 +342,51 @@ namespace FP
 				SDL_ReleaseGPUShader(gpu, uiFrag);
 			}
 		}
+
+		m_PostPipeline = CreateFullscreenPipeline("Present.frag", 2, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB);
+		m_FXAAPipeline = CreateFullscreenPipeline("FXAA.frag", 1, m_TargetFormat);
+		m_BloomPipeline = CreateFullscreenPipeline("Bloom.frag", 1, SceneFormat);
+		m_BloomAddPipeline = CreateFullscreenPipeline("Bloom.frag", 1, SceneFormat, true);
+
+		SDL_GPUShader* skyFrag = m_Device.LoadShader("Skybox.frag", 0, 1, 1);
+		if (presentVert && skyFrag)
+		{
+			SDL_GPUColorTargetDescription skyTarget = {};
+			skyTarget.format = SceneFormat;
+			SDL_GPUGraphicsPipelineCreateInfo info = {};
+			info.vertex_shader = presentVert;
+			info.fragment_shader = skyFrag;
+			info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+			info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+			info.target_info.color_target_descriptions = &skyTarget;
+			info.target_info.num_color_targets = 1;
+			info.target_info.has_depth_stencil_target = true;
+			info.target_info.depth_stencil_format = m_Device.GetDepthFormat();
+			m_SkyboxPipeline = SDL_CreateGPUGraphicsPipeline(gpu, &info);
+			if (!m_SkyboxPipeline)
+				FP_LOG_ERROR("Skybox pipeline failed: %s", SDL_GetError());
+		}
+		if (skyFrag)
+			SDL_ReleaseGPUShader(gpu, skyFrag);
+
+		SDL_GPUShader* blackHoleFrag = m_Device.LoadShader("BlackHole.frag", 2, 1, 1);
+		if (presentVert && blackHoleFrag)
+		{
+			SDL_GPUColorTargetDescription lensTarget = {};
+			lensTarget.format = SceneFormat;
+			SDL_GPUGraphicsPipelineCreateInfo info = {};
+			info.vertex_shader = presentVert;
+			info.fragment_shader = blackHoleFrag;
+			info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+			info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+			info.target_info.color_target_descriptions = &lensTarget;
+			info.target_info.num_color_targets = 1;
+			m_BlackHolePipeline = SDL_CreateGPUGraphicsPipeline(gpu, &info);
+			if (!m_BlackHolePipeline)
+				FP_LOG_WARN("Black hole pipeline failed, so black holes will not bend light: %s", SDL_GetError());
+		}
+		if (blackHoleFrag)
+			SDL_ReleaseGPUShader(gpu, blackHoleFrag);
 
 		SDL_GPUShader* lineVert = m_Device.LoadShader("Line.vert", 0, 1);
 		SDL_GPUShader* lineFrag = m_Device.LoadShader("Line.frag", 0, 0);
@@ -423,11 +568,12 @@ namespace FP
 
 	void Renderer::EnsureTargets(uint32 width, uint32 height)
 	{
-		if (m_SceneColor && m_SceneColor->GetWidth() == width && m_SceneColor->GetHeight() == height)
+		if (m_SceneColor && m_SceneCopy && m_Depth && m_SceneColor->GetWidth() == width && m_SceneColor->GetHeight() == height)
 			return;
 		m_SceneColor = m_Device.CreateRenderTarget(SceneFormat, width, height, false);
 		m_SceneCopy = m_Device.CreateRenderTarget(SceneFormat, width, height, false);
-		m_Depth = m_Device.CreateRenderTarget(m_Device.GetDepthFormat(), width, height, true);
+		// Sampled so black holes can find the scene along their bent rays.
+		m_Depth = m_Device.CreateRenderTarget(m_Device.GetDepthFormat(), width, height, true, true);
 	}
 
 	void Renderer::UploadLines(SDL_GPUCommandBuffer* cmd, const DebugLines& lines)
@@ -441,6 +587,126 @@ namespace FP
 			m_LineVertices = m_Device.CreateBuffer(SDL_GPU_BUFFERUSAGE_VERTEX, nullptr, capacity);
 		}
 		m_Device.UploadToBuffer(cmd, *m_LineVertices, lines.GetVertices().Data(), bytes);
+	}
+
+	void Renderer::PrepareEnvironment(World& world)
+	{
+		if (world.View<SkyboxComponent>().empty())
+			return;
+		const SkyboxComponent* sky = nullptr;
+		for (Entity entity : world.GetEntities())
+		{
+			const SkyboxComponent* candidate = world.TryGet<SkyboxComponent>(entity);
+			if (candidate && candidate->Enabled)
+			{
+				sky = candidate;
+				break;
+			}
+		}
+		if (!sky || sky->Texture.IsEmpty())
+			return;
+
+		const String path = Paths::Content(sky->Texture);
+		std::error_code ec;
+		const auto modified = std::filesystem::last_write_time(path.CStr(), ec);
+		const int64 stamp = ec ? 0 : modified.time_since_epoch().count();
+		if (path != m_EnvironmentPath || stamp != m_EnvironmentModified)
+		{
+			m_EnvironmentPath = path;
+			m_EnvironmentModified = stamp;
+			m_EnvironmentBuffer.Reset();
+			if (m_Environment.Load(path.CStr()))
+				m_EnvironmentBuffer = m_Device.CreateBuffer(SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ, m_Environment.Pixels.Data(),
+					static_cast<uint32>(m_Environment.Pixels.Num()) * sizeof(Vec4));
+			else
+				FP_LOG_WARN("Could not load skybox %s. Use a 2:1 panorama up to 8192 pixels wide.", path.CStr());
+		}
+		if (!m_EnvironmentBuffer)
+			return;
+		m_Frame.EnvironmentParams = { std::max(sky->Intensity, 0.0f), sky->Rotation * DegToRad, sky->Visible ? 1.0f : 0.0f, 0 };
+		m_Frame.EnvironmentSize = { static_cast<float>(m_Environment.Width), static_cast<float>(m_Environment.Height), static_cast<float>(m_Environment.Levels), 0 };
+		for (int32 i = 0; i < 9; ++i)
+			m_Frame.EnvironmentDiffuse[i] = m_Environment.Diffuse[i];
+	}
+
+	void Renderer::DrawSkybox(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, const RenderView& view)
+	{
+		if (m_Frame.EnvironmentSize.Z == 0 || m_Frame.EnvironmentParams.Z == 0)
+			return;
+		struct SkyboxUniforms
+		{
+			Mat4 InverseViewProjection;
+			Vec4 CameraPosition;
+			Vec4 CameraForward;
+			Vec4 Params;
+			Vec4 Size;
+		};
+		const SkyboxUniforms uniforms{ view.GetViewProjection().Inverse(), m_Frame.CameraPosition, m_Frame.CameraForward,
+			m_Frame.EnvironmentParams, m_Frame.EnvironmentSize };
+		SDL_BindGPUGraphicsPipeline(pass, m_SkyboxPipeline);
+		SDL_PushGPUFragmentUniformData(cmd, 0, &uniforms, sizeof(uniforms));
+		SDL_GPUBuffer* buffer = m_EnvironmentBuffer->GetHandle();
+		SDL_BindGPUFragmentStorageBuffers(pass, 0, &buffer, 1);
+		SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+	}
+
+	void Renderer::DrawBlackHoles(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view, uint32 width, uint32 height)
+	{
+		if (!m_BlackHolePipeline || view.Mode == ViewMode::Wireframe || world.View<BlackHoleComponent>().empty())
+			return;
+		BlackHoleUniforms u = {};
+		int32 holes = 0;
+		float stars = 0;
+		for (auto [entity, transform, hole] : world.View<TransformComponent, BlackHoleComponent>().each())
+		{
+			if (holes == MaxBlackHoles)
+				break;
+			const float radius = std::max(hole.SchwarzschildRadius, 0.001f);
+			u.Hole[holes] = { transform.Position, radius };
+			u.Disk[holes] = { transform.GetRotation().Rotate({ 0, 0, 1 }), hole.AccretionDisk ? std::max(hole.DiskOuterRadius, 3 * radius) : 0 };
+			u.DiskLight[holes] = { std::max(hole.DiskTemperature, 1.0f), std::max(hole.DiskBrightness, 0.0f), std::max(hole.SpeedOfLight, 0.001f), 0 };
+			stars = std::max(stars, hole.StarBrightness);
+			++holes;
+		}
+
+		const bool hasSky = m_EnvironmentBuffer && m_Frame.EnvironmentSize.Z > 0 && m_Frame.EnvironmentParams.Z > 0;
+		u.ViewProjection = view.GetViewProjection();
+		u.InverseViewProjection = u.ViewProjection.Inverse();
+		u.CameraForward = { view.CameraForward, view.Orthographic ? 1.0f : 0.0f };
+		u.Background = { ToLinear(view.Background).XYZ(), stars };
+		u.Params = { static_cast<float>(holes), static_cast<float>(world.GetTime()), 0, 0 };
+		u.Environment = { m_Frame.EnvironmentParams.X, m_Frame.EnvironmentParams.Y, hasSky ? 1.0f : 0.0f, 0 };
+		u.EnvironmentSize = m_Frame.EnvironmentSize;
+
+		// Rays read the finished scene from a copy and write the lensed image back over it.
+		SDL_GPUBlitInfo blit = {};
+		blit.source.texture = m_SceneColor->GetHandle();
+		blit.source.w = width;
+		blit.source.h = height;
+		blit.destination.texture = m_SceneCopy->GetHandle();
+		blit.destination.w = width;
+		blit.destination.h = height;
+		blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
+		blit.filter = SDL_GPU_FILTER_NEAREST;
+		SDL_BlitGPUTexture(cmd, &blit);
+
+		SDL_GPUColorTargetInfo output = {};
+		output.texture = m_SceneColor->GetHandle();
+		output.load_op = SDL_GPU_LOADOP_DONT_CARE;
+		output.store_op = SDL_GPU_STOREOP_STORE;
+		SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &output, 1, nullptr);
+		SDL_BindGPUGraphicsPipeline(pass, m_BlackHolePipeline);
+		SDL_PushGPUFragmentUniformData(cmd, 0, &u, sizeof(u));
+		// ponytail: every pixel traces its ray, even far from any hole. Add a screen bound if it costs too much
+		const SDL_GPUTextureSamplerBinding sources[2] = {
+			{ m_SceneCopy->GetHandle(), m_Device.GetClampSampler() },
+			{ m_Depth->GetHandle(), m_Device.GetClampSampler() },
+		};
+		SDL_BindGPUFragmentSamplers(pass, 0, sources, 2);
+		SDL_GPUBuffer* environment = hasSky ? m_EnvironmentBuffer->GetHandle() : m_EmptyEnvironment->GetHandle();
+		SDL_BindGPUFragmentStorageBuffers(pass, 0, &environment, 1);
+		SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+		SDL_EndGPURenderPass(pass);
 	}
 
 	void Renderer::BuildFrameUniforms(World& world, const RenderView& view, uint32 width, uint32 height)
@@ -543,12 +809,11 @@ namespace FP
 		return texture ? texture : fallback;
 	}
 
-	void Renderer::DrawObject(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, World& world, const Draw& draw, const Mat4& viewProjection)
+	ObjectUniforms Renderer::MakeObjectUniforms(World& world, const Draw& draw, const Mat4& viewProjection) const
 	{
 		const SpriteComponent* sprite = draw.Type == Surface::Sprite ? &world.Get<SpriteComponent>(draw.Value) : nullptr;
 		const MaterialData defaults;
 		const MaterialData& data = draw.Mat ? draw.Mat->GetData() : defaults;
-
 		ObjectUniforms object;
 		object.ViewProjection = viewProjection;
 		const Mat4 model = world.GetWorldMatrix(draw.Value);
@@ -557,12 +822,62 @@ namespace FP
 		object.UVTransform = { data.Tiling.X, data.Tiling.Y, data.Offset.X, data.Offset.Y };
 		object.Tint = sprite ? ToLinear(sprite->Tint) : Vec4(1, 1, 1, 1);
 
+		if (m_Mode == ViewMode::Wireframe && m_WirePipelines[static_cast<int>(draw.Type)])
+			object.Tint = sprite ? Vec4(0.35f, 0.65f, 1.0f, 1) : Vec4(0.85f, 0.85f, 0.85f, 1);
+		return object;
+	}
+
+	void Renderer::PrepareInstances(SDL_GPUCommandBuffer* cmd, World& world, Array<Draw>& draws)
+	{
+		if (!m_BatchingEnabled || m_MeshletSettings.Colorize || draws.Num() > UINT32_MAX / sizeof(InstanceData)) return;
+		Array<InstanceData> instances;
+		instances.Reserve(draws.Num());
+		for (Draw& draw : draws)
+		{
+			if (!GetInstancedPipeline(draw)) continue;
+			const ObjectUniforms object = MakeObjectUniforms(world, draw, Mat4());
+			draw.InstanceIndex = instances.Num();
+			instances.Add({ object.Model, object.NormalMatrix, object.UVTransform, object.Tint });
+		}
+		if (instances.IsEmpty()) return;
+		const uint32 bytes = static_cast<uint32>(instances.Num() * sizeof(InstanceData));
+		if (!m_Instances || m_Instances->GetSize() < bytes)
+			m_Instances = m_Device.CreateBuffer(SDL_GPU_BUFFERUSAGE_VERTEX, nullptr, bytes);
+		if (m_Instances)
+		{
+			// Cycling preserves instance data used by earlier views.
+			m_Device.UploadToBuffer(cmd, *m_Instances, instances.Data(), bytes, true);
+		}
+		else
+			for (Draw& draw : draws) draw.InstanceIndex = -1;
+	}
+
+	bool Renderer::CanBatch(World& world, const Draw& a, const Draw& b) const
+	{
+		if (a.InstanceIndex < 0 || b.InstanceIndex != a.InstanceIndex + 1 || a.Type != b.Type || a.Kind != b.Kind ||
+			a.Mat != b.Mat || a.Mesh != b.Mesh || a.FirstIndex != b.FirstIndex || a.IndexCount != b.IndexCount || a.Layer != b.Layer)
+			return false;
+		if ((a.IndirectFirst < 0) != (b.IndirectFirst < 0)) return false;
+		if (a.IndirectFirst >= 0 && b.IndirectFirst != a.IndirectFirst + static_cast<int32>(a.MeshletCount)) return false;
+		if (a.Type == Surface::Sprite && (!a.Mat || a.Mat->GetData().BaseColorMap.IsEmpty()))
+			return world.Get<SpriteComponent>(a.Value).Texture == world.Get<SpriteComponent>(b.Value).Texture;
+		return true;
+	}
+
+	void Renderer::DrawObject(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, World& world, const Draw& draw,
+		const Mat4& viewProjection, uint32 instances, uint32 commands)
+	{
+		const SpriteComponent* sprite = draw.Type == Surface::Sprite ? &world.Get<SpriteComponent>(draw.Value) : nullptr;
+		const MaterialData defaults;
+		const MaterialData& data = draw.Mat ? draw.Mat->GetData() : defaults;
+		ObjectUniforms object;
+		object.ViewProjection = viewProjection;
+		if (draw.InstanceIndex < 0) object = MakeObjectUniforms(world, draw, viewProjection);
+
 		MaterialUniforms material = MakeMaterialUniforms(data);
 		const bool wireframe = m_Mode == ViewMode::Wireframe && m_WirePipelines[static_cast<int>(draw.Type)];
 		if (wireframe)
 		{
-			// One flat color per surface type. Sprites are tinted blue so they stand out from meshes.
-			object.Tint = sprite ? Vec4(0.35f, 0.65f, 1.0f, 1) : Vec4(0.85f, 0.85f, 0.85f, 1);
 			material = MaterialUniforms();
 			material.Params2.Y = 0; // no alpha cutoff
 		}
@@ -586,7 +901,13 @@ namespace FP
 			SDL_BindGPUIndexBuffer(pass, &indexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
 		}
 
-		// A sprite's own texture stands in when the material has no base color map.
+		if (draw.InstanceIndex >= 0)
+		{
+			const SDL_GPUBufferBinding binding{ m_Instances->GetHandle(), 0 };
+			SDL_BindGPUVertexBuffers(pass, 1, &binding, 1);
+		}
+
+		// A sprite texture fills an empty material base map.
 		const String& baseMap = sprite && data.BaseColorMap.IsEmpty() ? sprite->Texture : data.BaseColorMap;
 		GPUTexture* white = m_Device.GetWhiteTexture();
 		SDL_GPUSampler* sampler = m_Device.GetDefaultSampler();
@@ -614,9 +935,17 @@ namespace FP
 			bind(Texture(data.RoughnessMap, false, white));
 			bind(m_SceneCopy.Get(), m_Device.GetClampSampler());
 		}
+		if (draw.Kind != ShaderKind::Unlit)
+		{
+			SDL_GPUBuffer* environment = m_EnvironmentBuffer ? m_EnvironmentBuffer->GetHandle() : m_EmptyEnvironment->GetHandle();
+			SDL_BindGPUFragmentStorageBuffers(pass, 0, &environment, 1);
+		}
 		SDL_BindGPUFragmentSamplers(pass, 0, bindings, count);
+		m_RenderStats.SceneInstances += instances;
 		if (draw.IndirectFirst >= 0)
 		{
+			m_RenderStats.IndirectCommands += commands;
+			m_RenderStats.SceneDrawCalls += m_MeshletSettings.Colorize ? draw.MeshletCount : 1;
 			if (m_MeshletSettings.Colorize)
 			{
 				material = MaterialUniforms();
@@ -630,9 +959,15 @@ namespace FP
 					SDL_DrawGPUIndexedPrimitivesIndirect(pass, m_Culling.Commands(), (draw.IndirectFirst + i) * sizeof(SDL_GPUIndexedIndirectDrawCommand), 1);
 				}
 			}
-			else SDL_DrawGPUIndexedPrimitivesIndirect(pass, m_Culling.Commands(), draw.IndirectFirst * sizeof(SDL_GPUIndexedIndirectDrawCommand), draw.MeshletCount);
+			else SDL_DrawGPUIndexedPrimitivesIndirect(pass, m_Culling.Commands(), draw.IndirectFirst * sizeof(SDL_GPUIndexedIndirectDrawCommand), commands);
 		}
-		else SDL_DrawGPUIndexedPrimitives(pass, sprite ? 6 : draw.IndexCount, 1, sprite ? 0 : draw.FirstIndex, 0, 0);
+		else
+		{
+			++m_RenderStats.SceneDrawCalls;
+			if (instances > 1) ++m_RenderStats.InstancedDrawCalls;
+			SDL_DrawGPUIndexedPrimitives(pass, sprite ? 6 : draw.IndexCount, instances, sprite ? 0 : draw.FirstIndex, 0,
+				draw.InstanceIndex >= 0 ? static_cast<uint32>(draw.InstanceIndex) : 0);
+		}
 	}
 
 	void Renderer::PushBones(SDL_GPUCommandBuffer* cmd, const Array<Mat4>* skin)
@@ -644,33 +979,24 @@ namespace FP
 		SDL_PushGPUVertexUniformData(cmd, 1, m_BoneUpload.Data(), static_cast<uint32>(MaxSkinBones * sizeof(Mat4)));
 	}
 
-	SDL_GPUGraphicsPipeline* Renderer::CreateShadowPipeline(Surface surface, bool occlusion)
+	SDL_GPUGraphicsPipeline* Renderer::CreateShadowPipeline(Surface surface, bool occlusion, bool instanced)
 	{
 		SDL_GPUDevice* gpu = m_Device.GetHandle();
 		const bool skinned = surface == Surface::SkinnedMesh;
-		SDL_GPUShader* vert = skinned ? m_Device.LoadShader("SkinnedMesh.vert", 0, 2) : m_Device.LoadShader("Mesh.vert", 0, 1);
+		SDL_GPUShader* vert = skinned ? m_Device.LoadShader("SkinnedMesh.vert", 0, 2) : m_Device.LoadShader(instanced ? "InstancedMesh.vert" : "Mesh.vert", 0, 1);
 		SDL_GPUShader* frag = m_Device.LoadShader("Shadow.frag", 0, 0);
 		SDL_GPUGraphicsPipeline* pipeline = nullptr;
 		if (vert && frag)
 		{
-			SDL_GPUVertexBufferDescription buffers[2] = {};
-			buffers[0] = { 0, sizeof(MeshVertex), SDL_GPU_VERTEXINPUTRATE_VERTEX, 0 };
-			buffers[1] = { 1, sizeof(SkinVertex), SDL_GPU_VERTEXINPUTRATE_VERTEX, 0 };
-			SDL_GPUVertexAttribute attributes[6] = {};
-			attributes[0] = { 0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(MeshVertex, Position) };
-			attributes[1] = { 1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(MeshVertex, Normal) };
-			attributes[2] = { 2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(MeshVertex, UV) };
-			attributes[3] = { 3, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(MeshVertex, Tangent) };
-			attributes[4] = { 4, 1, SDL_GPU_VERTEXELEMENTFORMAT_USHORT4, offsetof(SkinVertex, Bones) };
-			attributes[5] = { 5, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(SkinVertex, Weights) };
+			MeshInput input(skinned, instanced);
 
 			SDL_GPUGraphicsPipelineCreateInfo info = {};
 			info.vertex_shader = vert;
 			info.fragment_shader = frag;
-			info.vertex_input_state.vertex_buffer_descriptions = buffers;
-			info.vertex_input_state.num_vertex_buffers = skinned ? 2 : 1;
-			info.vertex_input_state.vertex_attributes = attributes;
-			info.vertex_input_state.num_vertex_attributes = skinned ? 6 : 4;
+			info.vertex_input_state.vertex_buffer_descriptions = input.Buffers;
+			info.vertex_input_state.num_vertex_buffers = input.BufferCount;
+			info.vertex_input_state.vertex_attributes = input.Attributes;
+			info.vertex_input_state.num_vertex_attributes = input.AttributeCount;
 			info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
 			// Both faces cast so open meshes like planes still shadow. The slope bias keeps
 			// lit surfaces from shadowing themselves. The camera occlusion prepass instead
@@ -697,7 +1023,33 @@ namespace FP
 		return pipeline;
 	}
 
-	void Renderer::RenderShadows(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view)
+	bool Renderer::CanBatchDepth(const Draw& a, const Draw& b) const
+	{
+		return a.Type == Surface::Mesh && b.Type == Surface::Mesh && a.InstanceIndex >= 0 &&
+			b.InstanceIndex == a.InstanceIndex + 1 && a.Mesh == b.Mesh && a.FirstIndex == b.FirstIndex && a.IndexCount == b.IndexCount;
+	}
+
+	void Renderer::DrawDepth(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, World& world, const Draw& draw,
+		const Mat4& viewProjection, SDL_GPUGraphicsPipeline* pipeline, bool instanced, uint32 instances)
+	{
+		ObjectUniforms object;
+		object.ViewProjection = viewProjection;
+		if (!instanced) object.Model = world.GetWorldMatrix(draw.Value);
+		SDL_BindGPUGraphicsPipeline(pass, pipeline);
+		SDL_PushGPUVertexUniformData(cmd, 0, &object, sizeof(object));
+		if (draw.Type == Surface::SkinnedMesh) PushBones(cmd, draw.Skin);
+		const SDL_GPUBufferBinding vertices[2] = {
+			{ draw.Mesh->Vertices->GetHandle(), 0 },
+			{ instanced ? m_Instances->GetHandle() : draw.Mesh->Skin ? draw.Mesh->Skin->GetHandle() : nullptr, 0 }
+		};
+		SDL_BindGPUVertexBuffers(pass, 0, vertices, instanced || draw.Type == Surface::SkinnedMesh ? 2 : 1);
+		const SDL_GPUBufferBinding indices{ draw.Mesh->Indices->GetHandle(), 0 };
+		SDL_BindGPUIndexBuffer(pass, &indices, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+		SDL_DrawGPUIndexedPrimitives(pass, draw.IndexCount, instances, draw.FirstIndex, 0,
+			instanced ? static_cast<uint32>(draw.InstanceIndex) : 0);
+	}
+
+	void Renderer::RenderShadows(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view, const Array<Draw>& draws)
 	{
 		for (Vec4& params : m_Frame.ShadowParams)
 			params = {};
@@ -734,49 +1086,31 @@ namespace FP
 			m_Frame.ShadowParams[type] = { std::clamp(strength, 0.0f, 1.0f),
 				1.0f / static_cast<float>(size), worldTexel * 1.5f, static_cast<float>(m_ShadowLights[type]) };
 
-			// Draw opaque sections. A range check skips distant meshes for local lights.
-			auto cast = [&](Entity entity, const GPUMesh* mesh, int32 pipeline, const Array<Mat4>* skin, float reach) {
-				const Mat4 model = world.GetWorldMatrix(entity);
+			Array<const Draw*> casters;
+			for (const Draw& draw : draws)
+			{
+				if (draw.Type == Surface::Sprite || (draw.Mat && draw.Mat->GetData().Shader == "Glass")) continue;
+				const Mat4 model = world.GetWorldMatrix(draw.Value);
 				float largest = 0;
 				for (int c = 0; c < 3; ++c)
 					largest = std::fmax(largest, Vec3(model.At(c, 0), model.At(c, 1), model.At(c, 2)).Length());
-				const Vec3 center = model.TransformPoint((mesh->BoundsMin + mesh->BoundsMax) * 0.5f);
-				const float radius = (mesh->BoundsMax - mesh->BoundsMin).Length() * 0.5f * largest * reach;
-				if (type == 0 ? !shadow.Touches(center, radius) : (center - lightPosition).Length() > range + radius)
-					return;
-
-				ObjectUniforms object;
-				object.ViewProjection = shadow.ViewProjection;
-				object.Model = model;
-				SDL_BindGPUGraphicsPipeline(pass, m_ShadowPipelines[pipeline]);
-				SDL_PushGPUVertexUniformData(cmd, 0, &object, sizeof(object));
-				if (pipeline == 1)
-					PushBones(cmd, skin);
-				const SDL_GPUBufferBinding vertices[2] = { { mesh->Vertices->GetHandle(), 0 }, { mesh->Skin ? mesh->Skin->GetHandle() : nullptr, 0 } };
-				SDL_BindGPUVertexBuffers(pass, 0, vertices, pipeline == 1 ? 2 : 1);
-				const SDL_GPUBufferBinding indices = { mesh->Indices->GetHandle(), 0 };
-				SDL_BindGPUIndexBuffer(pass, &indices, SDL_GPU_INDEXELEMENTSIZE_32BIT);
-
-				const MaterialComponent* materials = world.TryGet<MaterialComponent>(entity);
-				for (int32 i = 0; i < mesh->Sections.Num(); ++i)
-				{
-					const Material* material = materials ? MaterialLibrary::Get().Load(materials->GetForSection(i)) : nullptr;
-					if (material && material->GetData().Shader == "Glass")
-						continue;
-					SDL_DrawGPUIndexedPrimitives(pass, mesh->Sections[i].IndexCount, 1, mesh->Sections[i].FirstIndex, 0, 0);
-				}
-			};
-			for (auto [entity, transform, meshComponent] : world.View<TransformComponent, MeshComponent>().each())
-			{
-				if (const GPUMesh* mesh = m_Meshes.Get(meshComponent.Mesh))
-					cast(entity, mesh, 0, nullptr, 1);
+				const Vec3 center = model.TransformPoint((draw.Mesh->BoundsMin + draw.Mesh->BoundsMax) * 0.5f);
+				// Animated vertices can reach outside the bind pose bounds.
+				const float reach = draw.Type == Surface::SkinnedMesh ? 1.5f : 1;
+				const float radius = (draw.Mesh->BoundsMax - draw.Mesh->BoundsMin).Length() * 0.5f * largest * reach;
+				if (type == 0 ? !shadow.Touches(center, radius) : (center - lightPosition).Length() > range + radius) continue;
+				casters.Add(&draw);
 			}
-			for (auto [entity, transform, skeletal] : world.View<TransformComponent, SkeletalMeshComponent>().each())
+			for (int32 i = 0; i < casters.Num();)
 			{
-				// Animation can reach past the bind pose bounds, so cull them loosely.
-				const SkeletalPoseComponent* pose = world.TryGet<SkeletalPoseComponent>(entity);
-				if (const GPUMesh* mesh = m_Meshes.GetSkinned(skeletal.Mesh))
-					cast(entity, mesh, 1, pose ? &pose->Skin : nullptr, 1.5f);
+				const Draw& draw = *casters[i];
+				const bool instanced = draw.InstanceIndex >= 0 && m_InstancedShadowPipeline;
+				int32 end = i + 1;
+				while (instanced && end < casters.Num() && CanBatchDepth(*casters[end - 1], *casters[end])) ++end;
+				auto* pipeline = instanced ? m_InstancedShadowPipeline : m_ShadowPipelines[draw.Type == Surface::SkinnedMesh ? 1 : 0];
+				DrawDepth(cmd, pass, world, draw, shadow.ViewProjection, pipeline, instanced, static_cast<uint32>(end - i));
+				++m_RenderStats.ShadowDrawCalls;
+				i = end;
 			}
 			SDL_EndGPURenderPass(pass);
 		};
@@ -890,7 +1224,7 @@ namespace FP
 			for (const auto& meshlet : draw.Mesh->Meshlets)
 			{
 				if (meshlet.FirstIndex < draw.FirstIndex || meshlet.FirstIndex >= draw.FirstIndex + draw.IndexCount) continue;
-				items.Add({ localToClip, Vec4(meshlet.BoundsMin, 0), Vec4(meshlet.BoundsMax, 0), meshlet.FirstIndex, meshlet.IndexCount, {} });
+				items.Add({ localToClip, Vec4(meshlet.BoundsMin, 0), Vec4(meshlet.BoundsMax, 0), meshlet.FirstIndex, meshlet.IndexCount, static_cast<uint32>(std::max(draw.InstanceIndex, 0)), 0 });
 			}
 			if (items.Num() > first) { draw.IndirectFirst = first; draw.MeshletCount = static_cast<uint32>(items.Num() - first); }
 		}
@@ -903,22 +1237,26 @@ namespace FP
 		auto* pass = SDL_BeginGPURenderPass(cmd, nullptr, 0, &depth);
 		if (settings.Occlusion)
 		{
-			SDL_BindGPUGraphicsPipeline(pass, m_OcclusionPipeline);
+			Array<const Draw*> occluders;
 			for (const Draw& draw : draws)
 			{
 				if (draw.IndirectFirst < 0) continue;
-				// Cutout textures cannot safely occlude without reproducing their alpha test.
+				// Cutouts cannot occlude without testing their texture alpha.
 				const MaterialData defaults;
 				const auto& data = draw.Mat ? draw.Mat->GetData() : defaults;
 				if (data.BaseColor.A < data.AlphaCutoff || (!data.BaseColorMap.IsEmpty() && data.AlphaCutoff > 0)) continue;
-				ObjectUniforms object;
-				object.ViewProjection = clip; object.Model = world.GetWorldMatrix(draw.Value);
-				object.NormalMatrix = object.Model.Inverse().Transposed();
-				SDL_PushGPUVertexUniformData(cmd, 0, &object, sizeof(object));
-				SDL_GPUBufferBinding vertices{ draw.Mesh->Vertices->GetHandle(), 0 }, indices{ draw.Mesh->Indices->GetHandle(), 0 };
-				SDL_BindGPUVertexBuffers(pass, 0, &vertices, 1);
-				SDL_BindGPUIndexBuffer(pass, &indices, SDL_GPU_INDEXELEMENTSIZE_32BIT);
-				SDL_DrawGPUIndexedPrimitives(pass, draw.IndexCount, 1, draw.FirstIndex, 0, 0);
+				occluders.Add(&draw);
+			}
+			for (int32 i = 0; i < occluders.Num();)
+			{
+				const Draw& draw = *occluders[i];
+				const bool instanced = draw.InstanceIndex >= 0 && m_InstancedOcclusionPipeline;
+				int32 end = i + 1;
+				while (instanced && end < occluders.Num() && CanBatchDepth(*occluders[end - 1], *occluders[end])) ++end;
+				DrawDepth(cmd, pass, world, draw, clip, instanced ? m_InstancedOcclusionPipeline : m_OcclusionPipeline,
+					instanced, static_cast<uint32>(end - i));
+				++m_RenderStats.OcclusionDrawCalls;
+				i = end;
 			}
 		}
 		SDL_EndGPURenderPass(pass);
@@ -934,12 +1272,14 @@ namespace FP
 	void Renderer::Render(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* target, uint32 width, uint32 height,
 		World& world, const RenderView& view, const DebugLines* lines, const RenderView* cullingView)
 	{
+		m_RenderStats = {};
 		if (!IsValid() || width == 0 || height == 0)
 			return;
 		m_Mode = view.Mode;
 		EnsureTargets(width, height);
+		if (!m_SceneColor || !m_SceneCopy || !m_Depth) return;
 		BuildFrameUniforms(world, view, width, height);
-		RenderShadows(cmd, world, view);
+		PrepareEnvironment(world);
 
 		const bool hasLines = lines && !lines->GetVertices().IsEmpty();
 		if (hasLines)
@@ -1002,6 +1342,8 @@ namespace FP
 			return a.Depth > b.Depth;
 		});
 
+		PrepareInstances(cmd, world, draws);
+		RenderShadows(cmd, world, view, draws);
 		PrepareMeshlets(cmd, world, cullingView ? *cullingView : view, draws);
 		const Mat4 viewProjection = view.GetViewProjection();
 		SDL_PushGPUFragmentUniformData(cmd, 1, &m_Frame, sizeof(m_Frame));
@@ -1026,15 +1368,20 @@ namespace FP
 
 		auto drawRange = [&](SDL_GPURenderPass* pass, int32 from, int32 to) {
 			SDL_GPUGraphicsPipeline* bound = nullptr;
-			for (int32 i = from; i < to; ++i)
+			for (int32 i = from; i < to;)
 			{
+				int32 end = i + 1;
+				uint32 commands = draws[i].MeshletCount;
+				while (end < to && CanBatch(world, draws[end - 1], draws[end]))
+					commands += draws[end++].MeshletCount;
 				SDL_GPUGraphicsPipeline* pipeline = GetPipeline(draws[i]);
 				if (pipeline != bound)
 				{
 					SDL_BindGPUGraphicsPipeline(pass, pipeline);
 					bound = pipeline;
 				}
-				DrawObject(cmd, pass, world, draws[i], viewProjection);
+				DrawObject(cmd, pass, world, draws[i], viewProjection, static_cast<uint32>(end - i), commands);
+				i = end;
 			}
 		};
 
@@ -1043,6 +1390,7 @@ namespace FP
 			++firstGlass;
 
 		SDL_GPURenderPass* pass = beginScenePass(true);
+		DrawSkybox(cmd, pass, view);
 		drawRange(pass, 0, firstGlass);
 		// Particles go before glass so glass refracts them.
 		DrawParticles(cmd, pass, viewProjection);
@@ -1067,21 +1415,138 @@ namespace FP
 			SDL_EndGPURenderPass(pass);
 		}
 
+		DrawBlackHoles(cmd, world, view, width, height);
+
 		const Array<GPUTexture*> pages = PrepareUI(cmd, world, view, width, height);
 
-		// Present pass with UI pages and editor lines on top.
+		PostProcessComponent settings;
+		for (Entity entity : world.GetEntities())
+		{
+			if (const auto* post = world.TryGet<PostProcessComponent>(entity))
+			{
+				settings = *post;
+				break;
+			}
+		}
+		// Keep bloom out of diagnostic view modes.
+		if (view.Mode != ViewMode::Lit)
+		{
+			settings.Bloom = false;
+		}
+		auto drawFullscreen = [&](SDL_GPUTexture* destination, SDL_GPUGraphicsPipeline* pipeline,
+			const SDL_GPUTextureSamplerBinding* sources, uint32 count, const void* uniforms, uint32 bytes, bool keep = false) {
+			SDL_GPUColorTargetInfo output = {};
+			output.texture = destination;
+			output.load_op = keep ? SDL_GPU_LOADOP_LOAD : SDL_GPU_LOADOP_DONT_CARE;
+			output.store_op = SDL_GPU_STOREOP_STORE;
+			SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &output, 1, nullptr);
+			SDL_BindGPUGraphicsPipeline(pass, pipeline);
+			SDL_PushGPUFragmentUniformData(cmd, 0, uniforms, bytes);
+			SDL_BindGPUFragmentSamplers(pass, 0, sources, count);
+			SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+			SDL_EndGPURenderPass(pass);
+		};
+		GPUTexture* bloom = m_Device.GetBlackTexture();
+		float bloomIntensity = std::clamp(settings.BloomIntensity, 0.0f, 10.0f);
+		if (!settings.Bloom || settings.BloomIntensity <= 0 || !settings.WideBloom)
+			m_BloomOctaves.Clear();
+		if (settings.Bloom && settings.BloomIntensity > 0 && settings.WideBloom)
+		{
+			// Halve down to 1/256 of the screen, then walk back up adding each smaller octave onto
+			// the next larger one, so the glow has a sharp core and a tail that spans the screen.
+			uint32 w = width, h = height;
+			int32 levels = 0;
+			for (; levels < 8 && w > 1 && h > 1; ++levels)
+			{
+				w = (w + 1) / 2;
+				h = (h + 1) / 2;
+				if (m_BloomOctaves.Num() <= levels)
+					m_BloomOctaves.Add(nullptr);
+				RefPtr<GPUTexture>& octave = m_BloomOctaves[levels];
+				if (!octave || octave->GetWidth() != w || octave->GetHeight() != h)
+					octave = m_Device.CreateRenderTarget(SceneFormat, w, h, false);
+				if (!octave)
+					break;
+			}
+			if (levels > 0)
+			{
+				SDL_GPUTextureSamplerBinding source{ m_SceneColor->GetHandle(), m_Device.GetClampSampler() };
+				Vec4 params{ 1.0f / width, 1.0f / height, std::clamp(settings.BloomThreshold, 0.0f, 65504.0f), 0 };
+				drawFullscreen(m_BloomOctaves[0]->GetHandle(), m_BloomPipeline, &source, 1, &params, sizeof(params));
+				for (int32 i = 1; i < levels; ++i)
+				{
+					GPUTexture* larger = m_BloomOctaves[i - 1].Get();
+					source.texture = larger->GetHandle();
+					params = { 1.0f / larger->GetWidth(), 1.0f / larger->GetHeight(), 0, 2 };
+					drawFullscreen(m_BloomOctaves[i]->GetHandle(), m_BloomPipeline, &source, 1, &params, sizeof(params));
+				}
+				for (int32 i = levels - 2; i >= 0; --i)
+				{
+					GPUTexture* smaller = m_BloomOctaves[i + 1].Get();
+					source.texture = smaller->GetHandle();
+					params = { 1.0f / smaller->GetWidth(), 1.0f / smaller->GetHeight(), 0, 3 };
+					drawFullscreen(m_BloomOctaves[i]->GetHandle(), m_BloomAddPipeline, &source, 1, &params, sizeof(params), true);
+				}
+				bloom = m_BloomOctaves[0].Get();
+				// Every octave carries the full extracted light, so average them to keep intensity comparable.
+				bloomIntensity /= static_cast<float>(levels);
+			}
+			for (auto& texture : m_Bloom) texture.Reset();
+		}
+		else if (settings.Bloom && settings.BloomIntensity > 0)
+		{
+			const uint32 bw = std::max(1u, (width + 3) / 4), bh = std::max(1u, (height + 3) / 4);
+			if (!m_Bloom[0] || !m_Bloom[1] || m_Bloom[0]->GetWidth() != bw || m_Bloom[0]->GetHeight() != bh)
+				for (auto& texture : m_Bloom) texture = m_Device.CreateRenderTarget(SceneFormat, bw, bh, false);
+			if (m_Bloom[0] && m_Bloom[1])
+			{
+				SDL_GPUTextureSamplerBinding source{ m_SceneColor->GetHandle(), m_Device.GetClampSampler() };
+				Vec4 params{ 1.0f / width, 1.0f / height, std::clamp(settings.BloomThreshold, 0.0f, 65504.0f), 0 };
+				drawFullscreen(m_Bloom[0]->GetHandle(), m_BloomPipeline, &source, 1, &params, sizeof(params));
+				source.texture = m_Bloom[0]->GetHandle();
+				params = { 1.0f / bw, 0, 0, 1 };
+				drawFullscreen(m_Bloom[1]->GetHandle(), m_BloomPipeline, &source, 1, &params, sizeof(params));
+				source.texture = m_Bloom[1]->GetHandle();
+				params = { 0, 1.0f / bh, 0, 1 };
+				drawFullscreen(m_Bloom[0]->GetHandle(), m_BloomPipeline, &source, 1, &params, sizeof(params));
+				bloom = m_Bloom[0].Get();
+			}
+		}
+		else
+		{
+			for (auto& texture : m_Bloom) texture.Reset();
+		}
+		if (settings.FXAA && (!m_PostColor || m_PostColor->GetWidth() != width || m_PostColor->GetHeight() != height))
+			m_PostColor = m_Device.CreateRenderTarget(SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB, width, height, false);
+		if (!settings.FXAA) m_PostColor.Reset();
+		const bool fxaa = settings.FXAA && m_PostColor;
+		const EngineSettings& accessibility = EngineSettings::Get();
+		const auto& modes = EngineSettings::ColorBlindModes();
+		int32 colorMode = 0;
+		for (int32 i = 0; i < modes.Num(); ++i)
+			if (accessibility.ColorBlindMode == modes[i]) colorMode = i;
+		const Vec4 present[2] = {
+			{ view.Exposure, view.Tonemap ? 1.0f : 0.0f, bloomIntensity, static_cast<float>(colorMode) },
+			{ std::clamp(accessibility.ColorBlindStrength, 0.0f, 1.0f), 0, 0, 0 }
+		};
+		SDL_GPUTextureSamplerBinding sources[2] = {
+			{ m_SceneColor->GetHandle(), m_Device.GetClampSampler() }, { bloom->GetHandle(), m_Device.GetClampSampler() }
+		};
+		drawFullscreen(fxaa ? m_PostColor->GetHandle() : target, fxaa ? m_PostPipeline : m_PresentPipeline, sources, 2, present, sizeof(present));
+		if (fxaa)
+		{
+			const Vec4 params{ 1.0f / width, 1.0f / height, 0, 0 };
+			const SDL_GPUTextureSamplerBinding source{ m_PostColor->GetHandle(), m_Device.GetClampSampler() };
+			drawFullscreen(target, m_FXAAPipeline, &source, 1, &params, sizeof(params));
+		}
+		if (!hasLines && pages.IsEmpty()) return;
+
+		// UI pages and editor lines stay sharp above the post-processed scene.
 		SDL_GPUColorTargetInfo output = {};
 		output.texture = target;
-		output.load_op = SDL_GPU_LOADOP_DONT_CARE;
+		output.load_op = SDL_GPU_LOADOP_LOAD;
 		output.store_op = SDL_GPU_STOREOP_STORE;
 		pass = SDL_BeginGPURenderPass(cmd, &output, 1, nullptr);
-
-		SDL_BindGPUGraphicsPipeline(pass, m_PresentPipeline);
-		const Vec4 present{ view.Exposure, view.Tonemap ? 1.0f : 0.0f, 0, 0 };
-		SDL_PushGPUFragmentUniformData(cmd, 0, &present, sizeof(present));
-		SDL_GPUTextureSamplerBinding scene = { m_SceneColor->GetHandle(), m_Device.GetClampSampler() };
-		SDL_BindGPUFragmentSamplers(pass, 0, &scene, 1);
-		SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
 
 		if (!pages.IsEmpty())
 		{

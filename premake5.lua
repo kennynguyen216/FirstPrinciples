@@ -337,10 +337,16 @@ project "GameScripts"
 		linkoptions { '/PDB:"$(OutDir)GameScripts_$([System.DateTime]::Now.Ticks).pdb"' }
 	filter {}
 
--- Packaging uses Qt Core for processes and file operations, with no engine dependencies.
+project "AssetTool"
+	kind "ConsoleApp"
+	files { "src/Tools/AssetTool/**.h", "src/Tools/AssetTool/**.cpp" }
+	UseEngine(true)
+
+-- Packaging validates assets before staging the game
 project "PackageTool"
 	kind "ConsoleApp"
-	files { "src/Tools/PackageTool/**.h", "src/Tools/PackageTool/**.cpp", "src/Core/Misc/Pak.h", "src/Core/Misc/Pak.cpp" }
+	files { "src/Tools/PackageTool/**.h", "src/Tools/PackageTool/**.cpp" }
+	UseEngine(true)
 	UseQt({ "Core" })
 
 project "Runtime"
@@ -363,6 +369,11 @@ project "Editor"
 		links { "CoreGraphics.framework" }
 	filter {}
 
+project "Benchmarks"
+	kind "ConsoleApp"
+	files { "src/Benchmarks/**.cpp" }
+	UseEngine(false)
+
 project "Tests"
 	kind "ConsoleApp"
 	files { "src/Tests/**.h", "src/Tests/**.cpp" }
@@ -370,3 +381,15 @@ project "Tests"
 	files { "src/Tools/HeaderTool/HeaderParser.h", "src/Tools/HeaderTool/HeaderParser.cpp" }
 	UseEngine(false)
 	dependson { "GameScripts" }
+
+project "EditorTests"
+	kind "ConsoleApp"
+	dependson { "Editor" }
+	files {
+		"src/EditorTests/**.cpp",
+		"src/Editor/CodeEditor.h", "src/Editor/CodeEditor.cpp",
+		"src/Editor/InputActionsEditor.h", "src/Editor/InputActionsEditor.cpp",
+	}
+	UseEngine(false)
+	UseQt()
+	AddMocRules("src/Editor")

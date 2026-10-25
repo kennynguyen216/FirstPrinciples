@@ -59,7 +59,7 @@ namespace FP
 		const char* GetDriverName() const;
 
 		// Loads Engine/Content/Shaders/<name>.spv or .msl depending on the backend.
-		SDL_GPUShader* LoadShader(const char* name, uint32 numSamplers, uint32 numUniformBuffers);
+		SDL_GPUShader* LoadShader(const char* name, uint32 numSamplers, uint32 numUniformBuffers, uint32 numStorageBuffers = 0);
 
 		// Compute shaders use one uniform buffer; resource counts follow SDL binding order.
 		SDL_GPUComputePipeline* LoadComputeShader(const char* name, uint32 samplers, uint32 readBuffers, uint32 writeBuffers, uint32 threadsX, uint32 threadsY);
@@ -72,8 +72,8 @@ namespace FP
 
 		RefPtr<GPUBuffer> CreateBuffer(SDL_GPUBufferUsageFlags usage, const void* data, uint32 size);
 
-		// Copies data into a buffer with a copy pass on cmd. The buffer must be large enough.
-		void UploadToBuffer(SDL_GPUCommandBuffer* cmd, GPUBuffer& buffer, const void* data, uint32 size);
+		// Copies into a buffer large enough for size. Cycle preserves earlier draws.
+		void UploadToBuffer(SDL_GPUCommandBuffer* cmd, GPUBuffer& buffer, const void* data, uint32 size, bool cycle = false);
 
 		// A texture refilled from the CPU every so often, like a UI page. 4 bytes per pixel.
 		RefPtr<GPUTexture> CreateDynamicTexture(SDL_GPUTextureFormat format, uint32 width, uint32 height);

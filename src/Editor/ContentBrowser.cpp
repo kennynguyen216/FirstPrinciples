@@ -2,6 +2,7 @@
 #include "Editor/EditorIcons.h"
 #include "Editor/EditorStyle.h"
 #include "Engine/Material.h"
+#include "Engine/Assets/AssetDatabase.h"
 #include "Engine/Paths.h"
 #include "Engine/Project.h"
 #include "Engine/Render/ImageDecoder.h"
@@ -106,6 +107,9 @@ namespace FP::Editor
 		QToolButton* saveAll = flatButton(EditorIcon::SaveAll, "Save All", "Save the scene, materials and scripts");
 		connect(saveAll, &QToolButton::clicked, this, &ContentBrowser::SaveAllRequested);
 		bar->addWidget(saveAll);
+		QToolButton* validate = flatButton(EditorIcon::ContentBrowser, "Validate", "Check asset metadata and dependencies");
+		connect(validate, &QToolButton::clicked, this, &ContentBrowser::ValidateAssets);
+		bar->addWidget(validate);
 		m_Back = flatButton(EditorIcon::Back, "", "Back");
 		m_Forward = flatButton(EditorIcon::Forward, "", "Forward");
 		connect(m_Back, &QToolButton::clicked, this, &ContentBrowser::GoBack);
@@ -198,7 +202,11 @@ namespace FP::Editor
 		m_ThumbnailTimer = new QTimer(this);
 		m_ThumbnailTimer->setInterval(16);
 		connect(m_ThumbnailTimer, &QTimer::timeout, this, &ContentBrowser::RenderNextThumbnail);
-		connect(m_Watcher, &QFileSystemWatcher::fileChanged, m_RefreshTimer, qOverload<>(&QTimer::start));
+		connect(m_Watcher, &QFileSystemWatcher::fileChanged, this, [this](const QString& path) {
+			const QString relative = QDir(m_ContentRoot).relativeFilePath(path);
+			Paths::GetAssets().Invalidate(relative.toUtf8().constData());
+			m_RefreshTimer->start();
+		});
 
 		m_CurrentFolder = m_ContentRoot;
 		Refresh();
@@ -433,32 +441,6 @@ namespace FP::Editor
 		SelectPath(path);
 	}
 
-	int ContentBrowser::ReplaceReferences(const QString& oldPath, const QString& newPath)
-	{
-		const QString contentRoot = QString::fromUtf8(Paths::GetContentDir().CStr());
-		const QByteArray from = ("\"" + oldPath + "\"").toUtf8();
-		const QByteArray to = ("\"" + newPath + "\"").toUtf8();
-		int changed = 0;
-		QDirIterator it(contentRoot, { "*.scene", "*.material" }, QDir::Files, QDirIterator::Subdirectories);
-		while (it.hasNext())
-		{
-			QFile file(it.next());
-			if (!file.open(QIODevice::ReadOnly))
-				continue;
-			QByteArray text = file.readAll();
-			file.close();
-			if (!text.contains(from))
-				continue;
-			text.replace(from, to);
-			if (file.open(QIODevice::WriteOnly | QIODevice::Truncate))
-			{
-				file.write(text);
-				++changed;
-			}
-		}
-		return changed;
-	}
-
 	void ContentBrowser::RenameSelected()
 	{
 		const QStringList selected = SelectedPaths();
@@ -474,34 +456,26 @@ namespace FP::Editor
 			QMessageBox::warning(this, "Rename", name + " already exists.");
 			return;
 		}
-		if (!QDir().rename(info.absoluteFilePath(), target))
-		{
-			QMessageBox::warning(this, "Rename", "Could not rename " + info.fileName());
-			return;
-		}
-
-		// Keep scenes and materials pointing at the file under its new name.
 		const QDir content(m_ContentRoot);
 		const QString oldRelative = content.relativeFilePath(info.absoluteFilePath());
 		const QString newRelative = content.relativeFilePath(target);
-		int changed = 0;
-		if (info.isDir())
+		if (oldRelative.startsWith(".."))
 		{
-			QDirIterator it(target, QDir::Files, QDirIterator::Subdirectories);
-			while (it.hasNext())
+			if (!QDir().rename(info.absoluteFilePath(), target))
+				QMessageBox::warning(this, "Rename", "Could not rename " + info.fileName());
+		}
+		else
+		{
+			String error;
+			if (!Paths::GetAssets().Move(oldRelative.toUtf8().constData(), newRelative.toUtf8().constData(), error))
 			{
-				const QString moved = content.relativeFilePath(it.next());
-				changed += ReplaceReferences(oldRelative + moved.mid(newRelative.size()), moved);
+				QMessageBox::warning(this, "Rename", QString::fromUtf8(error.CStr()));
+				return;
 			}
-		}
-		else if (!oldRelative.startsWith(".."))
-		{
-			changed = ReplaceReferences(oldRelative, newRelative);
-		}
-		if (changed > 0)
-		{
-			MaterialLibrary::Get().Clear();
-			emit ReferencesChanged();
+			Project project = Paths::GetProject();
+			project.StartScene = Paths::AssetReference(project.StartScene);
+			if (!project.Save()) FP_LOG_ERROR("Could not update the project start scene");
+			emit AssetMoved(info.absoluteFilePath(), target);
 		}
 		SelectPath(target);
 	}
@@ -518,7 +492,21 @@ namespace FP::Editor
 			for (int n = 1; copy.isEmpty() || QFileInfo::exists(copy); ++n)
 				copy = info.absolutePath() + "/" + info.completeBaseName() + (n == 1 ? " Copy" : QString(" Copy %1").arg(n)) + "." + info.suffix();
 			if (QFile::copy(path, copy))
+			{
+				const QString metadata = path + AssetDatabase::MetadataExtension;
+				if (QFileInfo::exists(metadata))
+				{
+					QFile source(metadata);
+					if (source.open(QIODevice::ReadOnly))
+					{
+						QString settings = QString::fromUtf8(source.readAll());
+						settings.replace(QRegularExpression("id [^\\n]+"), "id " + QString::fromUtf8(Guid::New().ToString().CStr()));
+						QFile destination(copy + AssetDatabase::MetadataExtension);
+						if (destination.open(QIODevice::WriteOnly)) destination.write(settings.toUtf8());
+					}
+				}
 				last = copy;
+			}
 		}
 		if (!last.isEmpty())
 			SelectPath(last);
@@ -541,21 +529,24 @@ namespace FP::Editor
 			// Trash instead of deleting so a mistake can be undone from the OS.
 			if (!QFile::moveToTrash(path))
 				FP_LOG_ERROR("Could not move %s to the Trash", path.toUtf8().constData());
+			else if (QFileInfo::exists(path + AssetDatabase::MetadataExtension) && !QFile::moveToTrash(path + AssetDatabase::MetadataExtension))
+				FP_LOG_WARN("Could not move asset metadata to the Trash");
 		}
 		Refresh();
 	}
 
 	bool ContentBrowser::IsHidden(const QString& name) const
 	{
-		// Dot files are OS noise.
-		return name.startsWith('.');
+		return name.startsWith('.') || name.endsWith(AssetDatabase::MetadataExtension) || name.endsWith(".tmp");
 	}
 
 	QString ContentBrowser::AssetKind(const QString& path)
 	{
 		const QString suffix = QFileInfo(path).suffix().toLower();
+		if (suffix == "actions") return "Input Actions";
 		if (suffix == "scene") return "Scene";
 		if (suffix == "material") return "Material";
+		if (suffix == "hdr") return "Environment";
 		if (suffix == "wav" || suffix == "mp3") return "Audio";
 		if (QStringList{ "png", "jpg", "jpeg", "tga", "bmp" }.contains(suffix)) return "Texture";
 		if (QStringList{ "obj", "gltf", "glb" }.contains(suffix)) return "Mesh";
@@ -590,6 +581,7 @@ namespace FP::Editor
 
 	void ContentBrowser::Refresh()
 	{
+		Paths::GetAssets().Refresh(AssetRefreshMode::ChangedFiles);
 		m_IconCache.clear();
 		m_Thumbnails.Clear();
 		if (!QFileInfo(m_CurrentFolder).isDir())
@@ -597,6 +589,23 @@ namespace FP::Editor
 		RebuildTree();
 		RebuildFiles();
 		WatchFolders();
+	}
+
+	void ContentBrowser::ValidateAssets()
+	{
+		Paths::GetAssets().Refresh();
+		const auto& issues = Paths::GetAssets().GetIssues();
+		QStringList details;
+		for (const AssetIssue& issue : issues)
+		{
+			FP_LOG_ERROR("Asset %s: %s", issue.Path.CStr(), issue.Message.CStr());
+			details.append(QString::fromUtf8(issue.Path.CStr()) + ": " + QString::fromUtf8(issue.Message.CStr()));
+		}
+		QMessageBox report(this);
+		report.setWindowTitle("Validate Assets");
+		report.setText(issues.IsEmpty() ? "Asset metadata and dependencies are valid." : QString("Found %1 asset issues. See the details or Output Log.").arg(issues.Num()));
+		report.setDetailedText(details.join("\n"));
+		report.exec();
 	}
 
 	void ContentBrowser::AddFolderItems(QTreeWidgetItem* parent, const QString& path)
@@ -736,7 +745,7 @@ namespace FP::Editor
 
 	void ContentBrowser::ImportFiles()
 	{
-		const QStringList files = QFileDialog::getOpenFileNames(this, "Import", QString(), "Assets (*.png *.jpg *.jpeg *.tga *.bmp *.obj *.gltf *.glb *.bin *.material *.scene);;All files (*)");
+		const QStringList files = QFileDialog::getOpenFileNames(this, "Import", QString(), "Assets (*.actions *.hdr *.png *.jpg *.jpeg *.tga *.bmp *.obj *.gltf *.glb *.bin *.material *.scene);;All files (*)");
 		QString last;
 		for (const QString& file : files)
 		{
@@ -772,7 +781,7 @@ namespace FP::Editor
 				const QString path = it.next();
 				if (it.fileInfo().isDir())
 					dirs.append(path);
-				else if (AssetKind(path) == "Texture" || AssetKind(path) == "Material" || AssetKind(path) == "Mesh" || it.fileInfo().suffix() == "bin")
+				else if (!IsHidden(it.fileInfo().fileName()) || path.endsWith(AssetDatabase::MetadataExtension))
 					files.append(path);
 			}
 		}
@@ -883,7 +892,9 @@ namespace FP::Editor
 			m_PendingThumbnails.append(path);
 			return kind == "Material" ? TileIcon(EditorIcon::Material, QColor(0x80, 0xc0, 0x60)) : TileIcon(EditorIcon::Mesh, QColor(0x3a, 0xa0, 0xd0));
 		}
+		else if (kind == "Environment") icon = TileIcon(EditorIcon::Texture, QColor(0x60, 0xb0, 0xc0));
 		else if (kind == "Scene") icon = TileIcon(EditorIcon::Scene, QColor(0xf0, 0xa0, 0x30));
+		else if (kind == "Input Actions") icon = TileIcon(EditorIcon::Script, QColor(0x60, 0xc0, 0xb0));
 		else if (kind == "Script") icon = TileIcon(EditorIcon::Script, QColor(0x4f, 0xa3, 0xe0));
 		else if (kind == "Page") icon = TileIcon(EditorIcon::Script, QColor(0xe0, 0x8a, 0x3a));
 		else if (kind == "Web") icon = TileIcon(EditorIcon::Script, QColor(0xc0, 0xa0, 0x40));

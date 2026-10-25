@@ -34,6 +34,7 @@ layout(set = 3, binding = 0) uniform MaterialData
 	vec4 Subsurface; // rgb color, a strength
 	vec4 Params;     // x metallic, y roughness, z specular, w normal strength
 	vec4 Params2;    // x ambient occlusion strength, y alpha cutoff, z index of refraction, w thickness
+	vec4 Style;      // x cel shaded, yzw reserved
 } Material;
 
 // Per frame lighting, fragment uniform slot 1.
@@ -53,6 +54,9 @@ layout(set = 3, binding = 1) uniform FrameData
 	vec4 LightCone[MAX_LIGHTS];      // x cos(inner), y cos(outer)
 	mat4 ShadowMatrix[8];            // directional, spot, six point faces
 	vec4 ShadowParams[3];            // directional, spot, point: strength, texel, offset, light index
+	vec4 EnvironmentParams;
+	vec4 EnvironmentSize;
+	vec4 EnvironmentDiffuse[9];
 } Frame;
 
 #endif
