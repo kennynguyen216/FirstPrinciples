@@ -379,13 +379,12 @@ component CharacterController
   Mass 70
   AirControl 0.1
   GravityScale 1
-component Scripts
-  script "PlayerController"
-    WalkSpeed 5
-    RunSpeed 9
-    JumpSpeed 6
-    LookSpeed 0.15
-    Camera "Player Camera"
+component PlayerInput
+  WalkSpeed 5
+  RunSpeed 9
+  JumpSpeed 6
+  LookSpeed 0.15
+  Camera "Player Camera"
 
 entity 9c000013-0000-4000-8000-000000000013
 component Name
