@@ -4,13 +4,17 @@
 #include "Effects/Starfield.h"
 #include "Driver/Cab.h"
 #include "Driver/DriverSystem.h"
+#include "Enemies/SiphonComponents.h"
 #include "LifeSupport/Cargo.h"
 #include "Match/MatchQueries.h"
 #include "Net/DriverNet.h"
 #include "Net/GameNet.h"
 #include "Title/TitleComponents.h"
 
+#include "Engine/UI/UISystem.h"
+
 #include <algorithm>
+#include <cstdio>
 
 using namespace FP;
 using namespace MatchQueries;
@@ -105,6 +109,68 @@ namespace
 			body.Rotation = (rotation * Quat::FromEuler({ 0, crewmate.Yaw, 0 })).ToEuler();
 			body.Scale = WalkerSize;
 		}
+	}
+
+	// The bay from above for the HUD: its tanks, every Mite in it and this player when they walk
+	// there, so whoever is up in the cab can tell something is feeding in the back. Spots are -1 to 1
+	// across (x, the airlock wall is -1) and along (z, the hatch is +1). Built from what every machine
+	// syncs, so a Mite counts as feeding when it perches on an oxygen tank's rim.
+	void SendBayHud(World& world, int32 crew)
+	{
+		UIDocumentInstance* page = nullptr;
+		for (auto [entity, camera, ui] : world.View<CameraComponent, UIComponent>().each())
+			page = camera.Primary ? UISystem::For(world, entity) : page;
+		Vec3 bay;
+		InteriorComponent info;
+		if (!page || !page->IsReady() || FindInterior(world, crew, "Bay", &bay, &info) == NullEntity)
+			return;
+		std::string json;
+		auto append = [&json](const char* format, auto... args) {
+			char text[128];
+			std::snprintf(text, sizeof(text), format, args...);
+			json += text;
+		};
+		auto spotX = [&](Vec3 at) { return std::clamp((at.X - bay.X) / info.HalfWidth, -1.0f, 1.0f); };
+		auto spotZ = [&](Vec3 at) { return std::clamp((at.Z - bay.Z) / info.HalfLength, -1.0f, 1.0f); };
+
+		json = "{\"tanks\":[";
+		for (auto [entity, transform, tank] : world.View<TransformComponent, CargoTankComponent>().each())
+		{
+			if (tank.Crew == crew)
+				append("%s[%.3f,%.3f,%.2f,%d,%d]", json.back() == '[' ? "" : ",", spotX(transform.Position), spotZ(transform.Position),
+					tank.CapacityKg > 0 ? tank.AmountKg / tank.CapacityKg : 0.0f, tank.Holes, tank.Kind == CargoKind::Water ? 1 : 0);
+		}
+		json += "],\"mites\":[";
+		int32 mites = 0;
+		int32 feeding = 0;
+		for (auto [entity, transform, siphon] : world.View<TransformComponent, SiphonComponent>().each())
+		{
+			if (!siphon.Active || siphon.Crew != crew)
+				continue;
+			bool eating = false;
+			for (auto [tankEntity, tankTransform, tank] : world.View<TransformComponent, CargoTankComponent>().each())
+			{
+				const Vec3 apart = transform.Position - tankTransform.Position;
+				const float reach = tankTransform.Scale.X * 0.5f + 0.4f;
+				eating |= tank.Crew == crew && tank.Kind == CargoKind::Oxygen && tank.AmountKg > 0 && apart.X * apart.X + apart.Z * apart.Z < reach * reach;
+			}
+			append("%s[%.3f,%.3f,%d]", mites ? "," : "", spotX(transform.Position), spotZ(transform.Position), eating ? 1 : 0);
+			++mites;
+			feeding += eating ? 1 : 0;
+		}
+		json += "]";
+		const Entity local = FindLocalMember(world);
+		const OnFootComponent* onFoot = local == NullEntity ? nullptr : world.TryGet<OnFootComponent>(local);
+		if (onFoot && onFoot->Crew == crew && onFoot->Interior == "Bay")
+		{
+			const Vec3 at = world.Get<TransformComponent>(local).Position;
+			append(",\"you\":[%.3f,%.3f]", spotX(at), spotZ(at));
+		}
+		const Cargo::Totals totals = Cargo::Sum(world, crew);
+		const DriverState* cab = GetCab(world);
+		append(",\"count\":%d,\"feeding\":%d,\"leaks\":%d,\"o2\":%.3f,\"cab\":%s}", mites, feeding, totals.LeakingTanks,
+			totals.OxygenCapacityKg > 0 ? totals.OxygenKg / totals.OxygenCapacityKg : 0.0f, cab && cab->InCab ? "true" : "false");
+		page->SetJson("bay", json);
 	}
 }
 
@@ -245,6 +311,7 @@ void CargoBridgeOutSystem::Update(World& world, float)
 	const TransformComponent& truckTransform = world.Get<TransformComponent>(truck);
 	SendCabSpot(world, m_Seat);
 	PlaceCabCrewmates(world, *link, truckTransform, m_CabOrigin);
+	SendBayHud(world, m_Crew);
 
 	if (!GameNet::IsHost(world))
 	{

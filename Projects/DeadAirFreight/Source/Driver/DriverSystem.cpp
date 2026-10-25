@@ -56,6 +56,14 @@ namespace
 			channel(color.R), channel(color.G), channel(color.B), color.A, bar, size);
 	}
 
+	// One labeled reading for a HUD panel: its label, value, CSS color and an optional bar filled 0 to 1.
+	std::string Stat(const std::string& label, const std::string& value, Color color, float bar = -1)
+	{
+		auto channel = [](float c) { return static_cast<int>(std::clamp(c, 0.0f, 1.0f) * 255); };
+		return "{\"k\":" + UIDocument::ToJsonString(label) + ",\"v\":" + UIDocument::ToJsonString(value)
+			+ Format(",\"c\":\"rgba(%d,%d,%d,%.2f)\",\"bar\":%.3f}", channel(color.R), channel(color.G), channel(color.B), color.A, bar);
+	}
+
 	// Where a point lands on screen, -1 to 1 on both axes. False when it is off screen or behind.
 	bool ToScreen(const TransformComponent& camera, float fieldOfView, float aspect, Vec3 point, Vec2& screen)
 	{
@@ -598,31 +606,32 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 
 	const Color co2Color = life.Co2 > 0.6f ? Bad : life.Co2 > 0.25f ? Warn : Good;
 	std::vector<std::string> left = {
-		Line(Format("CAB AIR   %.2f KG", life.CabReserve), life.CabReserve > 0 ? White : Warn),
-		Line(Format("CARGO O2  %.1f KG", life.Cargo), White),
-		Line(Format("CO2       %3.0f%%", life.Co2 * 100), co2Color, life.Co2),
-		Line(Format("POWER     %3.0f%%", life.Power * 100), life.Power < 1 ? Warn : White),
+		Stat("CAB AIR", Format("%.2f KG", life.CabReserve), life.CabReserve > 0 ? White : Warn),
+		Stat("CARGO O2", Format("%.1f KG", life.Cargo), White),
+		Stat("CO2", Format("%.0f%%", life.Co2 * 100), co2Color, life.Co2),
+		Stat("POWER", Format("%.0f%%", life.Power * 100), life.Power < 1 ? Warn : White, life.Power),
+		Stat("LIOH SPARES", std::to_string(life.Canisters), life.Canisters > 0 ? White : Bad),
 	};
 	if (life.CalmHands > 0)
-		left.push_back(Line(Format("CALM HANDS %.0fS", std::ceil(life.CalmHands)), Good));
-	left.push_back(Line(Format("LIOH SPARES %d", life.Canisters), life.Canisters > 0 ? White : Bad));
+		left.push_back(Stat("CALM HANDS", Format("%.0fS", std::ceil(life.CalmHands)), Good));
 	if (life.AutoFix)
-		left.push_back(Line("FREE FIX BANKED", Good));
+		left.push_back(Stat("FREE FIX", "BANKED", Good));
 	if (truck.Boost > 0)
-		left.push_back(Line(Format("HYPERDRIVE %.0fS", std::ceil(truck.Boost)), flash ? Good : White));
+		left.push_back(Stat("HYPERDRIVE", Format("%.0fS", std::ceil(truck.Boost)), flash ? Good : White));
 	for (const BlackHole& hole : m_BlackHoles)
 	{
+		const float charge = hole.Charge / std::max(m_Settings.SlingshotTime, 1e-3f);
 		if (!hole.Spent && hole.Charge > 0)
-			left.push_back(Line(Format("SLINGSHOT  %3.0f%%", hole.Charge / std::max(m_Settings.SlingshotTime, 1e-3f) * 100), Warn, hole.Charge / std::max(m_Settings.SlingshotTime, 1e-3f)));
+			left.push_back(Stat("SLINGSHOT", Format("%.0f%%", charge * 100), Warn, charge));
 	}
 	field("left", list(left));
 
 	const int clock = static_cast<int>(std::ceil(life.ColonyTimeLeft));
-	field("clock", Line(Format("COLONY AIR %d:%02d", clock / 60, clock % 60), life.ColonyTimeLeft < 60 && flash ? Bad : White));
+	field("clock", Stat("COLONY AIR", Format("%d:%02d", clock / 60, clock % 60), life.ColonyTimeLeft < 60 ? (flash ? Bad : White) : White));
 	field("right", list({
-		Line(Format("SOLAR WIND %.0f KM/S", m_WindNow), White),
-		Line(Format("STORM KP %.1f", m_KpNow), White),
-		Line(m_Package.WeatherLabel, m_Package.WeatherLabel == "LIVE" ? Good : Warn),
+		Stat("SOLAR WIND", Format("%.0f KM/S", m_WindNow), White),
+		Stat("STORM KP", Format("%.1f", m_KpNow), m_KpNow >= 5 ? Warn : White, std::clamp(m_KpNow / 9, 0.0f, 1.0f)),
+		Stat("FEED", m_Package.WeatherLabel, m_Package.WeatherLabel == "LIVE" ? Good : Warn),
 	}));
 
 	std::vector<std::string> center;
@@ -687,8 +696,8 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 	const float offCourse = std::acos(std::clamp(Vec3::Dot(truck.Travel, toColony.Normalized()), -1.0f, 1.0f)) * RadToDeg;
 	const Color courseColor = offCourse < 10 ? Good : offCourse < 35 ? Warn : Bad;
 	field("progress", Format("%.4f", std::clamp(1 - altitude / m_Route.Length, 0.0f, 1.0f)));
-	field("distance", Line((km >= 1e6f ? Format("%.1f MILLION KM", km / 1e6f) : Format("%.0f KM", km)) + Format("   ETA %d:%02d", eta / 60, eta % 60), White));
-	field("course", Line(Format("OFF COURSE %.0f DEG    SPEED %.2fC", offCourse, truck.Speed * m_Settings.KmPerUnit / 299792.458f), courseColor, std::min(offCourse / 90, 1.0f)));
+	field("distance", Stat(km >= 1e6f ? Format("%.1f MILLION KM", km / 1e6f) : Format("%.0f KM", km), Format("ETA %d:%02d", eta / 60, eta % 60), White));
+	field("course", Stat(Format("%.0f° OFF COURSE", offCourse), Format("%.2fC", truck.Speed * m_Settings.KmPerUnit / 299792.458f), courseColor, std::min(offCourse / 90, 1.0f)));
 
 	// Steering sight: a ring where the windshield faces (the heading), a dot where you look, a line between them.
 	// Pinned to the screen's edge when you look far enough away that the heading leaves the view.
