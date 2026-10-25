@@ -7,7 +7,7 @@ struct OnFootConfigComponent
 {
 	float MoveSpeed = 6;
 	float LookSensitivity = 0.15f; // degrees per pixel the mouse moves
-	float EyeHeight = 1.6f;
+	float EyeHeight = 2.4f; // the same as the cab's, so the view stays level through the hatch
 	float BodyRadius = 0.5f; // keeps walkers, and the camera at their eyes, out of tanks and walls
 	float LaserRange = 60;
 	// Vaporize mode.
@@ -24,11 +24,13 @@ enum class LaserMode : FP::uint8
 	Repair,
 };
 
-// A player's body while they walk, until the real models are in.
-inline const FP::Vec3 WalkerSize{ 0.8f, 1.8f, 0.8f };
+// A player's body while they walk, until the real models are in. Tall enough to hold the eyes, which
+// sit at the cab's eye height so walking through the hatch keeps the view level.
+inline const FP::Vec3 WalkerSize{ 0.8f, 2.6f, 0.8f };
 
 // The bay end of the hatch between a crew's cab and its cargo bay. The cab end is the Driver scene's
-// "CabHatch" entity, which rides along with the cab.
+// "CabHatch" entity, which rides along with the cab. Both are open doorways: the transform sits on the
+// floor at the outside face of the back wall, and its scale is the doorway's size.
 struct BayHatchComponent
 {
 	FP::int32 Crew = 0;

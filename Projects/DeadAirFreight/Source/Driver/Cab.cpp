@@ -1,6 +1,7 @@
 #include "Cab.h"
 
 #include <algorithm>
+#include <cmath>
 
 using namespace FP;
 
@@ -13,11 +14,17 @@ void StepOnFoot(DriverState& driver, Vec2 look, Vec2 moveAxis, const CabBounds& 
 	const Vec3 forward{ -std::sin(yaw), 0, -std::cos(yaw) };
 	const Vec3 right{ std::cos(yaw), 0, -std::sin(yaw) };
 	const Vec3 move = forward * moveAxis.Y + right * moveAxis.X;
+	const bool inDoorway = driver.Position.Z > bounds.Max.Z;
 	if (move.Length() > 0)
 		driver.Position += move.Normalized() * (settings.WalkSpeed * deltaTime);
 
-	driver.Position.X = std::clamp(driver.Position.X, bounds.Min.X, bounds.Max.X);
-	driver.Position.Z = std::clamp(driver.Position.Z, bounds.Min.Z, bounds.Max.Z);
+	// Inside the doorway the walls are its sides.
+	if (inDoorway)
+		driver.Position.X = std::clamp(driver.Position.X, bounds.DoorX - bounds.DoorHalfWidth, bounds.DoorX + bounds.DoorHalfWidth);
+	else
+		driver.Position.X = std::clamp(driver.Position.X, bounds.Min.X, bounds.Max.X);
+	const bool atDoor = std::abs(driver.Position.X - bounds.DoorX) <= bounds.DoorHalfWidth;
+	driver.Position.Z = std::clamp(driver.Position.Z, bounds.Min.Z, atDoor ? bounds.DoorZ : bounds.Max.Z);
 }
 
 bool CanReach(const DriverState& driver, Vec3 point, const DriverSettings& settings)

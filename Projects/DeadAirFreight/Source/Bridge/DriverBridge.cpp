@@ -1,5 +1,6 @@
 #include "Bridge/DriverBridge.h"
 #include "Crew/CrewComponents.h"
+#include "Crew/TransitSystem.h"
 #include "Driver/Cab.h"
 #include "Driver/DriverSystem.h"
 #include "LifeSupport/Cargo.h"
@@ -149,6 +150,8 @@ void DriverLauncherSystem::Update(World& world, float)
 	world.AddSystem<CargoBridgeInSystem>(TruckCrew);
 	link->Driver = world.AddSystem<DriverSystem>(std::move(net));
 	world.AddSystem<CargoBridgeOutSystem>(TruckCrew);
+	// After the Driver's systems, so the hatch's ghosts follow where the cab is this frame.
+	world.AddSystem<TransitSystem>();
 	if (host)
 		SendPackage(world, link->Driver->GetPackage());
 

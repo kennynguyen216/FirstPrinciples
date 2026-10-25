@@ -18,6 +18,11 @@ struct CabBounds
 {
 	FP::Vec3 Min;
 	FP::Vec3 Max;
+	// An open doorway in the back wall: within DoorHalfWidth of DoorX the walker may go past Max.Z
+	// up to DoorZ. A negative width means no doorway.
+	float DoorX = 0;
+	float DoorHalfWidth = -1;
+	float DoorZ = 0;
 };
 
 void StepOnFoot(DriverState& driver, FP::Vec2 look, FP::Vec2 moveAxis, const CabBounds& bounds, const DriverSettings& settings, float deltaTime);

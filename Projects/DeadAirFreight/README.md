@@ -34,8 +34,9 @@ can be tried on one machine.
 Seats are ordered by each peer's random network id, not by join order, so every peer works out the
 same seating without sending anything. They lock when the countdown starts.
 
-Either crewmate can fly or defend: where you stand is your role. A hatch joins the cab and the cargo
-bay; press E at it to climb through, or R at the cab's end to vent the bay through its airlock (the
+Either crewmate can fly or defend: where you stand is your role. An open hatch in each room's back
+wall joins the cab and the cargo bay as if they were back to back: look through it to see the other
+room, walk through it to be there. Press R at the cab's end to vent the bay through its airlock (the
 creatures are dragged out with the air they stole). Seats only pick your crew and where you start.
 
 In the bay: WASD walk, the mouse looks, the left button uses the laser at the speck in the middle of

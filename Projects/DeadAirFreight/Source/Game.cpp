@@ -1,7 +1,6 @@
 #include "Game.h"
 #include "Audio/Sounds.h"
 #include "Crew/OnFootSystem.h"
-#include "Crew/TransitSystem.h"
 #include "Enemies/Airlock.h"
 #include "Enemies/SiphonSystems.h"
 #include "LifeSupport/LifeSupportSystems.h"
@@ -154,8 +153,7 @@ namespace Game
 		world.AddSystem<SiphonSystem>();
 		world.AddSystem<AirlockSystem>();
 		world.AddSystem<OnFootSystem>();
-		world.AddSystem<TransitSystem>();
-		// Starts the Driver's own systems at GO for a seated Driver.
+		// Starts the Driver's own systems at GO for a seated Driver, and the hatch between cab and bay.
 		world.AddSystem<DriverLauncherSystem>();
 		world.AddSystem<LifeSupportReadoutSystem>();
 	}
