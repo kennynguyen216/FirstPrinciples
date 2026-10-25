@@ -5,6 +5,7 @@
 #include "Match/MatchQueries.h"
 #include "Net/GameNet.h"
 
+#include <algorithm>
 #include <cmath>
 #include <string_view>
 
@@ -16,6 +17,11 @@ namespace
 	// The Driver scene's names for the cab hatch and the player's body in the cab.
 	constexpr const char* CabHatchName = "CabHatch";
 	constexpr const char* CabDriverName = "Driver";
+	constexpr const char* VentButtonName = "CabVentButton";
+	// How far short of the cab hatch a shut blast door stops the player.
+	constexpr float SealedDoorMargin = 0.5f;
+	const char* const VentButtonClosed = "Materials/CockpitRed.material";
+	const char* const VentButtonOpen = "Materials/CockpitGreen.material";
 	// The doorways face each other, so out of one is into the other: half a turn about up.
 	const Quat HalfTurn = Quat::AxisAngle({ 0, 1, 0 }, 180);
 
@@ -125,6 +131,8 @@ void TransitSystem::OnStart(World& world)
 	m_CabHatchEntity = FindByName(world, CabHatchName);
 	if (m_CabHatchEntity != NullEntity)
 		m_CabHatch = world.Get<TransformComponent>(m_CabHatchEntity).Position;
+	m_VentButtonEntity = FindByName(world, VentButtonName);
+	m_VentButton = m_VentButtonEntity != NullEntity ? world.Get<TransformComponent>(m_VentButtonEntity).Position : m_CabHatch;
 	// The cab is the Driver's cab parts, named the way DriverSystem finds them.
 	for (auto [entity, name] : world.View<NameComponent>().each())
 	{
@@ -155,7 +163,7 @@ void TransitSystem::Update(World& world, float)
 	const Doorway bayDoor = DoorwayOf(world.Get<TransformComponent>(bayHatch));
 	const Doorway cabSpaceDoor{ m_CabHatch, {} };
 
-	const bool near = !world.Has<OnFootComponent>(body) && cab->InCab && !cab->Seated && FlatDistance(cab->Position, m_CabHatch) <= m_Reach;
+	const bool near = !world.Has<OnFootComponent>(body) && cab->InCab && !cab->Seated && FlatDistance(cab->Position, m_VentButton) <= m_Reach;
 	if (near && !m_NearHatch)
 		FP_LOG("Transit: press R to vent the cargo bay");
 	m_NearHatch = near;
@@ -171,14 +179,21 @@ void TransitSystem::Update(World& world, float)
 		else if (!Airlock::Vent(world, member.Crew))
 			FP_LOG("Airlock: still cycling");
 	}
+	// The button lights green while the airlock is open.
+	if (MaterialComponent* button = m_VentButtonEntity != NullEntity ? world.TryGet<MaterialComponent>(m_VentButtonEntity) : nullptr)
+		button->Material = Airlock::IsOpen(world, member.Crew) ? VentButtonOpen : VentButtonClosed;
 
-	// Both hatches are in their room's back wall (+Z). Past one is the other room.
+	// Both hatches are in their room's back wall (+Z). Past one is the other room, unless the blast
+	// door between them is down, when the cab's doorway is a wall like the bay's.
+	const bool sealed = Airlock::IsSealed(world, member.Crew);
+	if (sealed && !world.Has<OnFootComponent>(body) && cab->InCab && !cab->Seated)
+		cab->Position.Z = std::min(cab->Position.Z, m_CabHatch.Z - SealedDoorMargin);
 	if (world.Has<OnFootComponent>(body))
 	{
-		if (world.Get<TransformComponent>(body).Position.Z > bayDoor.Position.Z)
+		if (!sealed && world.Get<TransformComponent>(body).Position.Z > bayDoor.Position.Z)
 			IntoCab(world, body, member.Crew, *cab, cabSpaceDoor, bayDoor);
 	}
-	else if (cab->InCab && !cab->Seated && cab->Position.Z > m_CabHatch.Z)
+	else if (!sealed && cab->InCab && !cab->Seated && cab->Position.Z > m_CabHatch.Z)
 	{
 		IntoBay(world, body, member.Crew, *cab, cabSpaceDoor, bayDoor);
 	}

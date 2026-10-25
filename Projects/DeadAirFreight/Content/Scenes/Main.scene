@@ -1246,7 +1246,7 @@ entity 3e68d4ad-3365-4678-9ecd-2bba38634da5
 component Name
   Name "CabVentPanel"
 component Transform
-  Position 1.55 -4998.6 5.98
+  Position -1.55 -4998.6 5.98
   Rotation 0 0 0
   Scale 0.6 0.8 0.04
 component Mesh
@@ -1258,7 +1258,7 @@ entity 50ae557b-6b13-4e7e-8ef1-723884b180de
 component Name
   Name "CabVentCage"
 component Transform
-  Position 1.55 -4998.6 5.93
+  Position -1.55 -4998.6 5.93
   Rotation 0 0 0
   Scale 0.42 0.42 0.06
 component Mesh
@@ -1270,7 +1270,7 @@ entity 45650055-20fc-4255-882c-816c51f9d200
 component Name
   Name "CabVentButton"
 component Transform
-  Position 1.55 -4998.6 5.88
+  Position -1.55 -4998.6 5.88
   Rotation 0 0 0
   Scale 0.3 0.3 0.12
 component Mesh
@@ -1563,8 +1563,8 @@ component MatchConfig
   SecondsPerRealDay 10
   ColonyCrewSize 6
   ColonyOxygenDays 30
-  CargoOxygenTanks 14
-  CargoWaterTanks 6
+  CargoOxygenTanks 40
+  CargoWaterTanks 20
   ParTimeSeconds 220
   TimeBonusPerSecond 1
   StatusLogSeconds 5
@@ -1579,8 +1579,8 @@ component LifeSupportConfig
   BoostOxygenKgPerSecond 1.5
   LeakBoostPenalty 0.25
 component TankConfig
-  OxygenTankKg 25
-  WaterTankKg 40
+  OxygenTankKg 8.75
+  WaterTankKg 12
   TankVolumeM3 0.1
   TankTemperatureK 293
   HoleAreaM2 2.5e-05
@@ -1613,7 +1613,7 @@ component SoundCues
   Countdown "Audio/PlaceholderClick.wav"
   Go ""
 component AirlockConfig
-  OpenSeconds 1.2
+  OpenSeconds 3
   PullSpeed 25
   FlushRadius 2
   VentOxygenKg 3
@@ -2016,6 +2016,40 @@ component Mesh
   Mesh "Cube"
 component Material
   Material "Materials/CockpitHull.material"
+
+entity 9d4bcc38-d6ad-49b3-950c-1163c0f7e48c
+component Name
+  Name "Cargo Bay A Blast Door"
+component Transform
+  Position -3000 -2995.5 20.25
+  Rotation 0 0 0
+  Scale 1.7 3 0.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/BlastDoor.material"
+component BlastDoor
+  Crew 0
+  Drop 3
+  CloseSeconds 0.25
+  OpenSeconds 1
+
+entity 4c734a3b-103c-479f-839a-8ee01e1c6feb
+component Name
+  Name "Cargo Bay B Blast Door"
+component Transform
+  Position 3000 -2995.5 20.25
+  Rotation 0 0 0
+  Scale 1.7 3 0.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/BlastDoor.material"
+component BlastDoor
+  Crew 1
+  Drop 3
+  CloseSeconds 0.25
+  OpenSeconds 1
 
 entity a354f1ac-9826-495e-a1e9-3fe95c989ae1
 component Name

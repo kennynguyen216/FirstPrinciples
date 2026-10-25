@@ -41,8 +41,8 @@ struct LifeSupportConfigComponent
 // Tank sizes and leak physics, on the Match entity.
 struct TankConfigComponent
 {
-	float OxygenTankKg = 25;
-	float WaterTankKg = 40;
+	float OxygenTankKg = 8.75f;
+	float WaterTankKg = 12;
 	// Leaks are choked flow of an ideal gas through a hole: the flow is proportional to the tank's
 	// pressure, which at a fixed volume and temperature is proportional to the oxygen left. So a
 	// holed tank loses a fixed fraction per second, faster for bigger holes and smaller tanks.
@@ -52,7 +52,7 @@ struct TankConfigComponent
 	float DischargeCoefficient = 0.62f; // sharp edged orifice
 	// Liquid seeps out at a steady rate per hole.
 	float WaterLeakKgPerSecond = 0.4f;
-	// Grid spacing in the bay.
+	// Tanks have set spots in the bay. These lay out any beyond them, in rows.
 	float Spacing = 3;
 	FP::int32 PerRow = 6;
 };

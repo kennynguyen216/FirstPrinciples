@@ -87,6 +87,12 @@ namespace Game
 		registry.Register<AirlockComponent>("Airlock")
 			.Field("Crew", &AirlockComponent::Crew);
 
+		registry.Register<BlastDoorComponent>("BlastDoor")
+			.Field("Crew", &BlastDoorComponent::Crew)
+			.Field("Drop", &BlastDoorComponent::Drop)
+			.Field("CloseSeconds", &BlastDoorComponent::CloseSeconds)
+			.Field("OpenSeconds", &BlastDoorComponent::OpenSeconds);
+
 		registry.Register<TitleScreenComponent>("TitleScreen")
 			.Field("GamePort", &TitleScreenComponent::GamePort)
 			.Field("DiscoveryPort", &TitleScreenComponent::DiscoveryPort);

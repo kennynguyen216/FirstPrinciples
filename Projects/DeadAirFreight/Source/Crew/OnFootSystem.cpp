@@ -2,6 +2,7 @@
 #include "Audio/Sounds.h"
 #include "Crew/BayActions.h"
 #include "Engine/Physics/Physics.h"
+#include "Enemies/Airlock.h"
 #include "Enemies/SiphonComponents.h"
 #include "LifeSupport/LifeSupportComponents.h"
 #include "Match/MatchQueries.h"
@@ -105,7 +106,8 @@ namespace
 				body.Position.X = std::clamp(body.Position.X, doorX - doorHalfWidth, doorX + doorHalfWidth);
 			else
 				body.Position.X = std::clamp(body.Position.X, room.X - interior.HalfWidth + radius, room.X + interior.HalfWidth - radius);
-			const bool atDoor = std::abs(body.Position.X - doorX) <= doorHalfWidth;
+			// A shut blast door makes the doorway wall too.
+			const bool atDoor = std::abs(body.Position.X - doorX) <= doorHalfWidth && !Airlock::IsSealed(world, onFoot.Crew);
 			body.Position.Z = std::clamp(body.Position.Z, room.Z - interior.HalfLength + radius, atDoor ? hatch->Position.Z + 1 : backZ);
 		}
 
@@ -142,14 +144,27 @@ namespace
 		RaycastHit RayHit;
 	};
 
-	// The first thing the laser meets, through the engine's Jolt world. Skips the shooter.
-	Aim Trace(World& world, const OnFootConfigComponent& config, const TransformComponent& eye, Entity shooter)
+	// The first thing the laser meets, through the engine's Jolt world. Skips the shooter, and Mites
+	// too when asked, since the repair beam has to reach the tank a Mite is sitting on.
+	Aim Trace(World& world, const OnFootConfigComponent& config, const TransformComponent& eye, Entity shooter, bool throughMites = false)
 	{
 		Aim aim;
 		const Vec3 forward = eye.GetForward();
 		aim.Muzzle = eye.Position + eye.GetRight() * MuzzleOffset.X + eye.GetUp() * MuzzleOffset.Y;
 		aim.End = eye.Position + forward * config.LaserRange;
-		aim.Hit = world.GetPhysics().Raycast(eye.Position, forward, config.LaserRange, aim.RayHit, shooter);
+		if (throughMites)
+		{
+			for (const RaycastHit& hit : world.GetPhysics().RaycastAll(eye.Position, forward, config.LaserRange, shooter))
+			{
+				if (world.Has<SiphonComponent>(hit.Entity))
+					continue;
+				aim.Hit = true;
+				aim.RayHit = hit;
+				break;
+			}
+		}
+		else
+			aim.Hit = world.GetPhysics().Raycast(eye.Position, forward, config.LaserRange, aim.RayHit, shooter);
 		if (aim.Hit)
 			aim.End = aim.RayHit.Point;
 		return aim;
@@ -191,7 +206,7 @@ namespace
 
 	void Repair(World& world, const OnFootConfigComponent& config, OnFootComponent& onFoot, const TransformComponent& eye, Entity shooter, float deltaTime)
 	{
-		const Aim aim = Trace(world, config, eye, shooter);
+		const Aim aim = Trace(world, config, eye, shooter, true);
 		const CargoTankComponent* tank = aim.Hit ? world.TryGet<CargoTankComponent>(aim.RayHit.Entity) : nullptr;
 		if (tank && tank->Holes > 0)
 		{

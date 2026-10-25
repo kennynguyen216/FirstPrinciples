@@ -12,9 +12,65 @@ using namespace MatchQueries;
 
 namespace
 {
-	// Tanks stand this tall and wide before the real models arrive. Just under eye height, so the
+	// A pressurized tank 1.2 m across and 2 m tall, domed on top. Just under eye height, so the
 	// Defender can see a Mite perched on any of them.
-	const Vec3 TankScale{ 1.2f, 1.4f, 1.2f };
+	const Vec3 TankScale{ 1.2f, 2.0f, 1.2f };
+	constexpr const char* TankMesh = "Meshes/Tank/Tank.obj";
+
+	// Where tanks stand in the bay, in meters from its middle: x across (the airlock wall is -x),
+	// z along (the hatch is +z). Stowed the way a crew would: packed against both walls between the
+	// ribs, two deep in places, and a few clumps out on the floor. The airlock, the Defender's
+	// start and the walk to the hatch stay clear. Oxygen fills them first, so the oxygen is on the
+	// left and up front, and the water is on the right.
+	constexpr float Wall = 8.95f; // a tank touching the wall, clear of the handrail
+	constexpr float Second = 7.75f; // a tank in front of that one
+	constexpr float Pack = 1.3f; // tanks side by side
+	constexpr float Rise = Pack * 0.866f; // the next row of a tight clump
+	const Vec2 TankSpots[] = {
+		// Left wall, front: two deep.
+		{ -Wall, -16.5f }, { -Wall, -16.5f + Pack }, { -Wall, -16.5f + 2 * Pack }, { -Wall, -16.5f + 3 * Pack },
+		{ -Second, -15.85f }, { -Second, -15.85f + Pack },
+		// Right wall, front: a long row with a second one started.
+		{ Wall, -16.0f }, { Wall, -16.0f + Pack }, { Wall, -16.0f + 2 * Pack }, { Wall, -16.0f + 3 * Pack }, { Wall, -16.0f + 4 * Pack },
+		{ Second, -15.35f }, { Second, -15.35f + Pack },
+		// A round clump on the floor, left of the aisle.
+		{ -2.5f, -9.0f }, { -2.5f + Pack, -9.0f }, { -2.5f - Pack, -9.0f }, { -2.5f + Pack * 0.5f, -9.0f + Rise },
+		{ -2.5f - Pack * 0.5f, -9.0f + Rise }, { -2.5f + Pack * 0.5f, -9.0f - Rise }, { -2.5f - Pack * 0.5f, -9.0f - Rise },
+		// Left wall, behind the airlock: two deep.
+		{ -Wall, 5.0f }, { -Wall, 5.0f + Pack }, { -Wall, 5.0f + 2 * Pack }, { -Wall, 5.0f + 3 * Pack },
+		{ -Second, 5.65f }, { -Second, 5.65f + Pack },
+		// Left wall, ahead of the airlock: a short row.
+		{ -Wall, -8.5f }, { -Wall, -8.5f + Pack }, { -Wall, -8.5f + 2 * Pack },
+		// Left wall, back by the hatch: two deep.
+		{ -Wall, 13.5f }, { -Wall, 13.5f + Pack }, { -Wall, 13.5f + 2 * Pack }, { -Wall, 13.5f + 3 * Pack },
+		{ -Second, 14.15f }, { -Second, 14.15f + Pack },
+		// A loose clump on the open floor up front.
+		{ 2.0f, -14.5f }, { 2.0f + Pack, -14.5f }, { 2.0f + Pack * 0.5f, -14.5f + Rise }, { 2.0f + Pack * 0.5f, -14.5f - Rise },
+		{ 2.0f - Pack * 0.5f, -14.5f - Rise },
+		// Water from here on.
+		// Right wall, middle: two deep.
+		{ Wall, -4.0f }, { Wall, -4.0f + Pack }, { Wall, -4.0f + 2 * Pack }, { Wall, -4.0f + 3 * Pack },
+		{ Second, -3.35f }, { Second, -3.35f + Pack },
+		// Right wall, behind the middle: a short row.
+		{ Wall, 6.0f }, { Wall, 6.0f + Pack }, { Wall, 6.0f + 2 * Pack },
+		// A small clump on the floor, right of the aisle.
+		{ 2.5f, -1.0f }, { 2.5f + Pack, -1.0f }, { 2.5f + Pack * 0.5f, -1.0f + Rise }, { 2.5f + Pack * 0.5f, -1.0f - Rise },
+		// Right wall, back by the hatch: a row with one in front.
+		{ Wall, 12.5f }, { Wall, 12.5f + Pack }, { Wall, 12.5f + 2 * Pack }, { Wall, 12.5f + 3 * Pack },
+		{ Second, 13.15f },
+		// A pair left out on the floor, right of the aisle.
+		{ 4.6f, 4.2f }, { 5.8f, 4.8f },
+	};
+	constexpr int32 TankSpotCount = static_cast<int32>(sizeof(TankSpots) / sizeof(TankSpots[0]));
+
+	// A few centimeters off true, the same on every machine, so the rows do not look ruled.
+	Vec2 Nudge(int32 index)
+	{
+		const uint32 hash = static_cast<uint32>(index + 1) * 2654435761u;
+		const float x = static_cast<float>(hash & 0xFFFF) / 0xFFFF - 0.5f;
+		const float z = static_cast<float>(hash >> 16) / 0xFFFF - 0.5f;
+		return { x * 0.08f, z * 0.08f };
+	}
 
 	bool IsRacing(World& world)
 	{
@@ -67,13 +123,19 @@ void LifeSupportSystem::SpawnTanks(World& world, int32 crew)
 	const TankConfigComponent tanks = Cargo::GetTankConfig(world);
 	const int32 total = match.CargoOxygenTanks + match.CargoWaterTanks;
 	const int32 perRow = std::max(tanks.PerRow, 1);
-	const int32 rows = (total + perRow - 1) / perRow;
 	for (int32 i = 0; i < total; ++i)
 	{
 		const bool oxygen = i < match.CargoOxygenTanks;
-		const int32 column = i % perRow;
-		const int32 row = i / perRow;
-		const Vec3 offset{ (column - (perRow - 1) * 0.5f) * tanks.Spacing, TankScale.Y * 0.5f, (row - (rows - 1) * 0.5f) * tanks.Spacing };
+		Vec2 spot;
+		if (i < TankSpotCount)
+			spot = TankSpots[i] + Nudge(i);
+		else
+		{
+			// More tanks than spots: rows across the open floor at the front.
+			const int32 extra = i - TankSpotCount;
+			spot = { (extra % perRow - (perRow - 1) * 0.5f) * tanks.Spacing, -12.5f + (extra / perRow) * tanks.Spacing };
+		}
+		const Vec3 offset{ spot.X, TankScale.Y * 0.5f, spot.Y };
 
 		const Entity entity = world.CreateEntity(String::Format("Crew %s %s Tank %d", GetCrewName(crew), oxygen ? "Oxygen" : "Water", i + 1));
 		TransformComponent& transform = world.Get<TransformComponent>(entity);
@@ -87,10 +149,10 @@ void LifeSupportSystem::SpawnTanks(World& world, int32 crew)
 		tank.CapacityKg = oxygen ? tanks.OxygenTankKg : tanks.WaterTankKg;
 		tank.AmountKg = tank.CapacityKg;
 
-		world.Add<MeshComponent>(entity).Mesh = "Cube";
+		world.Add<MeshComponent>(entity).Mesh = TankMesh;
 		world.Add<MaterialComponent>(entity).Material = GetTankMaterial(tank);
-		// A solid box the size of the tank, so shots and walkers stop at it.
-		world.Add<ColliderComponent>(entity);
+		// A solid box about the round tank's size, so shots and walkers stop at it.
+		world.Add<ColliderComponent>(entity).Size = { 0.85f, 1, 0.85f };
 	}
 }
 

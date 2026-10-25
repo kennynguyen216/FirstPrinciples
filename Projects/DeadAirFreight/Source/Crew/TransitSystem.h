@@ -31,6 +31,9 @@ private:
 	// The cab hatch in cab space, read from the scene before the cab starts riding the truck.
 	FP::Vec3 m_CabHatch;
 	FP::Entity m_CabHatchEntity = FP::NullEntity;
+	// The airlock button by the hatch, also in cab space. R within reach of it vents the bay.
+	FP::Vec3 m_VentButton;
+	FP::Entity m_VentButtonEntity = FP::NullEntity;
 	std::vector<FP::Entity> m_CabParts;
 	std::unordered_map<FP::Entity, Ghost> m_Ghosts;
 	float m_Reach = 2;

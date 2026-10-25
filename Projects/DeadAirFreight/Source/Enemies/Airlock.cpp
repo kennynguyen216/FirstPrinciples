@@ -50,17 +50,47 @@ namespace Airlock
 		Sounds::Play(world, SoundCue::AirlockVent);
 		return true;
 	}
+
+	bool IsOpen(World& world, int32 crew)
+	{
+		const AirlockComponent* airlock = FindAirlock(world, crew);
+		return airlock && airlock->OpenFor > 0;
+	}
+
+	bool IsSealed(World& world, int32 crew)
+	{
+		for (auto [entity, door] : world.View<BlastDoorComponent>().each())
+		{
+			if (door.Crew == crew && door.Shut > 0)
+				return true;
+		}
+		return false;
+	}
 }
 
 void AirlockSystem::OnStart(World& world)
 {
 	for (auto [entity, airlock] : world.View<AirlockComponent>().each())
 		airlock.OpenFor = airlock.CooldownFor = 0;
+	for (auto [entity, transform, door] : world.View<TransformComponent, BlastDoorComponent>().each())
+	{
+		door.Raised = transform.Position;
+		door.Shut = 0;
+	}
 }
 
 void AirlockSystem::Update(World& world, float deltaTime)
 {
 	const AirlockConfigComponent config = GetConfig(world);
+	// Every machine slides its doors from the airlocks it knows about, which the host keeps in sync.
+	for (auto [entity, transform, door] : world.View<TransformComponent, BlastDoorComponent>().each())
+	{
+		const bool close = Airlock::IsOpen(world, door.Crew);
+		const float seconds = std::max(close ? door.CloseSeconds : door.OpenSeconds, 0.01f);
+		door.Shut = std::clamp(door.Shut + (close ? 1 : -1) * deltaTime / seconds, 0.0f, 1.0f);
+		transform.Position = door.Raised - Vec3{ 0, door.Drop * door.Shut, 0 };
+	}
+
 	for (auto [airlockEntity, door, airlock, material] : world.View<TransformComponent, AirlockComponent, MaterialComponent>().each())
 	{
 		airlock.CooldownFor = std::max(0.0f, airlock.CooldownFor - deltaTime);

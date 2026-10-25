@@ -22,8 +22,8 @@ struct MatchConfigComponent
 	FP::int32 ColonyCrewSize = 6;
 	float ColonyOxygenDays = 30;
 	// Tanks loaded into each truck at the depot.
-	FP::int32 CargoOxygenTanks = 14;
-	FP::int32 CargoWaterTanks = 6;
+	FP::int32 CargoOxygenTanks = 40;
+	FP::int32 CargoWaterTanks = 20;
 	// Score is kilograms delivered plus this per second a crew arrives ahead of par.
 	float ParTimeSeconds = 180;
 	float TimeBonusPerSecond = 1;
