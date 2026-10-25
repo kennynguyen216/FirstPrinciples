@@ -16,9 +16,6 @@ using namespace FP;
 
 namespace
 {
-	// How long the steering sight's line must be, in half screen heights, before the steering sound plays.
-	constexpr float SteerSoundSightLength = 0.15f;
-
 	struct DustComponent
 	{
 	};
@@ -281,17 +278,6 @@ void DriverSystem::Update(World& world, float deltaTime)
 	Sounds::SetLoop(world, LoopSlot::Engine, SoundCue::Engine, !m_Finished && world.GetAudio().GetState(m_BoostVoice) != VoiceState::Playing);
 	Sounds::SetLoop(world, LoopSlot::Scratch, SoundCue::Scratch,
 		!m_Finished && ticket.Active && !ticket.Revealed && !IsBlackedOut(life) && Input::IsMouseDown(MouseButton::Left));
-	// Steering ramps up through its lead-in, then the loop takes over. Letting go winds it down.
-	const bool steerSound = !m_Finished && m_LocalSteering && m_SightLength >= SteerSoundSightLength;
-	if (steerSound && !m_SteerSounding)
-		m_SteerStartVoice = Sounds::Play(world, SoundCue::SteerStart);
-	else if (!steerSound && m_SteerSounding)
-	{
-		world.GetAudio().Stop(m_SteerStartVoice);
-		Sounds::Play(world, SoundCue::SteerStop);
-	}
-	m_SteerSounding = steerSound;
-	Sounds::SetLoop(world, LoopSlot::Steer, SoundCue::Steer, steerSound && world.GetAudio().GetState(m_SteerStartVoice) != VoiceState::Playing);
 	if (driver && driver->InCab)
 	{
 		const bool walking = !driver->Seated && !m_Finished && !IsBlackedOut(life) && Input::GetMoveAxis().LengthSquared() > 0;
@@ -357,7 +343,6 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 	}
 	const bool scratching = ticket.Active && !ticket.Revealed;
 	const bool steering = seated && !scratching && awake;
-	m_LocalSteering = steering;
 	// The host's truck is at the wheel when anyone holds it, here or on another machine. Away from the
 	// host the truck arrives from it, at the wheel or not.
 	if (m_Net.Authority)
@@ -747,14 +732,12 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 
 	// Steering sight: a ring where the windshield faces (the heading), a dot where you look, a line between them.
 	// Pinned to the screen's edge when you look far enough away that the heading leaves the view.
-	m_SightLength = 0;
 	if (seated && m_Settings.NoseTurnRate > 0)
 	{
 		Vec2 nose;
 		if (!ToScreen(*cameraTransform, fieldOfView, aspect, truck.Position + truck.Travel * 1000.0f, nose))
 			nose = nose * (1 / std::max({ std::abs(nose.X), std::abs(nose.Y), 1e-6f }));
 		field("sight", Format("{\"x\":%.3f,\"y\":%.3f}", nose.X, nose.Y));
-		m_SightLength = Vec2{ nose.X * aspect, nose.Y }.Length();
 	}
 
 	// Points at the colony from the screen's edge while it is out of view.

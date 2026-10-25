@@ -318,7 +318,8 @@ void OnFootSystem::Update(World& world, float deltaTime)
 	body.Rotation.Z = 0;
 
 	const bool racing = state->Phase == MatchPhase::Racing;
-	Sounds::SetLoop(world, LoopSlot::Footsteps, SoundCue::Walk, racing && Input::GetMoveAxis().LengthSquared() > 0);
+	const bool sprinting = Input::IsKeyDown(SDL_SCANCODE_LSHIFT);
+	Sounds::SetLoop(world, LoopSlot::Footsteps, sprinting ? SoundCue::Run : SoundCue::Walk, racing && Input::GetMoveAxis().LengthSquared() > 0);
 	if (racing)
 	{
 		const float yaw = body.Rotation.Y * DegToRad;
@@ -328,7 +329,7 @@ void OnFootSystem::Update(World& world, float deltaTime)
 		const Vec3 move = forward * axis.Y + right * axis.X;
 		const Vec3 from = body.Position;
 		if (move.LengthSquared() > 0)
-			body.Position += move.Normalized() * (config.MoveSpeed * deltaTime);
+			body.Position += move.Normalized() * (config.MoveSpeed * (sprinting ? config.SprintScale : 1) * deltaTime);
 		KeepClear(world, onFoot, config.BodyRadius, body, from);
 
 		if (Input::WasKeyPressed(SDL_SCANCODE_Q))

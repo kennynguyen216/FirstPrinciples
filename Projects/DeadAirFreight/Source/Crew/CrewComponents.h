@@ -6,6 +6,7 @@
 struct OnFootConfigComponent
 {
 	float MoveSpeed = 6;
+	float SprintScale = 1.8f; // move speed times this while holding Shift
 	float LookSensitivity = 0.15f; // degrees per pixel the mouse moves
 	float EyeHeight = 2.4f; // the same as the cab's, so the view stays level through the hatch
 	float BodyRadius = 0.5f; // keeps walkers, and the camera at their eyes, out of tanks and walls

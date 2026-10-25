@@ -111,6 +111,7 @@ namespace Game
 
 		registry.Register<OnFootConfigComponent>("OnFootConfig")
 			.Field("MoveSpeed", &OnFootConfigComponent::MoveSpeed)
+			.Field("SprintScale", &OnFootConfigComponent::SprintScale)
 			.Field("LookSensitivity", &OnFootConfigComponent::LookSensitivity)
 			.Field("EyeHeight", &OnFootConfigComponent::EyeHeight)
 			.Field("BodyRadius", &OnFootConfigComponent::BodyRadius)
@@ -160,10 +161,7 @@ namespace Game
 			.Field("Scratch", &SoundCuesComponent::Scratch).AssetPath(wav)
 			.Field("TicketPull", &SoundCuesComponent::TicketPull).AssetPath(wav)
 			.Field("TicketWin", &SoundCuesComponent::TicketWin).AssetPath(wav)
-			.Field("TicketDud", &SoundCuesComponent::TicketDud).AssetPath(wav)
-			.Field("Steer", &SoundCuesComponent::Steer).AssetPath(wav)
-			.Field("SteerStart", &SoundCuesComponent::SteerStart).AssetPath(wav)
-			.Field("SteerStop", &SoundCuesComponent::SteerStop).AssetPath(wav);
+			.Field("TicketDud", &SoundCuesComponent::TicketDud).AssetPath(wav);
 	}
 
 	void AddSystems(World& world)
