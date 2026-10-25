@@ -94,7 +94,7 @@ component DirectionalLight
   Color 1 0.95 0.85 1
   Intensity 2
 
-entity 38899efd-5ab4-4418-84ee-3b2f23ab4f23
+entity eca7aad1-7ba3-4355-b28a-8edfb23b9f5c
 component Name
   Name "CabFloor"
 component Transform
@@ -104,9 +104,21 @@ component Transform
 component Mesh
   Mesh "Plane"
 component Material
-  Material "Materials/Plastic.material"
+  Material "Materials/CockpitFloor.material"
 
-entity f2803974-3bee-4257-a3b5-e5c1ab4195f5
+entity aa41664b-c7ca-49fc-9871-ecb7ef062e1b
+component Name
+  Name "CabRoof"
+component Transform
+  Position 0 -4995.9 0
+  Rotation 0 0 0
+  Scale 8.4 0.2 12.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 9137d974-f1be-49ce-9b42-212a6fe54c70
 component Name
   Name "CabWallLeft"
 component Transform
@@ -116,9 +128,9 @@ component Transform
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/Plastic.material"
+  Material "Materials/CockpitHull.material"
 
-entity 6b9fa0a5-8427-4d60-b7f3-0c54c6f2b5d7
+entity da63c83a-95b5-469b-a723-f1aebd71b5b7
 component Name
   Name "CabWallLeftTop"
 component Transform
@@ -128,9 +140,9 @@ component Transform
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/Plastic.material"
+  Material "Materials/CockpitHull.material"
 
-entity 9dd11169-704d-48b5-86f4-4a28ecf6178c
+entity 0b293aa2-56a7-4063-80b1-b0afcf7a818f
 component Name
   Name "CabWallLeftBack"
 component Transform
@@ -140,9 +152,9 @@ component Transform
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/Plastic.material"
+  Material "Materials/CockpitHull.material"
 
-entity d6f84fc6-ea62-4caf-836c-9967e714db4d
+entity dbe34ef8-0e74-431b-84c5-8897b927bb66
 component Name
   Name "CabWindowLeft"
 component Transform
@@ -154,7 +166,55 @@ component Mesh
 component Material
   Material "Materials/Windshield.material"
 
-entity bcaf6ff6-cfb9-4822-ab56-cfed4c86a4a0
+entity 3f5b831c-f0e5-4708-b8c0-a709ecc364a1
+component Name
+  Name "CabAPillarLeft"
+component Transform
+  Position -4.0508 -4997.5 -6
+  Rotation 0 0 0
+  Scale 0.3 2.6 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 814a6790-261d-496d-9956-641f6e5d78fc
+component Name
+  Name "CabSideMirrorArmLeft"
+component Transform
+  Position -4.4 -4997.6 -5
+  Rotation 0 0 0
+  Scale 0.5 0.06 0.06
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitChrome.material"
+
+entity a62a0032-c538-4748-bc97-09fd69017f76
+component Name
+  Name "CabSideMirrorLeft"
+component Transform
+  Position -4.7 -4997.6 -5
+  Rotation 0 0 0
+  Scale 0.15 1 0.45
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 91d17d97-3b91-4b8e-8ba6-c5e355f593ee
+component Name
+  Name "CabSideMirrorGlassLeft"
+component Transform
+  Position -4.7 -4997.6 -4.77
+  Rotation 0 0 0
+  Scale 0.1 0.9 0.02
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitMirror.material"
+
+entity 2a35d672-49bd-4856-b573-654dc4312fb8
 component Name
   Name "CabWallRight"
 component Transform
@@ -164,9 +224,9 @@ component Transform
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/Plastic.material"
+  Material "Materials/CockpitHull.material"
 
-entity 2eba3cc9-3a5b-4ecc-afa3-5fc1e7dcffe7
+entity 3d636e0c-f866-4ddd-95ee-082c5f82585e
 component Name
   Name "CabWallRightTop"
 component Transform
@@ -176,9 +236,9 @@ component Transform
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/Plastic.material"
+  Material "Materials/CockpitHull.material"
 
-entity 9086ea9c-0a7b-4c5e-a371-5ddf40910887
+entity 13354d55-9561-4938-a94b-b36a4fcdc8e4
 component Name
   Name "CabWallRightBack"
 component Transform
@@ -188,9 +248,9 @@ component Transform
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/Plastic.material"
+  Material "Materials/CockpitHull.material"
 
-entity cc50ad78-e944-431d-8c41-21a2a4ad4c1b
+entity a8d138f6-a08f-4deb-908f-4e6e6e733d9a
 component Name
   Name "CabWindowRight"
 component Transform
@@ -202,7 +262,55 @@ component Mesh
 component Material
   Material "Materials/Windshield.material"
 
-entity 95f69f6e-20c7-41a2-8875-5eb62cb87f22
+entity fe2aa2b4-0226-49cc-96c4-a07370725a72
+component Name
+  Name "CabAPillarRight"
+component Transform
+  Position 4.0508 -4997.5 -6
+  Rotation 0 0 0
+  Scale 0.3 2.6 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 6c838aa1-0a50-47ca-97b6-592d24c59b69
+component Name
+  Name "CabSideMirrorArmRight"
+component Transform
+  Position 4.4 -4997.6 -5
+  Rotation 0 0 0
+  Scale 0.5 0.06 0.06
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitChrome.material"
+
+entity 56f566cc-6ac9-4128-a79e-462aafab29b4
+component Name
+  Name "CabSideMirrorRight"
+component Transform
+  Position 4.7 -4997.6 -5
+  Rotation 0 0 0
+  Scale 0.15 1 0.45
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity fced49e9-95ad-43d9-8447-119cdb8d656d
+component Name
+  Name "CabSideMirrorGlassRight"
+component Transform
+  Position 4.7 -4997.6 -4.77
+  Rotation 0 0 0
+  Scale 0.1 0.9 0.02
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitMirror.material"
+
+entity 6ee667b8-4b9d-4620-a361-116060a83cb1
 component Name
   Name "CabWallBack"
 component Transform
@@ -212,57 +320,1209 @@ component Transform
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/Plastic.material"
+  Material "Materials/CockpitHull.material"
 
-entity 565a6181-de90-4ade-b8a9-72ed20af35c2
+entity b3f11c0a-a248-4b32-9641-a421b00369c3
 component Name
-  Name "CabWindshield"
+  Name "CabWallFront"
 component Transform
-  Position 0 -4998 -6.1
+  Position 0 -4999.4 -6.1
   Rotation 0 0 0
-  Scale 8.4 4 0.2
+  Scale 8.4 1.2 0.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 39285515-b8b4-445f-8120-4237531bfe17
+component Name
+  Name "CabWindshieldLeft"
+component Transform
+  Position -2.05 -4997.5 -6.1
+  Rotation 0 0 0
+  Scale 4 2.6 0.1
 component Mesh
   Mesh "Cube"
 component Material
   Material "Materials/Windshield.material"
 
-entity 1d0a1a06-bd5b-41e1-acc1-b936fb2423c7
+entity 9b666f0b-5f38-4c19-9206-444345318dc8
 component Name
-  Name "CabConsole"
+  Name "CabWindshieldRight"
 component Transform
-  Position 0 -4999.5 -5.3
+  Position 2.05 -4997.5 -6.1
   Rotation 0 0 0
-  Scale 6 1 1.2
+  Scale 4 2.6 0.1
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/Gold.material"
+  Material "Materials/Windshield.material"
 
-entity c07e2c6c-5d11-4125-99c1-c91d68693178
+entity 0332483c-853d-4f9c-a8bb-e6ce13be27bb
 component Name
-  Name "Wheel"
+  Name "CabWindshieldPillar"
 component Transform
-  Position 0 -4998.7 -4.6
-  Rotation -35 0 0
-  Scale 0.9 0.9 0.12
+  Position 0 -4997.5 -6.05
+  Rotation 0 0 0
+  Scale 0.18 2.6 0.3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 0b12c9eb-94b6-4be2-865c-8e70a089b2ac
+component Name
+  Name "CabWindshieldHeader"
+component Transform
+  Position 0 -4996.1 -6.1
+  Rotation 0 0 0
+  Scale 8.4 0.2 0.25
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 8c0ceab4-08bd-4072-a90a-287a5f5214f0
+component Name
+  Name "CabDash"
+component Transform
+  Position 0 -4999.4 -5.4
+  Rotation 0 0 0
+  Scale 8 1.2 1.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity 01ddd5ad-8c8c-406e-be63-a35fab872393
+component Name
+  Name "CabDashStripe"
+component Transform
+  Position 0 -4998.79 -4.82
+  Rotation 0 0 0
+  Scale 8 0.02 0.06
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 4c097672-94b2-4ce8-afe6-7a566f403b2f
+component Name
+  Name "CabGaugePod"
+component Transform
+  Position -1.8 -4998.55 -5.15
+  Rotation 0 0 0
+  Scale 2 0.6 0.3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity bcbf776b-23d7-43b9-8797-9c2788ed0c3f
+component Name
+  Name "CabGaugeHood"
+component Transform
+  Position -1.8 -4998.21 -5.05
+  Rotation 0 0 0
+  Scale 2.1 0.08 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity 2baf37fb-0a7d-40ba-98d6-03514096d51e
+component Name
+  Name "CabGauge1"
+component Transform
+  Position -2.45 -4998.55 -4.97
+  Rotation 0 0 0
+  Scale 0.3 0.3 0.04
 component Mesh
   Mesh "Sphere"
 component Material
-  Material "Materials/Gold.material"
+  Material "Materials/CockpitAmber.material"
 
-entity 06646036-efa4-4e6f-8306-4bb99df05aa3
+entity 86e0e22d-f6a4-4363-99c8-417ae01ae085
 component Name
-  Name "CabSeat"
+  Name "CabGauge2"
 component Transform
-  Position 0 -4999.6 -3.4
+  Position -2 -4998.55 -4.97
   Rotation 0 0 0
-  Scale 1 0.8 1
+  Scale 0.42 0.42 0.04
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/CockpitScreen.material"
+
+entity 2a726332-c2b2-45c4-ad61-fa5068100562
+component Name
+  Name "CabGauge3"
+component Transform
+  Position -1.55 -4998.55 -4.97
+  Rotation 0 0 0
+  Scale 0.42 0.42 0.04
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/CockpitScreen.material"
+
+entity f4c102e4-3f5b-4b73-840d-04c99294a297
+component Name
+  Name "CabGauge4"
+component Transform
+  Position -1.12 -4998.55 -4.97
+  Rotation 0 0 0
+  Scale 0.3 0.3 0.04
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/CockpitAmber.material"
+
+entity aa16c8a2-f9ef-4ea3-8fa1-b4a63e1db47c
+component Name
+  Name "CabCenterStack"
+component Transform
+  Position 0.3 -4998.6 -5.2
+  Rotation 0 0 0
+  Scale 1.8 0.5 0.2
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/Plastic.material"
+  Material "Materials/CockpitTrim.material"
 
-entity 3b182f8f-a2b7-48c3-bc15-21d5a7313d31
+entity 282c0be6-c978-4825-914e-80bff772086d
+component Name
+  Name "CabNavScreen"
+component Transform
+  Position 0.3 -4998.6 -5.09
+  Rotation 0 0 0
+  Scale 1.5 0.38 0.02
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitScreen.material"
+
+entity d0e04155-3742-44a4-9a26-023a29d69124
+component Name
+  Name "CabRadarHousing"
+component Transform
+  Position 1.9 -4998.6 -5.2
+  Rotation 0 0 0
+  Scale 0.6 0.6 0.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity 683e38f7-d892-4606-9b87-c5fe186b9f4a
+component Name
+  Name "CabRadarScreen"
+component Transform
+  Position 1.9 -4998.6 -5.09
+  Rotation 0 0 0
+  Scale 0.48 0.48 0.03
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/CockpitGreen.material"
+
+entity 84666aa4-d0d2-4b04-ab13-7689e065dd5f
+component Name
+  Name "CabSwitch1"
+component Transform
+  Position 0.9 -4998.75 -4.95
+  Rotation 0 0 0
+  Scale 0.08 0.08 0.08
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitRed.material"
+
+entity f3c95d97-aa57-4408-a6c3-566eff8bb3a2
+component Name
+  Name "CabSwitch2"
+component Transform
+  Position 1.3 -4998.75 -4.95
+  Rotation 0 0 0
+  Scale 0.08 0.08 0.08
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitGreen.material"
+
+entity e0a0b0ac-c26e-40df-ab89-301dd7c0aa80
+component Name
+  Name "CabSwitch3"
+component Transform
+  Position 1.7 -4998.75 -4.95
+  Rotation 0 0 0
+  Scale 0.08 0.08 0.08
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitGreen.material"
+
+entity 43859613-90b0-4f8a-9164-007244e16b61
+component Name
+  Name "CabSwitch4"
+component Transform
+  Position 2.1 -4998.75 -4.95
+  Rotation 0 0 0
+  Scale 0.08 0.08 0.08
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitAmber.material"
+
+entity 17d0222f-3b7d-4d77-8cb1-df5a75666d18
+component Name
+  Name "CabSwitch5"
+component Transform
+  Position 2.5 -4998.75 -4.95
+  Rotation 0 0 0
+  Scale 0.08 0.08 0.08
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitRed.material"
+
+entity ff359019-108c-4f1c-820c-09f05dadcf73
+component Name
+  Name "CabSwitch6"
+component Transform
+  Position 2.9 -4998.75 -4.95
+  Rotation 0 0 0
+  Scale 0.08 0.08 0.08
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitGreen.material"
+
+entity 5be450f9-a213-4fac-8c30-bb0f86ff20da
+component Name
+  Name "CabClipboard"
+component Transform
+  Position 2.9 -4998.78 -5.5
+  Rotation 0 20 0
+  Scale 0.45 0.02 0.6
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitPaper.material"
+
+entity 054340e2-49b3-4798-ad24-43d0d1ba439b
+component Name
+  Name "CabAlienBody"
+component Transform
+  Position -3.3 -4998.65 -5.5
+  Rotation 0 0 0
+  Scale 0.16 0.25 0.16
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/CockpitAlien.material"
+
+entity b8999869-c976-4853-99cc-b25e862f6253
+component Name
+  Name "CabAlienHead"
+component Transform
+  Position -3.3 -4998.42 -5.5
+  Rotation 0 0 0
+  Scale 0.28 0.24 0.24
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/CockpitAlien.material"
+
+entity fa70a774-95b1-4454-a853-2d38f094e89c
+component Name
+  Name "Wheel"
+component Transform
+  Position -1.8 -4998.9 -4.55
+  Rotation -55 0 0
+  Scale 0.95 0.95 0.08
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity fb906069-c3bd-4956-95b4-73e9c65bf44d
+component Name
+  Name "CabWheelHub"
+component Transform
+  Position -1.8 -4998.9 -4.55
+  Rotation -55 0 0
+  Scale 0.3 0.3 0.14
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/CockpitChrome.material"
+
+entity d67840b2-cccd-4b72-8ef6-14d25f807aa8
+component Name
+  Name "CabWheelColumn"
+component Transform
+  Position -1.8 -4999.19 -4.75
+  Rotation -55 0 0
+  Scale 0.14 0.14 0.6
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity b521cd4f-2915-46de-b705-675e574b6a29
+component Name
+  Name "CabFloorMat"
+component Transform
+  Position -1.8 -4999.99 -4.2
+  Rotation 0 0 0
+  Scale 1.4 0.02 1.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity 45226aab-9158-490b-b1ec-151c8aa2aae5
+component Name
+  Name "CabSeat"
+component Transform
+  Position -1.8 -4999.38 -3.4
+  Rotation 0 0 0
+  Scale 1 0.3 1
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitLeather.material"
+
+entity e2ed89f7-c3d5-474b-a380-2cf167c9d2ee
+component Name
+  Name "CabSeatBase"
+component Transform
+  Position -1.8 -4999.76 -3.4
+  Rotation 0 0 0
+  Scale 0.45 0.48 0.45
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity f3fdd7a8-dd25-4a90-9dd0-e571dbb39f46
+component Name
+  Name "CabSeatBack"
+component Transform
+  Position -1.8 -4998.55 -2.85
+  Rotation 8 0 0
+  Scale 1 1.4 0.22
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitLeather.material"
+
+entity 3f76a008-27fa-4e97-8382-3ee156f51df2
+component Name
+  Name "CabSeatHeadrest"
+component Transform
+  Position -1.8 -4997.65 -2.75
+  Rotation 8 0 0
+  Scale 0.6 0.35 0.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitLeather.material"
+
+entity e202c1b5-bdd7-4385-97fe-75d855845442
+component Name
+  Name "CabSeatArmLeft"
+component Transform
+  Position -2.35 -4999.05 -3.3
+  Rotation 0 0 0
+  Scale 0.1 0.08 0.7
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitLeather.material"
+
+entity dde608fc-613b-429a-8da7-99ce1889bba6
+component Name
+  Name "CabSeatArmRight"
+component Transform
+  Position -1.25 -4999.05 -3.3
+  Rotation 0 0 0
+  Scale 0.1 0.08 0.7
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitLeather.material"
+
+entity c34c4d17-adfa-43d4-97b2-a4a29dd52660
+component Name
+  Name "CabSeatHarnessLeft"
+component Transform
+  Position -2.05 -4998.5 -2.97
+  Rotation 8 0 0
+  Scale 0.1 1.1 0.02
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitOrange.material"
+
+entity b4eaf862-bc59-4086-ad8d-883cad4c8f5c
+component Name
+  Name "CabSeatHarnessRight"
+component Transform
+  Position -1.55 -4998.5 -2.97
+  Rotation 8 0 0
+  Scale 0.1 1.1 0.02
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitOrange.material"
+
+entity 43a742da-966c-4e7b-bb63-5de78566dce2
+component Name
+  Name "CabPassengerSeat"
+component Transform
+  Position 1.8 -4999.38 -3.4
+  Rotation 0 0 0
+  Scale 1 0.3 1
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitLeather.material"
+
+entity 95dca17f-64c4-46de-a70b-e7129ce3866f
+component Name
+  Name "CabPassengerSeatBase"
+component Transform
+  Position 1.8 -4999.76 -3.4
+  Rotation 0 0 0
+  Scale 0.45 0.48 0.45
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity b7895ebc-6e4f-422b-83a3-8c41fea65ea5
+component Name
+  Name "CabPassengerSeatBack"
+component Transform
+  Position 1.8 -4998.55 -2.85
+  Rotation 8 0 0
+  Scale 1 1.4 0.22
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitLeather.material"
+
+entity 76e4ede8-ab4d-4242-91ba-939d44f5baed
+component Name
+  Name "CabPassengerSeatHeadrest"
+component Transform
+  Position 1.8 -4997.65 -2.75
+  Rotation 8 0 0
+  Scale 0.6 0.35 0.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitLeather.material"
+
+entity 486683f1-ed5b-4188-9a39-3c7ca0c70f17
+component Name
+  Name "CabPassengerSeatArmLeft"
+component Transform
+  Position 1.25 -4999.05 -3.3
+  Rotation 0 0 0
+  Scale 0.1 0.08 0.7
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitLeather.material"
+
+entity ddbc4a38-951b-4b80-b570-9d8fd96b4ffd
+component Name
+  Name "CabPassengerSeatArmRight"
+component Transform
+  Position 2.35 -4999.05 -3.3
+  Rotation 0 0 0
+  Scale 0.1 0.08 0.7
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitLeather.material"
+
+entity 0cbe0adb-a7d3-480b-89bd-1d61a87690d7
+component Name
+  Name "CabCenterConsole"
+component Transform
+  Position 0 -4999.65 -3.9
+  Rotation 0 0 0
+  Scale 0.8 0.7 1.6
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity f811aab0-a35e-4e99-b246-0a011996d88a
+component Name
+  Name "CabShifter"
+component Transform
+  Position 0 -4999 -3.7
+  Rotation 15 0 0
+  Scale 0.05 0.6 0.05
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitChrome.material"
+
+entity 5df344ea-b86d-4128-bf96-373857c43c61
+component Name
+  Name "CabShifterKnob"
+component Transform
+  Position 0 -4998.7 -3.62
+  Rotation 0 0 0
+  Scale 0.16 0.16 0.16
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/CockpitRed.material"
+
+entity 633c0fce-13a7-4b64-9206-5c21c3ffeccc
+component Name
+  Name "CabCoffeeBulb"
+component Transform
+  Position 0.22 -4999.2 -4.35
+  Rotation 0 0 0
+  Scale 0.16 0.18 0.16
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/CockpitPaper.material"
+
+entity 8c84cf17-0564-49b8-850c-300fbeccabfd
+component Name
+  Name "CabCoffeeStraw"
+component Transform
+  Position 0.22 -4999.05 -4.35
+  Rotation 0 0 0
+  Scale 0.02 0.14 0.02
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitOrange.material"
+
+entity 87fb5f83-e34b-44e0-a7a6-1f7702fac259
+component Name
+  Name "CabOverheadConsole"
+component Transform
+  Position -1 -4996.15 -4.8
+  Rotation 0 0 0
+  Scale 3.6 0.3 1.6
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity 838de049-1ac6-4c5c-902e-5a943a33f8d5
+component Name
+  Name "CabOverheadLight1"
+component Transform
+  Position -2.4 -4996.31 -4.4
+  Rotation 0 0 0
+  Scale 0.12 0.04 0.12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitRed.material"
+
+entity 0b3c12e8-c495-4ec0-9dbc-3c76c9382ae7
+component Name
+  Name "CabOverheadLight2"
+component Transform
+  Position -1.85 -4996.31 -4.4
+  Rotation 0 0 0
+  Scale 0.12 0.04 0.12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitGreen.material"
+
+entity cb0c3d0e-ded5-4d56-8586-7ff2af5045d2
+component Name
+  Name "CabOverheadLight3"
+component Transform
+  Position -1.3 -4996.31 -4.4
+  Rotation 0 0 0
+  Scale 0.12 0.04 0.12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitAmber.material"
+
+entity ae3173ae-6918-4952-91f4-0c1e09d1ae75
+component Name
+  Name "CabOverheadLight4"
+component Transform
+  Position -0.75 -4996.31 -4.4
+  Rotation 0 0 0
+  Scale 0.12 0.04 0.12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitGreen.material"
+
+entity dc2be783-e358-4df3-883a-a6c12d1965a1
+component Name
+  Name "CabOverheadLight5"
+component Transform
+  Position -0.2 -4996.31 -4.4
+  Rotation 0 0 0
+  Scale 0.12 0.04 0.12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitRed.material"
+
+entity 43faf4aa-93e7-483b-8dd0-f9c18fc8aa92
+component Name
+  Name "CabRadio"
+component Transform
+  Position 1.9 -4996.18 -4.5
+  Rotation 0 0 0
+  Scale 1 0.3 0.7
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity adea5c68-756b-418f-beba-7a088df2533d
+component Name
+  Name "CabRadioDisplay"
+component Transform
+  Position 1.9 -4996.18 -4.14
+  Rotation 0 0 0
+  Scale 0.6 0.1 0.02
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitGreen.material"
+
+entity 3efb81e7-2ae3-422b-9218-f99927375827
+component Name
+  Name "CabRadioMic"
+component Transform
+  Position 2.5 -4996.5 -4.15
+  Rotation 0 0 0
+  Scale 0.12 0.2 0.1
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity 48bda1da-763a-4d7a-9349-b519bd8e9566
+component Name
+  Name "CabSunVisor"
+component Transform
+  Position -1.8 -4996.15 -5.75
+  Rotation 10 0 0
+  Scale 1.6 0.05 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity beb89070-6ef1-4065-aa9e-44720157d5ea
+component Name
+  Name "CabMirror"
+component Transform
+  Position 0 -4996.45 -5.8
+  Rotation 0 0 0
+  Scale 1 0.28 0.08
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity 8c6ccbb8-ee47-4698-a0c8-5fd3f12972bb
+component Name
+  Name "CabMirrorGlass"
+component Transform
+  Position 0 -4996.45 -5.75
+  Rotation 0 0 0
+  Scale 0.92 0.2 0.02
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitMirror.material"
+
+entity 3acfbc6e-dc1f-41ab-b67d-5203e342d5e1
+component Name
+  Name "CabDiceAString"
+component Transform
+  Position -0.1 -4996.68 -5.78
+  Rotation 0 0 0
+  Scale 0.01 0.3 0.01
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity b1422bd5-94bc-4e70-b138-aaad9cf00d06
+component Name
+  Name "CabDiceA"
+component Transform
+  Position -0.1 -4996.9 -5.78
+  Rotation 25 35 10
+  Scale 0.14 0.14 0.14
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitFuzz.material"
+
+entity 0bb046df-99f7-41d1-9246-f624687799da
+component Name
+  Name "CabDiceBString"
+component Transform
+  Position 0.12 -4996.64 -5.78
+  Rotation 0 0 0
+  Scale 0.01 0.3 0.01
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity 2fe68b1c-7ddb-404d-88c4-4577cfe6ad15
+component Name
+  Name "CabDiceB"
+component Transform
+  Position 0.12 -4996.86 -5.78
+  Rotation -20 50 15
+  Scale 0.14 0.14 0.14
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitFuzz.material"
+
+entity bf606fb9-762b-421c-9cf4-662d92b296d0
+component Name
+  Name "CabHandrailLeft"
+component Transform
+  Position -2.2 -4996.25 0.5
+  Rotation 0 0 0
+  Scale 0.07 0.07 9
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity c9fb80dc-0dec-40a6-aaaa-895f52d9391d
+component Name
+  Name "CabHandrailRight"
+component Transform
+  Position 2.2 -4996.25 0.5
+  Rotation 0 0 0
+  Scale 0.07 0.07 9
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 63c0329b-c98f-4009-a033-59d495db8c46
+component Name
+  Name "CabCeilingLamp"
+component Transform
+  Position 0 -4996.01 -1
+  Rotation 0 0 0
+  Scale 0.25 0.03 3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitLamp.material"
+
+entity a62b4538-157f-4fe8-af20-499dd77f0de2
+component Name
+  Name "CabCeilingLampBack"
+component Transform
+  Position 0 -4996.01 3.2
+  Rotation 0 0 0
+  Scale 0.25 0.03 2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitLamp.material"
+
+entity c6e773d3-a8f2-49f1-b15c-27a8a72d6a93
+component Name
+  Name "CabHatch"
+component Transform
+  Position 0 -4998.85 5.95
+  Rotation 0 0 0
+  Scale 1.5 2.3 0.1
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Hatch.material"
+
+entity 85db65b4-7c43-4712-a755-c6dc87ec20b9
+component Name
+  Name "CabHatchPostLeft"
+component Transform
+  Position -0.95 -4998.75 5.9
+  Rotation 0 0 0
+  Scale 0.3 2.5 0.25
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 369b5cc1-b116-47c4-8d27-4a9f519c2e8b
+component Name
+  Name "CabHatchPostRight"
+component Transform
+  Position 0.95 -4998.75 5.9
+  Rotation 0 0 0
+  Scale 0.3 2.5 0.25
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity a94f9919-b6e9-4828-ac5d-e63316ffb520
+component Name
+  Name "CabHatchLintel"
+component Transform
+  Position 0 -4997.4 5.9
+  Rotation 0 0 0
+  Scale 2.2 0.3 0.25
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 0214f5ee-84b4-4308-892d-2a43dddbeff4
+component Name
+  Name "CabHatchSign"
+component Transform
+  Position 0 -4997 5.98
+  Rotation 0 0 0
+  Scale 1.4 0.3 0.04
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitAmber.material"
+
+entity 79b25cc6-8eed-437c-835d-618b0dc67e21
+component Name
+  Name "CabHatchPort"
+component Transform
+  Position 0 -4998.25 5.88
+  Rotation 0 0 0
+  Scale 0.5 0.5 0.04
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity f86a8ffc-467a-4ed9-9aa7-f59cae190547
+component Name
+  Name "CabHatchPortGlow"
+component Transform
+  Position 0 -4998.25 5.86
+  Rotation 0 0 0
+  Scale 0.38 0.38 0.02
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/CockpitScreen.material"
+
+entity 90a1ca1d-81e9-4334-b86c-4e1d28ba97de
+component Name
+  Name "CabHatchWheel"
+component Transform
+  Position 0 -4998.95 5.86
+  Rotation 0 0 0
+  Scale 0.6 0.6 0.06
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/CockpitChrome.material"
+
+entity 0dca165b-8441-42d3-899c-411019d7b446
+component Name
+  Name "CabHatchStep"
+component Transform
+  Position 0 -4999.95 5.6
+  Rotation 0 0 0
+  Scale 1.6 0.1 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 3e68d4ad-3365-4678-9ecd-2bba38634da5
+component Name
+  Name "CabVentPanel"
+component Transform
+  Position 1.55 -4998.6 5.98
+  Rotation 0 0 0
+  Scale 0.6 0.8 0.04
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 50ae557b-6b13-4e7e-8ef1-723884b180de
+component Name
+  Name "CabVentCage"
+component Transform
+  Position 1.55 -4998.6 5.93
+  Rotation 0 0 0
+  Scale 0.42 0.42 0.06
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity 45650055-20fc-4255-882c-816c51f9d200
+component Name
+  Name "CabVentButton"
+component Transform
+  Position 1.55 -4998.6 5.88
+  Rotation 0 0 0
+  Scale 0.3 0.3 0.12
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/CockpitRed.material"
+
+entity 67cfd197-ad93-4121-9193-ca28b79e8a79
+component Name
+  Name "CabWalkway"
+component Transform
+  Position 0 -4999.99 2
+  Rotation 0 0 0
+  Scale 1.4 0.02 7
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity 11bfd5e8-295b-4778-86e7-ed2d65584f39
+component Name
+  Name "CabWalkwayLeft"
+component Transform
+  Position -0.75 -4999.98 2
+  Rotation 0 0 0
+  Scale 0.08 0.02 7
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity c63c3c42-36f5-43b4-aafa-f06ff21ee50d
+component Name
+  Name "CabWalkwayRight"
+component Transform
+  Position 0.75 -4999.98 2
+  Rotation 0 0 0
+  Scale 0.08 0.02 7
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 93e697ea-91c6-4436-89c2-8fce62edec08
+component Name
+  Name "CabSuitRack"
+component Transform
+  Position -3.85 -4998 2.2
+  Rotation 0 0 0
+  Scale 0.15 3.6 1.6
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 609f57e6-579b-4a9f-9af5-531dd896be81
+component Name
+  Name "CabSuitBody"
+component Transform
+  Position -3.5 -4998.3 2.2
+  Rotation 0 0 0
+  Scale 0.6 1.4 0.9
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitPaper.material"
+
+entity ae121e42-3d2b-44af-a283-1c27848451f4
+component Name
+  Name "CabSuitHelmet"
+component Transform
+  Position -3.5 -4997.25 2.2
+  Rotation 0 0 0
+  Scale 0.7 0.7 0.7
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/CockpitPaper.material"
+
+entity ce1e7898-cb59-4889-b315-1f0c940fb9d5
+component Name
+  Name "CabSuitVisor"
+component Transform
+  Position -3.18 -4997.25 2.2
+  Rotation 0 0 0
+  Scale 0.08 0.4 0.5
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/CockpitAmber.material"
+
+entity 7ab7f819-205d-4ed6-a68a-b6a3a889efb4
+component Name
+  Name "CabSuitStripe"
+component Transform
+  Position -3.5 -4998.1 2.2
+  Rotation 0 0 0
+  Scale 0.62 0.12 0.92
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitOrange.material"
+
+entity a04f0495-c80f-40d7-b8bc-7307c1dddb86
+component Name
+  Name "CabSpareTank1"
+component Transform
+  Position -3.5 -4999.1 4.6
+  Rotation 0 0 0
+  Scale 0.5 1.8 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/TankOxygen.material"
+
+entity a7f82fdf-d48a-4272-a10e-2162acd2cac0
+component Name
+  Name "CabSpareTankCap1"
+component Transform
+  Position -3.5 -4998.2 4.6
+  Rotation 0 0 0
+  Scale 0.5 0.5 0.5
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/TankOxygen.material"
+
+entity f97595a2-b75c-4ff8-abfe-e9d7de9c6c94
+component Name
+  Name "CabSpareTank2"
+component Transform
+  Position -3.5 -4999.1 5.25
+  Rotation 0 0 0
+  Scale 0.5 1.8 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/TankOxygen.material"
+
+entity 40aa3e8b-2a90-4953-9e86-a5f1fd88de25
+component Name
+  Name "CabSpareTankCap2"
+component Transform
+  Position -3.5 -4998.2 5.25
+  Rotation 0 0 0
+  Scale 0.5 0.5 0.5
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/TankOxygen.material"
+
+entity e93ee0bc-e241-4342-936d-f8ec9421c174
+component Name
+  Name "CabTankStrap"
+component Transform
+  Position -3.5 -4998.7 4.92
+  Rotation 0 0 0
+  Scale 0.56 0.08 1.1
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitOrange.material"
+
+entity 09ac9c8c-4063-4f7f-ae44-7b9380b5ef66
+component Name
+  Name "CabLocker"
+component Transform
+  Position 3.45 -4998.1 2
+  Rotation 0 0 0
+  Scale 1.1 3.8 2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity fc14ae6d-4896-43cf-9a38-59b48d9ba788
+component Name
+  Name "CabLockerStripe"
+component Transform
+  Position 2.88 -4998.1 2
+  Rotation 0 0 0
+  Scale 0.02 0.15 2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 529de7a8-3399-49dc-8f5a-01bd21d09c38
+component Name
+  Name "Scrubber"
+component Transform
+  Position 3 -4999 5
+  Rotation 0 0 0
+  Scale 1.8 2 1.6
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Jelly.material"
+
+entity f90acc88-885b-4940-9c5e-8edc54cd9795
+component Name
+  Name "CabScrubberGrille"
+component Transform
+  Position 2.08 -4998.6 5
+  Rotation 0 0 0
+  Scale 0.03 0.6 1.3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity 4662c9e4-9bb8-4e13-a39a-10c859fe96ca
+component Name
+  Name "CabScrubberStatus"
+component Transform
+  Position 2.08 -4998.15 4.4
+  Rotation 0 0 0
+  Scale 0.03 0.12 0.12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitGreen.material"
+
+entity 5a8aa162-1ce7-4c2b-9c11-02f68180b4fe
+component Name
+  Name "CabScrubberStripe"
+component Transform
+  Position 2.08 -4999.7 5
+  Rotation 0 0 0
+  Scale 0.02 0.1 1.6
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity e4147990-8493-484b-b3da-1e732718d9ec
 component Name
   Name "Driver"
 component Transform
@@ -270,11 +1530,11 @@ component Transform
   Rotation 0 0 0
   Scale 1 1 1
 
-entity 799b9a90-6a75-4107-b6a4-5011c89e842e
+entity c1955cc1-c32c-4fe2-afed-0fccfb1aa564
 component Name
   Name "CabLight"
 component Transform
-  Position 0 -4996.5 0
+  Position 0 -4996.5 -0.5
   Rotation 0 0 0
   Scale 1 1 1
 component PointLight
@@ -282,17 +1542,29 @@ component PointLight
   Intensity 3
   Range 12
 
-entity e5830ee6-f161-4288-8ea5-6d5eda6c53a5
+entity 1858c8d5-010c-48d7-97e5-0d748ad75169
 component Name
-  Name "Scrubber"
+  Name "CabDashGlow"
 component Transform
-  Position 0 -4999 5.5
+  Position 0 -4998.4 -4.3
   Rotation 0 0 0
-  Scale 2.4 2 0.8
-component Mesh
-  Mesh "Cube"
-component Material
-  Material "Materials/Jelly.material"
+  Scale 1 1 1
+component PointLight
+  Color 0.3 0.8 1 1
+  Intensity 1
+  Range 3.5
+
+entity 67c6e7a3-e359-4dbd-ab2a-6fa0f10d0b02
+component Name
+  Name "CabHatchGlow"
+component Transform
+  Position 0 -4997 5.2
+  Rotation 0 0 0
+  Scale 1 1 1
+component PointLight
+  Color 1 0.6 0.15 1
+  Intensity 1.5
+  Range 4
 
 entity 2213412e-22ca-40a1-bd02-1eab87632991
 component Name
@@ -640,18 +1912,6 @@ component PointLight
   Color 1 0.92 0.8 1
   Intensity 3
   Range 40
-
-entity f9569a89-a5f4-4f90-b8c7-b5dd48939be3
-component Name
-  Name "CabHatch"
-component Transform
-  Position -3.3 -4999 5.95
-  Rotation 0 0 0
-  Scale 1.2 2 0.1
-component Mesh
-  Mesh "Cube"
-component Material
-  Material "Materials/Hatch.material"
 
 entity 8c0f2176-3bed-4b66-ac49-4be09d01c81a
 component Name
