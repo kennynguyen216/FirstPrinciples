@@ -39,8 +39,9 @@ Driver: the Driver's game from `game/driver-player`, unchanged, in `Source/Drive
 wheel or stands up, the mouse flies the truck, T buys a scratch ticket, and holding E at the scrubber
 repairs it. Space weather (NOAA solar wind and Kp) and asteroid flybys (NASA NeoWs) are fetched live
 at GO, falling back to the bundle in `Content/SpaceWeather` when offline. Its settings are in
-`Content/Settings/Driver.settings`, its HUD is 3D sprites until it moves to the engine's UI system,
-and `EngineRequests.md` lists what it still needs from the engine.
+`Content/Settings/Driver.settings`, its HUD is `Content/UI/DriverHud.html` drawn flat over that
+player's own camera (it needs the Ultralight SDK, from `Scripts/GetUltralight`), and
+`EngineRequests.md` lists what it still needs from the engine.
 
 A life support readout for both crews goes to the log every few seconds, and Tab prints one.
 

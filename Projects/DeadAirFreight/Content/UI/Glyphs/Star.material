@@ -1,9 +1,0 @@
-# FirstPrinciples material
-Shader "Unlit"
-BaseColor 1 1 1 1
-BaseColorMap "UI/Font.png"
-Tiling 0.0625 0.16666666666666666
-Offset 0.625 0.0
-EmissiveColor 0 0 0 1
-EmissiveIntensity 0
-AlphaCutoff 0.5

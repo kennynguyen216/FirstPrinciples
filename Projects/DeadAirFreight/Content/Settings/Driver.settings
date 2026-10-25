@@ -107,6 +107,3 @@ DustCount 400
 DustSpread 400
 StreakLength 60
 StreakSpeed 400
-HudDistance 0.3
-HudAspect 1.6
-HudTextSize 0.05
