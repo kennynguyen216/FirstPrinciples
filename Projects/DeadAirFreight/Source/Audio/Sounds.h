@@ -27,6 +27,9 @@ struct SoundCuesComponent
 	FP::String TicketPull; // pulling out a new scratch ticket
 	FP::String TicketWin; // a ticket reveals a minor prize
 	FP::String TicketDud; // a ticket reveals a dud
+	FP::String Steer; // loops while the local driver steers
+	FP::String SteerStart; // ramps up into Steer when steering starts
+	FP::String SteerStop; // winds Steer down when steering stops
 };
 
 enum class SoundCue : FP::uint8
@@ -52,6 +55,9 @@ enum class SoundCue : FP::uint8
 	TicketPull,
 	TicketWin,
 	TicketDud,
+	Steer,
+	SteerStart,
+	SteerStop,
 };
 
 // A looping, unpositioned sound. Each slot plays one clip at a time.
@@ -60,6 +66,7 @@ enum class LoopSlot : FP::uint8
 	Footsteps,
 	Engine,
 	Scratch,
+	Steer,
 };
 
 namespace Sounds

@@ -1747,7 +1747,7 @@ component SoundCues
   MiteSpawn ""
   MiteChitter "asset://9ed7fd0d-611c-456a-95a0-e93c6199109a"
   MiteBite ""
-  MiteDeath ""
+  MiteDeath "asset://211a0052-33d6-445d-96fb-9f65e33c09c0"
   Boost "asset://848cbe1e-a0c2-4dfa-b93b-8d00efd5b845"
   Hatch ""
   AirlockVent ""
@@ -1760,6 +1760,9 @@ component SoundCues
   Scratch "asset://1c000ec9-bb01-452f-804c-2e5fc65ce50a"
   TicketWin "asset://d7942447-9b87-4f4a-b784-8d487872a4ff"
   TicketDud "asset://133b583b-655e-4437-a287-2b9b9980aa3c"
+  SteerStart "asset://89c7272f-9cb9-46d7-9223-46dd739f08cb"
+  SteerStop "asset://75c5b834-96ad-4637-919f-2b3bd476026e"
+  Steer "asset://b272283b-004f-49e0-b5d5-c2e6efd5adb7"
   TicketPull "asset://c1348d31-e8fe-4c67-b903-7badfb034eaa"
 
 entity dc96e6bd-8d42-46d0-87f5-c0c256822a49

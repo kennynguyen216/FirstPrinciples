@@ -19,7 +19,7 @@ namespace
 		const String* fields[] = { &cues.LaserFire, &cues.RepairBeam, &cues.TankPuncture, &cues.TankPatched, &cues.MiteSpawn,
 			&cues.MiteChitter, &cues.MiteBite, &cues.MiteDeath, &cues.Boost, &cues.Hatch, &cues.AirlockVent,
 			&cues.Countdown, &cues.Go, &cues.JackpotBoost, &cues.Walk, &cues.Run,
-			&cues.Engine, &cues.Scratch, &cues.TicketPull, &cues.TicketWin, &cues.TicketDud };
+			&cues.Engine, &cues.Scratch, &cues.TicketPull, &cues.TicketWin, &cues.TicketDud, &cues.Steer, &cues.SteerStart, &cues.SteerStop };
 		const int32 index = static_cast<int32>(cue);
 		return index < static_cast<int32>(sizeof(fields) / sizeof(fields[0])) ? fields[index] : nullptr;
 	}
@@ -77,7 +77,7 @@ namespace Sounds
 		{
 			if (clip.IsEmpty())
 				return;
-			const char* names[] = { "Footsteps", "Engine Loop", "Scratch Loop" };
+			const char* names[] = { "Footsteps", "Engine Loop", "Scratch Loop", "Steer Loop" };
 			voice = world.CreateEntity(names[static_cast<int32>(slot)]);
 			world.Add<LoopVoice>(voice).Slot = slot;
 			world.Add<AudioSourceComponent>(voice).Loop = true;
@@ -96,7 +96,7 @@ void SoundPreloadSystem::OnStart(World& world)
 {
 	for (auto [entity, cues] : world.View<SoundCuesComponent>().each())
 	{
-		for (int32 i = 0; i <= static_cast<int32>(SoundCue::TicketDud); ++i)
+		for (int32 i = 0; i <= static_cast<int32>(SoundCue::SteerStop); ++i)
 		{
 			const String* clip = GetField(cues, static_cast<SoundCue>(i));
 			if (!clip || clip->IsEmpty())

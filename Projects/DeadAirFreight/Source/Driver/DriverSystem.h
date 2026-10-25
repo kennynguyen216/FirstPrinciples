@@ -123,6 +123,10 @@ private:
 	bool m_RemoteRepairing = false;
 	bool m_WheelTaken = false;
 	bool m_LocalSeated = false;
+	bool m_LocalSteering = false;
+	float m_SightLength = 0; // the steering sight's line on screen, in half screen heights
+	bool m_SteerSounding = false;
+	FP::VoiceHandle m_SteerStartVoice;
 	TruckControls m_LocalControls;
 	bool m_LocalRepairing = false;
 	float m_LastYaw = 0;
