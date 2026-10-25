@@ -34,6 +34,7 @@ layout(set = 3, binding = 0) uniform MaterialData
 	vec4 Subsurface; // rgb color, a strength
 	vec4 Params;     // x metallic, y roughness, z specular, w normal strength
 	vec4 Params2;    // x ambient occlusion strength, y alpha cutoff, z index of refraction, w thickness
+	vec4 Style;      // x cel shaded, yzw reserved
 } Material;
 
 // Per frame lighting, fragment uniform slot 1.

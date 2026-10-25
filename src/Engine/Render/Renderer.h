@@ -31,6 +31,7 @@ namespace FP
 		Vec4 Subsurface{ 0, 0, 0, 0 };
 		Vec4 Params{ 0, 0.5f, 0.5f, 1 };
 		Vec4 Params2{ 1, 0.01f, 1.5f, 0.5f };
+		Vec4 Style{ 0, 0, 0, 0 }; // x cel shaded, yzw reserved
 	};
 
 	constexpr int32 MaxLights = 16;

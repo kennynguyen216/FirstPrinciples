@@ -69,6 +69,7 @@ namespace FP
 			u.Subsurface = { ToLinear(data.SubsurfaceColor).XYZ(), data.Subsurface };
 			u.Params = { data.Metallic, data.Roughness, data.Specular, data.NormalStrength };
 			u.Params2 = { data.AmbientOcclusionStrength, data.AlphaCutoff, data.IndexOfRefraction, data.Thickness };
+			u.Style.X = data.CelShaded ? 1.0f : 0.0f;
 			return u;
 		}
 	}

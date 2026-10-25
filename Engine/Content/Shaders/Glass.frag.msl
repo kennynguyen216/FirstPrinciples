@@ -72,11 +72,6 @@ struct FrameData
     float4 EnvironmentDiffuse[9];
 };
 
-struct EnvironmentData
-{
-    float4 Pixels[1];
-};
-
 struct MaterialData
 {
     float4 BaseColor;
@@ -84,9 +79,15 @@ struct MaterialData
     float4 Subsurface;
     float4 Params;
     float4 Params2;
+    float4 Style;
 };
 
-constant spvUnsafeArray<float2, 8> _807 = spvUnsafeArray<float2, 8>({ float2(0.707099974155426025390625), float2(-0.707099974155426025390625, 0.707099974155426025390625), float2(0.707099974155426025390625, -0.707099974155426025390625), float2(-0.707099974155426025390625), float2(1.0, 0.0), float2(-1.0, 0.0), float2(0.0, 1.0), float2(0.0, -1.0) });
+struct EnvironmentData
+{
+    float4 Pixels[1];
+};
+
+constant spvUnsafeArray<float2, 8> _860 = spvUnsafeArray<float2, 8>({ float2(0.707099974155426025390625), float2(-0.707099974155426025390625, 0.707099974155426025390625), float2(0.707099974155426025390625, -0.707099974155426025390625), float2(-0.707099974155426025390625), float2(1.0, 0.0), float2(-1.0, 0.0), float2(0.0, 1.0), float2(0.0, -1.0) });
 
 struct main0_out
 {
@@ -109,10 +110,10 @@ float3 ApplyNormalMap(thread const float3& normal, thread const float4& tangent,
     float3 t = fast::normalize(tangent.xyz - (n * dot(n, tangent.xyz)));
     float3 b = cross(n, t) * tangent.w;
     float3 local = (sampled * 2.0) - float3(1.0);
-    float3 _160 = local;
-    float2 _162 = _160.xy * strength;
-    local.x = _162.x;
-    local.y = _162.y;
+    float3 _170 = local;
+    float2 _172 = _170.xy * strength;
+    local.x = _172.x;
+    local.y = _172.y;
     return fast::normalize(((t * local.x) + (b * local.y)) + (n * local.z));
 }
 
@@ -130,6 +131,24 @@ static inline __attribute__((always_inline))
 float3 FresnelSchlick(thread const float& cosTheta, thread const float3& f0)
 {
     return f0 + ((float3(1.0) - f0) * powr(1.0 - cosTheta, 5.0));
+}
+
+static inline __attribute__((always_inline))
+bool IsCelShaded(constant MaterialData& Material)
+{
+    return Material.Style.x > 0.5;
+}
+
+static inline __attribute__((always_inline))
+float3 CelBands(thread const float3& color)
+{
+    float brightness = dot(fast::max(color, float3(0.0)), float3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875));
+    if (brightness <= 9.9999997473787516355514526367188e-06)
+    {
+        return float3(0.0);
+    }
+    float band = floor((sqrt(brightness) * 4.0) + 0.5) / 4.0;
+    return color * ((band * band) / brightness);
 }
 
 static inline __attribute__((always_inline))
@@ -165,20 +184,20 @@ float3 EnvironmentLevel(thread const float3& direction, thread const int& level0
     int2 param = pixel;
     int2 param_1 = size;
     int param_2 = offset;
-    float3 _545 = EnvironmentPixel(param, param_1, param_2, Environment);
+    float3 _602 = EnvironmentPixel(param, param_1, param_2, Environment);
     int2 param_3 = pixel + int2(1, 0);
     int2 param_4 = size;
     int param_5 = offset;
-    float3 _554 = EnvironmentPixel(param_3, param_4, param_5, Environment);
+    float3 _611 = EnvironmentPixel(param_3, param_4, param_5, Environment);
     int2 param_6 = pixel + int2(0, 1);
     int2 param_7 = size;
     int param_8 = offset;
-    float3 _567 = EnvironmentPixel(param_6, param_7, param_8, Environment);
+    float3 _624 = EnvironmentPixel(param_6, param_7, param_8, Environment);
     int2 param_9 = pixel + int2(1);
     int2 param_10 = size;
     int param_11 = offset;
-    float3 _575 = EnvironmentPixel(param_9, param_10, param_11, Environment);
-    return mix(mix(_545, _554, float3(f.x)), mix(_567, _575, float3(f.x)), float3(f.y));
+    float3 _632 = EnvironmentPixel(param_9, param_10, param_11, Environment);
+    return mix(mix(_602, _611, float3(f.x)), mix(_624, _632, float3(f.x)), float3(f.y));
 }
 
 static inline __attribute__((always_inline))
@@ -269,6 +288,12 @@ float3 SpecularOnly(thread const float3& n, thread const float3& v, thread const
     return (((f * (DistributionGGX(param_2, param_3) * VisibilitySmith(param_4, param_5, param_6))) * radiance) * nDotL) * 3.1415927410125732421875;
 }
 
+static inline __attribute__((always_inline))
+float CelEdge(thread const float& nDotV)
+{
+    return mix(0.1500000059604644775390625, 1.0, step(0.180000007152557373046875, nDotV));
+}
+
 fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Material [[buffer(0)]], constant FrameData& Frame [[buffer(1)]], const device EnvironmentData& Environment [[buffer(2)]], texture2d<float> BaseColorMap [[texture(0)]], texture2d<float> NormalMap [[texture(1)]], texture2d<float> RoughnessMap [[texture(2)]], texture2d<float> SceneColor [[texture(3)]], sampler BaseColorMapSmplr [[sampler(0)]], sampler NormalMapSmplr [[sampler(1)]], sampler RoughnessMapSmplr [[sampler(2)]], sampler SceneColorSmplr [[sampler(3)]], float4 gl_FragCoord [[position]])
 {
     main0_out out = {};
@@ -299,7 +324,7 @@ fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Materi
     {
         for (int i = 0; i < 8; i++)
         {
-            behind += SceneColor.sample(SceneColorSmplr, (screenUV + (_807[i] * blur))).xyz;
+            behind += SceneColor.sample(SceneColorSmplr, (screenUV + (_860[i] * blur))).xyz;
         }
         behind /= float3(9.0);
     }
@@ -309,31 +334,46 @@ fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Materi
     float param_5 = fast::max(dot(n, v), 0.0);
     float3 param_6 = f0;
     float3 fresnel = FresnelSchlick(param_5, param_6);
-    float3 color = (behind * transmittance) * (float3(1.0) - fresnel);
-    color += ((fresnel * Frame.Ambient.xyz) * 4.0);
+    if (IsCelShaded(Material))
+    {
+        float3 param_7 = fresnel;
+        fresnel = fast::clamp(CelBands(param_7), float3(0.0), float3(1.0));
+    }
+    float3 reflection = (fresnel * Frame.Ambient.xyz) * 4.0;
     if (Frame.EnvironmentSize.z > 0.0)
     {
-        float3 param_7 = n;
-        float3 param_8 = v;
-        float param_9 = roughness;
-        color += (fresnel * EnvironmentReflection(param_7, param_8, param_9, Frame, Environment));
+        float3 param_8 = n;
+        float3 param_9 = v;
+        float param_10 = roughness;
+        reflection += (fresnel * EnvironmentReflection(param_8, param_9, param_10, Frame, Environment));
     }
-    float3 param_12;
     float3 param_13;
+    float3 param_14;
     for (int i_1 = 0; i_1 < Frame.LightCount.x; i_1++)
     {
-        int param_10 = i_1;
-        float3 param_11 = in.InWorldPosition;
-        GetLight(param_10, param_11, param_12, param_13, Frame);
-        float3 l = param_12;
-        float3 radiance = param_13;
-        float3 param_14 = n;
-        float3 param_15 = v;
-        float3 param_16 = l;
-        float3 param_17 = radiance;
-        float param_18 = roughness;
-        float3 param_19 = f0;
-        color += SpecularOnly(param_14, param_15, param_16, param_17, param_18, param_19);
+        int param_11 = i_1;
+        float3 param_12 = in.InWorldPosition;
+        GetLight(param_11, param_12, param_13, param_14, Frame);
+        float3 l = param_13;
+        float3 radiance = param_14;
+        float3 param_15 = n;
+        float3 param_16 = v;
+        float3 param_17 = l;
+        float3 param_18 = radiance;
+        float param_19 = roughness;
+        float3 param_20 = f0;
+        reflection += SpecularOnly(param_15, param_16, param_17, param_18, param_19, param_20);
+    }
+    if (IsCelShaded(Material))
+    {
+        float3 param_21 = reflection;
+        reflection = CelBands(param_21);
+    }
+    float3 color = ((behind * transmittance) * (float3(1.0) - fresnel)) + reflection;
+    if (IsCelShaded(Material))
+    {
+        float param_22 = fast::max(dot(geometryNormal, v), 0.0);
+        color *= CelEdge(param_22);
     }
     color += Material.Emissive.xyz;
     out.OutColor = float4(color, 1.0);
