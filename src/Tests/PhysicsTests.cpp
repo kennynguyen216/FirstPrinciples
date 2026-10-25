@@ -240,3 +240,161 @@ FP_TEST(Physics_InteractionsPushAndFindBodies)
 	FP_EXPECT(hit.Entity != far && std::fabs(hit.Point.Y) < 0.05f);
 	world->EndPlay();
 }
+
+namespace
+{
+	// Steps physics by hand so the test can see every event.
+	void RunCharacters(World& world, PhysicsWorld& physics, float seconds, Array<PhysicsEvent>* events = nullptr, Entity walker = NullEntity, Vec3 walk = {})
+	{
+		for (float t = 0; t < seconds; t += PhysicsWorld::FixedStep)
+		{
+			if (walker != NullEntity)
+				physics.MoveCharacter(walker, walk);
+			physics.Sync(world);
+			physics.Step(PhysicsWorld::FixedStep);
+			physics.WriteBack(world);
+			physics.WriteCharacters(world);
+			Array<PhysicsEvent> step;
+			physics.TakeEvents(step);
+			if (events)
+			{
+				for (const PhysicsEvent& event : step)
+					events->Add(event);
+			}
+		}
+	}
+
+	bool Saw(const Array<PhysicsEvent>& events, PhysicsEvent::Kind kind, Entity a, Entity b)
+	{
+		return events.FindIf([&](const PhysicsEvent& e) { return e.Type == kind && e.A == a && e.B == b; }) != INDEX_NONE;
+	}
+}
+
+FP_TEST(Physics_CharactersWalkClimbAndJump)
+{
+	Engine::RegisterEngineComponents();
+	StrongObjectPtr<World> world(NewObject<World>());
+	PhysicsWorld physics;
+	MakeFloor(*world.Get());
+	const Entity player = world->CreateEntity("Player");
+	world->Get<TransformComponent>(player).Position = { 0, 3, 0 };
+	world->Add<CharacterControllerComponent>(player);
+
+	// A low step at x 3 and a tall wall at z -3.
+	const Entity step = world->CreateEntity("Step");
+	world->Get<TransformComponent>(step).Position = { 4, 0.125f, 0 };
+	world->Add<ColliderComponent>(step).Size = { 2, 0.25f, 4 };
+	const Entity wall = world->CreateEntity("Wall");
+	world->Get<TransformComponent>(wall).Position = { 0, 1, -3 };
+	world->Add<ColliderComponent>(wall).Size = { 4, 2, 0.5f };
+
+	// Falls and stands with its 2 unit tall capsule on the floor.
+	RunCharacters(*world.Get(), physics, 1.5f);
+	FP_EXPECT(physics.GetCharacterCount() == 1);
+	FP_EXPECT(physics.IsGrounded(player));
+	FP_EXPECT(std::fabs(world->Get<TransformComponent>(player).Position.Y - 1) < 0.05f);
+
+	// Walks onto the step.
+	RunCharacters(*world.Get(), physics, 1.0f, nullptr, player, { 4, 0, 0 });
+	const Vec3 onStep = world->Get<TransformComponent>(player).Position;
+	FP_EXPECT(onStep.X > 3.5f && std::fabs(onStep.Y - 1.25f) < 0.05f);
+
+	// Stops without Move.
+	RunCharacters(*world.Get(), physics, 0.3f);
+	const float stoppedX = world->Get<TransformComponent>(player).Position.X;
+	RunCharacters(*world.Get(), physics, 0.3f);
+	FP_EXPECT(std::fabs(world->Get<TransformComponent>(player).Position.X - stoppedX) < 0.01f);
+
+	// Back on the floor, the wall stops it.
+	world->Get<TransformComponent>(player).Position = { 0, 1, 0 };
+	RunCharacters(*world.Get(), physics, 1.5f, nullptr, player, { 0, 0, -4 });
+	FP_EXPECT(world->Get<TransformComponent>(player).Position.Z > -2.3f);
+
+	// Jumps only from the ground.
+	FP_EXPECT(physics.JumpCharacter(player, 5));
+	RunCharacters(*world.Get(), physics, 0.2f);
+	FP_EXPECT(!physics.IsGrounded(player) && world->Get<TransformComponent>(player).Position.Y > 1.5f);
+	FP_EXPECT(!physics.JumpCharacter(player, 5));
+	RunCharacters(*world.Get(), physics, 1.5f);
+	FP_EXPECT(physics.IsGrounded(player));
+
+	// Rays hit it, unless told to skip it.
+	RaycastHit hit;
+	const Vec3 at = world->Get<TransformComponent>(player).Position;
+	FP_EXPECT(physics.Raycast(at + Vec3(0, 5, 0), { 0, -1, 0 }, 10, hit, NullEntity) && hit.Entity == player);
+	FP_EXPECT(physics.Raycast(at + Vec3(0, 5, 0), { 0, -1, 0 }, 10, hit, player) && hit.Entity != player);
+}
+
+FP_TEST(Physics_CharactersTouchTriggersAndPushCrates)
+{
+	Engine::RegisterEngineComponents();
+	StrongObjectPtr<World> world(NewObject<World>());
+	PhysicsWorld physics;
+	const Entity floor = MakeFloor(*world.Get());
+	const Entity player = world->CreateEntity("Player");
+	world->Get<TransformComponent>(player).Position = { 0, 1, 0 };
+	world->Add<CharacterControllerComponent>(player);
+	const Entity zone = world->CreateEntity("Zone");
+	world->Get<TransformComponent>(zone).Position = { 3, 1, 0 };
+	ColliderComponent& trigger = world->Add<ColliderComponent>(zone);
+	trigger.Size = { 1, 2, 2 };
+	trigger.Trigger = true;
+	const Entity crate = MakeBox(*world.Get(), { 0, 0.5f, 3 });
+
+	Array<PhysicsEvent> events;
+	RunCharacters(*world.Get(), physics, 0.5f, &events);
+	FP_EXPECT(Saw(events, PhysicsEvent::Kind::CollisionEnter, player, floor));
+
+	// Walking through the zone enters and then leaves it.
+	events.Clear();
+	RunCharacters(*world.Get(), physics, 2.0f, &events, player, { 3, 0, 0 });
+	FP_EXPECT(Saw(events, PhysicsEvent::Kind::TriggerEnter, player, zone));
+	FP_EXPECT(Saw(events, PhysicsEvent::Kind::TriggerExit, player, zone));
+	FP_EXPECT(!Saw(events, PhysicsEvent::Kind::CollisionEnter, player, zone));
+
+	// Walking into the crate shoves it.
+	world->Get<TransformComponent>(player).Position = { 0, 1, 0 };
+	RunCharacters(*world.Get(), physics, 2.0f, nullptr, player, { 0, 0, 3 });
+	FP_EXPECT(world->Get<TransformComponent>(crate).Position.Z > 3.5f);
+
+	// Taking the controller away removes the character and ends its contacts.
+	events.Clear();
+	world->Remove<CharacterControllerComponent>(player);
+	RunCharacters(*world.Get(), physics, PhysicsWorld::FixedStep, &events);
+	FP_EXPECT(physics.GetCharacterCount() == 0);
+	FP_EXPECT(Saw(events, PhysicsEvent::Kind::CollisionExit, player, floor));
+}
+
+#include "Engine/Physics/PlayerInputSystem.h"
+#include "Engine/Input.h"
+
+FP_TEST(Physics_PlayerInputWalksAndLooks)
+{
+	Engine::RegisterEngineComponents();
+	StrongObjectPtr<World> world(NewObject<World>());
+	MakeFloor(*world.Get());
+	const Entity player = world->CreateEntity("Player");
+	world->Get<TransformComponent>(player).Position = { 0, 1, 0 };
+	world->Add<CharacterControllerComponent>(player);
+	world->Add<PlayerInputComponent>(player);
+	const Entity camera = world->CreateEntity("Player Camera");
+	world->SetParent(camera, player);
+	world->AddSystem<PlayerInputSystem>();
+	world->AddSystem<PhysicsSystem>();
+	world->BeginPlay();
+	Run(*world.Get(), 0.5f);
+
+	// W walks forward, which is -Z before any turning.
+	Input::SetKey(SDL_SCANCODE_W, true);
+	Run(*world.Get(), 1.0f);
+	Input::SetKey(SDL_SCANCODE_W, false);
+	FP_EXPECT(world->Get<TransformComponent>(player).Position.Z < -3);
+
+	// The mouse turns the player and tilts its camera.
+	Input::AddMouseDelta({ 100, 50 });
+	world->Update(PhysicsWorld::FixedStep);
+	Input::EndFrame();
+	FP_EXPECT(world->Get<TransformComponent>(player).Rotation.Y < -10);
+	FP_EXPECT(world->Get<TransformComponent>(camera).Rotation.X < -5);
+	world->EndPlay();
+}

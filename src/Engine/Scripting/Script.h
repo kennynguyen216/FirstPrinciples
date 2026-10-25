@@ -140,6 +140,14 @@ namespace FP
 			return GetPhysics().Raycast(view.Position, view.GetForward(), maxDistance, hit, m_Entity);
 		}
 
+		// ---- Characters ------------------------------------------------------------
+
+		// For an entity with a CharacterController. Move walks at velocity in meters per second,
+		// ignoring Y, and needs calling every frame. Jump does nothing off the ground.
+		void Move(Vec3 velocity) const { GetPhysics().MoveCharacter(m_Entity, velocity); }
+		bool Jump(float speed) const { return GetPhysics().JumpCharacter(m_Entity, speed); }
+		bool IsGrounded() const { return GetPhysics().IsGrounded(m_Entity); }
+
 		// Every entity with a body touching the sphere, triggers included.
 		Array<Entity> OverlapSphere(Vec3 center, float radius) const { return GetPhysics().OverlapSphere(center, radius); }
 

@@ -140,6 +140,45 @@ namespace FP
 			return mesh;
 		}
 
+		MeshData Capsule(int32 segments, int32 rings)
+		{
+			// Two half spheres pulled apart, the top one up by half a unit and the bottom one down.
+			// The rows on either side of the middle make the straight part.
+			MeshData mesh;
+			const int32 half = std::max(rings / 2, 1);
+			const int32 rows = (half + 1) * 2;
+			for (int32 row = 0; row < rows; ++row)
+			{
+				const bool top = row <= half;
+				const float phi = static_cast<float>(top ? row : row - 1) / static_cast<float>(half) * Pi * 0.5f;
+				const float lift = top ? 0.5f : -0.5f;
+				for (int32 segment = 0; segment <= segments; ++segment)
+				{
+					const float u = static_cast<float>(segment) / static_cast<float>(segments);
+					const float theta = u * 2.0f * Pi;
+					MeshVertex vertex;
+					vertex.Normal = { std::sin(phi) * std::sin(theta), std::cos(phi), std::sin(phi) * std::cos(theta) };
+					vertex.Position = vertex.Normal * 0.5f + Vec3(0, lift, 0);
+					vertex.UV = { u, (1.0f - vertex.Position.Y) * 0.5f };
+					mesh.Vertices.Add(vertex);
+				}
+			}
+			const uint32 stride = static_cast<uint32>(segments + 1);
+			for (int32 row = 0; row + 1 < rows; ++row)
+			{
+				for (int32 segment = 0; segment < segments; ++segment)
+				{
+					const uint32 a = static_cast<uint32>(row) * stride + static_cast<uint32>(segment);
+					const uint32 b = a + stride;
+					for (uint32 index : { a, b, b + 1, a, b + 1, a + 1 })
+						mesh.Indices.Add(index);
+				}
+			}
+			mesh.ComputeTangents();
+			mesh.ComputeBounds();
+			return mesh;
+		}
+
 		MeshData Plane()
 		{
 			MeshData mesh;
@@ -170,7 +209,7 @@ namespace FP
 
 		const Array<const char*>& GetNames()
 		{
-			static const Array<const char*> names = { "Cube", "Sphere", "Plane", "Quad" };
+			static const Array<const char*> names = { "Cube", "Sphere", "Capsule", "Plane", "Quad" };
 			return names;
 		}
 
@@ -178,6 +217,7 @@ namespace FP
 		{
 			if (name == "Cube") out = Cube();
 			else if (name == "Sphere") out = Sphere();
+			else if (name == "Capsule") out = Capsule();
 			else if (name == "Plane") out = Plane();
 			else if (name == "Quad") out = Quad();
 			else return false;

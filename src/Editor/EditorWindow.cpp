@@ -26,6 +26,7 @@
 #include "Engine/Scripting/ScriptSystem.h"
 #include "Engine/Animation/AnimationSystem.h"
 #include "Engine/Physics/PhysicsSystem.h"
+#include "Engine/Physics/PlayerInputSystem.h"
 #include "Engine/UI/UISystem.h"
 #include "Engine/Animation/SkeletalModel.h"
 #include "Game.h"
@@ -129,7 +130,11 @@ namespace FP::Editor
 		connect(m_Viewport, &ViewportWidget::EntityDropped, this, [this](const QString& kind, Vec3 point) {
 			const Entity entity = CreateEntity(kind);
 			if (entity != NullEntity)
-				m_World->Get<TransformComponent>(entity).Position = point;
+			{
+				// Characters stand on the drop point rather than sinking halfway into it.
+				const float lift = kind == "Character" ? 1.0f : 0.0f;
+				m_World->Get<TransformComponent>(entity).Position = point + Vec3(0, lift, 0);
+			}
 		});
 
 		// Drives the world and the viewport at about 60 fps.
@@ -343,6 +348,7 @@ namespace FP::Editor
 			meshes->addAction(name, this, [this, name]() { CreateEntity(name); });
 		}
 		entity->addAction("Create &Point Light", this, [this]() { CreateEntity("Point Light"); });
+		entity->addAction("Create &Character", this, [this]() { CreateEntity("Character"); });
 		entity->addAction("Create &Directional Light", this, [this]() { CreateEntity("Directional Light"); });
 		// Text fields take these keys first, so they still copy, paste and erase text there.
 		entity->addAction("&Copy", QKeySequence::Copy, this, &EditorWindow::CopySelected);
@@ -1297,6 +1303,25 @@ namespace FP::Editor
 			entity = m_World->CreateEntity(name);
 			m_World->Add<SpriteComponent>(entity);
 		}
+		else if (kind == "Character")
+		{
+			// A pill that plays straight away: it walks, jumps and looks around, and the game sees
+			// it through a camera that follows behind.
+			entity = m_World->CreateEntity(name);
+			m_World->Get<TransformComponent>(entity).Position.Y = 1;
+			m_World->Add<MeshComponent>(entity).Mesh = "Capsule";
+			m_World->Add<CharacterControllerComponent>(entity);
+			const String cameraName = m_World->Add<PlayerInputComponent>(entity).Camera;
+
+			const Entity camera = m_World->CreateEntity(cameraName);
+			TransformComponent& view = m_World->Get<TransformComponent>(camera);
+			view.Position = { 0, 1.5f, 5 };
+			view.Rotation = { -12, 0, 0 };
+			CameraComponent& lens = m_World->Add<CameraComponent>(camera);
+			lens.Perspective = true;
+			m_World->SetParent(camera, entity, false);
+			m_World->SetActiveCamera(camera);
+		}
 		else if (kind == "Camera")
 		{
 			entity = m_World->CreateEntity(name);
@@ -1400,6 +1425,7 @@ namespace FP::Editor
 		// Snapshot the scene so Stop can put everything back.
 		m_PlaySnapshot = SceneSerializer::SaveToString(*m_World.Get());
 		m_World->AddSystem<ScriptSystem>();
+		m_World->AddSystem<PlayerInputSystem>();
 		m_World->AddSystem<PhysicsSystem>();
 		m_World->AddSystem<AnimationSystem>();
 		m_World->AddSystem<UISystem>();

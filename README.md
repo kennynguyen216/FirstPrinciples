@@ -263,6 +263,7 @@ that `FP_SCRIPT` registers. There is nothing to list by hand.
 | World space | `GetWorldPosition()`, `SetWorldPosition(position)`, `GetWorldRotation()` |
 | Timers | `After(seconds, fn)`, `Every(seconds, fn)`, `CancelTimer(id)`, `CancelAllTimers()` |
 | Physics | `AddForce(force)`, `AddImpulse(impulse)`, `AddForceAtPoint`, `AddImpulseAtPoint`, `GetVelocity()`, `SetVelocity(velocity)`, `GetMass()`, `GetPhysics()` for the rest |
+| Characters | `Move(velocity)` every frame, `Jump(speed)`, `IsGrounded()` |
 | Physics queries | `Raycast(origin, direction, distance, hit)`, `SphereCast(origin, radius, direction, distance, hit)`, `RaycastFromCamera(distance, hit)`, `OverlapSphere(center, radius)`, `AddExplosion(center, radius, impulse)` |
 | Cameras | `SetActiveCamera(entity or name)` (this entity by default), `GetActiveCamera()`, `IsActiveCamera()` |
 | Physics events | `OnCollisionEnter(other, collision)`, `OnCollisionExit(other)`, `OnTriggerEnter(other)`, `OnTriggerExit(other)` |
@@ -334,6 +335,32 @@ void OnTriggerEnter(Entity other) override { ++Score; }
 `Content/Scenes/Physics.scene` drops balls down a ramp, through a goal that counts them, and into a
 pyramid of crates. Space kicks every ball. C switches to a first person camera where the mouse
 looks, WASD flies, left click pushes, F picks things up and right click blows them up.
+
+**Characters**
+
+A **CharacterController** makes a walking capsule for players and enemies, used instead of a
+collider and rigid body. It slides along walls, climbs steps up to `StepHeight`, walks up slopes
+up to `MaxSlope`, rides moving platforms and pushes crates. Rays and triggers find it like any
+body.
+
+**Entity > Create Character** (or Character in Place Entities) adds a pill with a follow camera
+that plays with no code in any project. Its **PlayerInput** component walks it with WASD, runs with
+Shift, jumps with Space and turns it with the mouse. Remove PlayerInput to drive it from a script:
+
+```cpp
+void OnUpdate(float) override
+{
+    const Vec2 axis = Input::GetMoveAxis();
+    Move(Vec3(axis.X, 0, -axis.Y) * 5); // meters per second, call it every frame
+    if (Input::WasKeyPressed(SDL_SCANCODE_SPACE))
+        Jump(6);                        // only works on the ground
+}
+```
+
+`AirControl` sets how much `Move` steers mid jump. `SetVelocity` and `AddImpulse` knock a
+character about, and explosions push it too. `Content/Scenes/Character.scene` has a third person
+player with stairs, a walkable and a too steep ramp, a lift, crates and a zone
+that counts the player walking in.
 
 ### Game UI
 
