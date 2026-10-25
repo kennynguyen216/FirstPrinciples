@@ -1665,7 +1665,7 @@ component Transform
 component Mesh
   Mesh "Plane"
 component Material
-  Material "Materials/BayFloor.material"
+  Material "Materials/CockpitFloor.material"
 component Collider
   Shape "Box"
   Size 1 0.02 1
@@ -1697,7 +1697,7 @@ component Transform
 component Mesh
   Mesh "Plane"
 component Material
-  Material "Materials/BayFloor.material"
+  Material "Materials/CockpitFloor.material"
 component Collider
   Shape "Box"
   Size 1 0.02 1
@@ -1731,7 +1731,7 @@ component Transform
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/BayWall.material"
+  Material "Materials/CockpitHull.material"
 component Collider
   Shape "Box"
   Size 1 1 1
@@ -1750,7 +1750,7 @@ component Transform
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/BayWall.material"
+  Material "Materials/CockpitHull.material"
 component Collider
   Shape "Box"
   Size 1 1 1
@@ -1769,7 +1769,7 @@ component Transform
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/BayWall.material"
+  Material "Materials/CockpitHull.material"
 component Collider
   Shape "Box"
   Size 1 1 1
@@ -1788,7 +1788,7 @@ component Transform
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/BayWall.material"
+  Material "Materials/CockpitHull.material"
 component Collider
   Shape "Box"
   Size 1 1 1
@@ -1807,7 +1807,7 @@ component Transform
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/BayWall.material"
+  Material "Materials/CockpitHull.material"
 component Collider
   Shape "Box"
   Size 1 1 1
@@ -1826,7 +1826,7 @@ component Transform
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/BayWall.material"
+  Material "Materials/CockpitHull.material"
 component Collider
   Shape "Box"
   Size 1 1 1
@@ -1857,7 +1857,7 @@ component Transform
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/BayWall.material"
+  Material "Materials/CockpitHull.material"
 component Collider
   Shape "Box"
   Size 1 1 1
@@ -1876,7 +1876,7 @@ component Transform
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/BayWall.material"
+  Material "Materials/CockpitHull.material"
 component Collider
   Shape "Box"
   Size 1 1 1
@@ -1895,7 +1895,7 @@ component Transform
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/BayWall.material"
+  Material "Materials/CockpitHull.material"
 component Collider
   Shape "Box"
   Size 1 1 1
@@ -1914,7 +1914,7 @@ component Transform
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/BayWall.material"
+  Material "Materials/CockpitHull.material"
 component Collider
   Shape "Box"
   Size 1 1 1
@@ -1933,7 +1933,7 @@ component Transform
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/BayWall.material"
+  Material "Materials/CockpitHull.material"
 component Collider
   Shape "Box"
   Size 1 1 1
@@ -1952,7 +1952,7 @@ component Transform
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/BayWall.material"
+  Material "Materials/CockpitHull.material"
 component Collider
   Shape "Box"
   Size 1 1 1
@@ -2003,7 +2003,7 @@ component Transform
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/BayWall.material"
+  Material "Materials/CockpitHull.material"
 
 entity 79c09a5b-5c56-494b-b748-582fae4e18e0
 component Name
@@ -2015,7 +2015,7 @@ component Transform
 component Mesh
   Mesh "Cube"
 component Material
-  Material "Materials/BayWall.material"
+  Material "Materials/CockpitHull.material"
 
 entity a354f1ac-9826-495e-a1e9-3fe95c989ae1
 component Name
@@ -2062,3 +2062,891 @@ component Scripts
 component TitleScreen
   GamePort 7777
   DiscoveryPort 7778
+
+entity 42b9d593-0171-457b-a223-148ddab3c8b6
+component Name
+  Name "Cargo Bay A Hatch Frame Left"
+component Transform
+  Position -3000.95 -2998.43 19.85
+  Rotation 0 0 0
+  Scale 0.3 3.15 0.3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 8ab3dde5-1cab-490e-94fd-43af818d74cc
+component Name
+  Name "Cargo Bay A Hatch Frame Right"
+component Transform
+  Position -2999.05 -2998.43 19.85
+  Rotation 0 0 0
+  Scale 0.3 3.15 0.3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 14ca9690-e2b8-4183-824e-06e4a04c9090
+component Name
+  Name "Cargo Bay A Hatch Lintel"
+component Transform
+  Position -3000 -2996.85 19.85
+  Rotation 0 0 0
+  Scale 2.2 0.3 0.3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 95ba16b3-9ab2-4de2-b495-32024aceba45
+component Name
+  Name "Cargo Bay A Hatch Sign"
+component Transform
+  Position -3000 -2996.5 19.97
+  Rotation 0 0 0
+  Scale 1.4 0.3 0.04
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitAmber.material"
+
+entity a5700e5d-184f-4144-8af4-79a9d96d9e06
+component Name
+  Name "Cargo Bay A Hatch Step"
+component Transform
+  Position -3000 -2999.95 19.6
+  Rotation 0 0 0
+  Scale 1.6 0.1 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 3a97be75-a770-4228-8ca7-98b645657298
+component Name
+  Name "Cargo Bay A Walkway"
+component Transform
+  Position -3000 -2999.99 15
+  Rotation 0 0 0
+  Scale 1.4 0.02 10
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity b7d92427-37c1-402f-9d6b-f2a667bc09ca
+component Name
+  Name "Cargo Bay A Walkway Left"
+component Transform
+  Position -3000.75 -2999.98 15
+  Rotation 0 0 0
+  Scale 0.08 0.02 10
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity dcbd5a8c-0dc0-4ffd-9861-bcecde267e6f
+component Name
+  Name "Cargo Bay A Walkway Right"
+component Transform
+  Position -2999.25 -2999.98 15
+  Rotation 0 0 0
+  Scale 0.08 0.02 10
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 3e65da90-af16-44ec-9a79-862b11a92b23
+component Name
+  Name "Cargo Bay A Edge Left"
+component Transform
+  Position -3009.6 -2999.98 0
+  Rotation 0 0 0
+  Scale 0.15 0.02 40
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 249dbadd-bea5-45d8-bc5e-ad2024dae91c
+component Name
+  Name "Cargo Bay A Edge Right"
+component Transform
+  Position -2990.4 -2999.98 0
+  Rotation 0 0 0
+  Scale 0.15 0.02 40
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 518f4628-1de7-45c5-b1ca-580ce94ca711
+component Name
+  Name "Cargo Bay A Handrail Left Front"
+component Transform
+  Position -3009.6 -2998.2 -11.25
+  Rotation 0 0 0
+  Scale 0.07 0.07 17.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 5f0040fd-e9f3-4514-9e56-d3160ef9c3b6
+component Name
+  Name "Cargo Bay A Handrail Left Back"
+component Transform
+  Position -3009.6 -2998.2 11.25
+  Rotation 0 0 0
+  Scale 0.07 0.07 17.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity bdd2dfb9-d5b8-4d16-9a86-78e5273df3bb
+component Name
+  Name "Cargo Bay A Handrail Right"
+component Transform
+  Position -2990.4 -2998.2 0
+  Rotation 0 0 0
+  Scale 0.07 0.07 39
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity e9017791-a3a7-489c-b7fa-1a6303271ec5
+component Name
+  Name "Cargo Bay A Lamp Left"
+component Transform
+  Position -3004 -2994.02 0
+  Rotation 0 0 0
+  Scale 0.25 0.03 30
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitLamp.material"
+
+entity d79d5b7d-87bb-4efa-a637-03e384543ca5
+component Name
+  Name "Cargo Bay A Lamp Right"
+component Transform
+  Position -2996 -2994.02 0
+  Rotation 0 0 0
+  Scale 0.25 0.03 30
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitLamp.material"
+
+entity b59d8bd9-6e87-4b59-b4a1-e8a0cb74f963
+component Name
+  Name "Cargo Bay A Airlock Frame Front"
+component Transform
+  Position -3009.85 -2998.4 -2.15
+  Rotation 0 0 0
+  Scale 0.2 3.2 0.3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 51f87055-87d5-4d04-8398-89a8bb4f113b
+component Name
+  Name "Cargo Bay A Airlock Frame Back"
+component Transform
+  Position -3009.85 -2998.4 2.15
+  Rotation 0 0 0
+  Scale 0.2 3.2 0.3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity a31a0533-3027-4553-9c3a-e538a17faaed
+component Name
+  Name "Cargo Bay A Airlock Lintel"
+component Transform
+  Position -3009.85 -2996.85 0
+  Rotation 0 0 0
+  Scale 0.2 0.3 4.6
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity e4d4bfc0-28fa-434b-89ba-8d67f6cdf016
+component Name
+  Name "Cargo Bay A Airlock Sign"
+component Transform
+  Position -3009.93 -2996.45 0
+  Rotation 0 0 0
+  Scale 0.04 0.3 2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitRed.material"
+
+entity d89f67af-ce68-4399-9ffd-f2bd7820a815
+component Name
+  Name "Cargo Bay A Crate Left"
+component Transform
+  Position -3008.6 -2999.4 -18.6
+  Rotation 0 0 0
+  Scale 1.2 1.2 1.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity 701f9c3e-c875-4077-889e-97f6f242181a
+component Name
+  Name "Cargo Bay A Crate Left Stripe"
+component Transform
+  Position -3008.6 -2999.4 -18.6
+  Rotation 0 0 0
+  Scale 1.22 0.15 1.22
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitOrange.material"
+
+entity fcf37836-7d27-4e02-88da-aa2df9944b67
+component Name
+  Name "Cargo Bay A Crate Right"
+component Transform
+  Position -2991.6 -2999.25 -18.4
+  Rotation 0 0 0
+  Scale 1.5 1.5 1.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity 926bc14e-f459-4d61-8f68-97af0eb96872
+component Name
+  Name "Cargo Bay A Crate Right Stripe"
+component Transform
+  Position -2991.6 -2999.25 -18.4
+  Rotation 0 0 0
+  Scale 1.52 0.15 1.52
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitOrange.material"
+
+entity a2920320-9d22-4bce-a9e7-b983f56b087e
+component Name
+  Name "Cargo Bay A Crate Right Top"
+component Transform
+  Position -2991.4 -2998.05 -18.6
+  Rotation 0 0 0
+  Scale 0.9 0.9 0.9
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity aefd51ac-9201-47e9-a21f-489088b86f02
+component Name
+  Name "Cargo Bay A Rib Left -15"
+component Transform
+  Position -3009.85 -2997 -15
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 63d8ae2c-3124-4710-88fe-c8e3803c6e5d
+component Name
+  Name "Cargo Bay A Rib Right -15"
+component Transform
+  Position -2990.15 -2997 -15
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 0075de2d-2440-4880-b075-1b588a12ceec
+component Name
+  Name "Cargo Bay A Rib Left -10"
+component Transform
+  Position -3009.85 -2997 -10
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity a6e816f3-c88d-4783-a612-003ac3090f27
+component Name
+  Name "Cargo Bay A Rib Right -10"
+component Transform
+  Position -2990.15 -2997 -10
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 5a685a3f-ff71-4404-9d3f-a550706cf0f5
+component Name
+  Name "Cargo Bay A Rib Left -5"
+component Transform
+  Position -3009.85 -2997 -5
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity a1aea530-15d6-4b07-891d-1dac4b37dbec
+component Name
+  Name "Cargo Bay A Rib Right -5"
+component Transform
+  Position -2990.15 -2997 -5
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity e19dc50b-2663-4831-b4a9-126653bd0c82
+component Name
+  Name "Cargo Bay A Rib Left 5"
+component Transform
+  Position -3009.85 -2997 5
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 4742d80a-76d8-4291-8686-d9fb08ae4428
+component Name
+  Name "Cargo Bay A Rib Right 5"
+component Transform
+  Position -2990.15 -2997 5
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 90837abb-2ab2-4596-b702-82e9c9362f53
+component Name
+  Name "Cargo Bay A Rib Left 10"
+component Transform
+  Position -3009.85 -2997 10
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity a166b607-1298-4946-b2ea-b99d299062e4
+component Name
+  Name "Cargo Bay A Rib Right 10"
+component Transform
+  Position -2990.15 -2997 10
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 646f924c-b4ef-4b51-944b-c36edd56ead5
+component Name
+  Name "Cargo Bay A Rib Left 15"
+component Transform
+  Position -3009.85 -2997 15
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity c4881e4f-2e48-44fc-8d3c-13359a363195
+component Name
+  Name "Cargo Bay A Rib Right 15"
+component Transform
+  Position -2990.15 -2997 15
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity e5e5c550-f853-43ca-8ca4-7651b15498ef
+component Name
+  Name "Cargo Bay A Hatch Glow"
+component Transform
+  Position -3000 -2997 19
+  Rotation 0 0 0
+  Scale 1 1 1
+component PointLight
+  Color 1 0.6 0.15 1
+  Intensity 1.5
+  Range 4
+
+entity d088b9c5-6c23-4b08-a4a8-9aadb38b227f
+component Name
+  Name "Cargo Bay B Hatch Frame Left"
+component Transform
+  Position 2999.05 -2998.43 19.85
+  Rotation 0 0 0
+  Scale 0.3 3.15 0.3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 53a02c9b-2524-4b76-b6e9-b03938fc11f0
+component Name
+  Name "Cargo Bay B Hatch Frame Right"
+component Transform
+  Position 3000.95 -2998.43 19.85
+  Rotation 0 0 0
+  Scale 0.3 3.15 0.3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity dfabbc3e-3e15-425b-8f3f-5cdc2d35385c
+component Name
+  Name "Cargo Bay B Hatch Lintel"
+component Transform
+  Position 3000 -2996.85 19.85
+  Rotation 0 0 0
+  Scale 2.2 0.3 0.3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 8b3913f2-5081-45ba-a747-28201aa6ea7d
+component Name
+  Name "Cargo Bay B Hatch Sign"
+component Transform
+  Position 3000 -2996.5 19.97
+  Rotation 0 0 0
+  Scale 1.4 0.3 0.04
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitAmber.material"
+
+entity 3ae11eb8-bd8a-4f35-9264-a28168ee5e6e
+component Name
+  Name "Cargo Bay B Hatch Step"
+component Transform
+  Position 3000 -2999.95 19.6
+  Rotation 0 0 0
+  Scale 1.6 0.1 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity f5a6fd64-66f7-43c0-997b-b67bfc36f08e
+component Name
+  Name "Cargo Bay B Walkway"
+component Transform
+  Position 3000 -2999.99 15
+  Rotation 0 0 0
+  Scale 1.4 0.02 10
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity ddcf0cb0-41be-45fe-86e7-cd6bc7fcc946
+component Name
+  Name "Cargo Bay B Walkway Left"
+component Transform
+  Position 2999.25 -2999.98 15
+  Rotation 0 0 0
+  Scale 0.08 0.02 10
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 5da9d630-8d4c-448b-ad65-3dcaf8834b68
+component Name
+  Name "Cargo Bay B Walkway Right"
+component Transform
+  Position 3000.75 -2999.98 15
+  Rotation 0 0 0
+  Scale 0.08 0.02 10
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 3af24223-9a91-415e-8ec7-304d905ca10c
+component Name
+  Name "Cargo Bay B Edge Left"
+component Transform
+  Position 2990.4 -2999.98 0
+  Rotation 0 0 0
+  Scale 0.15 0.02 40
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 273f6035-abe3-406e-865e-99590535def6
+component Name
+  Name "Cargo Bay B Edge Right"
+component Transform
+  Position 3009.6 -2999.98 0
+  Rotation 0 0 0
+  Scale 0.15 0.02 40
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 90194db7-79f9-4b1b-b8a9-5c3a14add7f2
+component Name
+  Name "Cargo Bay B Handrail Left Front"
+component Transform
+  Position 2990.4 -2998.2 -11.25
+  Rotation 0 0 0
+  Scale 0.07 0.07 17.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity c089fab5-3618-431d-9fac-4bb619be2df2
+component Name
+  Name "Cargo Bay B Handrail Left Back"
+component Transform
+  Position 2990.4 -2998.2 11.25
+  Rotation 0 0 0
+  Scale 0.07 0.07 17.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 5cbb93ca-5290-4c24-b640-5eb06036cae9
+component Name
+  Name "Cargo Bay B Handrail Right"
+component Transform
+  Position 3009.6 -2998.2 0
+  Rotation 0 0 0
+  Scale 0.07 0.07 39
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 3096d4f9-22b7-4548-8bf5-55bdf19408b3
+component Name
+  Name "Cargo Bay B Lamp Left"
+component Transform
+  Position 2996 -2994.02 0
+  Rotation 0 0 0
+  Scale 0.25 0.03 30
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitLamp.material"
+
+entity 496709d7-3e3f-4e92-afff-23a7cd54e273
+component Name
+  Name "Cargo Bay B Lamp Right"
+component Transform
+  Position 3004 -2994.02 0
+  Rotation 0 0 0
+  Scale 0.25 0.03 30
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitLamp.material"
+
+entity cc2cf620-00a5-44d0-b638-6356625f2f38
+component Name
+  Name "Cargo Bay B Airlock Frame Front"
+component Transform
+  Position 2990.15 -2998.4 -2.15
+  Rotation 0 0 0
+  Scale 0.2 3.2 0.3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 025bbd21-bb4e-4005-8150-fcbd41ce9856
+component Name
+  Name "Cargo Bay B Airlock Frame Back"
+component Transform
+  Position 2990.15 -2998.4 2.15
+  Rotation 0 0 0
+  Scale 0.2 3.2 0.3
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity ecabd71a-6fde-4b82-adf7-1997133fdae1
+component Name
+  Name "Cargo Bay B Airlock Lintel"
+component Transform
+  Position 2990.15 -2996.85 0
+  Rotation 0 0 0
+  Scale 0.2 0.3 4.6
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity ea07232f-fd3d-4c0a-9a22-603c0a88fcae
+component Name
+  Name "Cargo Bay B Airlock Sign"
+component Transform
+  Position 2990.07 -2996.45 0
+  Rotation 0 0 0
+  Scale 0.04 0.3 2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitRed.material"
+
+entity 1edc5e9e-d95e-484d-9e39-513b778e9d92
+component Name
+  Name "Cargo Bay B Crate Left"
+component Transform
+  Position 2991.4 -2999.4 -18.6
+  Rotation 0 0 0
+  Scale 1.2 1.2 1.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity a28b830b-66c2-449c-bb84-a55ee5512747
+component Name
+  Name "Cargo Bay B Crate Left Stripe"
+component Transform
+  Position 2991.4 -2999.4 -18.6
+  Rotation 0 0 0
+  Scale 1.22 0.15 1.22
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitOrange.material"
+
+entity f8e246e7-30a4-4a93-87ad-f4fa085c78e0
+component Name
+  Name "Cargo Bay B Crate Right"
+component Transform
+  Position 3008.4 -2999.25 -18.4
+  Rotation 0 0 0
+  Scale 1.5 1.5 1.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitTrim.material"
+
+entity 0a6a1d29-f60a-40c2-91c9-bbc672ce79f9
+component Name
+  Name "Cargo Bay B Crate Right Stripe"
+component Transform
+  Position 3008.4 -2999.25 -18.4
+  Rotation 0 0 0
+  Scale 1.52 0.15 1.52
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitOrange.material"
+
+entity 9129be2b-e8ca-4e34-ac94-954634c7b764
+component Name
+  Name "Cargo Bay B Crate Right Top"
+component Transform
+  Position 3008.6 -2998.05 -18.6
+  Rotation 0 0 0
+  Scale 0.9 0.9 0.9
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 42404af5-b0ed-4aed-9283-fdd0fe24e617
+component Name
+  Name "Cargo Bay B Rib Left -15"
+component Transform
+  Position 2990.15 -2997 -15
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity db6c7111-5cf8-40d2-8441-214e0dea2f56
+component Name
+  Name "Cargo Bay B Rib Right -15"
+component Transform
+  Position 3009.85 -2997 -15
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity dc98d627-6a39-496a-9807-13f21bc61d31
+component Name
+  Name "Cargo Bay B Rib Left -10"
+component Transform
+  Position 2990.15 -2997 -10
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity dfa46449-415a-4924-819f-b56316802250
+component Name
+  Name "Cargo Bay B Rib Right -10"
+component Transform
+  Position 3009.85 -2997 -10
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 70720301-ab1a-45ed-9a22-1204cc8c347c
+component Name
+  Name "Cargo Bay B Rib Left -5"
+component Transform
+  Position 2990.15 -2997 -5
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 56092a5b-ffa9-4534-943b-51979fa80bcd
+component Name
+  Name "Cargo Bay B Rib Right -5"
+component Transform
+  Position 3009.85 -2997 -5
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 45f99139-9fa7-4248-8159-26f7b3a18d2a
+component Name
+  Name "Cargo Bay B Rib Left 5"
+component Transform
+  Position 2990.15 -2997 5
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity f3629627-ddcc-40e2-85ca-859b656d782d
+component Name
+  Name "Cargo Bay B Rib Right 5"
+component Transform
+  Position 3009.85 -2997 5
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 3324a371-604a-44fb-85d5-e577b20ee959
+component Name
+  Name "Cargo Bay B Rib Left 10"
+component Transform
+  Position 2990.15 -2997 10
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity efb3b6f5-bd4e-4376-ad08-7154d73849d7
+component Name
+  Name "Cargo Bay B Rib Right 10"
+component Transform
+  Position 3009.85 -2997 10
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 808ab6a9-94fb-4569-938f-ff8bdbe04649
+component Name
+  Name "Cargo Bay B Rib Left 15"
+component Transform
+  Position 2990.15 -2997 15
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 1e86dbc9-71cb-4f8e-a93a-2229d91fe9cc
+component Name
+  Name "Cargo Bay B Rib Right 15"
+component Transform
+  Position 3009.85 -2997 15
+  Rotation 0 0 0
+  Scale 0.3 6 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHull.material"
+
+entity 75b730bd-304e-4079-a9f4-f5d44e640ba3
+component Name
+  Name "Cargo Bay B Hatch Glow"
+component Transform
+  Position 3000 -2997 19
+  Rotation 0 0 0
+  Scale 1 1 1
+component PointLight
+  Color 1 0.6 0.15 1
+  Intensity 1.5
+  Range 4
