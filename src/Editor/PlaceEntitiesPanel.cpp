@@ -35,6 +35,7 @@ namespace FP::Editor
 			{ "Sprite", "Basic", EditorIcon::Sprite, "A textured quad for 2D games" },
 			{ "Camera", "Basic", EditorIcon::Camera, "The view the game renders from" },
 			{ "Character", "Basic", EditorIcon::Entity, "A pill shaped player with a follow camera. WASD walks, Space jumps and the mouse looks, no script needed" },
+			{ "Particle Emitter", "Basic", EditorIcon::Entity, "Sprays glowing particles. Tune rate, speed, size and color for fire, smoke or sparks" },
 			{ "Point Light", "Lights", EditorIcon::PointLight, "Light that shines in every direction from a point" },
 			{ "Directional Light", "Lights", EditorIcon::DirectionalLight, "Sun style light that comes from one direction" },
 			{ "Ambient Light", "Lights", EditorIcon::AmbientLight, "Flat light that fills every shadow" },

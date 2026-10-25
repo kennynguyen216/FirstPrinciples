@@ -1,0 +1,33 @@
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+struct ParticleData
+{
+    float4x4 ViewProjection;
+};
+
+struct main0_out
+{
+    float2 OutUV [[user(locn0)]];
+    float4 OutColor [[user(locn1)]];
+    float4 gl_Position [[position]];
+};
+
+struct main0_in
+{
+    float3 InPosition [[attribute(0)]];
+    float2 InUV [[attribute(1)]];
+    float4 InColor [[attribute(2)]];
+};
+
+vertex main0_out main0(main0_in in [[stage_in]], constant ParticleData& Particles [[buffer(0)]])
+{
+    main0_out out = {};
+    out.OutUV = in.InUV;
+    out.OutColor = in.InColor;
+    out.gl_Position = Particles.ViewProjection * float4(in.InPosition, 1.0);
+    return out;
+}
+
