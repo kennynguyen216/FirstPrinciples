@@ -2,6 +2,7 @@
 #include "Engine/Material.h"
 #include "Engine/Animation/SkeletalModel.h"
 #include "Engine/UI/UISystem.h"
+#include "Engine/Particles/ParticleSystem.h"
 #include "HAL/PlatformMisc.h"
 
 #include <algorithm>
@@ -31,6 +32,21 @@ namespace FP
 			blend.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
 			return blend;
 		}
+
+		SDL_GPUColorTargetBlendState AdditiveBlend()
+		{
+			SDL_GPUColorTargetBlendState blend = AlphaBlend();
+			blend.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+			blend.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+			return blend;
+		}
+
+		struct ParticleVertex
+		{
+			Vec3 Position;
+			Vec2 UV;
+			Vec4 Color;
+		};
 
 		// Unit quad in the XY plane facing +Z. UV origin is the top left like images.
 		const MeshVertex QuadVertices[4] = {
@@ -80,7 +96,7 @@ namespace FP
 					SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
 			}
 		}
-		for (SDL_GPUGraphicsPipeline* pipeline : { m_PresentPipeline, m_UIPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1] })
+		for (SDL_GPUGraphicsPipeline* pipeline : { m_PresentPipeline, m_UIPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1], m_ParticlePipelines[0], m_ParticlePipelines[1] })
 		{
 			if (pipeline)
 				SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
@@ -261,6 +277,146 @@ namespace FP
 		{
 			if (shader)
 				SDL_ReleaseGPUShader(gpu, shader);
+		}
+
+		CreateParticlePipelines();
+	}
+
+	void Renderer::CreateParticlePipelines()
+	{
+		SDL_GPUDevice* gpu = m_Device.GetHandle();
+		SDL_GPUShader* vert = m_Device.LoadShader("Particle.vert", 0, 1);
+		SDL_GPUShader* frag = m_Device.LoadShader("Particle.frag", 1, 1);
+		if (vert && frag)
+		{
+			SDL_GPUVertexBufferDescription buffer = {};
+			buffer.slot = 0;
+			buffer.pitch = sizeof(ParticleVertex);
+			buffer.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+
+			SDL_GPUVertexAttribute attributes[3] = {};
+			attributes[0] = { 0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(ParticleVertex, Position) };
+			attributes[1] = { 1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(ParticleVertex, UV) };
+			attributes[2] = { 2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(ParticleVertex, Color) };
+
+			for (int32 additive = 0; additive < 2; ++additive)
+			{
+				SDL_GPUColorTargetDescription colorTarget = {};
+				colorTarget.format = SceneFormat;
+				colorTarget.blend_state = additive ? AdditiveBlend() : AlphaBlend();
+
+				SDL_GPUGraphicsPipelineCreateInfo info = {};
+				info.vertex_shader = vert;
+				info.fragment_shader = frag;
+				info.vertex_input_state.vertex_buffer_descriptions = &buffer;
+				info.vertex_input_state.num_vertex_buffers = 1;
+				info.vertex_input_state.vertex_attributes = attributes;
+				info.vertex_input_state.num_vertex_attributes = 3;
+				info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+				info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+				info.depth_stencil_state.enable_depth_test = true;
+				info.depth_stencil_state.enable_depth_write = false;
+				info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
+				info.target_info.color_target_descriptions = &colorTarget;
+				info.target_info.num_color_targets = 1;
+				info.target_info.has_depth_stencil_target = true;
+				info.target_info.depth_stencil_format = m_Device.GetDepthFormat();
+				m_ParticlePipelines[additive] = SDL_CreateGPUGraphicsPipeline(gpu, &info);
+				if (!m_ParticlePipelines[additive])
+					FP_LOG_ERROR("Particle pipeline failed: %s", SDL_GetError());
+			}
+		}
+		if (vert)
+			SDL_ReleaseGPUShader(gpu, vert);
+		if (frag)
+			SDL_ReleaseGPUShader(gpu, frag);
+	}
+
+	void Renderer::PrepareParticles(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view)
+	{
+		m_ParticleBatches.Clear();
+		if (!m_ParticlePipelines[0] || !m_ParticlePipelines[1])
+			return;
+
+		// Far emitters first so alpha particles blend over what is behind them.
+		struct Source
+		{
+			Entity Value;
+			float Depth;
+		};
+		Array<Source> sources;
+		for (auto [entity, emitter, state] : world.View<ParticleEmitterComponent, ParticleStateComponent>().each())
+		{
+			if (!state.Particles.IsEmpty())
+				sources.Add({ entity, Vec3::Dot(world.GetWorldPosition(entity) - view.CameraPosition, view.CameraForward) });
+		}
+		if (sources.IsEmpty())
+			return;
+		std::sort(sources.begin(), sources.end(), [](const Source& a, const Source& b) { return a.Depth > b.Depth; });
+
+		Array<ParticleVertex> vertices;
+		for (const Source& source : sources)
+		{
+			const ParticleEmitterComponent& emitter = world.Get<ParticleEmitterComponent>(source.Value);
+			const ParticleStateComponent& state = world.Get<ParticleStateComponent>(source.Value);
+			const Mat4 placed = emitter.WorldSpace ? Mat4() : world.GetWorldMatrix(source.Value);
+			const Vec4 start = ToLinear(emitter.StartColor);
+			const Vec4 end = ToLinear(emitter.EndColor);
+			const uint32 first = static_cast<uint32>(vertices.Num());
+			for (const Particle& particle : state.Particles)
+			{
+				const float t = Clamp01(particle.Age / particle.Life);
+				const float half = Lerp(emitter.StartSize, emitter.EndSize, t) * 0.5f;
+				const Vec4 color{ Lerp(start.X, end.X, t), Lerp(start.Y, end.Y, t), Lerp(start.Z, end.Z, t), Lerp(start.W, end.W, t) };
+				const Vec3 center = emitter.WorldSpace ? particle.Position : placed.TransformPoint(particle.Position);
+				const Vec3 right = view.CameraRight * half;
+				const Vec3 up = view.CameraUp * half;
+				const ParticleVertex corners[4] = {
+					{ center - right + up, { 0, 0 }, color },
+					{ center + right + up, { 1, 0 }, color },
+					{ center + right - up, { 1, 1 }, color },
+					{ center - right - up, { 0, 1 }, color },
+				};
+				for (int32 index : { 0, 3, 2, 0, 2, 1 })
+					vertices.Add(corners[index]);
+			}
+			GPUTexture* texture = emitter.Texture.IsEmpty() ? nullptr : Texture(emitter.Texture, true, m_Device.GetWhiteTexture());
+			m_ParticleBatches.Add({ texture, emitter.Blend != "Alpha", first, static_cast<uint32>(vertices.Num()) - first });
+		}
+
+		const uint32 bytes = static_cast<uint32>(vertices.Num()) * sizeof(ParticleVertex);
+		if (!m_ParticleVertices || m_ParticleVertices->GetSize() < bytes)
+		{
+			uint32 capacity = 256 * 1024;
+			while (capacity < bytes)
+				capacity *= 2;
+			m_ParticleVertices = m_Device.CreateBuffer(SDL_GPU_BUFFERUSAGE_VERTEX, nullptr, capacity);
+		}
+		m_Device.UploadToBuffer(cmd, *m_ParticleVertices, vertices.Data(), bytes);
+	}
+
+	void Renderer::DrawParticles(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, const Mat4& viewProjection)
+	{
+		if (m_ParticleBatches.IsEmpty())
+			return;
+		SDL_GPUBufferBinding binding = { m_ParticleVertices->GetHandle(), 0 };
+		SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
+		SDL_PushGPUVertexUniformData(cmd, 0, &viewProjection, sizeof(viewProjection));
+		SDL_GPUGraphicsPipeline* bound = nullptr;
+		for (const ParticleBatch& batch : m_ParticleBatches)
+		{
+			SDL_GPUGraphicsPipeline* pipeline = m_ParticlePipelines[batch.Additive ? 1 : 0];
+			if (pipeline != bound)
+			{
+				SDL_BindGPUGraphicsPipeline(pass, pipeline);
+				bound = pipeline;
+			}
+			GPUTexture* image = batch.Texture ? batch.Texture : m_Device.GetWhiteTexture();
+			SDL_GPUTextureSamplerBinding sampler = { image->GetHandle(), m_Device.GetClampSampler() };
+			SDL_BindGPUFragmentSamplers(pass, 0, &sampler, 1);
+			const Vec4 look{ batch.Texture ? 1.0f : 0.0f, 0, 0, 0 };
+			SDL_PushGPUFragmentUniformData(cmd, 0, &look, sizeof(look));
+			SDL_DrawGPUPrimitives(pass, batch.Count, 1, batch.First, 0);
 		}
 	}
 
@@ -648,6 +804,7 @@ namespace FP
 		const bool hasLines = lines && !lines->GetVertices().IsEmpty();
 		if (hasLines)
 			UploadLines(cmd, *lines);
+		PrepareParticles(cmd, world, view);
 
 		// Collect everything visible with its shader and surface.
 		Array<Draw> draws;
@@ -746,6 +903,8 @@ namespace FP
 
 		SDL_GPURenderPass* pass = beginScenePass(true);
 		drawRange(pass, 0, firstGlass);
+		// Particles go before glass so glass refracts them.
+		DrawParticles(cmd, pass, viewProjection);
 		SDL_EndGPURenderPass(pass);
 
 		// Glass pass. Each glass object sees the scene as it was before any glass was drawn.

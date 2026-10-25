@@ -1,0 +1,38 @@
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+struct ParticleLook
+{
+    float4 Params;
+};
+
+struct main0_out
+{
+    float4 OutColor [[color(0)]];
+};
+
+struct main0_in
+{
+    float2 InUV [[user(locn0)]];
+    float4 InColor [[user(locn1)]];
+};
+
+fragment main0_out main0(main0_in in [[stage_in]], constant ParticleLook& Look [[buffer(0)]], texture2d<float> Image [[texture(0)]], sampler ImageSmplr [[sampler(0)]])
+{
+    main0_out out = {};
+    float4 color = in.InColor;
+    if (Look.Params.x > 0.5)
+    {
+        color *= Image.sample(ImageSmplr, in.InUV);
+    }
+    else
+    {
+        float edge = fast::clamp(1.0 - length((in.InUV * 2.0) - float2(1.0)), 0.0, 1.0);
+        color.w *= (edge * edge);
+    }
+    out.OutColor = color;
+    return out;
+}
+

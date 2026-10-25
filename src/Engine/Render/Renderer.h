@@ -119,6 +119,10 @@ namespace FP
 		void PushBones(SDL_GPUCommandBuffer* cmd, const Array<Mat4>* skin);
 		SDL_GPUGraphicsPipeline* CreateShadowPipeline(Surface surface);
 		void RenderShadows(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view);
+		void CreateParticlePipelines();
+		// Builds camera facing quads for every live particle and uploads them before the scene pass.
+		void PrepareParticles(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view);
+		void DrawParticles(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, const Mat4& viewProjection);
 		// Uploads the UI pages on screen and returns their textures in draw order.
 		Array<GPUTexture*> PrepareUI(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view, uint32 width, uint32 height);
 		GPUTexture* Texture(const String& path, bool srgb, GPUTexture* fallback);
@@ -148,6 +152,19 @@ namespace FP
 		};
 		Array<UITexture> m_UITextures;
 		SDL_GPUGraphicsPipeline* m_LinePipeline = nullptr;
+
+		// Particles test depth without writing it. Indexed by blend: alpha then additive.
+		// Optional, so a missing shader only loses particles.
+		SDL_GPUGraphicsPipeline* m_ParticlePipelines[2] = {};
+		struct ParticleBatch
+		{
+			GPUTexture* Texture; // null draws the soft dot
+			bool Additive;
+			uint32 First;
+			uint32 Count;
+		};
+		Array<ParticleBatch> m_ParticleBatches;
+		RefPtr<GPUBuffer> m_ParticleVertices;
 
 		RefPtr<GPUBuffer> m_QuadVertices;
 		RefPtr<GPUBuffer> m_QuadIndices;
