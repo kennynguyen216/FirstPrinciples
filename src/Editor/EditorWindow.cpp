@@ -1,4 +1,5 @@
 #include "Editor/EditorWindow.h"
+#include "Editor/MeshletDebugWidget.h"
 #include "Editor/AudioImport.h"
 #include "Engine/Audio/AudioDevice.h"
 #include "Engine/Audio/AudioWorld.h"
@@ -395,6 +396,7 @@ namespace FP::Editor
 			window->addAction(toggle);
 		}
 		window->addSeparator();
+		window->addAction("Nanite / Meshlet Debugger", this, [this]() { ShowMeshletDebugger(*m_Viewport, this); });
 		window->addAction("Audio Debugger", this, &EditorWindow::ShowAudioDebugger);
 		window->addAction("&Reset Layout", this, &EditorWindow::ResetLayout);
 		// Remembered once the window has its real size so the reset matches what opened.

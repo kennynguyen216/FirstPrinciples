@@ -1,0 +1,23 @@
+#version 450
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(set = 0, binding = 0) uniform sampler2D Depth;
+#ifdef FP_METAL
+#define OUTPUT_BINDING 1
+#else
+#define OUTPUT_BINDING 0
+#endif
+layout(std430, set = 1, binding = OUTPUT_BINDING) writeonly buffer TileData { float Values[]; } Tiles;
+layout(set = 2, binding = 0) uniform Params { uint Width; uint Height; uint Count; uint Flags; } U;
+shared float Depths[64];
+void main()
+{
+    uvec2 pixel = gl_GlobalInvocationID.xy;
+    uint lane = gl_LocalInvocationIndex;
+    Depths[lane] = all(lessThan(pixel, uvec2(U.Width, U.Height))) ? texelFetch(Depth, ivec2(pixel), 0).r : 1.0;
+    barrier();
+    for (uint stride = 32; stride > 0; stride >>= 1) {
+        if (lane < stride) Depths[lane] = max(Depths[lane], Depths[lane + stride]);
+        barrier();
+    }
+    if (lane == 0) Tiles.Values[gl_WorkGroupID.y * ((U.Width + 7) / 8) + gl_WorkGroupID.x] = Depths[0];
+}

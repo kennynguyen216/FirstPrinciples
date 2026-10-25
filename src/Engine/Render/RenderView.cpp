@@ -19,6 +19,20 @@ namespace FP
 		return true;
 	}
 
+	RenderView RenderView::Expanded(float factor) const
+	{
+		RenderView result = *this;
+		factor = std::isfinite(factor) ? std::clamp(factor, 1.0f, 4.0f) : 1.0f;
+		// Scale both clip-space rows, including translation for off-center ortho views.
+		for (int column = 0; column < 4; ++column)
+		{
+			result.Projection.At(column, 0) /= factor;
+			result.Projection.At(column, 1) /= factor;
+		}
+		result.PixelsPerUnit /= factor;
+		return result;
+	}
+
 	Ray RenderView::ScreenToRay(Vec2 pixel) const
 	{
 		const float x = pixel.X / static_cast<float>(Width) * 2.0f - 1.0f;

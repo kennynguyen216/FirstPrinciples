@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Engine/Render/GPUDevice.h"
-#include "Engine/Render/MeshData.h"
+#include "Engine/Render/Meshlets.h"
 
 namespace FP
 {
@@ -12,6 +12,7 @@ namespace FP
 		RefPtr<GPUBuffer> Vertices;
 		RefPtr<GPUBuffer> Indices;
 		uint32 IndexCount = 0;
+		Array<Meshlet> Meshlets;
 		Array<MeshSection> Sections; // drawn one at a time, each with its own material
 		RefPtr<GPUBuffer> Skin; // SkinVertex per vertex, only on skeletal meshes
 		Vec3 BoundsMin;
