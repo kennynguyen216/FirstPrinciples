@@ -327,6 +327,9 @@ project "Editor"
 	AddMocRules("src/Editor")
 	filter "system:windows"
 		entrypoint "mainCRTStartup"
+	filter "system:macosx"
+		-- Hides the cursor for cursor lock.
+		linkoptions { "-framework CoreGraphics" }
 	filter {}
 
 project "Tests"

@@ -13,7 +13,6 @@ StartingCargo 50
 CruiseSpeed 40
 ThrustAccel 12
 MouseSensitivity 0.15
-MouseJumpLimit 150
 MaxPitch 80
 TurnTime90 1.5
 

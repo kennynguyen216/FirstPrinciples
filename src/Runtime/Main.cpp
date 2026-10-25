@@ -182,9 +182,14 @@ int main(int argc, char** argv)
 				{
 					event.motion.x *= density;
 					event.motion.y *= density;
+					event.motion.xrel *= density;
+					event.motion.yrel *= density;
 				}
 				Input::ProcessEvent(event);
 			}
+			// SDL frees the cursor by itself while the window is unfocused.
+			if (SDL_GetWindowRelativeMouseMode(window) != Input::IsCursorLocked())
+				SDL_SetWindowRelativeMouseMode(window, Input::IsCursorLocked());
 
 			const uint64 now = SDL_GetTicksNS();
 			float deltaTime = static_cast<float>(now - lastTicks) / 1e9f;

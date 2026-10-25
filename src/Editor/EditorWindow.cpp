@@ -1055,6 +1055,7 @@ namespace FP::Editor
 
 		m_World->Update(deltaTime);
 		Input::EndFrame();
+		m_Viewport->ApplyCursorLock();
 
 		// Systems can create or destroy entities while playing.
 		if (m_World->IsPlaying())

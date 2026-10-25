@@ -31,6 +31,8 @@ namespace FP::Editor
 		void SetWorld(World* world) { m_World = world; }
 		void SetSelected(Entity entity) { m_Selected = entity; }
 		void SetPlaying(bool playing);
+		// Hides and holds the cursor while the game wants it locked. Call every frame, after the world update.
+		void ApplyCursorLock();
 
 		void Set3D(bool enabled) { m_3D = enabled; m_Gizmo.Set3D(enabled); }
 		bool Is3D() const { return m_3D; }
@@ -87,6 +89,7 @@ namespace FP::Editor
 
 	private:
 		void RecreateTarget();
+		void RecenterCursor();
 		RenderView CurrentView() const;
 		Vec2 ToPixels(QPointF point) const;
 		Vec2 PixelToWorld2D(Vec2 pixel) const;
@@ -120,6 +123,7 @@ namespace FP::Editor
 		World* m_World = nullptr;
 		Entity m_Selected = NullEntity;
 		bool m_Playing = false;
+		bool m_CursorLocked = false;
 		ViewMode m_ViewMode = ViewMode::Lit;
 
 		// 2D editor camera.

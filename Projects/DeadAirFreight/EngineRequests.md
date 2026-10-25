@@ -3,19 +3,6 @@
 Features this game needs from the engine. The game doesn't change the engine itself; each entry says
 what the game does in the meantime.
 
-## Mouse look: cursor lock and mouse delta
-
-**Needed for:** Driver flight (mouse aims the truck's nose), mouse look on foot in the cab, and the
-scratch ticket coin.
-
-**Ask:** a way for game code to hide and lock the cursor while playing, plus the mouse movement
-since last frame, e.g. `Input::SetCursorLocked(bool)` and `Input::GetMouseDelta()`.
-SDL's relative mouse mode covers the runtime; the editor viewport would need the same during Play.
-
-**Meanwhile:** the game uses how far `Input::GetMousePosition()` moved since last frame. Turning stops
-once the cursor reaches the edge of the view; move the mouse back to keep turning. Jumps bigger than
-`MouseJumpLimit` (the cursor entering the view) are ignored.
-
 ## Text and 2D overlay drawing
 
 **Needed for:** the whole Driver HUD, the scratch ticket and the results screen.

@@ -150,7 +150,7 @@ void DriverSystem::OnStart(World& world)
 		world.Add<DustComponent>(dust);
 	}
 
-	m_LastMouse = Input::GetMousePosition();
+	m_CursorFree = false;
 	m_Bank = 0;
 	m_BaseFieldOfView = 60;
 	for (auto [entity, camera] : world.View<CameraComponent>().each())
@@ -174,7 +174,10 @@ void DriverSystem::Update(World& world, float deltaTime)
 	if (!m_Finished)
 		Simulate(*truck, life, ticket, driver, deltaTime);
 	if (m_Finished)
+	{
 		truck->Speed = truck->Boost = 0;
+		Input::SetCursorLocked(false);
+	}
 	for (Message& message : m_Messages)
 		message.TimeLeft -= deltaTime;
 	m_Messages.erase(std::remove_if(m_Messages.begin(), m_Messages.end(), [](const Message& m) { return m.TimeLeft <= 0; }), m_Messages.end());
@@ -184,11 +187,13 @@ void DriverSystem::Update(World& world, float deltaTime)
 
 void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket, DriverState* driver, float deltaTime)
 {
-	const Vec2 mouse = Input::GetMousePosition();
-	Vec2 mouseMove = mouse - m_LastMouse;
-	if (std::abs(mouseMove.X) > m_Settings.MouseJumpLimit || std::abs(mouseMove.Y) > m_Settings.MouseJumpLimit)
-		mouseMove = {};
-	m_LastMouse = mouse;
+	// Escape frees the cursor and a click takes it back.
+	if (Input::WasKeyPressed(SDL_SCANCODE_ESCAPE))
+		m_CursorFree = true;
+	else if (Input::WasMousePressed(MouseButton::Left))
+		m_CursorFree = false;
+	Input::SetCursorLocked(!m_CursorFree);
+	const Vec2 mouseMove = Input::GetMouseDelta();
 
 	const bool awake = !IsBlackedOut(life);
 	bool repairing = false;

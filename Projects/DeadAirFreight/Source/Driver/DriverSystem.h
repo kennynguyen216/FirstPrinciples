@@ -69,7 +69,7 @@ private:
 	float m_Bank = 0;
 	float m_BaseFieldOfView = 60;
 
-	FP::Vec2 m_LastMouse;
+	bool m_CursorFree = false;
 	float m_WindNow = 0;
 	float m_KpNow = 0;
 	float m_PeakWindFought = 0;

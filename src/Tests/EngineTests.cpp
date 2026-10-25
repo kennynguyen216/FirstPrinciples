@@ -449,6 +449,21 @@ FP_TEST(Input_TextAndScrollLastOneFrame)
 	FP_EXPECT(Input::GetTypedText().empty() && Input::GetScroll().Y == 0);
 }
 
+FP_TEST(Input_MouseDeltaLastsOneFrameAndLockSurvivesReset)
+{
+	Input::AddMouseDelta({ 3, -1 });
+	Input::AddMouseDelta({ 2, 4 });
+	FP_EXPECT(Input::GetMouseDelta().X == 5 && Input::GetMouseDelta().Y == 3);
+	Input::EndFrame();
+	FP_EXPECT(Input::GetMouseDelta().X == 0 && Input::GetMouseDelta().Y == 0);
+
+	Input::SetCursorLocked(true);
+	Input::Reset();
+	FP_EXPECT(Input::IsCursorLocked());
+	Input::SetCursorLocked(false);
+	FP_EXPECT(!Input::IsCursorLocked());
+}
+
 #include "Engine/Json.h"
 
 FP_TEST(Json_ReadsWhatPagesSend)

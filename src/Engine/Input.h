@@ -34,6 +34,16 @@ namespace FP
 		// Pixels from the top left of the game view.
 		Vec2 GetMousePosition();
 
+		// Pixels the mouse moved this frame. Keeps coming while the cursor is locked, even though
+		// the cursor itself stays put.
+		Vec2 GetMouseDelta();
+
+		// Hides the cursor and holds it in the game view, for mouse look. Stays set until the game
+		// clears it. The host frees the cursor while the game view is unfocused (Escape unfocuses
+		// the editor viewport) and locks it again when focus comes back.
+		void SetCursorLocked(bool locked);
+		bool IsCursorLocked();
+
 		// Wheel movement this frame. Positive Y scrolls up, positive X scrolls right.
 		Vec2 GetScroll();
 
@@ -48,6 +58,7 @@ namespace FP
 		void SetKey(Key key, bool down);
 		void SetMouseButton(MouseButton button, bool down);
 		void SetMousePosition(Vec2 position);
+		void AddMouseDelta(Vec2 amount);
 		void AddScroll(Vec2 amount);
 		void AddTypedText(std::string_view utf8);
 		void ProcessEvent(const SDL_Event& event);

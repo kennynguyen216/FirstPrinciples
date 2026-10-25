@@ -16,6 +16,8 @@ namespace FP::Input
 			bool MouseDown[static_cast<int>(MouseButton::Count)] = {};
 			bool MousePressed[static_cast<int>(MouseButton::Count)] = {};
 			Vec2 MousePosition;
+			Vec2 MouseDelta;
+			bool CursorLocked = false;
 			Vec2 Scroll;
 			std::string Typed;
 		};
@@ -37,6 +39,9 @@ namespace FP::Input
 	bool IsMouseDown(MouseButton button) { return GetState().MouseDown[static_cast<int>(button)]; }
 	bool WasMousePressed(MouseButton button) { return GetState().MousePressed[static_cast<int>(button)]; }
 	Vec2 GetMousePosition() { return GetState().MousePosition; }
+	Vec2 GetMouseDelta() { return GetState().MouseDelta; }
+	void SetCursorLocked(bool locked) { GetState().CursorLocked = locked; }
+	bool IsCursorLocked() { return GetState().CursorLocked; }
 	Vec2 GetScroll() { return GetState().Scroll; }
 	std::string_view GetTypedText() { return GetState().Typed; }
 
@@ -67,6 +72,7 @@ namespace FP::Input
 	}
 
 	void SetMousePosition(Vec2 position) { GetState().MousePosition = position; }
+	void AddMouseDelta(Vec2 amount) { GetState().MouseDelta += amount; }
 	void AddScroll(Vec2 amount) { GetState().Scroll += amount; }
 	void AddTypedText(std::string_view utf8) { GetState().Typed.append(utf8); }
 
@@ -81,6 +87,7 @@ namespace FP::Input
 				break;
 			case SDL_EVENT_MOUSE_MOTION:
 				SetMousePosition({ event.motion.x, event.motion.y });
+				AddMouseDelta({ event.motion.xrel, event.motion.yrel });
 				break;
 			case SDL_EVENT_MOUSE_BUTTON_DOWN:
 			case SDL_EVENT_MOUSE_BUTTON_UP:
@@ -110,6 +117,7 @@ namespace FP::Input
 		std::memset(GetState().Pressed, 0, sizeof(GetState().Pressed));
 		std::memset(GetState().Released, 0, sizeof(GetState().Released));
 		std::memset(GetState().MousePressed, 0, sizeof(GetState().MousePressed));
+		GetState().MouseDelta = {};
 		GetState().Scroll = {};
 		GetState().Typed.clear();
 	}
@@ -117,8 +125,10 @@ namespace FP::Input
 	void Reset()
 	{
 		const Vec2 mouse = GetState().MousePosition;
+		const bool locked = GetState().CursorLocked;
 		GetState() = State();
 		GetState().MousePosition = mouse;
+		GetState().CursorLocked = locked;
 	}
 
 	void* GetSharedState()

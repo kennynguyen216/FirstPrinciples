@@ -4,6 +4,11 @@
 
 #include <SDL3/SDL.h>
 
+#ifdef __APPLE__
+#include <CoreGraphics/CoreGraphics.h>
+#endif
+
+#include <QCursor>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QKeyEvent>
@@ -18,6 +23,17 @@ namespace FP::Editor
 {
 	namespace
 	{
+		// Moves the cursor right away. On macOS Qt posts an event that moves it later, so the next
+		// QCursor::pos() would still see the old spot.
+		void WarpCursor(QPoint global)
+		{
+#ifdef __APPLE__
+			SDL_WarpMouseGlobal(static_cast<float>(global.x()), static_cast<float>(global.y()));
+#else
+			QCursor::setPos(global);
+#endif
+		}
+
 		// Maps the keys games usually need from Qt to SDL scancodes.
 		Key ToScancode(int qtKey)
 		{
@@ -98,9 +114,54 @@ namespace FP::Editor
 		m_Flying = false;
 		m_FlyKeys = 0;
 		m_Gizmo.EndDrag();
+		Input::SetCursorLocked(false);
 		Input::Reset();
+		ApplyCursorLock();
 		if (playing)
 			setFocus();
+	}
+
+	void ViewportWidget::ApplyCursorLock()
+	{
+		const bool lock = m_Playing && hasFocus() && Input::IsCursorLocked();
+		if (lock == m_CursorLocked)
+		{
+			if (lock)
+				RecenterCursor();
+			return;
+		}
+		m_CursorLocked = lock;
+		if (lock)
+		{
+			// The grab keeps clicks on the view even if a fast move gets the cursor out between checks.
+			setCursor(Qt::BlankCursor);
+#ifdef __APPLE__
+			// A blank cursor still grows when the mouse is shaken. Hiding it in the system doesn't.
+			CGDisplayHideCursor(kCGDirectMainDisplay);
+#endif
+			grabMouse();
+			WarpCursor(mapToGlobal(rect().center()));
+		}
+		else
+		{
+			releaseMouse();
+			unsetCursor();
+#ifdef __APPLE__
+			CGDisplayShowCursor(kCGDirectMainDisplay);
+#endif
+		}
+	}
+
+	void ViewportWidget::RecenterCursor()
+	{
+		// Reads where the cursor really is rather than trusting event positions, which can be stale
+		// or merged on macOS.
+		const QPoint center = mapToGlobal(rect().center());
+		const QPoint offset = QCursor::pos() - center;
+		if (offset.isNull())
+			return;
+		Input::AddMouseDelta(ToPixels(QPointF(offset)));
+		WarpCursor(center);
 	}
 
 	void ViewportWidget::RecreateTarget()
@@ -657,7 +718,15 @@ namespace FP::Editor
 		const QPointF position = event->position();
 		if (m_Playing)
 		{
+			// Locked, every move sends the cursor straight back to the middle. Each frame does too.
+			if (m_CursorLocked)
+			{
+				RecenterCursor();
+				return;
+			}
+			Input::AddMouseDelta(ToPixels(position - m_LastMouse));
 			Input::SetMousePosition(ToPixels(position));
+			m_LastMouse = position;
 			return;
 		}
 
@@ -771,6 +840,12 @@ namespace FP::Editor
 	{
 		if (m_Playing)
 		{
+			// Escape gives the cursor back to the editor. Clicking the view takes it again.
+			if (event->key() == Qt::Key_Escape && m_CursorLocked)
+			{
+				clearFocus();
+				return;
+			}
 			if (!event->isAutoRepeat())
 				Input::SetKey(ToScancode(event->key()), true);
 			// Printable text goes to UI text boxes. Control characters arrive as key presses instead.
@@ -868,6 +943,7 @@ namespace FP::Editor
 	{
 		Input::Reset();
 		m_FlyKeys = 0;
+		ApplyCursorLock();
 		QWidget::focusOutEvent(event);
 	}
 }
