@@ -1,12 +1,9 @@
 #include "Engine/Audio/AudioClip.h"
 #include "Engine/Paths.h"
 
-#include <SDL3/SDL.h>
-#include <algorithm>
-#include <cmath>
-#include <cstring>
+#include "Engine/Audio/AudioFileDecoder.h"
+#include <array>
 #include <filesystem>
-#include <fstream>
 #include <map>
 #include <thread>
 
@@ -23,98 +20,35 @@ namespace FP
 			return {reinterpret_cast<const char*>(text.data()), static_cast<int32>(text.size())};
 		}
 		fs::path Native(const String& text) { return fs::path(reinterpret_cast<const char8_t*>(text.CStr())); }
-		uint16 U16(const uint8* p) { return uint16(p[0]) | (uint16(p[1]) << 8); }
-		uint32 U32(const uint8* p) { return uint32(U16(p)) | (uint32(U16(p + 2)) << 16); }
-		bool Tag(const uint8* p, const char* tag) { return std::memcmp(p, tag, 4) == 0; }
-
-		AudioClipResult Decode(const fs::path& path, uint64 transientBudget)
+		AudioClipResult Decode(const fs::path& path, uint64 transientBudget, bool validateAll = false)
 		{
-			std::error_code stampError;
-			const auto stamp = fs::last_write_time(path, stampError);
-			std::ifstream file(path, std::ios::binary | std::ios::ate);
-			if (!file) return Error(AudioError::MissingClip, "Cannot open WAV file; check its path and permissions.");
-			const auto end = file.tellg();
-			if (end < 12 || uint64(end) > 64 * MiB) return Error(AudioError::UnsupportedFormat, "WAV must be a RIFF file of at most 64 MiB.");
-			const uint64 size = uint64(end);
-			if (size > transientBudget) return Error(AudioError::BudgetExceeded, "WAV input exceeds the temporary loading budget.");
-			std::vector<uint8> bytes(static_cast<size_t>(size));
-			file.seekg(0);
-			if (!file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size)))
-				return Error(AudioError::DecodeFailed, "Could not read the complete WAV snapshot.");
-			if (!Tag(bytes.data(), "RIFF") || !Tag(bytes.data() + 8, "WAVE") || uint64(U32(bytes.data() + 4)) + 8 != size)
-				return Error(AudioError::UnsupportedFormat, "Expected a complete little-endian RIFF/WAVE file.");
-			const uint8* format = nullptr;
-			uint32 formatSize = 0, dataSize = 0;
-			bool hasData = false;
-			for (uint64 offset = 12; offset < size;)
+			if (transientBudget < MiB) return Error(AudioError::BudgetExceeded, "Clip exceeds the temporary loading reservation.");
+			AudioFileDecoder decoder;
+			if (const auto result = decoder.Open(Utf8(path)); !result) return {result, {}};
+			auto clip = std::make_shared<AudioClip>(decoder.Info());
+			const uint64 decodedBytes = clip->Frames * clip->Channels * sizeof(float);
+			if (clip->Duration > 60 || decodedBytes > 32 * MiB)
 			{
-				if (size - offset < 8) return Error(AudioError::DecodeFailed, "Truncated WAV chunk header.");
-				const uint8* chunk = bytes.data() + offset;
-				const uint64 length = U32(chunk + 4);
-				const uint64 next = offset + 8 + length + (length & 1);
-				if (next > size) return Error(AudioError::DecodeFailed, "WAV chunk or padding exceeds the file.");
-				if (Tag(chunk, "fmt "))
+				clip->StreamPath = Utf8(path);
+				if (validateAll)
 				{
-					if (format) return Error(AudioError::UnsupportedFormat, "WAV contains multiple format chunks.");
-					format = chunk + 8;
-					formatSize = static_cast<uint32>(length);
+					std::array<float, 4096> buffer{};
+					while (decoder.Read(buffer.data(), buffer.size() / clip->Channels)) {}
+					if (!decoder.Result()) return {decoder.Result(), {}};
 				}
-				else if (Tag(chunk, "data"))
-				{
-					if (hasData) return Error(AudioError::UnsupportedFormat, "WAV contains multiple data chunks.");
-					hasData = true;
-					dataSize = static_cast<uint32>(length);
-				}
-				offset = next;
 			}
-			if (!format || !hasData || (formatSize != 16 && formatSize != 18) || (formatSize == 18 && U16(format + 16) != 0))
-				return Error(AudioError::UnsupportedFormat, "WAV needs one ordinary PCM16 or float32 format and one data chunk.");
-			const uint16 encoding = U16(format), channels = U16(format + 2), bits = U16(format + 14);
-			const uint32 rate = U32(format + 4);
-			if (!((encoding == 1 && bits == 16) || (encoding == 3 && bits == 32)) || channels < 1 || channels > 2 || rate < 8000 || rate > 96000)
-				return Error(AudioError::UnsupportedFormat, "Export PCM16 or float32 mono/stereo WAV at 8,000-96,000 Hz.");
-			const uint32 alignment = channels * (bits / 8);
-			if (U16(format + 12) != alignment || U32(format + 8) != rate * alignment || !dataSize || dataSize % alignment)
-				return Error(AudioError::DecodeFailed, "WAV data is empty or has invalid frame/block alignment.");
-			const uint64 frames = dataSize / alignment, decodedBytes = frames * channels * sizeof(float);
-			if (frames > uint64(rate) * 60 || decodedBytes > 32 * MiB)
-				return Error(AudioError::BudgetExceeded, "Clip exceeds 60 seconds or 32 MiB of decoded samples; split it into shorter clips.");
-			// SDL decode + conversion + immutable publication can coexist with the input snapshot.
-			if (size + dataSize + decodedBytes * 2 + MiB > transientBudget)
-				return Error(AudioError::BudgetExceeded, "Clip exceeds the temporary loading reservation.");
-			SDL_AudioSpec source{};
-			Uint8* sourceData = nullptr;
-			Uint32 sourceBytes = 0;
-			if (!SDL_LoadWAV_IO(SDL_IOFromConstMem(bytes.data(), bytes.size()), true, &source, &sourceData, &sourceBytes))
-				return {{AudioError::DecodeFailed, String::Format("SDL WAV decode failed: %s", SDL_GetError())}, {}};
-			std::unique_ptr<Uint8, decltype(&SDL_free)> sourceOwner(sourceData, SDL_free);
-			if (source.freq != int(rate) || source.channels != channels || sourceBytes != dataSize ||
-				source.format != (encoding == 1 ? SDL_AUDIO_S16LE : SDL_AUDIO_F32LE))
-				return Error(AudioError::DecodeFailed, "Decoded WAV does not match its validated format.");
-			SDL_AudioSpec target{SDL_AUDIO_F32, int(channels), int(rate)};
-			Uint8* converted = nullptr;
-			int convertedBytes = 0;
-			if (!SDL_ConvertAudioSamples(&source, sourceData, static_cast<int>(sourceBytes), &target, &converted, &convertedBytes))
-				return {{AudioError::DecodeFailed, String::Format("SDL sample conversion failed: %s", SDL_GetError())}, {}};
-			std::unique_ptr<Uint8, decltype(&SDL_free)> convertedOwner(converted, SDL_free);
-			if (convertedBytes < 0 || uint64(convertedBytes) != decodedBytes)
-				return Error(AudioError::DecodeFailed, "Unexpected decoded WAV frame count.");
-			auto clip = std::make_shared<AudioClip>();
-			clip->Path = Utf8(path);
-			clip->SampleRate = int(rate);
-			clip->Channels = channels;
-			clip->Frames = frames;
-			clip->Duration = double(frames) / rate;
-			clip->Encoding = encoding == 1 ? "PCM16" : "Float32";
-			clip->SourceBytes = size;
-			clip->LastWriteTicks = stampError ? 0 : static_cast<int64>(stamp.time_since_epoch().count());
-			const auto samples = reinterpret_cast<const float*>(converted);
-			clip->Samples.assign(samples, samples + decodedBytes / sizeof(float));
-			for (float& sample : clip->Samples)
+			else
 			{
-				if (!std::isfinite(sample)) return Error(AudioError::DecodeFailed, "Float WAV contains NaN or infinity; export finite samples.");
-				if (sample < -1 || sample > 1) { ++clip->ClippedSamples; sample = std::clamp(sample, -1.f, 1.f); }
+				if (decodedBytes + MiB > transientBudget) return Error(AudioError::BudgetExceeded, "Clip exceeds the temporary loading reservation.");
+				clip->Samples.resize(size_t(clip->Frames * clip->Channels));
+				if (decoder.Read(clip->Samples.data(), clip->Frames) != clip->Frames)
+					return decoder.Result() ? Error(AudioError::DecodeFailed, "Could not decode the complete audio file.") : AudioClipResult{decoder.Result(), {}};
 			}
+			clip->ClippedSamples = decoder.Info().ClippedSamples;
+			std::error_code ec;
+			const auto stamp = fs::last_write_time(path, ec);
+			if (ec || int64(stamp.time_since_epoch().count()) != clip->LastWriteTicks || fs::file_size(path) != clip->SourceBytes)
+				return Error(AudioError::DecodeFailed, "Audio changed while loading; retry with a stable file.");
 			return {{}, std::move(clip)};
 		}
 	}
@@ -158,8 +92,8 @@ namespace FP
 	}
 	AudioClipResult AudioClipCache::ValidateFile(const String& path)
 	{
-		try { return Decode(Native(path), 128 * MiB); }
-		catch (const std::exception&) { return Error(AudioError::DecodeFailed, "Could not allocate or access the WAV snapshot."); }
+		try { return Decode(Native(path), 128 * MiB, true); }
+		catch (const std::exception&) { return Error(AudioError::DecodeFailed, "Could not allocate or access the audio snapshot."); }
 	}
 	AudioClipResult AudioClipCache::Load(const String& path, bool reload)
 	{
@@ -191,7 +125,7 @@ namespace FP
 			const auto root = fs::canonical(m_Impl->Root, ec);
 			if (ec) return fail(Error(AudioError::MissingClip, "Content directory does not exist."));
 			const auto absolute = fs::canonical(root / relative, ec);
-			if (ec || !fs::is_regular_file(absolute, ec)) return fail(Error(AudioError::MissingClip, "Clip is missing; select an existing WAV under Content."));
+			if (ec || !fs::is_regular_file(absolute, ec)) return fail(Error(AudioError::MissingClip, "Clip is missing; select an existing WAV or MP3 under Content."));
 			auto actual = absolute.begin();
 			for (auto expected = root.begin(); expected != root.end(); ++expected, ++actual)
 				if (actual == absolute.end() || *actual != *expected) return fail(Error(AudioError::InvalidSettings, "Clip escapes the Content directory."));

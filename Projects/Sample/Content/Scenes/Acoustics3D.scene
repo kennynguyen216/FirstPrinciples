@@ -1,0 +1,818 @@
+# FirstPrinciples scene
+version 2
+
+entity ac00571c-0000-4000-8000-000000000001
+component Name
+  Name "Listener - 1/2/3/4 rooms, Space clap, R dry, T auto, WASD + mouse"
+component Transform
+  Position -18 1.65 3
+  Rotation 0 0 0
+  Scale 1 1 1
+component Camera
+  Perspective true
+  Primary true
+  FieldOfView 70
+  NearClip 0.05
+  FarClip 180
+  Background 0.10 0.16 0.24 1
+component AudioListener
+  Enabled true
+component AcousticsTest
+  AutoClap true
+
+entity ac00571c-0000-4000-8000-000000000002
+component Name
+  Name "Daylight"
+component Transform
+  Position 0 0 0
+  Rotation -55 -25 0
+  Scale 1 1 1
+component DirectionalLight
+  Color 1 0.94 0.84 1
+  Intensity 1.4
+  CastShadows true
+  ShadowResolution 2048
+  ShadowDistance 100
+
+entity ac00571c-0000-4000-8000-000000000003
+component Name
+  Name "Room fill"
+component Transform
+  Position 0 0 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component AmbientLight
+  Color 0.80 0.88 1 1
+  Intensity 0.7
+
+entity ac00571c-0000-4000-8000-000000000004
+component Name
+  Name "Outdoor promenade"
+component Transform
+  Position 12 -0.5 7
+  Rotation 0 0 0
+  Scale 92 0.5 42
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/Outside.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-000000000005
+component Name
+  Name "Soft room acoustics"
+component Transform
+  Position -18 2 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component AudioRoom
+  Enabled true
+  Size 10 4 12
+  Wet 0.85
+  Decay 0.35
+
+entity ac00571c-0000-4000-8000-000000000006
+component Name
+  Name "Soft floor"
+component Transform
+  Position -18 -0.2 0
+  Rotation 0 0 0
+  Scale 10 0.4 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/Soft.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-000000000007
+component Name
+  Name "Soft ceiling"
+component Transform
+  Position -18 4.2 0
+  Rotation 0 0 0
+  Scale 10.8 0.4 12.8
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/SoftCeiling.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-000000000008
+component Name
+  Name "Soft side wall"
+component Transform
+  Position -23.2 2 0
+  Rotation 0 0 0
+  Scale 0.4 4 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/SoftWall.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-000000000009
+component Name
+  Name "Soft doorway jamb"
+component Transform
+  Position -21.25 2 6.2
+  Rotation 0 0 0
+  Scale 3.5 4 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/SoftWall.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-00000000000a
+component Name
+  Name "Soft side wall"
+component Transform
+  Position -12.8 2 0
+  Rotation 0 0 0
+  Scale 0.4 4 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/SoftWall.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-00000000000b
+component Name
+  Name "Soft doorway jamb"
+component Transform
+  Position -14.75 2 6.2
+  Rotation 0 0 0
+  Scale 3.5 4 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/SoftWall.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-00000000000c
+component Name
+  Name "Soft back wall"
+component Transform
+  Position -18 2 -6.2
+  Rotation 0 0 0
+  Scale 10.8 4 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/SoftWall.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-00000000000d
+component Name
+  Name "Soft door lintel"
+component Transform
+  Position -18 3.5 6.2
+  Rotation 0 0 0
+  Scale 3 1 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/Soft.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-00000000000e
+component Name
+  Name "01 / SOFT ROOM"
+component Transform
+  Position -18 2 -5.97
+  Rotation 0 0 0
+  Scale 7 3.5 1
+component Mesh
+  Mesh "Quad"
+component Material
+  Material "Materials/Acoustics/SoftSign.material"
+
+entity ac00571c-0000-4000-8000-00000000000f
+component Name
+  Name "Bright room acoustics"
+component Transform
+  Position 0 2.5 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component AudioRoom
+  Enabled true
+  Size 12 5 14
+  Wet 0.85
+  Decay 1.6
+
+entity ac00571c-0000-4000-8000-000000000010
+component Name
+  Name "Bright floor"
+component Transform
+  Position 0 -0.2 0
+  Rotation 0 0 0
+  Scale 12 0.4 14
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/Bright.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-000000000011
+component Name
+  Name "Bright ceiling"
+component Transform
+  Position 0 5.2 0
+  Rotation 0 0 0
+  Scale 12.8 0.4 14.8
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/BrightCeiling.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-000000000012
+component Name
+  Name "Bright side wall"
+component Transform
+  Position -6.2 2.5 0
+  Rotation 0 0 0
+  Scale 0.4 5 14
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/BrightWall.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-000000000013
+component Name
+  Name "Bright doorway jamb"
+component Transform
+  Position -3.75 2.5 7.2
+  Rotation 0 0 0
+  Scale 4.5 5 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/BrightWall.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-000000000014
+component Name
+  Name "Bright side wall"
+component Transform
+  Position 6.2 2.5 0
+  Rotation 0 0 0
+  Scale 0.4 5 14
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/BrightWall.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-000000000015
+component Name
+  Name "Bright doorway jamb"
+component Transform
+  Position 3.75 2.5 7.2
+  Rotation 0 0 0
+  Scale 4.5 5 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/BrightWall.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-000000000016
+component Name
+  Name "Bright back wall"
+component Transform
+  Position 0 2.5 -7.2
+  Rotation 0 0 0
+  Scale 12.8 5 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/BrightWall.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-000000000017
+component Name
+  Name "Bright door lintel"
+component Transform
+  Position 0 4 7.2
+  Rotation 0 0 0
+  Scale 3 2 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/Bright.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-000000000018
+component Name
+  Name "02 / BRIGHT ROOM"
+component Transform
+  Position 0 2 -6.97
+  Rotation 0 0 0
+  Scale 7 3.5 1
+component Mesh
+  Mesh "Quad"
+component Material
+  Material "Materials/Acoustics/BrightSign.material"
+
+entity ac00571c-0000-4000-8000-000000000019
+component Name
+  Name "Hall room acoustics"
+component Transform
+  Position 24 5 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component AudioRoom
+  Enabled true
+  Size 22 10 24
+  Wet 0.85
+  Decay 3.4
+
+entity ac00571c-0000-4000-8000-00000000001a
+component Name
+  Name "Hall floor"
+component Transform
+  Position 24 -0.2 0
+  Rotation 0 0 0
+  Scale 22 0.4 24
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/Hall.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-00000000001b
+component Name
+  Name "Hall ceiling"
+component Transform
+  Position 24 10.2 0
+  Rotation 0 0 0
+  Scale 22.8 0.4 24.8
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/HallCeiling.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-00000000001c
+component Name
+  Name "Hall side wall"
+component Transform
+  Position 12.8 5 0
+  Rotation 0 0 0
+  Scale 0.4 10 24
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/HallWall.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-00000000001d
+component Name
+  Name "Hall doorway jamb"
+component Transform
+  Position 17.75 5 12.2
+  Rotation 0 0 0
+  Scale 9.5 10 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/HallWall.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-00000000001e
+component Name
+  Name "Hall side wall"
+component Transform
+  Position 35.2 5 0
+  Rotation 0 0 0
+  Scale 0.4 10 24
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/HallWall.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-00000000001f
+component Name
+  Name "Hall doorway jamb"
+component Transform
+  Position 30.25 5 12.2
+  Rotation 0 0 0
+  Scale 9.5 10 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/HallWall.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-000000000020
+component Name
+  Name "Hall back wall"
+component Transform
+  Position 24 5 -12.2
+  Rotation 0 0 0
+  Scale 22.8 10 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/HallWall.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-000000000021
+component Name
+  Name "Hall door lintel"
+component Transform
+  Position 24 6.5 12.2
+  Rotation 0 0 0
+  Scale 3 7 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/Hall.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-000000000022
+component Name
+  Name "03 / LARGE HALL"
+component Transform
+  Position 24 2 -11.97
+  Rotation 0 0 0
+  Scale 7 3.5 1
+component Mesh
+  Mesh "Quad"
+component Material
+  Material "Materials/Acoustics/HallSign.material"
+
+entity ac00571c-0000-4000-8000-000000000023
+component Name
+  Name "Outdoor listening pad"
+component Transform
+  Position 48 -0.1 0
+  Rotation 0 0 0
+  Scale 14 0.2 14
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/Outside.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-000000000024
+component Name
+  Name "04 / OPEN AIR"
+component Transform
+  Position 48 2.2 -5
+  Rotation 0 0 0
+  Scale 6 3 1
+component Mesh
+  Mesh "Quad"
+component Material
+  Material "Materials/Acoustics/OutsideSign.material"
+
+entity ac00571c-0000-4000-8000-000000000025
+component Name
+  Name "Soft clap pedestal"
+component Transform
+  Position -18 0.6 -1
+  Rotation 0 0 0
+  Scale 0.8 1.2 0.8
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/ClapStand.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-000000000026
+component Name
+  Name "Soft clap emitter"
+component Transform
+  Position -18 1.5 -1
+  Rotation 0 0 0
+  Scale 0.65 0.65 0.65
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Acoustics/ClapEmitter.material"
+component Collider
+  Shape "Sphere"
+  Radius 0.5
+  Trigger false
+component AudioSource
+  Clip "Audio/Clap.wav"
+  Enabled true
+  Volume 0.9
+  Pitch 1
+  Loop false
+  PlayOnStart false
+  Bus "SFX"
+  Spatial true
+  Occlusion true
+  MinDistance 3
+  MaxDistance 30
+  Priority 128
+
+entity ac00571c-0000-4000-8000-000000000027
+component Name
+  Name "CLAP SOURCE"
+component Transform
+  Position -18 2.8 -1
+  Rotation 0 0 0
+  Scale 2.4 1.2 1
+component Mesh
+  Mesh "Quad"
+component Material
+  Material "Materials/Acoustics/ClapSourceSign.material"
+
+entity ac00571c-0000-4000-8000-000000000028
+component Name
+  Name "Bright clap pedestal"
+component Transform
+  Position 0 0.6 -1
+  Rotation 0 0 0
+  Scale 0.8 1.2 0.8
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/ClapStand.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-000000000029
+component Name
+  Name "Bright clap emitter"
+component Transform
+  Position 0 1.5 -1
+  Rotation 0 0 0
+  Scale 0.65 0.65 0.65
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Acoustics/ClapEmitter.material"
+component Collider
+  Shape "Sphere"
+  Radius 0.5
+  Trigger false
+component AudioSource
+  Clip "Audio/Clap.wav"
+  Enabled true
+  Volume 0.9
+  Pitch 1
+  Loop false
+  PlayOnStart false
+  Bus "SFX"
+  Spatial true
+  Occlusion true
+  MinDistance 3
+  MaxDistance 30
+  Priority 128
+
+entity ac00571c-0000-4000-8000-00000000002a
+component Name
+  Name "CLAP SOURCE"
+component Transform
+  Position 0 2.8 -1
+  Rotation 0 0 0
+  Scale 2.4 1.2 1
+component Mesh
+  Mesh "Quad"
+component Material
+  Material "Materials/Acoustics/ClapSourceSign.material"
+
+entity ac00571c-0000-4000-8000-00000000002b
+component Name
+  Name "Hall clap pedestal"
+component Transform
+  Position 24 0.6 -1
+  Rotation 0 0 0
+  Scale 0.8 1.2 0.8
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/ClapStand.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-00000000002c
+component Name
+  Name "Hall clap emitter"
+component Transform
+  Position 24 1.5 -1
+  Rotation 0 0 0
+  Scale 0.65 0.65 0.65
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Acoustics/ClapEmitter.material"
+component Collider
+  Shape "Sphere"
+  Radius 0.5
+  Trigger false
+component AudioSource
+  Clip "Audio/Clap.wav"
+  Enabled true
+  Volume 0.9
+  Pitch 1
+  Loop false
+  PlayOnStart false
+  Bus "SFX"
+  Spatial true
+  Occlusion true
+  MinDistance 3
+  MaxDistance 30
+  Priority 128
+
+entity ac00571c-0000-4000-8000-00000000002d
+component Name
+  Name "CLAP SOURCE"
+component Transform
+  Position 24 2.8 -1
+  Rotation 0 0 0
+  Scale 2.4 1.2 1
+component Mesh
+  Mesh "Quad"
+component Material
+  Material "Materials/Acoustics/ClapSourceSign.material"
+
+entity ac00571c-0000-4000-8000-00000000002e
+component Name
+  Name "Outdoor clap pedestal"
+component Transform
+  Position 48 0.6 -1
+  Rotation 0 0 0
+  Scale 0.8 1.2 0.8
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/ClapStand.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity ac00571c-0000-4000-8000-00000000002f
+component Name
+  Name "Outdoor clap emitter"
+component Transform
+  Position 48 1.5 -1
+  Rotation 0 0 0
+  Scale 0.65 0.65 0.65
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Acoustics/ClapEmitter.material"
+component Collider
+  Shape "Sphere"
+  Radius 0.5
+  Trigger false
+component AudioSource
+  Clip "Audio/Clap.wav"
+  Enabled true
+  Volume 0.9
+  Pitch 1
+  Loop false
+  PlayOnStart false
+  Bus "SFX"
+  Spatial true
+  Occlusion true
+  MinDistance 3
+  MaxDistance 30
+  Priority 128
+
+entity ac00571c-0000-4000-8000-000000000030
+component Name
+  Name "CLAP SOURCE"
+component Transform
+  Position 48 2.8 -1
+  Rotation 0 0 0
+  Scale 2.4 1.2 1
+component Mesh
+  Mesh "Quad"
+component Material
+  Material "Materials/Acoustics/ClapSourceSign.material"
+
+entity ac00571c-0000-4000-8000-000000000031
+component Name
+  Name "Moving Doppler emitter"
+component Transform
+  Position 24 1.7 2
+  Rotation 0 0 0
+  Scale 1.2 1.2 1.2
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Acoustics/DopplerEmitter.material"
+component MovingAudio
+  Distance 8
+  Speed 30
+component AudioSource
+  Clip "Audio/DopplerTone.wav"
+  Enabled false
+  Volume 0.55
+  Pitch 1
+  Loop true
+  PlayOnStart false
+  Bus "SFX"
+  Spatial true
+  Occlusion true
+  DopplerScale 1
+  MinDistance 6
+  MaxDistance 45
+  Priority 128
+
+entity ac00571c-0000-4000-8000-000000000032
+component Name
+  Name "DOPPLER / PRESS 5"
+component Transform
+  Position 24 4 1.9
+  Rotation 0 0 0
+  Scale 5 2.5 1
+component Mesh
+  Mesh "Quad"
+component Material
+  Material "Materials/Acoustics/DopplerSign.material"

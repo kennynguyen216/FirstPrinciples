@@ -30,3 +30,11 @@ public:
 	void OnStart(FP::World& world) override;
 	void Update(FP::World& world, float deltaTime) override;
 };
+
+class AcousticsTestSystem : public FP::System
+{
+public:
+	const char* GetName() const override { return "AcousticsTest"; }
+	void OnStart(FP::World& world) override;
+	void Update(FP::World& world, float deltaTime) override;
+};

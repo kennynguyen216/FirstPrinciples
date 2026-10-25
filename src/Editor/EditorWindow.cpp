@@ -36,6 +36,8 @@
 #include <SDL3/SDL_events.h>
 
 #include <type_traits>
+#include <algorithm>
+#include <cmath>
 
 #include <QApplication>
 #include <QClipboard>
@@ -71,6 +73,9 @@
 #include <QTimer>
 #include <QToolBar>
 #include <QToolButton>
+#include <QTableWidget>
+#include <QHeaderView>
+#include <QProgressBar>
 
 namespace FP::Editor
 {
@@ -369,6 +374,7 @@ namespace FP::Editor
 			window->addAction(toggle);
 		}
 		window->addSeparator();
+		window->addAction("Audio Debugger", this, &EditorWindow::ShowAudioDebugger);
 		window->addAction("&Reset Layout", this, &EditorWindow::ResetLayout);
 		// Remembered once the window has its real size so the reset matches what opened.
 		QTimer::singleShot(0, this, [this]() { m_DefaultLayout = saveState(); });
@@ -1480,7 +1486,7 @@ namespace FP::Editor
 	{
 		if (m_World->IsPlaying())
 			return;
-		const QString source = QFileDialog::getOpenFileName(this, "Import Audio", {}, "Audio (*.wav)");
+		const QString source = QFileDialog::getOpenFileName(this, "Import Audio", {}, "Audio (*.wav *.mp3)");
 		if (source.isEmpty())
 			return;
 		const QDir content(ToQString(Paths::GetContentDir()));
@@ -1490,11 +1496,11 @@ namespace FP::Editor
 			return;
 		}
 		QString destination = QFileDialog::getSaveFileName(this, "Import Audio into Content/Audio",
-			content.filePath("Audio/" + QFileInfo(source).fileName()), "Audio (*.wav)", nullptr, QFileDialog::DontConfirmOverwrite);
+			content.filePath("Audio/" + QFileInfo(source).fileName()), "Audio (*.wav *.mp3)", nullptr, QFileDialog::DontConfirmOverwrite);
 		if (destination.isEmpty())
 			return;
-		if (!destination.endsWith(".wav", Qt::CaseInsensitive))
-			destination += ".wav";
+		if (QFileInfo(destination).suffix().isEmpty())
+			destination += "." + QFileInfo(source).suffix();
 		String relative;
 		const AudioResult result = ImportAudioFile(ToString(source), ToString(destination), relative);
 		if (!result)
@@ -1515,6 +1521,112 @@ namespace FP::Editor
 			}
 		}
 		statusBar()->showMessage(QString("Imported %1").arg(ToQString(relative)), 5000);
+	}
+
+	void EditorWindow::ShowAudioDebugger()
+	{
+		if (m_AudioDebugger) { m_AudioDebugger->show(); m_AudioDebugger->raise(); return; }
+		m_AudioDebugger = new QDockWidget("Audio Debugger", this);
+		m_AudioDebugger->setObjectName("AudioDebugger");
+		QWidget* body = new QWidget(m_AudioDebugger);
+		QVBoxLayout* layout = new QVBoxLayout(body);
+		QCheckBox* capture = new QCheckBox("Capture paths and draw rays during Play");
+		capture->setChecked(true);
+		layout->addWidget(capture);
+		QLabel* legend = new QLabel("Green: direct   Orange: obstructed   Cyan: reflections   Yellow: material hits. Double-click a material hit to inspect its object.");
+		legend->setWordWrap(true); layout->addWidget(legend);
+		QProgressBar* peak = new QProgressBar();
+		peak->setRange(0, 600); peak->setValue(0); peak->setAccessibleName("Audio output peak in decibels");
+		peak->setToolTip("Peak display decays at 20 dB per second so short sounds remain readable");
+		layout->addWidget(peak);
+		QLabel* meter = new QLabel(); meter->setTextInteractionFlags(Qt::TextSelectableByMouse); layout->addWidget(meter);
+		QTabWidget* tabs = new QTabWidget(); layout->addWidget(tabs);
+		auto table = [tabs](const char* title, QStringList headers) {
+			QTableWidget* widget = new QTableWidget(0, headers.size());
+			widget->setHorizontalHeaderLabels(headers);
+			widget->setEditTriggers(QAbstractItemView::NoEditTriggers);
+			widget->setSelectionBehavior(QAbstractItemView::SelectRows);
+			widget->horizontalHeader()->setStretchLastSection(true);
+			widget->verticalHeader()->hide();
+			tabs->addTab(widget, title);
+			return widget;
+		};
+		QTableWidget* voices = table("Voices", {"Clip / stream", "Bus", "State", "Peak dBFS", "RMS dBFS", "Low-pass Hz", "Wet", "Pitch x"});
+		voices->setColumnWidth(0, 260);
+		QTableWidget* paths = table("Paths", {"Source", "Distance m", "Transmission", "Applied gain dB", "Low-pass Hz", "Wet", "Decay s", "Pitch x"});
+		QTableWidget* hits = table("Material hits", {"Source", "Object", "Material", "Path", "Transmission", "Absorption", "Damping"});
+		hits->setColumnWidth(2, 300);
+		connect(hits, &QTableWidget::cellDoubleClicked, this, [this, hits](int row, int) {
+			const auto* item = hits->item(row, 1);
+			if (!item) return;
+			const Entity entity = Entity(item->data(Qt::UserRole).toUInt());
+			if (m_World->IsValid(entity)) Select(entity);
+		});
+		auto enabled = [this, capture]() {
+			m_World->GetAudio().SetDebugEnabled(m_AudioDebugger->isVisible() && capture->isChecked());
+		};
+		connect(capture, &QCheckBox::toggled, m_AudioDebugger, enabled);
+		connect(m_AudioDebugger, &QDockWidget::visibilityChanged, this, enabled);
+		auto refresh = [this, voices, paths, hits, peak, meter]() {
+			if (!m_AudioDebugger->isVisible()) return;
+			auto db = [](float value) { return value > 0.000001f ? QString::number(20 * std::log10(value), 'f', 1) : QString("-inf"); };
+			auto put = [](QTableWidget* target, int row, int column, const QString& text) {
+				if (auto* item = target->item(row, column)) { if (item->text() != text) item->setText(text); }
+				else target->setItem(row, column, new QTableWidgetItem(text));
+			};
+			const auto levels = m_Audio.GetMixLevels();
+			const int level = levels.OutputPeak > 0 ? int((60 + 20 * std::log10(levels.OutputPeak)) * 10) : 0;
+			peak->setValue(std::clamp(level, 0, 600));
+			peak->setFormat(QString("Output peak %1 dBFS").arg(db(levels.OutputPeak)));
+			meter->setText(QString("Input %1 dBFS | RMS %2 dBFS | Limiter reduction %3 dB | Limited samples %4 | Nonfinite %5")
+				.arg(db(levels.InputPeak), db(levels.Rms)).arg(levels.ReductionDb, 0, 'f', 1).arg(levels.LimitedSamples).arg(levels.NonfiniteSamples));
+			const auto active = m_Audio.GetVoices();
+			voices->setRowCount(active.Num());
+			const char* buses[] = {"SFX", "Music", "UI", "Voice"};
+			for (int row = 0; row < active.Num(); ++row)
+			{
+				const auto& voice = active[row];
+				put(voices, row, 0, ToQString(voice.Clip)); put(voices, row, 1, buses[size_t(voice.Params.Bus)]);
+				put(voices, row, 2, voice.State == VoiceState::Paused ? "Paused" : voice.State == VoiceState::Draining ? "Draining" : "Playing");
+				put(voices, row, 3, db(voice.Peak)); put(voices, row, 4, db(voice.Rms));
+				put(voices, row, 5, QString::number(voice.Params.LowPassHz, 'f', 0)); put(voices, row, 6, QString::number(voice.Params.Room.Wet, 'f', 2));
+				put(voices, row, 7, QString::number(voice.Params.Pitch, 'f', 3));
+			}
+			const auto& sources = m_World->GetAudio().GetDebugSources();
+			paths->setRowCount(int(sources.size()));
+			int hitCount = 0;
+			for (const auto& source : sources) hitCount += int(source.Hits.size());
+			hitCount = std::min(hitCount, 256); hits->setRowCount(hitCount);
+			int hitRow = 0;
+			for (size_t row = 0; row < sources.size(); ++row)
+			{
+				const auto& source = sources[row];
+				const QString name = m_World->IsValid(source.Owner) ? ToQString(m_World->GetEntityName(source.Owner)) : QString("One-shot");
+				put(paths, int(row), 0, name);
+				put(paths, int(row), 1, QString::number((source.Position - source.Listener).Length(), 'f', 2));
+				put(paths, int(row), 2, QString::number(source.Transmission, 'f', 3));
+				put(paths, int(row), 3, db(source.Params.Volume * std::hypot(source.Params.LeftGain, source.Params.RightGain)));
+				put(paths, int(row), 4, QString::number(source.Params.LowPassHz, 'f', 0));
+				put(paths, int(row), 5, QString::number(source.Params.Room.Wet, 'f', 2)); put(paths, int(row), 6, QString::number(source.Params.Room.Decay, 'f', 2));
+				put(paths, int(row), 7, QString::number(source.Params.Pitch, 'f', 3));
+				for (const auto& hit : source.Hits)
+				{
+					if (hitRow == hitCount) break;
+					put(hits, hitRow, 0, name); put(hits, hitRow, 1, ToQString(m_World->GetEntityName(hit.Object)));
+					hits->item(hitRow, 1)->setData(Qt::UserRole, uint32(hit.Object));
+					put(hits, hitRow, 2, ToQString(hit.Material)); put(hits, hitRow, 3, hit.Reflection ? "Reflection" : "Direct");
+					put(hits, hitRow, 4, QString::number(hit.Transmission, 'f', 3)); put(hits, hitRow, 5, QString::number(hit.Absorption, 'f', 3));
+					put(hits, hitRow, 6, QString::number(hit.Damping, 'f', 3));
+					++hitRow;
+				}
+			}
+		};
+		QTimer* timer = new QTimer(m_AudioDebugger);
+		connect(timer, &QTimer::timeout, m_AudioDebugger, refresh); timer->start(100);
+		m_AudioDebugger->setWidget(body);
+		addDockWidget(Qt::BottomDockWidgetArea, m_AudioDebugger);
+		tabifyDockWidget(m_ContentDock, m_AudioDebugger);
+		m_AudioDebugger->show(); m_AudioDebugger->raise(); enabled(); refresh();
 	}
 
 	void EditorWindow::ShowAudioSettings()
@@ -1622,6 +1734,9 @@ namespace FP::Editor
 		QTimer statusTimer(&dialog);
 		connect(&statusTimer, &QTimer::timeout, &dialog, refresh);
 		statusTimer.start(250);
+		QPushButton* debugger = new QPushButton("Open Audio Debugger");
+		connect(debugger, &QPushButton::clicked, &dialog, [this, &dialog]() { dialog.accept(); ShowAudioDebugger(); });
+		layout->addWidget(debugger);
 		QPushButton* close = new QPushButton("Close");
 		connect(close, &QPushButton::clicked, &dialog, &QDialog::accept);
 		layout->addWidget(close);

@@ -888,6 +888,35 @@ namespace FP
 		return true;
 	}
 
+	Array<RaycastHit> PhysicsWorld::RaycastAll(Vec3 origin, Vec3 direction, float maxDistance, entt::entity ignore, entt::entity ignoreAlso) const
+	{
+		Array<RaycastHit> hits;
+		const float length = direction.Length();
+		if (!std::isfinite(length) || length < 1e-8f || !std::isfinite(maxDistance) || maxDistance <= 0
+			|| !std::isfinite(origin.X) || !std::isfinite(origin.Y) || !std::isfinite(origin.Z)) return hits;
+		const Vec3 unit = direction / length;
+		const JPH::RRayCast ray{JPH::RVec3(origin.X, origin.Y, origin.Z), ToJolt(unit * maxDistance)};
+		const SolidFilter filter(m_Impl->Find(ignore), m_Impl->Find(ignoreAlso));
+		JPH::AllHitCollisionCollector<JPH::CastRayCollector> collector;
+		m_Impl->System->GetNarrowPhaseQuery().CastRay(ray, JPH::RayCastSettings{}, collector, {}, {}, filter);
+		collector.Sort();
+		for (const auto& result : collector.mHits)
+		{
+			const Entity entity = m_Impl->EntityOf(result.mBodyID);
+			bool duplicate = false;
+			for (const auto& hit : hits) if (hit.Entity == entity) { duplicate = true; break; }
+			if (entity == NullEntity || duplicate) continue;
+			RaycastHit hit;
+			hit.Entity = entity;
+			hit.Distance = result.mFraction * maxDistance;
+			hit.Point = origin + unit * hit.Distance;
+			JPH::BodyLockRead lock(m_Impl->System->GetBodyLockInterface(), result.mBodyID);
+			hit.Normal = lock.Succeeded() ? FromJolt(lock.GetBody().GetWorldSpaceSurfaceNormal(result.mSubShapeID2, ray.GetPointOnRay(result.mFraction))) : -unit;
+			hits.Add(hit);
+		}
+		return hits;
+	}
+
 	bool PhysicsWorld::SphereCast(Vec3 origin, float radius, Vec3 direction, float maxDistance, RaycastHit& hit, entt::entity ignore) const
 	{
 		const float length = direction.Length();

@@ -48,6 +48,8 @@ namespace FP
 		void SetAngularVelocity(entt::entity entity, Vec3 velocity) override;
 		bool Raycast(Vec3 origin, Vec3 direction, float maxDistance, RaycastHit& hit,
 			entt::entity ignore = entt::null, entt::entity ignoreAlso = entt::null) const override;
+		Array<RaycastHit> RaycastAll(Vec3 origin, Vec3 direction, float maxDistance,
+			entt::entity ignore = entt::null, entt::entity ignoreAlso = entt::null) const override;
 		bool SphereCast(Vec3 origin, float radius, Vec3 direction, float maxDistance, RaycastHit& hit, entt::entity ignore) const override;
 		Array<entt::entity> OverlapSphere(Vec3 center, float radius) const override;
 		void MoveCharacter(entt::entity entity, Vec3 velocity) override;

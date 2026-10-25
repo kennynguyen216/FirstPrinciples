@@ -1,0 +1,9 @@
+# FirstPrinciples material
+Shader "Lit"
+BaseColor 0.21 0.32 0.24 1
+BaseColorMap ""
+Metallic 0
+Roughness 0.8
+SoundTransmission 0.25
+SoundAbsorption 0.4
+SoundDamping 0.5

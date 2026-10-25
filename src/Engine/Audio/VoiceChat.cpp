@@ -57,7 +57,7 @@ namespace FP
 			VoiceHandle Voice;
 			Entity Owner = NullEntity;
 			bool Muted = false;
-			double NextSpatial = 0, RateStart = 0;
+			double NextSpatial = 0, RateStart = 0, TailUntil = 0;
 			uint32 PacketsThisSecond = 0;
 			uint64 QueuedFrames = 0;
 		};
@@ -76,8 +76,9 @@ namespace FP
 
 		void Stop(Peer& peer)
 		{
-			if (!DeviceLifetime.expired() && peer.Voice) Device->Stop(peer.Voice);
+			if (!DeviceLifetime.expired() && peer.Voice) Device->Stop(peer.Voice, false);
 			peer.Voice = {};
+			peer.TailUntil = 0;
 		}
 		void Discard(uint32 count)
 		{
@@ -235,17 +236,20 @@ namespace FP
 		{
 			const auto* settings = world.IsValid(peer.Owner) ? world.TryGet<VoiceChatComponent>(peer.Owner) : nullptr;
 			const bool ownerMatches = Player(world, id) == peer.Owner;
-			if (!device || !device->IsReady() || peer.Muted || !settings || !Valid(*settings) || !ownerMatches || !peer.Stream.IsActive(now))
+			const bool active = peer.Stream.IsActive(now);
+			if (!device || !device->IsReady() || peer.Muted || !settings || !Valid(*settings) || !ownerMatches || (!active && now >= peer.TailUntil))
 			{
 				impl.Stop(peer);
 				if (!settings || !Valid(*settings) || !ownerMatches) peer.Stream.Reset();
 				continue;
 			}
+			if (!active && device->GetState(peer.Voice) == VoiceState::Invalid) continue;
 			if (now >= peer.NextSpatial || device->GetState(peer.Voice) == VoiceState::Invalid)
 			{
 				OneShotParams params;
 				params.Owner = peer.Owner;
 				params.Spatial = true;
+				params.DopplerScale = 0;
 				params.Volume = settings->Volume;
 				params.MinDistance = settings->MinDistance;
 				params.MaxDistance = settings->MaxDistance;
@@ -253,6 +257,8 @@ namespace FP
 				params.Bus = AudioBus::Voice;
 				params.Priority = 255;
 				const auto spatial = world.GetAudio().GetSpatialParameters(params);
+				if (active) peer.TailUntil = spatial.Room.Wet > 0 ? now + 0.25 + spatial.Room.Decay * 1.5 + 0.5 : 0;
+				else if (spatial.Room.Wet == 0) peer.TailUntil = 0;
 				if (device->GetState(peer.Voice) == VoiceState::Invalid)
 					peer.Voice = device->CreateStream(impl.Context, VoiceSampleRate, spatial).Voice;
 				else
@@ -465,6 +471,29 @@ namespace FP
 		expires.Stream.Pop(pcm.data(), PlatformMisc::GetTimeSeconds() + 1);
 		chat.Update(*world.Get(), session, 0);
 		if (device.GetState(expiring) != VoiceState::Invalid) return false;
+		const Entity room = world->CreateEntity("Voice reverb room");
+		world->Add<AudioRoomComponent>(room);
+		const Entity speaker = Player(*world.Get(), 1000);
+		expires.NextSpatial = 0;
+		chat.Receive(*world.Get(), message(1000, speaker, 2));
+		chat.Update(*world.Get(), session, 0);
+		const VoiceHandle tail = expires.Voice;
+		if (!tail || expires.TailUntil <= PlatformMisc::GetTimeSeconds()) return false;
+		expires.Stream.Pop(pcm.data(), PlatformMisc::GetTimeSeconds() + 1);
+		chat.Update(*world.Get(), session, 0);
+		if (device.GetState(tail) == VoiceState::Invalid) return false;
+		chat.SetPeerMuted(1000, true);
+		if (device.GetState(tail) != VoiceState::Invalid || expires.TailUntil != 0) return false;
+		chat.SetPeerMuted(1000, false);
+		chat.Receive(*world.Get(), message(1000, speaker, 3));
+		expires.NextSpatial = 0;
+		chat.Update(*world.Get(), session, 0);
+		const VoiceHandle boundedTail = expires.Voice;
+		if (!boundedTail) return false;
+		expires.Stream.Pop(pcm.data(), PlatformMisc::GetTimeSeconds() + 1);
+		expires.TailUntil = PlatformMisc::GetTimeSeconds() - 1;
+		chat.Update(*world.Get(), session, 0);
+		if (device.GetState(boundedTail) != VoiceState::Invalid) return false;
 		chat.Shutdown();
 		if (!chat.m_Impl->Peers.empty() || chat.m_Impl->Device || !noCapture()) return false;
 		world->EndPlay(); world->GetAudio().Attach(nullptr);

@@ -25,3 +25,19 @@ struct AudioDemoComponent
 {
 	FP::String Clip = "Audio/Click.wav";
 };
+
+struct AcousticsTestComponent
+{
+	bool AutoClap = true;
+	bool Bypass = false;
+	float UntilClap = 0.8f;
+	bool DopplerDemo = false;
+};
+
+struct MovingAudioComponent
+{
+	float Distance = 8;
+	float Speed = 30;
+	float Phase = 0;
+	FP::Vec3 Origin;
+};
