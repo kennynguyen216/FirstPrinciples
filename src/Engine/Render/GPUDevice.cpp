@@ -228,7 +228,7 @@ namespace FP
 		return result;
 	}
 
-	void GPUDevice::UploadToBuffer(SDL_GPUCommandBuffer* cmd, GPUBuffer& buffer, const void* data, uint32 size)
+	void GPUDevice::UploadToBuffer(SDL_GPUCommandBuffer* cmd, GPUBuffer& buffer, const void* data, uint32 size, bool cycle)
 	{
 		FP_ASSERT(size <= buffer.GetSize());
 		SDL_GPUTransferBufferCreateInfo transferInfo = {};
@@ -244,7 +244,7 @@ namespace FP
 		SDL_GPUBufferRegion destination = {};
 		destination.buffer = buffer.GetHandle();
 		destination.size = size;
-		SDL_UploadToGPUBuffer(copy, &source, &destination, false);
+		SDL_UploadToGPUBuffer(copy, &source, &destination, cycle);
 		SDL_EndGPUCopyPass(copy);
 
 		// Safe to release now. SDL keeps it alive until the command buffer finishes.
