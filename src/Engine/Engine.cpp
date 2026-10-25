@@ -125,7 +125,8 @@ namespace FP::Engine
 			.Field("FXAA", &PostProcessComponent::FXAA)
 			.Field("Bloom", &PostProcessComponent::Bloom)
 			.Field("BloomIntensity", &PostProcessComponent::BloomIntensity).Range(0, 10)
-			.Field("BloomThreshold", &PostProcessComponent::BloomThreshold).Range(0, 65504);
+			.Field("BloomThreshold", &PostProcessComponent::BloomThreshold).Range(0, 65504)
+			.Field("WideBloom", &PostProcessComponent::WideBloom).Tooltip("A soft halo that spreads across the screen, like film glare around very bright light");
 
 		registry.Register<CameraComponent>("Camera")
 			.Field("Perspective", &CameraComponent::Perspective)

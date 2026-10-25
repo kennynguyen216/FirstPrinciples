@@ -714,12 +714,13 @@ FP_TEST(PostProcess_SceneSettingsStayIndependentOfAccessibility)
 	post.Bloom = true;
 	post.BloomIntensity = 0.4f;
 	post.BloomThreshold = 2;
+	post.WideBloom = true;
 	const String text = SceneSerializer::SaveToString(*world.Get());
 	FP_EXPECT(!text.Contains("ColorBlind"));
 	StrongObjectPtr<World> loaded(NewObject<World>());
 	FP_EXPECT(SceneSerializer::LoadFromString(*loaded.Get(), text.View()));
 	const auto* copy = loaded->TryGet<PostProcessComponent>(loaded->FindEntityByName("Post Processing"));
-	FP_EXPECT(copy && copy->FXAA && copy->Bloom && copy->BloomIntensity == 0.4f && copy->BloomThreshold == 2);
+	FP_EXPECT(copy && copy->FXAA && copy->Bloom && copy->BloomIntensity == 0.4f && copy->BloomThreshold == 2 && copy->WideBloom);
 	post.BloomIntensity = -1;
 	FP_EXPECT(!SceneSerializer::Validate(*world.Get()));
 	post.BloomIntensity = 0;

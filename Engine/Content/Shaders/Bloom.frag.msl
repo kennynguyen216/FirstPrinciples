@@ -43,9 +43,26 @@ fragment main0_out main0(main0_in in [[stage_in]], constant BloomData& Bloom [[b
     }
     else
     {
-        color = Source.sample(SourceSmplr, in.InUV).xyz * 0.227026998996734619140625;
-        color += ((Source.sample(SourceSmplr, (in.InUV + (stepUV * 1.3846149444580078125))).xyz + Source.sample(SourceSmplr, (in.InUV - (stepUV * 1.3846149444580078125))).xyz) * 0.316215991973876953125);
-        color += ((Source.sample(SourceSmplr, (in.InUV + (stepUV * 3.2307689189910888671875))).xyz + Source.sample(SourceSmplr, (in.InUV - (stepUV * 3.2307689189910888671875))).xyz) * 0.070270001888275146484375);
+        if (Bloom.Params.w > 2.5)
+        {
+            color = Source.sample(SourceSmplr, in.InUV).xyz * 4.0;
+            color += ((((Source.sample(SourceSmplr, (in.InUV + (stepUV * float2(1.0, 0.0)))).xyz + Source.sample(SourceSmplr, (in.InUV - (stepUV * float2(1.0, 0.0)))).xyz) + Source.sample(SourceSmplr, (in.InUV + (stepUV * float2(0.0, 1.0)))).xyz) + Source.sample(SourceSmplr, (in.InUV - (stepUV * float2(0.0, 1.0)))).xyz) * 2.0);
+            color += (((Source.sample(SourceSmplr, (in.InUV + stepUV)).xyz + Source.sample(SourceSmplr, (in.InUV - stepUV)).xyz) + Source.sample(SourceSmplr, (in.InUV + (stepUV * float2(1.0, -1.0)))).xyz) + Source.sample(SourceSmplr, (in.InUV + (stepUV * float2(-1.0, 1.0)))).xyz);
+            color /= float3(16.0);
+        }
+        else
+        {
+            if (Bloom.Params.w > 1.5)
+            {
+                color = (((Source.sample(SourceSmplr, (in.InUV + (stepUV * float2(-1.0)))).xyz + Source.sample(SourceSmplr, (in.InUV + (stepUV * float2(1.0, -1.0)))).xyz) + Source.sample(SourceSmplr, (in.InUV + (stepUV * float2(-1.0, 1.0)))).xyz) + Source.sample(SourceSmplr, (in.InUV + (stepUV * float2(1.0)))).xyz) * 0.25;
+            }
+            else
+            {
+                color = Source.sample(SourceSmplr, in.InUV).xyz * 0.227026998996734619140625;
+                color += ((Source.sample(SourceSmplr, (in.InUV + (stepUV * 1.3846149444580078125))).xyz + Source.sample(SourceSmplr, (in.InUV - (stepUV * 1.3846149444580078125))).xyz) * 0.316215991973876953125);
+                color += ((Source.sample(SourceSmplr, (in.InUV + (stepUV * 3.2307689189910888671875))).xyz + Source.sample(SourceSmplr, (in.InUV - (stepUV * 3.2307689189910888671875))).xyz) * 0.070270001888275146484375);
+            }
+        }
     }
     out.OutColor = float4(color, 1.0);
     return out;

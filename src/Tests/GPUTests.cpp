@@ -125,6 +125,13 @@ FP_TEST(PostProcess_GPUSettingsApplyAcrossScenes)
 		post.BloomIntensity = 1;
 		post.BloomThreshold = 0.25f;
 		FP_EXPECT(!same(baseline, render(*world.Get())));
+		// Wide bloom reaches the corners, which the short blur leaves dark.
+		const auto narrow = render(*world.Get());
+		post.WideBloom = true;
+		const auto wide = render(*world.Get());
+		FP_EXPECT(!same(narrow, wide));
+		FP_EXPECT(wide[0] > narrow[0]);
+		post.WideBloom = false;
 		post.BloomThreshold = 65504;
 		FP_EXPECT(same(baseline, render(*world.Get())));
 		post.BloomThreshold = 0.25f;

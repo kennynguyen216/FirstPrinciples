@@ -3,7 +3,7 @@
 layout(set = 2, binding = 0) uniform sampler2D Source;
 layout(set = 3, binding = 0) uniform BloomData
 {
-	vec4 Params; // xy texel step, z HDR threshold, w 0 extract / 1 blur
+	vec4 Params; // xy texel step, z HDR threshold, w 0 extract / 1 blur / 2 downsample / 3 upsample
 } Bloom;
 layout(location = 0) in vec2 InUV;
 layout(location = 0) out vec4 OutColor;
@@ -24,6 +24,22 @@ void main()
 		// Threshold before averaging so small emissive surfaces survive downsampling.
 		color = (Extract(InUV + stepUV * vec2(-1, -1)) + Extract(InUV + stepUV * vec2(1, -1)) +
 			Extract(InUV + stepUV * vec2(-1, 1)) + Extract(InUV + stepUV * vec2(1, 1))) * 0.25;
+	}
+	else if (Bloom.Params.w > 2.5)
+	{
+		// Wide bloom upsample: 3x3 tent over the smaller octave, added onto this one by blending.
+		color = texture(Source, InUV).rgb * 4.0;
+		color += (texture(Source, InUV + stepUV * vec2(1, 0)).rgb + texture(Source, InUV - stepUV * vec2(1, 0)).rgb +
+			texture(Source, InUV + stepUV * vec2(0, 1)).rgb + texture(Source, InUV - stepUV * vec2(0, 1)).rgb) * 2.0;
+		color += texture(Source, InUV + stepUV).rgb + texture(Source, InUV - stepUV).rgb +
+			texture(Source, InUV + stepUV * vec2(1, -1)).rgb + texture(Source, InUV + stepUV * vec2(-1, 1)).rgb;
+		color /= 16.0;
+	}
+	else if (Bloom.Params.w > 1.5)
+	{
+		// Wide bloom downsample: four bilinear taps one source texel out average a 4x4 block.
+		color = (texture(Source, InUV + stepUV * vec2(-1, -1)).rgb + texture(Source, InUV + stepUV * vec2(1, -1)).rgb +
+			texture(Source, InUV + stepUV * vec2(-1, 1)).rgb + texture(Source, InUV + stepUV * vec2(1, 1)).rgb) * 0.25;
 	}
 	else
 	{
