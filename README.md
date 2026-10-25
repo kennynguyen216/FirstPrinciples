@@ -958,9 +958,10 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 ### Meshlets and visibility debugging
 
 Every mesh upload (primitives, OBJ, and glTF) builds clusters using meshoptimizer v0.25.
-Clusters have at most 64 vertices and 124 triangles, preserve material sections and triangle
+Clusters have at most 32 vertices and 60 triangles, preserve material sections and triangle
 winding, and keep original vertex indices so skeletal weights remain aligned. Meshes are cached
-by path; uploading a shared mesh builds its clusters once.
+by path; uploading a shared mesh builds its clusters once. The smaller clusters give occlusion
+tighter bounds, trading more cluster metadata and indirect commands for finer rejection.
 
 Static opaque meshes use compute frustum and occlusion culling followed by indexed indirect
 main-pass draws. A current-frame depth prepass feeds an 8x8 max-depth tile buffer. A cluster is

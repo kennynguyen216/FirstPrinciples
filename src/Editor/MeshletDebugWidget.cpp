@@ -69,7 +69,7 @@ namespace FP::Editor
 		ImGui::SetNextWindowSize(io.DisplaySize);
 		ImGui::Begin("Nanite / meshlet visibility", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
 		ImGui::TextUnformatted("MESHLET VISIBILITY");
-		ImGui::TextWrapped("Clusters are built automatically at mesh upload: up to 64 vertices / 124 triangles per cluster.");
+		ImGui::TextWrapped("Clusters are built automatically at mesh upload: up to %u vertices / %u triangles per cluster.", MeshletMaxVertices, MeshletMaxTriangles);
 		if (!renderer.HasMeshletCulling()) ImGui::TextColored(ImVec4(1, 0.5f, 0.2f, 1), "Compute unavailable: using full mesh draws.");
 		ImGui::Checkbox("Enable meshlet rendering", &settings.Enabled);
 		ImGui::Checkbox("Frustum culling", &settings.Frustum); ImGui::SameLine();

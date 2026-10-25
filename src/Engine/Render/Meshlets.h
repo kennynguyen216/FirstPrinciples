@@ -3,8 +3,9 @@
 
 namespace FP
 {
-	constexpr uint32 MeshletMaxVertices = 64;
-	constexpr uint32 MeshletMaxTriangles = 124;
+	// Smaller clusters give occlusion tighter bounds, at the cost of more indirect commands.
+	constexpr uint32 MeshletMaxVertices = 32;
+	constexpr uint32 MeshletMaxTriangles = 60;
 	struct Meshlet
 	{
 		Vec3 BoundsMin;
