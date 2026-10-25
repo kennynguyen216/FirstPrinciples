@@ -253,7 +253,28 @@ Packets are tied to their peer's player, with size and rate limits. Proximity fi
 peer-replicated positions; a trusted server/relay is needed to enforce who may receive speech.
 The existing session has no relay for peers behind strict NATs.
 
-Open `Scenes/Acoustics3D.scene` in the editor and press Play, or run:
+Open `Scenes/Acoustics3D.scene` in the editor for the original room comparison.
+
+For a longer Doppler demonstration, open **`Scenes/DopplerFlyby.scene`**. The cyan emitter travels
+**500 meters at 45 m/s**, taking about **11 seconds each way** without teleporting at the ends.
+The listener starts 80 meters beside the route, with enough audio range to hear the full approach
+and departure. **P** toggles Doppler, **F** freezes motion while audio continues, and **R** restarts
+the pass. **WASD**, **Shift** and the mouse let you walk, run and look along the route.
+Assign a mono WAV/MP3 to **Long Doppler Emitter - assign mono MP3** to hear your own sound.
+This scene uses open air with no room effects or occlusion so the pitch shift is easy to compare.
+Regenerate its scene and distance markers with `python Scripts/GenerateDopplerFlyby.py` (Pillow required).
+
+For a ready-to-use MP3 test, open **`Scenes/AudioPlayground.scene`**. Import your file with
+**File > Import Audio...**, select **MP3 Music (M)** in the hierarchy, and replace its **AudioSource > Clip**.
+Press Play, click the viewport and press **M** to start/stop music. Stereo files are supported here;
+the included original 65-second MP3 demonstrates automatic streaming.
+Select **MP3 Doppler (5)** and assign a **mono** MP3 to test your own sound moving through space.
+Press **5** to start its sweep and **P** to compare Doppler on/off. **1–4**, **Space**, **T**, **R** and **B**
+keep the room, clap, dry/wet and overlap controls below. Open **Window > Audio Debugger** to inspect the result.
+The scene and bundled original sounds regenerate with `python Scripts/GenerateAudioPlayground.py`
+(FFmpeg and Pillow required only for regeneration).
+
+Run the original acoustics scene directly with:
 
 ```powershell
 Projects/Sample/Binaries/Debug/Runtime.exe Scenes/Acoustics3D.scene
