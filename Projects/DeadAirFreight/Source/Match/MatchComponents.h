@@ -2,17 +2,23 @@
 
 #include "Engine/Engine.h"
 
+// Two trucks race, with up to two players each. Seats fill in turn, P1 Crew A, P2 Crew B, P3 Crew A,
+// P4 Crew B, so two players race one on one and four race as pairs. A truck's first player starts
+// at the wheel and runs it; a second starts in the cargo bay, and either can do either job.
 inline constexpr FP::int32 CrewCount = 2;
 inline constexpr FP::int32 SlotsPerCrew = 2;
 inline constexpr FP::int32 MaxSlots = CrewCount * SlotsPerCrew;
+
+inline constexpr FP::int32 GetSlotCrew(FP::int32 slot) { return slot % CrewCount; }
 
 // Tuning for one match, edited on the scene's Match entity. Real world constants (consumption
 // rates, flare classes, radiation doses) do not go here. They live on the Real Data entity and in
 // Content/Data, where their sources are cited.
 struct MatchConfigComponent
 {
-	// The lobby starts the countdown once this many players are in. Enter starts it early for testing.
-	FP::int32 PlayersRequired = 4;
+	// The lobby waits this long for players to join, then starts. The host can skip the wait, and
+	// it starts at once when every seat is taken. Enter skips it too, for testing.
+	float LobbySeconds = 30;
 	float CountdownSeconds = 3;
 	// Game seconds per real day. Converts the real per day rates to per second rates while keeping
 	// their ratios.
@@ -56,7 +62,7 @@ struct CrewResult
 struct MatchStateComponent
 {
 	MatchPhase Phase = MatchPhase::Lobby;
-	// Seconds left in the countdown.
+	// Seconds left in the countdown, or in the lobby's wait for players.
 	float Countdown = 0;
 	float RaceTime = 0;
 	// -1 when nobody won, such as when the colony ran out of oxygen first.
@@ -64,6 +70,10 @@ struct MatchStateComponent
 	// The host pressed Start in the lobby.
 	bool StartRequested = false;
 	CrewResult Crews[CrewCount];
+	// Who sits where: the host fills seats in the order players join and everyone else hears it,
+	// so a seat never changes hands while the lobby waits.
+	bool SeatTaken[MaxSlots] = {};
+	FP::uint64 SeatOwners[MaxSlots] = {};
 };
 
 enum class CrewRole : FP::uint8

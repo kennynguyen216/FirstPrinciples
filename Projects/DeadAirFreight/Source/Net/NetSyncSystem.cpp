@@ -1,4 +1,5 @@
 #include "Net/NetSyncSystem.h"
+#include "Bridge/DriverBridge.h"
 #include "Crew/BayActions.h"
 #include "Enemies/Airlock.h"
 #include "Enemies/SiphonComponents.h"
@@ -18,6 +19,8 @@ namespace
 {
 	constexpr float MatchStateInterval = 0.2f;
 	constexpr float BayStateInterval = 0.05f;
+	// Tanks go in pages this big, so a bay full of holed tanks still fits the network's 1024 bytes.
+	constexpr int32 TanksPerMessage = 30;
 
 	DriverNetComponent* GetLink(World& world)
 	{
@@ -28,8 +31,9 @@ namespace
 	void ApplyBayState(World& world, NetReader& in)
 	{
 		const int32 crew = in.ReadU8();
+		const int32 first = in.ReadU8();
 		const int32 tanks = in.ReadU8();
-		for (int32 i = 0; i < tanks; ++i)
+		for (int32 i = first; i < first + tanks; ++i)
 		{
 			const float amount = in.ReadFloat();
 			const int32 holes = in.ReadU8();
@@ -47,6 +51,11 @@ namespace
 					tank->LeakPoint = leak;
 			}
 		}
+	}
+
+	void ApplyBayCreatures(World& world, NetReader& in)
+	{
+		const int32 crew = in.ReadU8();
 		const int32 siphons = in.ReadU8();
 		for (int32 i = 0; i < siphons; ++i)
 		{
@@ -131,12 +140,24 @@ void NetSyncSystem::Handle(World& world, const NetEvent& event)
 			const float countdown = in.ReadFloat();
 			const float raceTime = in.ReadFloat();
 			const int32 winner = static_cast<int32>(in.ReadU8()) - 1;
+			bool taken[MaxSlots];
+			uint64 owners[MaxSlots];
+			for (int32 slot = 0; slot < MaxSlots; ++slot)
+			{
+				taken[slot] = in.ReadBool();
+				owners[slot] = in.ReadU64();
+			}
 			if (host || !state || !in.IsValid())
 				return;
 			state->Phase = phase;
 			state->Countdown = countdown;
 			state->RaceTime = raceTime;
 			state->WinnerCrew = winner;
+			for (int32 slot = 0; slot < MaxSlots; ++slot)
+			{
+				state->SeatTaken[slot] = taken[slot];
+				state->SeatOwners[slot] = owners[slot];
+			}
 			break;
 		}
 		case Message::DriverPackage:
@@ -152,19 +173,13 @@ void NetSyncSystem::Handle(World& world, const NetEvent& event)
 				link->PackageReady = FromText(link->PackageText, link->Package);
 			break;
 		}
-		case Message::TruckState:
-		{
-			if (host || !link || in.Remaining() < static_cast<int32>(sizeof(TruckState) + sizeof(LifeSupport) + 8))
-				return;
-			std::memcpy(&link->Truck, in.ReadBytes(sizeof(TruckState)), sizeof(TruckState));
-			std::memcpy(&link->Life, in.ReadBytes(sizeof(LifeSupport)), sizeof(LifeSupport));
-			link->WheelHolder = in.ReadU64();
-			link->HasTruck = true;
-			break;
-		}
 		case Message::BayState:
 			if (!host)
 				ApplyBayState(world, in);
+			break;
+		case Message::BayCreatures:
+			if (!host)
+				ApplyBayCreatures(world, in);
 			break;
 		case Message::DriverResults:
 		{
@@ -173,33 +188,76 @@ void NetSyncSystem::Handle(World& world, const NetEvent& event)
 				link->Results = reason.CStr();
 			break;
 		}
+		case Message::CargoSpend:
+		{
+			const int32 crew = in.ReadU8();
+			const float kg = in.ReadFloat();
+			if (host && in.IsValid() && crew < CrewCount)
+				DriverBridge::SpendCargo(world, crew, kg);
+			break;
+		}
+		case Message::TruckFinished:
+		{
+			const int32 crew = in.ReadU8();
+			const bool delivered = in.ReadBool();
+			const float cargo = in.ReadFloat();
+			if (host && in.IsValid() && crew < CrewCount)
+				DriverBridge::FinishTruck(world, crew, delivered, cargo);
+			break;
+		}
+		case Message::TruckState:
+		{
+			const int32 crew = in.ReadU8();
+			if (!link || crew >= CrewCount || in.Remaining() < static_cast<int32>(sizeof(TruckState) + sizeof(LifeSupport) + 8))
+				return;
+			DriverNetComponent::Truck& truck = link->Crews[crew];
+			std::memcpy(&truck.State, in.ReadBytes(sizeof(TruckState)), sizeof(TruckState));
+			std::memcpy(&truck.Life, in.ReadBytes(sizeof(LifeSupport)), sizeof(LifeSupport));
+			truck.WheelHolder = in.ReadU64();
+			truck.Heard = true;
+			break;
+		}
 		case Message::CrewInput:
 		{
+			const int32 crew = in.ReadU8();
 			const bool seated = in.ReadBool();
 			const bool repairing = in.ReadBool();
 			const float aimX = in.ReadFloat();
 			const float aimY = in.ReadFloat();
-			if (!host || !link || !in.IsValid())
+			if (!link || !in.IsValid())
 				return;
-			DriverNetComponent::RemoteCrew& crew = link->GetRemote(event.Peer);
-			crew.Seated = seated;
-			crew.Repairing = repairing;
-			crew.Controls.Aim = { aimX, aimY };
-			crew.LastHeard = world.GetTime();
+			DriverNetComponent::CrewInput& input = DriverNetComponent::ByPeer(link->Inputs, event.Peer);
+			input.Crew = crew;
+			input.Seated = seated;
+			input.Repairing = repairing;
+			input.Controls.Aim = { aimX, aimY };
+			input.LastHeard = world.GetTime();
 			break;
 		}
 		case Message::CrewInCab:
 		{
+			const int32 crew = in.ReadU8();
 			const bool inCab = in.ReadBool();
 			const Vec3 position = in.ReadVec3();
 			const float yaw = in.ReadFloat();
 			if (!link || !in.IsValid())
 				return;
-			DriverNetComponent::CabCrewmate& crewmate = link->GetCabCrewmate(event.Peer);
+			DriverNetComponent::CabCrewmate& crewmate = DriverNetComponent::ByPeer(link->CabCrew, event.Peer);
+			crewmate.Crew = crew;
 			crewmate.InCab = inCab;
 			crewmate.CabPosition = position;
 			crewmate.Yaw = yaw;
 			crewmate.LastHeard = world.GetTime();
+			break;
+		}
+		case Message::TruckPose:
+		{
+			const int32 crew = in.ReadU8();
+			const Vec3 position = in.ReadVec3();
+			const Vec3 velocity = in.ReadVec3();
+			const Vec3 rotation = in.ReadVec3();
+			if (link && in.IsValid() && crew < CrewCount)
+				DriverBridge::ReceivePose(world, *link, crew, position, velocity, rotation);
 			break;
 		}
 		case Message::LaserHit:
@@ -247,29 +305,42 @@ void NetSyncSystem::SendMatchState(World& world)
 	message.WriteFloat(state->Countdown);
 	message.WriteFloat(state->RaceTime);
 	message.WriteU8(static_cast<uint8>(state->WinnerCrew + 1));
+	for (int32 slot = 0; slot < MaxSlots; ++slot)
+	{
+		message.WriteBool(state->SeatTaken[slot]);
+		message.WriteU64(state->SeatOwners[slot]);
+	}
 	GameNet::Send(world, message, NetChannel::Sequenced);
 }
 
 void NetSyncSystem::SendBayState(World& world, int32 crew)
 {
-	NetWriter message = GameNet::Begin(Message::BayState);
-	message.WriteU8(static_cast<uint8>(crew));
-
 	int32 tanks = 0;
 	for (auto [entity, tank] : world.View<CargoTankComponent>().each())
 		tanks += tank.Crew == crew ? 1 : 0;
-	message.WriteU8(static_cast<uint8>(tanks));
-	for (int32 i = 0; i < tanks; ++i)
+	for (int32 first = 0; first < tanks; first += TanksPerMessage)
 	{
-		const CargoTankComponent* tank = world.TryGet<CargoTankComponent>(BayActions::FindTank(world, crew, i));
-		message.WriteFloat(tank ? tank->AmountKg : 0);
-		const uint8 holes = tank ? static_cast<uint8>(std::clamp(tank->Holes, 0, 255)) : 0;
-		message.WriteU8(holes);
-		message.WriteFloat(tank ? tank->PatchProgress : 0);
-		if (holes > 0)
-			message.WriteVec3(tank->LeakPoint);
+		const int32 count = std::min(TanksPerMessage, tanks - first);
+		NetWriter page = GameNet::Begin(Message::BayState);
+		page.WriteU8(static_cast<uint8>(crew));
+		page.WriteU8(static_cast<uint8>(first));
+		page.WriteU8(static_cast<uint8>(count));
+		for (int32 i = first; i < first + count; ++i)
+		{
+			const CargoTankComponent* tank = world.TryGet<CargoTankComponent>(BayActions::FindTank(world, crew, i));
+			page.WriteFloat(tank ? tank->AmountKg : 0);
+			const uint8 holes = tank ? static_cast<uint8>(std::clamp(tank->Holes, 0, 255)) : 0;
+			page.WriteU8(holes);
+			page.WriteFloat(tank ? tank->PatchProgress : 0);
+			if (holes > 0)
+				page.WriteVec3(tank->LeakPoint);
+		}
+		// Each page is whole on its own, so it need not wait its turn behind other state.
+		GameNet::Send(world, page, NetChannel::Unreliable);
 	}
 
+	NetWriter message = GameNet::Begin(Message::BayCreatures);
+	message.WriteU8(static_cast<uint8>(crew));
 	int32 siphons = 0;
 	for (auto [entity, siphon] : world.View<SiphonComponent>().each())
 		siphons += siphon.Crew == crew ? 1 : 0;

@@ -650,7 +650,11 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 	const Color courseColor = offCourse < 10 ? Good : offCourse < 35 ? Warn : Bad;
 	field("progress", Format("%.4f", std::clamp(1 - altitude / m_Route.Length, 0.0f, 1.0f)));
 	field("distance", Line((km >= 1e6f ? Format("%.1f MILLION KM", km / 1e6f) : Format("%.0f KM", km)) + Format("   ETA %d:%02d", eta / 60, eta % 60), White));
-	field("course", Line(Format("OFF COURSE %.0f DEG    SPEED %.2fC", offCourse, truck.Speed * m_Settings.KmPerUnit / 299792.458f), courseColor, std::min(offCourse / 90, 1.0f)));
+	// Shown as a fraction of light speed, scaled so the fastest the truck can go (a jackpot boost)
+	// reads 0.995c and nothing ever reaches c. Only the readout scales; the truck's speed does not.
+	const float topSpeed = m_Settings.CruiseSpeed * std::max(m_Settings.BoostSpeedScale, 1.0f);
+	const float shownC = topSpeed > 0 ? std::min(truck.Speed, topSpeed) * (0.995f / topSpeed) : 0;
+	field("course", Line(Format("OFF COURSE %.0f DEG    SPEED %.3fC", offCourse, shownC), courseColor, std::min(offCourse / 90, 1.0f)));
 
 	// Steering sight: a ring where the windshield faces (the heading), a dot where you look, a line between them.
 	// Pinned to the screen's edge when you look far enough away that the heading leaves the view.

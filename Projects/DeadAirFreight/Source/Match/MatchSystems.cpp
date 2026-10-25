@@ -137,41 +137,89 @@ void CrewSystem::Update(World& world, float)
 			seats.Add(Seat{ GetOwner(world, entity), entity });
 		seats.Sort([](const Seat& a, const Seat& b) { return a.Owner < b.Owner; });
 
-		// Playing alone, keys 1 to 4 pick the seat so every role can be tried without four machines.
-		int32 players = 0;
-		for (int32 i = 0; i < seats.Num(); ++i)
-			players += i == 0 || seats[i].Owner != seats[i - 1].Owner ? 1 : 0;
-		// Only in the lobby, so typing an address on the title screen does not pick a seat.
-		if (players == 1 && state && state->Phase == MatchPhase::Lobby)
+		Array<uint64> owners;
+		for (const Seat& seat : seats)
 		{
-			const Key seatKeys[MaxSlots] = { SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3, SDL_SCANCODE_4 };
+			if (owners.IsEmpty() || owners[owners.Num() - 1] != seat.Owner)
+				owners.Add(seat.Owner);
+		}
+
+		// The host fills the seats; everyone else hears them in the match state (NetSyncSystem).
+		MatchStateComponent* seating = GetState(world);
+		if (seating && GameNet::IsHost(world))
+		{
+			// Playing alone, keys 1 to 4 pick the seat so every role can be tried without four
+			// machines. Only in the lobby, so typing an address on the title screen picks nothing.
+			if (owners.Num() == 1 && seating->Phase == MatchPhase::Lobby)
+			{
+				const Key seatKeys[MaxSlots] = { SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3, SDL_SCANCODE_4 };
+				for (int32 slot = 0; slot < MaxSlots; ++slot)
+				{
+					if (Input::WasKeyPressed(seatKeys[slot]) && m_SoloSeat != slot)
+					{
+						m_SoloSeat = slot;
+						FP_LOG("Crew: playing alone as P%d, Crew %s %s", slot + 1, GetCrewName(GetSlotCrew(slot)), GetRoleName(slot < CrewCount ? CrewRole::Driver : CrewRole::Defender));
+					}
+				}
+			}
+			// Players who left give up their seats.
 			for (int32 slot = 0; slot < MaxSlots; ++slot)
 			{
-				if (Input::WasKeyPressed(seatKeys[slot]) && m_SoloSeat != slot)
+				bool here = false;
+				for (uint64 owner : owners)
+					here |= owner == seating->SeatOwners[slot];
+				if (seating->SeatTaken[slot] && !here)
+					seating->SeatTaken[slot] = false;
+			}
+			if (owners.Num() == 1)
+			{
+				for (bool& taken : seating->SeatTaken)
+					taken = false;
+				seating->SeatTaken[m_SoloSeat] = true;
+				seating->SeatOwners[m_SoloSeat] = owners[0];
+			}
+			else
+			{
+				// Newcomers take the first free seat, so everyone already seated keeps theirs.
+				for (uint64 owner : owners)
 				{
-					m_SoloSeat = slot;
-					FP_LOG("Crew: playing alone as P%d, Crew %s %s", slot + 1, GetCrewName(slot / SlotsPerCrew), GetRoleName(slot % SlotsPerCrew == 0 ? CrewRole::Driver : CrewRole::Defender));
+					bool seated = false;
+					for (int32 slot = 0; slot < MaxSlots; ++slot)
+						seated |= seating->SeatTaken[slot] && seating->SeatOwners[slot] == owner;
+					for (int32 slot = 0; slot < MaxSlots && !seated; ++slot)
+					{
+						if (!seating->SeatTaken[slot])
+						{
+							seating->SeatTaken[slot] = true;
+							seating->SeatOwners[slot] = owner;
+							seated = true;
+						}
+					}
 				}
 			}
 		}
 
-		int32 next = players == 1 ? m_SoloSeat : 0;
-		uint64 previousOwner = 0;
-		for (int32 i = 0; i < seats.Num(); ++i)
+		for (const Seat& seat : seats)
 		{
-			CrewMemberComponent& member = world.Get<CrewMemberComponent>(seats[i].Member);
-			// The swapped out network template shares our owner for one frame. Seat only one.
-			const bool duplicate = i > 0 && seats[i].Owner == previousOwner;
-			previousOwner = seats[i].Owner;
-			if (duplicate || next >= MaxSlots)
-			{
-				member.Slot = -1;
-				member.Crew = -1;
+			CrewMemberComponent& member = world.Get<CrewMemberComponent>(seat.Member);
+			member.Slot = -1;
+			member.Crew = -1;
+		}
+		for (int32 slot = 0; seating && slot < MaxSlots; ++slot)
+		{
+			if (!seating->SeatTaken[slot])
 				continue;
+			// The swapped out network template shares its owner for one frame. Seat only one.
+			for (const Seat& seat : seats)
+			{
+				CrewMemberComponent& member = world.Get<CrewMemberComponent>(seat.Member);
+				if (seat.Owner != seating->SeatOwners[slot] || member.Slot >= 0)
+					continue;
+				member.Slot = slot;
+				member.Crew = GetSlotCrew(slot);
+				member.Role = slot < CrewCount ? CrewRole::Driver : CrewRole::Defender;
+				break;
 			}
-			member.Slot = next++;
-			member.Crew = member.Slot / SlotsPerCrew;
-			member.Role = member.Slot % SlotsPerCrew == 0 ? CrewRole::Driver : CrewRole::Defender;
 		}
 	}
 
@@ -211,19 +259,24 @@ void MatchSystem::Update(World& world, float deltaTime)
 		m_LastPhase = state->Phase;
 		return;
 	}
+	const MatchPhase lastPhase = m_LastPhase;
 	m_LastPhase = state->Phase;
 
 	switch (state->Phase)
 	{
 		case MatchPhase::Lobby:
 		{
+			// The wait for players starts over each time a lobby opens.
+			if (lastPhase != MatchPhase::Lobby)
+				state->Countdown = config.LobbySeconds;
 			int32 seated = 0;
 			for (auto [entity, member] : world.View<CrewMemberComponent>().each())
 				seated += member.Slot >= 0 ? 1 : 0;
 			// Wait out the first moments so the network has swapped in this peer's own player.
 			if (world.GetTime() < 0.5 || seated == 0)
 				break;
-			if (seated >= config.PlayersRequired || Input::WasKeyPressed(SDL_SCANCODE_RETURN) || state->StartRequested)
+			state->Countdown -= deltaTime;
+			if (state->Countdown <= 0 || seated >= MaxSlots || Input::WasKeyPressed(SDL_SCANCODE_RETURN) || state->StartRequested)
 				StartCountdown(world, *state, config);
 			state->StartRequested = false;
 			break;
