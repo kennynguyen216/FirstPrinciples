@@ -9,6 +9,12 @@
 
 namespace FP
 {
+	uint64 AllocateAudioContext()
+	{
+		static std::atomic<uint64> next{0};
+		return ++next;
+	}
+
 	namespace
 	{
 		constexpr uint32 GameVoices = 64, PreviewSlot = GameVoices;
@@ -16,7 +22,8 @@ namespace FP
 		bool Valid(const AudioPlaybackParams& p)
 		{
 			return Gain(p.Volume) && Gain(p.LeftGain) && Gain(p.RightGain) && std::isfinite(p.Pitch) &&
-				p.Pitch >= .25f && p.Pitch <= 4 && p.Priority >= 0 && p.Priority <= 255 && uint8(p.Bus) <= uint8(AudioBus::UI);
+				p.Pitch >= .25f && p.Pitch <= 4 && p.Priority >= 0 && p.Priority <= 255 && uint8(p.Bus) <= uint8(AudioBus::Voice) &&
+				std::isfinite(p.LowPassHz) && (p.LowPassHz == 0 || (p.LowPassHz >= 20 && p.LowPassHz <= 20000));
 		}
 	}
 
@@ -26,11 +33,16 @@ namespace FP
 		{
 			SDL_AudioStream* Stream = nullptr;
 			std::shared_ptr<const AudioClip> Clip;
+			std::vector<float> Ring;
+			size_t ReadHead = 0, Buffered = 0;
+			int SampleRate = 0;
 			AudioPlaybackParams Params;
 			uint64 Context = 0, Generation = 0, Serial = 0, Cursor = 0;
 			bool Paused = false, Ended = false, Failed = false;
 			float Left = 0, Right = 0, TargetLeft = 0, TargetRight = 0;
 			uint32 Ramp = 0;
+			float LowPass = 1, TargetLowPass = 1, FilterLeft = 0, FilterRight = 0;
+			uint32 FilterRamp = 0;
 			uint64 Overruns = 0;
 			std::array<float, 512 * 2> Scratch{};
 		};
@@ -41,8 +53,8 @@ namespace FP
 		SDL_AudioDeviceID Device = 0;
 		bool Initialized = false, RetryPending = false, MasterMuted = false;
 		float Master = 1;
-		std::array<float, 3> BusGains{1, 1, 1};
-		std::array<bool, 3> BusMuted{};
+		std::array<float, 4> BusGains{1, 1, 1, 1};
+		std::array<bool, 4> BusMuted{};
 		uint64 Generation = 0, Serial = 0, Rejected = 0, Stolen = 0, Overruns = 0;
 		std::atomic<uint64> Clipped{0}, Nonfinite{0};
 		std::atomic<int> OutputRate{0}, OutputChannels{0};
@@ -76,6 +88,7 @@ namespace FP
 		}
 		void Targets(Slot& slot)
 		{
+			const int sampleRate = slot.Clip ? slot.Clip->SampleRate : slot.SampleRate;
 			const size_t bus = static_cast<size_t>(slot.Params.Bus);
 			const float scalar = slot.Params.Volume * (MasterMuted ? 0.f : Master) *
 				(slot.Params.Preview ? 1.f : (BusMuted[bus] ? 0.f : BusGains[bus]));
@@ -84,7 +97,13 @@ namespace FP
 			{
 				slot.TargetLeft = left;
 				slot.TargetRight = right;
-				slot.Ramp = std::max(1, slot.Clip->SampleRate / 200);
+				slot.Ramp = std::max(1, sampleRate / 200);
+			}
+			const float lowPass = slot.Params.LowPassHz == 0 ? 1.f : float(1 - std::exp(-6.283185307179586 * slot.Params.LowPassHz / sampleRate));
+			if (lowPass != slot.TargetLowPass)
+			{
+				slot.TargetLowPass = lowPass;
+				slot.FilterRamp = std::max(1, sampleRate / 200);
 			}
 		}
 		void RefreshGains()
@@ -103,7 +122,7 @@ namespace FP
 			if (requested > 16384) { ++slot.Overruns; requested = 16384; }
 			while (requested)
 			{
-				const uint64 count = std::min({requested, uint64(512), slot.Clip->Frames - slot.Cursor});
+				const uint64 count = slot.Clip ? std::min({requested, uint64(512), slot.Clip->Frames - slot.Cursor}) : std::min(requested, uint64(512));
 				for (uint64 frame = 0; frame < count; ++frame)
 				{
 					if (slot.Ramp)
@@ -112,14 +131,35 @@ namespace FP
 						slot.Right += (slot.TargetRight - slot.Right) / slot.Ramp;
 						--slot.Ramp;
 					}
-					const size_t offset = static_cast<size_t>((slot.Cursor + frame) * slot.Clip->Channels);
-					slot.Scratch[frame * 2] = slot.Clip->Samples[offset] * slot.Left;
-					slot.Scratch[frame * 2 + 1] = slot.Clip->Samples[offset + (slot.Clip->Channels == 2 ? 1 : 0)] * slot.Right;
+					float left = 0, right = 0;
+					if (slot.Clip)
+					{
+						const size_t offset = static_cast<size_t>((slot.Cursor + frame) * slot.Clip->Channels);
+						left = slot.Clip->Samples[offset];
+						right = slot.Clip->Samples[offset + (slot.Clip->Channels == 2 ? 1 : 0)];
+					}
+					else if (slot.Buffered)
+					{
+						left = right = slot.Ring[slot.ReadHead];
+						slot.ReadHead = (slot.ReadHead + 1) % slot.Ring.size();
+						--slot.Buffered;
+					}
+					if (slot.FilterRamp)
+					{
+						slot.LowPass += (slot.TargetLowPass - slot.LowPass) / slot.FilterRamp;
+						--slot.FilterRamp;
+					}
+					slot.FilterLeft += slot.LowPass * (left - slot.FilterLeft);
+					slot.FilterRight += slot.LowPass * (right - slot.FilterRight);
+					if (std::abs(slot.FilterLeft) < 1e-20f) slot.FilterLeft = 0;
+					if (std::abs(slot.FilterRight) < 1e-20f) slot.FilterRight = 0;
+					slot.Scratch[frame * 2] = slot.FilterLeft * slot.Left;
+					slot.Scratch[frame * 2 + 1] = slot.FilterRight * slot.Right;
 				}
 				if (!SDL_PutAudioStreamData(stream, slot.Scratch.data(), int(count * sizeof(float) * 2))) { slot.Failed = true; return; }
 				slot.Cursor += count;
 				requested -= count;
-				if (slot.Cursor == slot.Clip->Frames)
+				if (slot.Clip && slot.Cursor == slot.Clip->Frames)
 				{
 					if (slot.Params.Loop) slot.Cursor = 0;
 					else
@@ -220,6 +260,52 @@ namespace FP
 		return true;
 	}
 
+	bool AudioStreamingOfflineSelfCheck()
+	{
+		SDL_AudioSpec spec{SDL_AUDIO_F32, 2, 48000};
+		auto stream = std::unique_ptr<SDL_AudioStream, decltype(&SDL_DestroyAudioStream)>(SDL_CreateAudioStream(&spec, &spec), SDL_DestroyAudioStream);
+		if (!stream) return false;
+		AudioDevice device;
+		AudioDevice::Impl::Slot slot;
+		slot.Stream = stream.get(); slot.SampleRate = 48000; slot.Ring.resize(12000);
+		slot.Left = slot.TargetLeft = 1; slot.Right = slot.TargetRight = .25f;
+		slot.ReadHead = 11998; slot.Buffered = 4;
+		const float samples[] = {.25f, -.5f, .75f, -1.f};
+		for (size_t i = 0; i < 4; ++i) slot.Ring[(slot.ReadHead + i) % slot.Ring.size()] = samples[i];
+		AudioDevice::Impl::Fill(&slot, stream.get(), 8 * 8, 0);
+		std::array<float, 16> first{};
+		if (SDL_GetAudioStreamData(stream.get(), first.data(), int(sizeof(first))) != sizeof(first)) return false;
+		for (size_t i = 0; i < 8; ++i)
+		{
+			const float value = i < 4 ? samples[i] : 0;
+			if (first[i * 2] != value || first[i * 2 + 1] != value * .25f) return false;
+		}
+		if (slot.Buffered || slot.Ended || slot.Cursor != 8) return false;
+		slot.Params.LowPassHz = 500; slot.Params.RightGain = 1;
+		device.m_Impl->Targets(slot);
+		std::array<float, 1920> output{};
+		for (int pass = 0; pass < 2; ++pass)
+		{
+			slot.ReadHead = 0; slot.Buffered = 960;
+			for (size_t i = 0; i < 960; ++i) slot.Ring[i] = i % 2 ? -1.f : 1.f;
+			AudioDevice::Impl::Fill(&slot, stream.get(), 960 * 8, 0);
+			if (SDL_GetAudioStreamData(stream.get(), output.data(), int(sizeof(output))) != sizeof(output)) return false;
+			for (float value : output) if (!std::isfinite(value) || std::abs(value) > 1) return false;
+			if (pass == 0 && std::abs(output.back()) > .1f) return false;
+			if (pass == 1 && std::abs(output.back()) < .99f) return false;
+			slot.Params.LowPassHz = 0;
+			device.m_Impl->Targets(slot);
+		}
+		device.m_Impl->Master = .5f; device.m_Impl->BusGains[static_cast<size_t>(AudioBus::Voice)] = .5f;
+		slot.Params.Bus = AudioBus::Voice; slot.Params.Volume = .8f; slot.Params.LeftGain = .5f; slot.Params.RightGain = .25f;
+		device.m_Impl->Targets(slot);
+		slot.ReadHead = 0; slot.Buffered = 960;
+		std::fill_n(slot.Ring.begin(), 960, 1.f);
+		AudioDevice::Impl::Fill(&slot, stream.get(), 960 * 8, 0);
+		if (SDL_GetAudioStreamData(stream.get(), output.data(), int(sizeof(output))) != sizeof(output)) return false;
+		return std::abs(output[1918] - .1f) < .00001f && std::abs(output[1919] - .05f) < .00001f;
+	}
+
 	AudioDevice::AudioDevice() : m_Impl(std::make_unique<Impl>()) {}
 	AudioDevice::~AudioDevice() { Shutdown(); }
 	AudioResult AudioDevice::Initialize()
@@ -259,12 +345,23 @@ namespace FP
 	AudioPlayResult AudioDevice::Play(uint64 context, const std::shared_ptr<const AudioClip>& clip, const AudioPlaybackParams& params, VoiceHandle replace, bool startPaused)
 	{
 		m_Impl->CheckThread();
+		if (!clip || !clip->Frames || clip->Channels < 1 || clip->Channels > 2 || clip->SampleRate < 8000 ||
+			clip->SampleRate > 96000 || clip->Frames > 96000ull * 60 || clip->Samples.size() != clip->Frames * clip->Channels)
+			return {{}, {AudioError::MissingClip, "A validated nonempty audio clip is required."}};
+		return StartVoice(context, clip, clip->SampleRate, params, replace, startPaused);
+	}
+	AudioPlayResult AudioDevice::CreateStream(uint64 context, int sampleRate, const AudioPlaybackParams& params)
+	{
+		return StartVoice(context, {}, sampleRate, params, {}, false);
+	}
+	AudioPlayResult AudioDevice::StartVoice(uint64 context, const std::shared_ptr<const AudioClip>& clip, int sampleRate,
+		const AudioPlaybackParams& params, VoiceHandle replace, bool startPaused)
+	{
+		m_Impl->CheckThread();
 		auto fail = [&](AudioError code, const char* message) -> AudioPlayResult { ++m_Impl->Rejected; return {{}, {code, message}}; };
 		if (!IsReady()) return fail(AudioError::NotReady, "Audio output is unavailable; retry audio initialization.");
 		if (!context || !Valid(params)) return fail(AudioError::InvalidSettings, "Invalid audio context, gain, pitch, bus or priority.");
-		if (!clip || !clip->Frames || clip->Channels < 1 || clip->Channels > 2 || clip->SampleRate < 8000 ||
-			clip->SampleRate > 96000 || clip->Frames > 96000ull * 60 || clip->Samples.size() != clip->Frames * clip->Channels)
-			return fail(AudioError::MissingClip, "A validated nonempty audio clip is required.");
+		if (sampleRate < 8000 || sampleRate > 96000) return fail(AudioError::InvalidSettings, "Streaming audio rate must be 8,000-96,000 Hz.");
 		uint32 selected = PreviewSlot;
 		bool stealing = false;
 		if (!params.Preview)
@@ -288,13 +385,15 @@ namespace FP
 		}
 		auto incoming = std::make_unique<Impl::Slot>();
 		incoming->Clip = clip;
+		incoming->SampleRate = sampleRate;
+		if (!clip) incoming->Ring.resize(static_cast<size_t>(sampleRate / 4));
 		incoming->Params = params;
 		incoming->Paused = startPaused;
 		incoming->Context = context;
 		incoming->Generation = ++m_Impl->Generation;
 		incoming->Serial = ++m_Impl->Serial;
 		m_Impl->Targets(*incoming);
-		SDL_AudioSpec input{SDL_AUDIO_F32, 2, clip->SampleRate};
+		SDL_AudioSpec input{SDL_AUDIO_F32, 2, sampleRate};
 		SDL_AudioSpec output{SDL_AUDIO_F32, 2, 48000};
 		incoming->Stream = SDL_CreateAudioStream(&input, &output);
 		if (!incoming->Stream) return fail(AudioError::BackendFailure, SDL_GetError());
@@ -313,6 +412,23 @@ namespace FP
 		m_Impl->Voices[selected] = std::move(incoming);
 		if (stealing) ++m_Impl->Stolen;
 		return {handle, {}};
+	}
+	bool AudioDevice::QueueStream(VoiceHandle handle, const float* samples, uint32 count)
+	{
+		m_Impl->CheckThread();
+		auto* slot = m_Impl->Find(handle);
+		if (!slot || slot->Clip || count > slot->Ring.size() || (count && !samples)) return false;
+		for (uint32 i = 0; i < count; ++i) if (!std::isfinite(samples[i])) return false;
+		if (!SDL_LockAudioStream(slot->Stream)) return false;
+		const bool fits = count <= slot->Ring.size() - slot->Buffered;
+		if (fits)
+		{
+			for (uint32 i = 0; i < count; ++i)
+				slot->Ring[(slot->ReadHead + slot->Buffered + i) % slot->Ring.size()] = std::clamp(samples[i], -1.f, 1.f);
+			slot->Buffered += count;
+		}
+		SDL_UnlockAudioStream(slot->Stream);
+		return fits;
 	}
 	bool AudioDevice::SetParameters(VoiceHandle handle, const AudioPlaybackParams& params)
 	{
@@ -402,7 +518,7 @@ namespace FP
 	bool AudioDevice::SetBusGain(AudioBus bus, float gain)
 	{
 		m_Impl->CheckThread();
-		if (uint8(bus) > uint8(AudioBus::UI) || !Gain(gain)) return false;
+		if (uint8(bus) > uint8(AudioBus::Voice) || !Gain(gain)) return false;
 		m_Impl->BusGains[static_cast<size_t>(bus)] = gain;
 		m_Impl->RefreshGains();
 		return true;
@@ -410,7 +526,7 @@ namespace FP
 	void AudioDevice::SetBusMuted(AudioBus bus, bool muted)
 	{
 		m_Impl->CheckThread();
-		if (uint8(bus) > uint8(AudioBus::UI)) return;
+		if (uint8(bus) > uint8(AudioBus::Voice)) return;
 		m_Impl->BusMuted[static_cast<size_t>(bus)] = muted;
 		m_Impl->RefreshGains();
 	}

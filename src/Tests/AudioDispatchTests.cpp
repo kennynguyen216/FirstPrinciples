@@ -22,6 +22,7 @@ namespace
 		AudioResult Preload(const String&) override { Calls |= 1u << 5; return {}; }
 		AudioPlayResult Play(Entity) override { Calls |= 1u << 6; return {HostVoice, {}}; }
 		AudioPlayResult PlayOneShot(const String&, const OneShotParams&) override { Calls |= 1u << 7; return {HostVoice, {}}; }
+		AudioPlaybackParams GetSpatialParameters(const OneShotParams&) override { Calls |= 1u << 16; return {}; }
 		bool Stop(VoiceHandle) override { Calls |= 1u << 8; return true; }
 		bool Pause(VoiceHandle) override { Calls |= 1u << 9; return true; }
 		bool Resume(VoiceHandle) override { Calls |= 1u << 10; return true; }
@@ -54,6 +55,7 @@ namespace
 		FP_EXPECT(audio.Preload("Audio/Uncached.wav"));
 		FP_EXPECT(audio.Play(NullEntity).Voice == HostVoice);
 		FP_EXPECT(audio.PlayOneShot("Audio/Uncached.wav").Voice == HostVoice);
+		audio.GetSpatialParameters({});
 		FP_EXPECT(audio.Stop(HostVoice));
 		FP_EXPECT(audio.Pause(HostVoice));
 		FP_EXPECT(audio.Resume(HostVoice));
@@ -72,7 +74,7 @@ FP_TEST(Audio_ScriptInterfacesDispatchToHost)
 	StrongObjectPtr<HostDispatchWorld> world(NewObject<HostDispatchWorld>());
 	CallAudioThroughScriptInterfaces(*world.Get());
 	FP_EXPECT(world->GetterCalls == 1);
-	FP_EXPECT(static_cast<HostDispatchAudio*>(world->Service.get())->Calls == 0xffffu);
+	FP_EXPECT(static_cast<HostDispatchAudio*>(world->Service.get())->Calls == 0x1ffffu);
 	world.Reset();
 	GarbageCollector::Get().Collect();
 	FP_EXPECT(HostDispatchAudio::Destroyed == 1);

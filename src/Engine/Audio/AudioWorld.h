@@ -31,6 +31,8 @@ namespace FP
 		virtual AudioResult Preload(const String& clip);
 		virtual AudioPlayResult Play(Entity source);
 		virtual AudioPlayResult PlayOneShot(const String& clip, const OneShotParams& params = {});
+		// Main thread; callers cache occlusion queries and refresh at most 20 times per second.
+		virtual AudioPlaybackParams GetSpatialParameters(const OneShotParams& params);
 		virtual bool Stop(VoiceHandle voice);
 		virtual bool Pause(VoiceHandle voice);
 		virtual bool Resume(VoiceHandle voice);
@@ -60,6 +62,10 @@ namespace FP
 			AudioPlaybackParams Params;
 			int Channels = 1;
 			bool SettingsValid = true;
+			bool Occlusion = true;
+			double NextOcclusionCheck = 0;
+			float OcclusionGain = 1;
+			float LowPassHz = 0;
 		};
 		AudioPlayResult PlayInternal(Entity source, bool preservePause);
 		Source& TrackSource(Entity source);
@@ -69,6 +75,7 @@ namespace FP
 		void SourceRemoved(entt::registry&, Entity entity);
 		void SelectListener();
 		void ApplySpatial(Voice& voice);
+		void ApplyOcclusion(AudioPlaybackParams& params, Vec3 source, Entity owner);
 		bool Owns(VoiceHandle voice) const;
 
 		World& m_World;

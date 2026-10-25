@@ -36,6 +36,7 @@ namespace FP
 		bool PlayOnStart = false;
 		String Bus = "SFX";
 		bool Spatial = false;
+		bool Occlusion = true;
 		float MinDistance = 1;
 		float MaxDistance = 25;
 		int32 Priority = 128;
@@ -44,6 +45,15 @@ namespace FP
 	struct AudioListenerComponent
 	{
 		bool Enabled = true;
+	};
+
+	struct VoiceChatComponent
+	{
+		bool Enabled = true;
+		float Volume = 1;
+		float MinDistance = 1;
+		float MaxDistance = 25;
+		bool Occlusion = true;
 	};
 
 	// Makes the entity a child of another. Its Transform is then relative to the parent, so it

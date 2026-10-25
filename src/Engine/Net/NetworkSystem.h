@@ -3,6 +3,7 @@
 #include "Engine/Net/NetSession.h"
 #include "Engine/Net/NetworkComponent.h"
 #include "Engine/World.h"
+#include "Engine/Audio/VoiceChat.h"
 
 namespace FP
 {
@@ -21,6 +22,7 @@ namespace FP
 	public:
 		const char* GetName() const override { return "Network"; }
 		NetSession& GetSession() { return m_Session; }
+		VoiceChat& GetVoiceChat() { return m_Voice; }
 
 		void OnStart(World& world) override;
 		void Update(World& world, float deltaTime) override;
@@ -32,6 +34,7 @@ namespace FP
 			Spawn,
 			Despawn,
 			Transforms,
+			Voice = VoiceChat::MessageType,
 		};
 
 		struct PartialSpawn
@@ -49,6 +52,7 @@ namespace FP
 		void Smooth(World& world, float deltaTime);
 
 		NetSession m_Session;
+		VoiceChat m_Voice;
 		bool m_TemplatesReplaced = false;
 		// Networked entities that came with the scene, and ones this peer spawned since.
 		Array<Guid> m_SceneEntities;

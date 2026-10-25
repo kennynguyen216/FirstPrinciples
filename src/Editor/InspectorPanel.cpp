@@ -949,6 +949,14 @@ namespace FP::Editor
 					if (info == ComponentRegistry::Get().Find<MeshComponent>() || info == ComponentRegistry::Get().Find<SkeletalMeshComponent>())
 						RebuildLater();
 				});
+				if ((info == ComponentRegistry::Get().Find<AudioSourceComponent>() || info == ComponentRegistry::Get().Find<VoiceChatComponent>()) && std::string_view(field.Name) == "Occlusion")
+					form->itemAt(form->rowCount() - 1, QFormLayout::FieldRole)->widget()->setToolTip("Uses raycasts between a spatial source and listener to dampen blocked sound.");
+			}
+			if (info == ComponentRegistry::Get().Find<VoiceChatComponent>())
+			{
+				QLabel* hint = new QLabel("Place on the network player to set speaking distance and volume. Enable the microphone in Audio settings, then hold V in the focused game viewport to talk. Use headphones to avoid feedback.");
+				hint->setWordWrap(true);
+				groupLayout->addWidget(hint);
 			}
 
 			if (info == ComponentRegistry::Get().Find<MaterialComponent>())

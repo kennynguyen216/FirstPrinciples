@@ -328,16 +328,17 @@ namespace FP
 
 	namespace
 	{
-		// Skips triggers and the body asked to be ignored, like the one casting the ray.
+		// Audio excludes both endpoints; gameplay casts usually exclude just the caster.
 		class SolidFilter final : public JPH::BodyFilter
 		{
 		public:
-			explicit SolidFilter(JPH::BodyID ignore) : m_Ignore(ignore) {}
-			bool ShouldCollide(const JPH::BodyID& id) const override { return id != m_Ignore; }
+			explicit SolidFilter(JPH::BodyID ignore, JPH::BodyID ignoreAlso = JPH::BodyID()) : m_Ignore(ignore), m_IgnoreAlso(ignoreAlso) {}
+			bool ShouldCollide(const JPH::BodyID& id) const override { return id != m_Ignore && id != m_IgnoreAlso; }
 			bool ShouldCollideLocked(const JPH::Body& body) const override { return !body.IsSensor(); }
 
 		private:
 			JPH::BodyID m_Ignore;
+			JPH::BodyID m_IgnoreAlso;
 		};
 	}
 
@@ -594,14 +595,15 @@ namespace FP
 			m_Impl->System->GetBodyInterface().SetAngularVelocity(id, ToJolt(velocity));
 	}
 
-	bool PhysicsWorld::Raycast(Vec3 origin, Vec3 direction, float maxDistance, RaycastHit& hit, entt::entity ignore) const
+	bool PhysicsWorld::Raycast(Vec3 origin, Vec3 direction, float maxDistance, RaycastHit& hit,
+		entt::entity ignore, entt::entity ignoreAlso) const
 	{
 		const float length = direction.Length();
 		if (length < 1e-8f || maxDistance <= 0)
 			return false;
 		const Vec3 unit = direction / length;
 
-		const SolidFilter filter(m_Impl->Find(ignore));
+		const SolidFilter filter(m_Impl->Find(ignore), m_Impl->Find(ignoreAlso));
 
 		const JPH::RRayCast ray{ JPH::RVec3(origin.X, origin.Y, origin.Z), ToJolt(unit * maxDistance) };
 		JPH::RayCastResult result;

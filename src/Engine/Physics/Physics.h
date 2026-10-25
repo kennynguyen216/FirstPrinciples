@@ -53,8 +53,9 @@ namespace FP
 		virtual Vec3 GetAngularVelocity(entt::entity entity) const = 0;
 		virtual void SetAngularVelocity(entt::entity entity, Vec3 velocity) = 0;
 
-		// The closest body along a ray, skipping ignore and triggers. direction need not be unit length.
-		virtual bool Raycast(Vec3 origin, Vec3 direction, float maxDistance, RaycastHit& hit, entt::entity ignore = entt::null) const = 0;
+		// The closest solid body along a ray, skipping both ignored entities. direction need not be unit length.
+		virtual bool Raycast(Vec3 origin, Vec3 direction, float maxDistance, RaycastHit& hit,
+			entt::entity ignore = entt::null, entt::entity ignoreAlso = entt::null) const = 0;
 
 		// Like Raycast but sweeps a ball, which is more forgiving for aiming and checking for room.
 		virtual bool SphereCast(Vec3 origin, float radius, Vec3 direction, float maxDistance, RaycastHit& hit, entt::entity ignore = entt::null) const = 0;

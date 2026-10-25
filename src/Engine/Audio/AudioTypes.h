@@ -8,6 +8,8 @@
 
 namespace FP
 {
+	uint64 AllocateAudioContext();
+
 	enum class AudioError : uint8
 	{
 		Ok, NotReady, InvalidSource, InvalidSettings, MissingClip,
@@ -21,7 +23,7 @@ namespace FP
 		explicit operator bool() const { return Code == AudioError::Ok; }
 	};
 
-	enum class AudioBus : uint8 { SFX, Music, UI };
+	enum class AudioBus : uint8 { SFX, Music, UI, Voice };
 	enum class VoiceState : uint8 { Invalid, Playing, Paused, Draining };
 
 	struct VoiceHandle
@@ -50,6 +52,7 @@ namespace FP
 		float LeftGain = 1;
 		float RightGain = 1;
 		bool Preview = false;
+		float LowPassHz = 0; // zero bypasses the filter
 	};
 
 	struct OneShotParams
@@ -63,5 +66,6 @@ namespace FP
 		Vec3 Position;
 		float MinDistance = 1;
 		float MaxDistance = 25;
+		bool Occlusion = true;
 	};
 }
