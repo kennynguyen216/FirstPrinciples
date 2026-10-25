@@ -24,6 +24,8 @@ namespace FP::Editor
 	{
 		setMouseTracking(true);
 		setFocusPolicy(Qt::StrongFocus);
+		m_PreviousCameraContext = viewport.GetMeshletCameraContext();
+		viewport.SetMeshletCameraContext(true);
 		ImGuiContext* previous = ImGui::GetCurrentContext();
 		m_Context = ImGui::CreateContext();
 		ImGui::GetIO().IniFilename = nullptr;
@@ -46,6 +48,7 @@ namespace FP::Editor
 	}
 	MeshletDebugWidget::~MeshletDebugWidget()
 	{
+		if (m_Viewport) m_Viewport->SetMeshletCameraContext(m_PreviousCameraContext);
 		SDL_WaitForGPUIdle(m_Device.GetHandle());
 		ImGuiContext* previous = ImGui::GetCurrentContext();
 		ImGui::SetCurrentContext(m_Context);
@@ -76,6 +79,10 @@ namespace FP::Editor
 		ImGui::Checkbox("Compute occlusion", &settings.Occlusion);
 		ImGui::Checkbox("Color meshlets", &settings.Colorize); ImGui::SameLine();
 		ImGui::Checkbox("Freeze culling camera", &settings.FreezeCamera);
+		bool cameraContext = m_Viewport->GetMeshletCameraContext();
+		if (ImGui::Checkbox("Show outside camera", &cameraContext)) m_Viewport->SetMeshletCameraContext(cameraContext);
+		if (cameraContext) ImGui::SliderFloat("Observer width", &m_Viewport->GetMeshletObserverWidth(), 1.05f, 2.0f, "%.2fx");
+		ImGui::TextWrapped("Yellow frame = the culling camera. The wider view shows clusters crossing its edges live. Move the camera with WASD + right mouse in the viewport.");
 		ImGui::TextWrapped("Freeze, then move the editor camera to inspect what the captured camera keeps. Unfreeze to resume live visibility.");
 		if (settings.Enabled && renderer.GetActiveMeshlets())
 		{
@@ -87,7 +94,7 @@ namespace FP::Editor
 		else ImGui::TextUnformatted("No active meshlet draws. Full mesh rendering or no static meshes.");
 		ImGui::TextWrapped("Static opaque meshes use indirect draws. Skinning and glass keep full draws. Cutouts do not act as occluders. Occlusion is off in wireframe.");
 		ImGui::Separator();
-		ImGui::TextUnformatted("Live viewport camera (edit camera, or game camera during Play)");
+		ImGui::TextUnformatted(cameraContext ? "Live observer view (yellow frame = culling camera)" : "Live viewport camera (edit camera, or game camera during Play)");
 		if (auto* preview = m_Viewport->GetRenderTarget())
 		{
 			const float aspect = static_cast<float>(preview->GetWidth()) / preview->GetHeight();
@@ -152,7 +159,7 @@ namespace FP::Editor
 		auto* layout = new QVBoxLayout(dialog);
 		layout->setContentsMargins(0, 0, 0, 0);
 		layout->addWidget(new MeshletDebugWidget(viewport, dialog));
-		dialog->resize(760, 700);
+		dialog->resize(760, 780);
 		dialog->show();
 	}
 }

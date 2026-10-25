@@ -63,6 +63,9 @@ namespace FP::Editor
 		void RenderFrame();
 
 		GPUTexture* GetRenderTarget() const { return m_Target.Get(); }
+		bool GetMeshletCameraContext() const { return m_MeshletCameraContext; }
+		void SetMeshletCameraContext(bool enabled) { m_MeshletCameraContext = enabled; }
+		float& GetMeshletObserverWidth() { return m_MeshletObserverWidth; }
 
 		Renderer* GetRenderer() const { return m_Renderer; }
 
@@ -94,7 +97,7 @@ namespace FP::Editor
 
 	private:
 		void RecreateTarget();
-		RenderView CurrentView() const;
+		RenderView CurrentView(bool observer = true) const;
 		Vec2 ToPixels(QPointF point) const;
 		Vec2 PixelToWorld2D(Vec2 pixel) const;
 
@@ -132,6 +135,8 @@ namespace FP::Editor
 		bool m_CursorHidden = false;
 		bool m_CursorLocked = false;
 		ViewMode m_ViewMode = ViewMode::Lit;
+		bool m_MeshletCameraContext = false;
+		float m_MeshletObserverWidth = 1.35f;
 
 		// 2D editor camera.
 		Vec2 m_CameraCenter;

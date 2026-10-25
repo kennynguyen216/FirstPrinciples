@@ -975,13 +975,22 @@ Open **Window > Nanite / Meshlet Debugger** for an ImGui window with:
 
 - Enable, frustum, and compute occlusion toggles to compare with full mesh rendering.
 - **Color meshlets** for stable colors per cluster.
+- **Show outside camera** (on when the debugger opens) widens the observer view by 1.35x while
+  culling continues from the original camera. The yellow frame marks that camera's frustum, so
+  you can see meshlets crossing its edges in real time. Adjust **Observer width** for more context;
+  closing the debugger restores the normal viewport. Picking and gizmos use the wider view too.
 - **Freeze culling camera** to hold visibility at a captured viewpoint while moving the editor camera.
+  The yellow outline then shows the frozen camera's volume from your new viewpoint.
 - A live viewport preview, plus asynchronous GPU counts of visible, frustum-rejected and occluded
   meshlets and main-pass triangles. Counts are from the last completed readback.
 
 Open `Scenes/Meshlets.scene` in the Sample project and press Play to see the demo camera.
 Nine spheres sit behind a movable wall, three sit in front, and two sit outside the camera.
-In edit mode, freeze the culling camera and fly around, or move the wall to watch the counts change.
+In edit mode, hold right mouse and use WASD in the viewport to move the live camera. The yellow
+frame and culling update together; meshlets outside the frame disappear while clusters that cross
+its edges remain visible. Disable **Frustum culling** to compare the surrounding geometry.
+Freeze the culling camera to inspect its results from another viewpoint, or move the wall to watch
+occlusion update. Camera movement does not require freezing.
 The feature works in the Runtime too; the debugger is editor-only. For a reproducible editor smoke test:
 
 ```bash

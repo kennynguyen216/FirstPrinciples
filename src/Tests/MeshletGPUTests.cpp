@@ -131,3 +131,47 @@ FP_TEST(Meshlet_RendererMatchesFullDrawsAfterMotionAndResize)
 	delete device;
 	SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }
+
+FP_TEST(Meshlet_ObserverUsesSeparateLiveCullingCamera)
+{
+	if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) return;
+	auto* device = GPUDevice::Create();
+	if (!device) { SDL_QuitSubSystem(SDL_INIT_VIDEO); return; }
+	{
+		Engine::RegisterEngineComponents();
+		StrongObjectPtr<World> world(NewObject<World>());
+		const Entity cube = world->CreateEntity("Outside camera, inside observer");
+		world->Add<MeshComponent>(cube).Mesh = "Cube";
+		world->Get<TransformComponent>(cube).Position = { 2.1f, 0, -3 };
+		world->Get<TransformComponent>(cube).Scale = { 0.2f, 0.2f, 0.2f };
+		Renderer renderer(*device, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM);
+		FP_EXPECT(renderer.IsValid() && renderer.HasMeshletCulling());
+		if (renderer.IsValid() && renderer.HasMeshletCulling())
+		{
+			renderer.GetMeshletSettings().Occlusion = false;
+			RenderView camera;
+			camera.Orthographic = false;
+			camera.Width = camera.Height = 128;
+			camera.Projection = Mat4::Perspective(60, 1, 0.1f, 100);
+			camera.Background = { 0, 0, 0, 1 }; camera.Mode = ViewMode::Unlit; camera.Tonemap = false;
+			auto target = device->CreateRenderTarget(SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM, 128, 128, false);
+			auto litPixels = [&](const RenderView* culling) {
+				const RenderView observer = camera.Expanded(1.5f);
+				auto* cmd = SDL_AcquireGPUCommandBuffer(device->GetHandle());
+				renderer.Render(cmd, target->GetHandle(), 128, 128, *world.Get(), observer, nullptr, culling);
+				SDL_SubmitGPUCommandBuffer(cmd);
+				Array<uint8> pixels; pixels.Resize(128 * 128 * 4);
+				FP_EXPECT(device->ReadPixels(target->GetHandle(), 128, 128, pixels.Data()));
+				int lit = 0;
+				for (int i = 0; i < pixels.Num(); i += 4) if (pixels[i] > 100) ++lit;
+				return lit;
+			};
+			FP_EXPECT(litPixels(&camera) == 0);
+			FP_EXPECT(litPixels(nullptr) > 0); // expanding the observer must not expand the culling camera
+			camera.View = Mat4::Translation({ -1, 0, 0 }); camera.CameraPosition = { 1, 0, 0 };
+			FP_EXPECT(litPixels(&camera) > 0); // live movement reveals the cluster without freezing
+		}
+	}
+	delete device;
+	SDL_QuitSubSystem(SDL_INIT_VIDEO);
+}

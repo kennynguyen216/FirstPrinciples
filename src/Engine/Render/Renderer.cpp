@@ -932,7 +932,7 @@ namespace FP
 	}
 
 	void Renderer::Render(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* target, uint32 width, uint32 height,
-		World& world, const RenderView& view, const DebugLines* lines)
+		World& world, const RenderView& view, const DebugLines* lines, const RenderView* cullingView)
 	{
 		if (!IsValid() || width == 0 || height == 0)
 			return;
@@ -1002,7 +1002,7 @@ namespace FP
 			return a.Depth > b.Depth;
 		});
 
-		PrepareMeshlets(cmd, world, view, draws);
+		PrepareMeshlets(cmd, world, cullingView ? *cullingView : view, draws);
 		const Mat4 viewProjection = view.GetViewProjection();
 		SDL_PushGPUFragmentUniformData(cmd, 1, &m_Frame, sizeof(m_Frame));
 

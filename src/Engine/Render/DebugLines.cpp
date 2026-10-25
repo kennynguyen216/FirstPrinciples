@@ -8,6 +8,21 @@ namespace FP
 		m_Vertices.Add({ b, color });
 	}
 
+	void DebugLines::AddFrustum(const RenderView& camera, Color color)
+	{
+		const Mat4 fromClip = camera.GetViewProjection().Inverse();
+		Vec3 corners[8];
+		for (int i = 0; i < 8; ++i)
+		{
+			const Vec4 p = fromClip * Vec4((i & 1) ? 1.0f : -1.0f, (i & 2) ? 1.0f : -1.0f, (i & 4) ? 1.0f : 0.0f, 1);
+			if (!std::isfinite(p.W) || std::fabs(p.W) < 1e-7f) return;
+			corners[i] = p.XYZ() / p.W;
+		}
+		for (int i = 0; i < 8; ++i)
+			for (int bit : { 1, 2, 4 })
+				if (!(i & bit)) AddLine(corners[i], corners[i | bit], color);
+	}
+
 	void DebugLines::AddRect(const Mat4& transform, Vec2 size, Color color)
 	{
 		const Vec2 h = size * 0.5f;

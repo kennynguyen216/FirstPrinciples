@@ -25,6 +25,7 @@ namespace FP::Editor
 		GPUDevice& m_Device;
 		ImGuiContext* m_Context = nullptr;
 		bool m_Ready = false;
+		bool m_PreviousCameraContext = false;
 		RefPtr<GPUTexture> m_Target;
 		QImage m_Image;
 	};

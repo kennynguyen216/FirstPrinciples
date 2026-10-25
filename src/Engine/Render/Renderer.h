@@ -69,9 +69,10 @@ namespace FP
 
 		bool IsValid() const;
 
-		// Records the frame into cmd. The caller submits it.
+		// Records the frame into cmd. The caller submits it. An optional cullingView lets
+		// an editor observe the results from a wider or independent viewpoint.
 		void Render(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* target, uint32 width, uint32 height,
-			World& world, const RenderView& view, const DebugLines* lines = nullptr);
+			World& world, const RenderView& view, const DebugLines* lines = nullptr, const RenderView* cullingView = nullptr);
 
 		// Loads every texture the world's sprites and materials use, decoding them in parallel.
 		// Call after loading a scene so the first frame does not stall on image decoding.
@@ -84,6 +85,7 @@ namespace FP
 		const MeshletStats& GetMeshletStats() { return m_Culling.ReadStats(); }
 		bool HasMeshletCulling() const { return m_Culling.IsValid() && m_OcclusionPipeline; }
 		uint32 GetActiveMeshlets() const { return m_ActiveMeshlets; }
+		const RenderView* GetFrozenMeshletView() const { return m_MeshletSettings.FreezeCamera && m_HasCullingView ? &m_CullingView : nullptr; }
 
 	private:
 		enum class ShaderKind : uint8
