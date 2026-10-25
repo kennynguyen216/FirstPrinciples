@@ -7,6 +7,7 @@
 #include "LifeSupport/LifeSupportSystems.h"
 #include "Match/MatchSystems.h"
 #include "Net/NetSyncSystem.h"
+#include "Title/TitleSystem.h"
 #include "Bridge/DriverBridge.h"
 
 using namespace FP;
@@ -87,6 +88,14 @@ namespace Game
 		registry.Register<AirlockComponent>("Airlock")
 			.Field("Crew", &AirlockComponent::Crew);
 
+		registry.Register<TitleScreenComponent>("TitleScreen")
+			.Field("GamePort", &TitleScreenComponent::GamePort)
+			.Field("DiscoveryPort", &TitleScreenComponent::DiscoveryPort);
+
+		registry.Register<TitleRequestComponent>("TitleRequest")
+			.Field("Action", &TitleRequestComponent::Action)
+			.Field("Address", &TitleRequestComponent::Address);
+
 		registry.Register<BayHatchComponent>("BayHatch")
 			.Field("Crew", &BayHatchComponent::Crew);
 
@@ -135,6 +144,9 @@ namespace Game
 		// Seats first so every later system sees this frame's crews and roles.
 		world.AddSystem<CrewSystem>();
 		world.AddSystem<MatchSystem>();
+		// After MatchSystem, which makes the match state. The title screen hosts or joins before the
+		// match begins.
+		world.AddSystem<TitleSystem>();
 		world.AddSystem<ColonyClockSystem>();
 		world.AddSystem<LifeSupportSystem>();
 		world.AddSystem<CargoTankSystem>();

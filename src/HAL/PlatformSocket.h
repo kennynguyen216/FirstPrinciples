@@ -13,6 +13,7 @@ namespace FP
 		uint16 Port = 0;
 
 		static NetAddress Loopback(uint16 port) { return { 0x7F000001, port }; }
+		static NetAddress Broadcast(uint16 port) { return { 0xFFFFFFFF, port }; }
 
 		// Accepts "1.2.3.4:5000", "localhost:5000" or a bare "1.2.3.4" with defaultPort.
 		static bool Parse(const char* text, NetAddress& out, uint16 defaultPort = 0);
@@ -37,8 +38,12 @@ namespace FP
 		UdpSocket(const UdpSocket&) = delete;
 		UdpSocket& operator=(const UdpSocket&) = delete;
 
-		// Binds to every interface on port. Port 0 lets the OS pick one, see GetPort.
-		bool Open(uint16 port);
+		// Binds to every interface on port. Port 0 lets the OS pick one, see GetPort. A shared socket
+		// lets other shared sockets bind the same port, so every one of them hears its broadcasts,
+		// as LAN game discovery needs when several games run on one machine.
+		bool Open(uint16 port, bool shared = false);
+		// Allows sending to the broadcast address, 255.255.255.255, which reaches the whole LAN.
+		bool EnableBroadcast();
 		void Close();
 		bool IsOpen() const { return m_Handle != InvalidHandle; }
 		uint16 GetPort() const { return m_Port; }

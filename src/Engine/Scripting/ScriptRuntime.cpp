@@ -6,6 +6,7 @@
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_loadso.h>
 
+#include <chrono>
 #include <filesystem>
 
 namespace FP
@@ -61,7 +62,9 @@ namespace FP
 			for (const fs::directory_entry& entry : fs::directory_iterator(cacheDir, ec))
 				fs::remove(entry.path(), ec);
 		}
-		const fs::path copy = cacheDir / (source.stem().string() + "_" + std::to_string(++m_LoadCount) + source.extension().string());
+		// Named for this run too, so several games started from one folder never fight over a copy.
+		static const uint64 runId = static_cast<uint64>(std::chrono::steady_clock::now().time_since_epoch().count());
+		const fs::path copy = cacheDir / (source.stem().string() + "_" + std::to_string(runId) + "_" + std::to_string(++m_LoadCount) + source.extension().string());
 		fs::copy_file(source, copy, fs::copy_options::overwrite_existing, ec);
 		if (ec)
 		{

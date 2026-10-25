@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+	html, body {
+		margin: 0;
+		height: 100%;
+		font-family: "Segoe UI", Helvetica, Arial, sans-serif;
+		color: #e8ecf4;
+		background: radial-gradient(ellipse at 50% 35%, rgba(18, 28, 56, 0.92), rgba(2, 3, 10, 0.98));
+		user-select: none;
+	}
+	.screen {
+		display: none;
+		height: 100%;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 22px;
+	}
+	.screen.shown { display: flex; }
+	h1 {
+		margin: 0 0 18px;
+		font-size: 64px;
+		letter-spacing: 6px;
+		font-weight: 800;
+		text-transform: uppercase;
+		text-align: center;
+		color: #ffffff;
+		text-shadow: 0 0 24px rgba(255, 110, 60, 0.75), 0 0 4px rgba(255, 200, 150, 0.9);
+	}
+	h2 {
+		margin: 0;
+		font-size: 30px;
+		letter-spacing: 3px;
+		text-transform: uppercase;
+	}
+	button {
+		min-width: 280px;
+		padding: 14px 28px;
+		font-size: 20px;
+		letter-spacing: 2px;
+		text-transform: uppercase;
+		color: #e8ecf4;
+		background: rgba(30, 44, 80, 0.85);
+		border: 2px solid #3d5a99;
+		border-radius: 6px;
+		cursor: pointer;
+	}
+	button:hover { background: rgba(255, 110, 60, 0.85); border-color: #ffb08a; color: #fff; }
+	button.small { min-width: 0; padding: 8px 18px; font-size: 15px; }
+	.games {
+		width: 460px;
+		max-height: 260px;
+		overflow-y: auto;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.game {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		min-width: 0;
+		text-transform: none;
+		letter-spacing: 0;
+	}
+	.game .who { font-weight: 700; }
+	.game .where { color: #9fb3d9; font-size: 14px; }
+	.empty { color: #9fb3d9; text-align: center; padding: 12px; }
+	.manual { display: flex; gap: 8px; }
+	input {
+		width: 300px;
+		padding: 10px 12px;
+		font-size: 17px;
+		color: #fff;
+		background: rgba(8, 12, 26, 0.9);
+		border: 2px solid #3d5a99;
+		border-radius: 6px;
+	}
+	.status { min-height: 22px; color: #ffcf8a; }
+	.hint { color: #9fb3d9; font-size: 15px; text-align: center; max-width: 520px; }
+	.players { font-size: 22px; }
+</style>
+</head>
+<body>
+	<!-- The first screen. -->
+	<div class="screen" id="title">
+		<h1>Mission Kritikal Ultra</h1>
+		<button onclick="engine.send('host')">Host Game</button>
+		<button onclick="engine.send('browse')">Join Game</button>
+		<div class="status" data-bind="status"></div>
+	</div>
+
+	<!-- Games found on the network, and a box for an address. -->
+	<div class="screen" id="join">
+		<h2>Join Game</h2>
+		<div class="games" id="games"></div>
+		<div class="manual">
+			<input id="address" placeholder="Host address, like 192.168.1.20">
+			<button class="small" onclick="joinTyped()">Join</button>
+		</div>
+		<div class="status" data-bind="status"></div>
+		<button class="small" onclick="engine.send('back')">Back</button>
+	</div>
+
+	<!-- Waiting for the match to start. -->
+	<div class="screen" id="lobby">
+		<h2 id="lobbyTitle">Lobby</h2>
+		<div class="players"><span data-bind="players">0</span> in the lobby</div>
+		<button id="start" onclick="engine.send('start')">Start</button>
+		<div class="hint" id="lobbyHint"></div>
+		<div class="status" data-bind="status"></div>
+		<button class="small" onclick="engine.send('back')">Back</button>
+	</div>
+
+	<script>
+		function show(screen) {
+			["title", "join", "lobby"].forEach(function (id) {
+				document.getElementById(id).classList.toggle("shown", id === screen);
+			});
+		}
+
+		function joinTyped() {
+			var address = document.getElementById("address").value.trim();
+			if (address.length > 0)
+				engine.send("join", { address: address });
+		}
+
+		function updateLobby() {
+			var isHost = engine.state.isHost === true;
+			var connected = engine.state.connected === true;
+			document.getElementById("lobbyTitle").textContent = isHost ? "Hosting" : connected ? "Joined" : "Joining";
+			document.getElementById("start").style.display = isHost ? "inline-block" : "none";
+			document.getElementById("lobbyHint").textContent = isHost
+				? "Start when your crews are in. Playing alone, press 1 to 4 to pick your seat first."
+				: connected ? "Waiting for the host to start." : "Looking for the host...";
+		}
+
+		engine.watch("screen", function (screen) { show(screen); updateLobby(); });
+		engine.watch("isHost", updateLobby);
+		engine.watch("connected", updateLobby);
+
+		// The game sends the list a few times a second. Rebuild it only when it changes, since a
+		// rebuild between pressing and releasing the mouse would swallow the click.
+		var shownGames = null;
+		engine.watch("games", function (games) {
+			var key = JSON.stringify(games || []);
+			if (key === shownGames)
+				return;
+			shownGames = key;
+			var list = document.getElementById("games");
+			list.innerHTML = "";
+			if (!games || games.length === 0) {
+				list.innerHTML = '<div class="empty">Looking for games on your network...</div>';
+				return;
+			}
+			games.forEach(function (game) {
+				var button = document.createElement("button");
+				button.className = "game";
+				button.innerHTML = '<span class="who"></span><span class="where"></span>';
+				button.querySelector(".who").textContent = game.name;
+				button.querySelector(".where").textContent = game.players + " in lobby · " + game.address;
+				button.onclick = function () { engine.send("join", { address: game.address }); };
+				list.appendChild(button);
+			});
+		});
+
+		document.getElementById("address").addEventListener("keydown", function (event) {
+			if (event.key === "Enter")
+				joinTyped();
+		});
+
+		show("title");
+	</script>
+</body>
+</html>

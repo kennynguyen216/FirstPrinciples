@@ -37,6 +37,9 @@ enum class MatchPhase : FP::uint8
 	Countdown,
 	Racing,
 	Results,
+	// The title screen, before a game is hosted or joined. Last so the numbers of the others, which go
+	// over the network, stay put.
+	Title,
 };
 
 struct CrewResult
@@ -58,6 +61,8 @@ struct MatchStateComponent
 	float RaceTime = 0;
 	// -1 when nobody won, such as when the colony ran out of oxygen first.
 	FP::int32 WinnerCrew = -1;
+	// The host pressed Start in the lobby.
+	bool StartRequested = false;
 	CrewResult Crews[CrewCount];
 };
 

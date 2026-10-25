@@ -1992,3 +1992,21 @@ component Material
   Material "Materials/Airlock.material"
 component Airlock
   Crew 1
+
+entity d0885712-ff8a-4464-aeca-572ea7a11694
+component Name
+  Name "Title Screen"
+component Transform
+  Position 0 0 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component UI
+  Page "UI/Title.html"
+  Visible true
+  Input true
+  Order 10
+component Scripts
+  script "TitleScreen"
+component TitleScreen
+  GamePort 7777
+  DiscoveryPort 7778

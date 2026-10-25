@@ -203,7 +203,7 @@ namespace
 void OnFootSystem::Update(World& world, float deltaTime)
 {
 	const MatchStateComponent* state = GetState(world);
-	if (!state || state->Phase == MatchPhase::Lobby)
+	if (!state || state->Phase == MatchPhase::Lobby || state->Phase == MatchPhase::Title)
 		return;
 
 	// A player seated as their crew's Defender starts the match on foot in the bay. After that

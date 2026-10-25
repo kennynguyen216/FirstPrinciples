@@ -9,15 +9,19 @@ Scripts\GenerateProjects.bat Projects\DeadAirFreight
 msbuild Projects\DeadAirFreight\Build\DeadAirFreight.slnx /m /p:Configuration=Debug /p:Platform=x64
 ```
 
-Run `msbuild` from the Developer PowerShell. Then start one host and three joiners, each on its own machine:
+Run `msbuild` from the Developer PowerShell, and `Scripts\GetUltralight.ps1` once so the title screen
+draws. The game opens on the Mission Kritikal Ultra title screen:
 
-```powershell
-Projects\DeadAirFreight\Binaries\Debug\Runtime --host 7777
-Projects\DeadAirFreight\Binaries\Debug\Runtime --join <host ip>:7777
-```
+- **Host Game** starts a game others on the same network can join. Hosting alone plays solo.
+- **Join Game** lists the games hosted on your network (hosts announce themselves on UDP port 7778),
+  or takes a typed address.
+- In the lobby the host presses **Start**. **Back** leaves the game for the title screen.
 
-The countdown starts once `MatchConfig.PlayersRequired` players are in. Press Enter to start early
-when testing with fewer. Playing alone, press 1 to 4 in the lobby to pick your seat, so every role
+`Runtime --host 7777` and `Runtime --join <host ip>:7777` still work and skip the title screen.
+Several copies can run from one folder for testing.
+
+The countdown also starts on its own once `MatchConfig.PlayersRequired` players are in, and Enter
+starts it early. Playing alone, press 1 to 4 in the lobby to pick your seat, so every role
 can be tried on one machine.
 
 | Seat | Crew | Role |

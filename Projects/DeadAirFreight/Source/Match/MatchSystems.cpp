@@ -127,7 +127,8 @@ namespace
 void CrewSystem::Update(World& world, float)
 {
 	const MatchStateComponent* state = GetState(world);
-	const bool locked = state && state->Phase != MatchPhase::Lobby;
+	// Seats settle in the lobby, and on the title screen, and lock once the countdown starts.
+	const bool locked = state && state->Phase != MatchPhase::Lobby && state->Phase != MatchPhase::Title;
 
 	if (!locked)
 	{
@@ -140,7 +141,8 @@ void CrewSystem::Update(World& world, float)
 		int32 players = 0;
 		for (int32 i = 0; i < seats.Num(); ++i)
 			players += i == 0 || seats[i].Owner != seats[i - 1].Owner ? 1 : 0;
-		if (players == 1)
+		// Only in the lobby, so typing an address on the title screen does not pick a seat.
+		if (players == 1 && state && state->Phase == MatchPhase::Lobby)
 		{
 			const Key seatKeys[MaxSlots] = { SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3, SDL_SCANCODE_4 };
 			for (int32 slot = 0; slot < MaxSlots; ++slot)
@@ -221,8 +223,9 @@ void MatchSystem::Update(World& world, float deltaTime)
 			// Wait out the first moments so the network has swapped in this peer's own player.
 			if (world.GetTime() < 0.5 || seated == 0)
 				break;
-			if (seated >= config.PlayersRequired || Input::WasKeyPressed(SDL_SCANCODE_RETURN))
+			if (seated >= config.PlayersRequired || Input::WasKeyPressed(SDL_SCANCODE_RETURN) || state->StartRequested)
 				StartCountdown(world, *state, config);
+			state->StartRequested = false;
 			break;
 		}
 		case MatchPhase::Countdown:
@@ -290,6 +293,7 @@ void MatchSystem::Update(World& world, float deltaTime)
 			break;
 		}
 		case MatchPhase::Results:
+		case MatchPhase::Title:
 			break;
 	}
 }

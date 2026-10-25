@@ -106,7 +106,7 @@ namespace FP
 		return text;
 	}
 
-	bool UdpSocket::Open(uint16 port)
+	bool UdpSocket::Open(uint16 port, bool shared)
 	{
 		Close();
 		if (!StartSockets())
@@ -119,6 +119,15 @@ namespace FP
 		if (handle < 0)
 			return false;
 #endif
+
+		if (shared)
+		{
+			const int on = 1;
+			setsockopt(handle, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&on), sizeof(on));
+#ifdef SO_REUSEPORT
+			setsockopt(handle, SOL_SOCKET, SO_REUSEPORT, reinterpret_cast<const char*>(&on), sizeof(on));
+#endif
+		}
 
 		sockaddr_in bindAddress = {};
 		bindAddress.sin_family = AF_INET;
@@ -152,6 +161,14 @@ namespace FP
 		m_Port = ntohs(bound.sin_port);
 		m_Handle = static_cast<uint64>(handle);
 		return true;
+	}
+
+	bool UdpSocket::EnableBroadcast()
+	{
+		if (!IsOpen())
+			return false;
+		const int on = 1;
+		return setsockopt(static_cast<SocketHandle>(m_Handle), SOL_SOCKET, SO_BROADCAST, reinterpret_cast<const char*>(&on), sizeof(on)) == 0;
 	}
 
 	void UdpSocket::Close()
