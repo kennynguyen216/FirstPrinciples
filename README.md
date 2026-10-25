@@ -893,7 +893,9 @@ The editor follows Unreal Engine 5's layout and dark theme, using this engine's 
   Perspective and Top (2D), pick Lit, Unlit or Wireframe, and turn grid snap on with a grid size.
 - **Details** and **Hierarchy** share the panel on the right as tabs. Details shows the selection's components in collapsible sections. Add components with the Add
   button, remove one with the x on its header, and filter fields with the search box.
-- **Hierarchy** lists every entity nested under its parent with its type, plus a search box. The scene row at the top holds scene scripts.
+- **Hierarchy** lists every entity nested under its parent with its type, plus a search box. Double-click
+  an object or right-click **Rename** to edit its name inline. Enter commits and Escape cancels;
+  renames support undo and redo. The scene row at the top holds scene scripts.
 - Drag a panel by its title to move it, or drop it on another panel to share a spot as tabs. Pull a tab
   out to separate it again. **Window** reopens closed panels and **Reset Layout** puts everything back.
 - **Content Browser**, **Output Log** and **Profiler** share the bottom. The profiler shows each

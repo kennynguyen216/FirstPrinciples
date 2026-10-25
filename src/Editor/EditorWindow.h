@@ -49,7 +49,7 @@ namespace FP::Editor
 		void SetPaused(bool paused);
 		void StepFrame();
 		void Stop();
-		void Select(Entity entity);
+		void Select(Entity entity, bool revealDetails = true);
 		void ShowAudioDebugger();
 		void ShowProfiler();
 

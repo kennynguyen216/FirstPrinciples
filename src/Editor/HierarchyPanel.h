@@ -41,11 +41,13 @@ namespace FP::Editor
 		// parent is a null Guid to make child top level.
 		void ParentRequested(const FP::Guid& child, const FP::Guid& parent);
 		void CreateChildRequested(const FP::Guid& parent);
+		void RenameRequested(const FP::Guid& entity, const QString& name);
 
 	private:
 		void ApplyFilter();
 		void UpdateFooter();
 		void ShowContextMenu(const QPoint& position);
+		void BeginRename(const Guid& id);
 
 		QLineEdit* m_Search = nullptr;
 		HierarchyTree* m_Tree = nullptr;

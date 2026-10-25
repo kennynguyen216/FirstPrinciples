@@ -18,6 +18,7 @@ namespace FP::Editor
 	namespace
 	{
 		constexpr int GuidRole = Qt::UserRole + 1;
+		constexpr int NameRole = Qt::UserRole + 2;
 		enum Column { LabelColumn, TypeColumn };
 
 		EditorIcon IconForType(const QString& type)
@@ -102,6 +103,8 @@ namespace FP::Editor
 		m_Tree->setRootIsDecorated(true);
 		m_Tree->setIndentation(14);
 		m_Tree->setUniformRowHeights(true);
+		m_Tree->setEditTriggers(QAbstractItemView::NoEditTriggers);
+		m_Tree->setExpandsOnDoubleClick(false);
 		m_Tree->setIconSize({ 14, 14 });
 		m_Tree->setDragDropMode(QAbstractItemView::InternalMove);
 		m_Tree->setDragEnabled(true);
@@ -126,6 +129,19 @@ namespace FP::Editor
 		connect(m_Tree, &QTreeWidget::itemCollapsed, this, [this](QTreeWidgetItem* item) { m_Collapsed.insert(item->data(LabelColumn, GuidRole).toString()); });
 		connect(m_Tree, &QTreeWidget::itemExpanded, this, [this](QTreeWidgetItem* item) { m_Collapsed.remove(item->data(LabelColumn, GuidRole).toString()); });
 		connect(m_Tree, &QTreeWidget::customContextMenuRequested, this, &HierarchyPanel::ShowContextMenu);
+		connect(m_Tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int) { BeginRename(ItemGuid(item)); });
+		connect(m_Tree, &QTreeWidget::itemChanged, this, [this](QTreeWidgetItem* item, int column) {
+			if (column != LabelColumn || !item->parent()) return;
+			const QString previous = item->data(LabelColumn, NameRole).toString();
+			const QString name = item->text(LabelColumn).trimmed();
+			{
+				QSignalBlocker block(m_Tree);
+				item->setText(LabelColumn, name.isEmpty() ? previous : name);
+				if (!name.isEmpty()) item->setData(LabelColumn, NameRole, name);
+			}
+			if (!name.isEmpty() && name != previous)
+				emit RenameRequested(ItemGuid(item), name);
+		});
 		connect(m_Search, &QLineEdit::textChanged, this, &HierarchyPanel::ApplyFilter);
 	}
 
@@ -169,10 +185,11 @@ namespace FP::Editor
 			const QString type = TypeName(world, entity);
 			QTreeWidgetItem* item = new QTreeWidgetItem();
 			item->setText(LabelColumn, ToQString(world.GetEntityName(entity)));
+			item->setData(LabelColumn, NameRole, item->text(LabelColumn));
 			item->setIcon(LabelColumn, EditorIcons::Get(IconForType(type)));
 			item->setText(TypeColumn, type);
 			item->setForeground(TypeColumn, QColor(0x9a, 0x9a, 0x9a));
-			item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled);
+			item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled | Qt::ItemIsEditable);
 			const QString id = ToQString(world.Get<IdComponent>(entity).Id.ToString());
 			item->setData(LabelColumn, GuidRole, id);
 			items.insert(id, item);
@@ -245,10 +262,29 @@ namespace FP::Editor
 		if (id == Guid())
 			return;
 		QMenu menu(this);
+		QAction* rename = nullptr;
+		if (item->parent())
+		{
+			rename = menu.addAction("Rename");
+			menu.addSeparator();
+		}
 		menu.addAction("Create Child", this, [this, id]() { emit CreateChildRequested(id); });
 		QAction* detach = menu.addAction("Detach from Parent", this, [this, id]() { emit ParentRequested(id, Guid()); });
 		detach->setEnabled(item->parent() && item->parent()->parent());
-		menu.exec(m_Tree->viewport()->mapToGlobal(position));
+		// Start editing after the popup releases focus, so closing it cannot commit the new editor.
+		if (QAction* chosen = menu.exec(m_Tree->viewport()->mapToGlobal(position)); rename && chosen == rename)
+			BeginRename(id);
+	}
+
+	void HierarchyPanel::BeginRename(const Guid& id)
+	{
+		if (id == Guid()) return;
+		if (QTreeWidgetItem* root = m_Tree->topLevelItem(0))
+			ForEachItem(root, [this, &id](QTreeWidgetItem* item) {
+				if (ItemGuid(item) != id) return;
+				m_Tree->setCurrentItem(item, LabelColumn);
+				m_Tree->editItem(item, LabelColumn);
+			});
 	}
 
 	void HierarchyPanel::UpdateFooter()

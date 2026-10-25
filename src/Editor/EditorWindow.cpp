@@ -205,7 +205,19 @@ namespace FP::Editor
 	void EditorWindow::BuildDocks()
 	{
 		m_Hierarchy = new HierarchyPanel();
-		connect(m_Hierarchy, &HierarchyPanel::EntityClicked, this, [this](const Guid& id) { Select(m_World->FindEntityByGuid(id)); });
+		connect(m_Hierarchy, &HierarchyPanel::EntityClicked, this, [this](const Guid& id) { Select(m_World->FindEntityByGuid(id), false); });
+		connect(m_Hierarchy, &HierarchyPanel::RenameRequested, this, [this](const Guid& id, const QString& name) {
+			const Entity entity = m_World->FindEntityByGuid(id);
+			if (!m_World->IsValid(entity)) return;
+			auto* component = m_World->TryGet<NameComponent>(entity);
+			if (!component) component = &m_World->Add<NameComponent>(entity);
+			const String renamed = ToString(name);
+			if (component->Name == renamed) return;
+			component->Name = renamed;
+			MarkDirty();
+			RefreshHierarchy();
+			if (entity == m_Selected) m_Inspector->SetTarget(m_World.Get(), entity);
+		}, Qt::QueuedConnection); // Rebuild after Qt finishes committing and closing the inline editor.
 		connect(m_Hierarchy, &HierarchyPanel::SceneClicked, this, [this]() {
 			// Made on first use, so scenes without scene scripts stay as they were.
 			const bool existed = m_World->GetSceneEntity() != NullEntity;
@@ -1303,7 +1315,7 @@ namespace FP::Editor
 		RefreshProfiler();
 	}
 
-	void EditorWindow::Select(Entity entity)
+	void EditorWindow::Select(Entity entity, bool revealDetails)
 	{
 		if (!m_World->IsValid(entity))
 			entity = NullEntity;
@@ -1320,7 +1332,7 @@ namespace FP::Editor
 
 		if (changed)
 			m_Inspector->SetTarget(m_World.Get(), entity);
-		if (entity != NullEntity)
+		if (entity != NullEntity && revealDetails)
 		{
 			m_DetailsDock->show();
 			m_DetailsDock->raise();
