@@ -13,11 +13,19 @@ namespace FP::Paths
 	// anything loads content.
 	bool OpenProject(const String& path);
 
+	// Redirects content to an extracted package and keeps saved data outside the app.
+	void UsePackagedContent(const String& directory, const String& savedDirectory);
+	bool IsPackaged();
+	void* GetSharedState();
+
 	// The open project. Without OpenProject it is found by walking up from the executable or
 	// the working folder to a .fpproject file, then falls back to the one the build was made for.
 	const Project& GetProject();
 
 	const String& GetProjectDir();
+
+	// Writable saved data for the project, including packaged games.
+	const String& GetSavedDir();
 
 	// The open project's Content folder.
 	const String& GetContentDir();

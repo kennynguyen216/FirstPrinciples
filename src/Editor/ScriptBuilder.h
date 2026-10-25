@@ -28,6 +28,9 @@ namespace FP::Editor
 		// Game code is compiled into the editor, so every project needs its own.
 		void BuildProject(const QString& projectDir);
 
+		// Builds a Release runtime and cooks a distributable game into a new output path.
+		void Package(const QString& output);
+
 		// Where the Editor of the project in projectDir is built to.
 		static QString EditorPath(const QString& projectDir);
 
@@ -45,6 +48,7 @@ namespace FP::Editor
 		void Started();
 		void Finished(bool success);
 		void ProjectBuilt(bool success, const QString& projectDir);
+		void Packaged(bool success, const QString& output);
 
 	private:
 		struct Step
@@ -54,7 +58,7 @@ namespace FP::Editor
 		};
 
 		// Steps to build target in projectDir. Premake runs first when regenerate is set.
-		static bool PlanSteps(QList<Step>& steps, const QString& projectDir, const QString& target, bool regenerate);
+		static bool PlanSteps(QList<Step>& steps, const QString& projectDir, const QString& target, bool regenerate, bool release = false);
 		void RunNext();
 		void OnOutput();
 		void OnStepFinished(int exitCode, QProcess::ExitStatus status);
@@ -65,5 +69,6 @@ namespace FP::Editor
 		bool m_RegeneratedThisBuild = false;
 		// Set while building another project's editor instead of scripts.
 		QString m_OtherProject;
+		QString m_PackageOutput;
 	};
 }

@@ -382,6 +382,59 @@ namespace FP::Editor
 		m_ScriptBuilder = new ScriptBuilder(this);
 		connect(m_ScriptBuilder, &ScriptBuilder::Finished, this, &EditorWindow::OnScriptsBuilt);
 		connect(m_ScriptBuilder, &ScriptBuilder::ProjectBuilt, this, &EditorWindow::OnProjectBuilt);
+		connect(m_ScriptBuilder, &ScriptBuilder::Packaged, this, [this](bool success, const QString& output) {
+			if (success)
+				QMessageBox::information(this, "Package Game", "Packaged game saved to " + output);
+			else
+				QMessageBox::warning(this, "Package Game", "Packaging failed. The Output Log has the errors.");
+		});
+		QMenu* package = new QMenu("Package Game", file);
+		file->insertMenu(file->actions().last(), package);
+		for (const QString& platform : { QString("macOS"), QString("Windows") })
+		{
+			QAction* action = package->addAction(platform + " (Release)...", this, [this, platform]() {
+				if (m_ScriptBuilder->IsBuilding())
+				{
+					QMessageBox::information(this, "Package Game", "Wait for the current build to finish first.");
+					return;
+				}
+				if (!ConfirmDiscard())
+					return;
+				for (int i = 0; i < m_CentralTabs->count(); ++i)
+				{
+					CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->widget(i));
+					if (!editor || !editor->IsDirty())
+						continue;
+					const auto answer = QMessageBox::question(this, "Unsaved script", "Save changes to " + QFileInfo(editor->GetPath()).fileName() + " before packaging?",
+						QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+					if (answer == QMessageBox::Cancel || (answer == QMessageBox::Save && !editor->Save()))
+						return;
+				}
+				MaterialLibrary::Get().SaveDirty();
+				const QString parent = QFileDialog::getExistingDirectory(this, "Choose Package Destination", ToQString(Paths::GetProjectDir()) + "/Saved");
+				if (parent.isEmpty())
+					return;
+				const QString name = ToQString(Paths::GetProject().Name);
+				const QString output = parent + "/" + name + (platform == "macOS" ? ".app" : "-Windows");
+				if (QFileInfo::exists(output))
+				{
+					QMessageBox::warning(this, "Package Game", output + " already exists. Move it or choose a different destination.");
+					return;
+				}
+				m_ScriptBuilder->Package(output);
+			});
+#if defined(__APPLE__)
+			const bool supported = platform == "macOS";
+#elif defined(_WIN32)
+			const bool supported = platform == "Windows";
+#else
+			const bool supported = false;
+#endif
+			action->setEnabled(supported);
+			action->setToolTip(supported ? "Builds the runtime and scripts and cooks saved content into a .pak file" : "Build this target from an editor running on that operating system");
+		}
+		package->setToolTipsVisible(true);
+
 		QMenu* scripts = menuBar()->addMenu("&Scripts");
 		scripts->addAction("&New Script...", this, [this]() {
 			const QString name = QInputDialog::getText(this, "New Script", "Class name:");

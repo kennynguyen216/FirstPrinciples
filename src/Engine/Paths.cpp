@@ -1,6 +1,7 @@
 #include "Engine/Paths.h"
 #include "Engine/Project.h"
 #include "Core/Log.h"
+#include "Core/Misc/ModuleContext.h"
 
 #include <SDL3/SDL_filesystem.h>
 
@@ -50,16 +51,26 @@ namespace FP::Paths
 		{
 			Project Current;
 			String ContentDir;
+			String EngineDir;
+			String SavedDir;
+			bool Packaged = false;
 		};
 
 		void SetCurrent(State& state, const Project& project)
 		{
 			state.Current = project;
 			state.ContentDir = project.GetContentDir();
+			state.SavedDir = project.Dir + "/Saved";
+			state.EngineDir.Clear();
+			state.Packaged = false;
 		}
 
 		State& GetState()
 		{
+			// Scripts use the host's extracted content and current project.
+			const ModuleContext* context = GetModuleContext();
+			if (context && context->Paths)
+				return *static_cast<State*>(context->Paths);
 			static State state = []() {
 				State found;
 				Project project;
@@ -92,6 +103,26 @@ namespace FP::Paths
 		return true;
 	}
 
+	void UsePackagedContent(const String& directory, const String& savedDirectory)
+	{
+		State& state = GetState();
+		state.ContentDir = directory + "/Content";
+		state.EngineDir = directory + "/Engine";
+		state.Current.Dir = directory;
+		state.SavedDir = savedDirectory + "/Saved";
+		state.Packaged = true;
+	}
+
+	void* GetSharedState()
+	{
+		return &GetState();
+	}
+
+	bool IsPackaged()
+	{
+		return GetState().Packaged;
+	}
+
 	const Project& GetProject()
 	{
 		return GetState().Current;
@@ -100,6 +131,11 @@ namespace FP::Paths
 	const String& GetProjectDir()
 	{
 		return GetState().Current.Dir;
+	}
+
+	const String& GetSavedDir()
+	{
+		return GetState().SavedDir;
 	}
 
 	const String& GetContentDir()
@@ -114,6 +150,8 @@ namespace FP::Paths
 
 	const String& GetEngineDir()
 	{
+		if (GetState().Packaged)
+			return GetState().EngineDir;
 		static const String dir = WalkUp([](const fs::path& dir) {
 			std::error_code ec;
 			return fs::is_directory(dir / "Engine/Content", ec);
