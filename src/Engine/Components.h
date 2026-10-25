@@ -274,6 +274,15 @@ namespace FP
 		Vec3 LastPosition; // runtime only, for measuring how fast the hole moves
 	};
 
+	// A window into somewhere else. This entity's glass mesh shows the scene as seen from Target, as
+	// if Target stood where this entity is, so a room can be bigger than the walls around it. Only
+	// what lies beyond Target, on its -Z side, shows through. Opaque meshes and sprites draw in it;
+	// glass, particles and black holes do not.
+	struct PortalComponent
+	{
+		String Target; // an entity's name
+	};
+
 	// Anything a black hole should pull, like a racer. With a Dynamic RigidBody the pull goes through
 	// physics. Without one, Velocity moves the transform directly.
 	struct GravityBodyComponent

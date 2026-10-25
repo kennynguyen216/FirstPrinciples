@@ -809,6 +809,95 @@ namespace FP
 		m_Frame.LightCount[0] = count;
 	}
 
+	void Renderer::RenderPortals(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view, const Array<Draw>& draws, uint32 width, uint32 height)
+	{
+		for (PortalView& portal : m_Portals)
+			portal.Value = NullEntity;
+		if (view.Orthographic || m_Mode != ViewMode::Lit)
+			return;
+		const FrameUniforms frame = m_Frame;
+		int32 used = 0;
+		for (auto [entity, portal] : world.View<PortalComponent>().each())
+		{
+			const Entity target = world.FindEntityByName(portal.Target.CStr());
+			if (!world.IsValid(target))
+				continue;
+
+			// The camera moves by however the target sits relative to the portal.
+			const Mat4 targetWorld = world.GetWorldMatrix(target);
+			RenderView seen = view;
+			seen.View = view.View * world.GetWorldMatrix(entity) * targetWorld.Inverse();
+			const Mat4 eye = seen.View.Inverse();
+			seen.CameraPosition = eye.TransformPoint({});
+			seen.CameraForward = eye.TransformVector({ 0, 0, -1 }).Normalized();
+			seen.CameraRight = eye.TransformVector({ 1, 0, 0 }).Normalized();
+			seen.CameraUp = eye.TransformVector({ 0, 1, 0 }).Normalized();
+
+			// Moves the near plane onto the target's plane (Lengyel's oblique clipping), so whatever
+			// stands between the camera and the target stays out. A camera behind it sees nothing.
+			const Vec3 normal = seen.View.TransformVector(targetWorld.TransformVector({ 0, 0, -1 })).Normalized();
+			const Vec4 plane{ normal, -Vec3::Dot(normal, seen.View.TransformPoint(targetWorld.TransformPoint({}))) };
+			if (plane.W >= 0)
+				continue;
+			const Vec4 corner = seen.Projection.Inverse() * Vec4{ plane.X < 0 ? -1.0f : 1.0f, plane.Y < 0 ? -1.0f : 1.0f, 1, 1 };
+			const float scale = 1 / (plane.X * corner.X + plane.Y * corner.Y + plane.Z * corner.Z + plane.W * corner.W);
+			seen.Projection.At(0, 2) = plane.X * scale;
+			seen.Projection.At(1, 2) = plane.Y * scale;
+			seen.Projection.At(2, 2) = plane.Z * scale;
+			seen.Projection.At(3, 2) = plane.W * scale;
+
+			if (m_Portals.Num() <= used)
+				m_Portals.Add({});
+			PortalView& slot = m_Portals[used];
+			if (!slot.Color || slot.Color->GetWidth() != width || slot.Color->GetHeight() != height)
+			{
+				slot.Color = m_Device.CreateRenderTarget(SceneFormat, width, height, false);
+				slot.Depth = m_Device.CreateRenderTarget(m_Device.GetDepthFormat(), width, height, true);
+			}
+			if (!slot.Color || !slot.Depth)
+				continue;
+			slot.Value = entity;
+			++used;
+
+			m_Frame = frame;
+			m_Frame.CameraPosition = { seen.CameraPosition, 0 };
+			m_Frame.CameraForward = { seen.CameraForward, 0 };
+			m_Frame.CameraRight = { seen.CameraRight, 0 };
+			m_Frame.CameraUp = { seen.CameraUp, 0 };
+			SDL_PushGPUFragmentUniformData(cmd, 1, &m_Frame, sizeof(m_Frame));
+
+			const Vec4 background = ToLinear(view.Background);
+			SDL_GPUColorTargetInfo color = {};
+			color.texture = slot.Color->GetHandle();
+			color.clear_color = { background.X, background.Y, background.Z, 1 };
+			color.load_op = SDL_GPU_LOADOP_CLEAR;
+			color.store_op = SDL_GPU_STOREOP_STORE;
+			SDL_GPUDepthStencilTargetInfo depth = {};
+			depth.texture = slot.Depth->GetHandle();
+			depth.clear_depth = 1;
+			depth.load_op = SDL_GPU_LOADOP_CLEAR;
+			depth.store_op = SDL_GPU_STOREOP_DONT_CARE;
+			depth.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
+			depth.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+			SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &color, 1, &depth);
+			DrawSkybox(cmd, pass, seen);
+			const Mat4 viewProjection = seen.GetViewProjection();
+			for (const Draw& draw : draws)
+			{
+				if (draw.Kind == ShaderKind::Glass)
+					break;
+				// Meshlets were culled for the main view, so whole sections draw here.
+				Draw whole = draw;
+				whole.IndirectFirst = -1;
+				whole.MeshletCount = 0;
+				SDL_BindGPUGraphicsPipeline(pass, GetPipeline(whole));
+				DrawObject(cmd, pass, world, whole, viewProjection);
+			}
+			SDL_EndGPURenderPass(pass);
+		}
+		m_Frame = frame;
+	}
+
 	void Renderer::PreloadTextures(World& world)
 	{
 		Array<TextureCache::Request> requests;
@@ -967,7 +1056,12 @@ namespace FP
 		{
 			bind(Texture(data.NormalMap, false, m_Device.GetFlatNormalTexture()));
 			bind(Texture(data.RoughnessMap, false, white));
-			bind(m_SceneCopy.Get(), m_Device.GetClampSampler());
+			// A portal shows its own view in place of the scene behind it.
+			GPUTexture* behind = m_SceneCopy.Get();
+			for (const PortalView& portal : m_Portals)
+				if (portal.Value == draw.Value)
+					behind = portal.Color.Get();
+			bind(behind, m_Device.GetClampSampler());
 		}
 		if (draw.Kind != ShaderKind::Unlit)
 		{
@@ -1362,8 +1456,13 @@ namespace FP
 			}
 		}
 
-		// Opaque meshes front to back, then sprites by layer back to front, then glass back to front.
-		auto bucket = [](const Draw& d) { return d.Kind == ShaderKind::Glass ? 2 : d.Type != Surface::Sprite ? 0 : 1; };
+		// Opaque meshes front to back, then sprites by layer back to front, then glass back to front,
+		// then portals, so other glass never covers them.
+		auto bucket = [&](const Draw& d) {
+			if (d.Kind == ShaderKind::Glass)
+				return world.Has<PortalComponent>(d.Value) ? 3 : 2;
+			return d.Type != Surface::Sprite ? 0 : 1;
+		};
 		std::stable_sort(draws.begin(), draws.end(), [&](const Draw& a, const Draw& b) {
 			const int ba = bucket(a);
 			const int bb = bucket(b);
@@ -1379,6 +1478,7 @@ namespace FP
 		PrepareInstances(cmd, world, draws);
 		RenderShadows(cmd, world, view, draws);
 		PrepareMeshlets(cmd, world, cullingView ? *cullingView : view, draws);
+		RenderPortals(cmd, world, view, draws, width, height);
 		const Mat4 viewProjection = view.GetViewProjection();
 		SDL_PushGPUFragmentUniformData(cmd, 1, &m_Frame, sizeof(m_Frame));
 

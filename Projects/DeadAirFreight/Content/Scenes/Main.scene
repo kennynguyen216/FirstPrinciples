@@ -18,18 +18,6 @@ component Material
   Slot 4 "asset://77de1503-2db1-4dfd-9c38-30a87f37a514"
   Slot 5 "asset://e19d5e2f-bd4a-4f30-87e9-c3e7e14dc524"
 
-entity aae47f15-856b-4c5b-b5e1-8010acd59eba
-component Name
-  Name "TravelMarker"
-component Transform
-  Position 0 0 -85
-  Rotation 0 0 0
-  Scale 0.800000012 0.800000012 0.800000012
-component Mesh
-  Mesh "Sphere"
-component Material
-  Material "asset://6296bce7-6104-443e-933a-bf204d59e054"
-
 entity 498ad1e0-20b3-43f7-8c15-2f066b7eb746
 component Name
   Name "DriverCamera"

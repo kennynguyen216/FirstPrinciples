@@ -28,8 +28,12 @@ namespace
 	// The SpaceTruck model's bounds before the Truck entity's scale, from Meshes/SpaceTruck.
 	const Vec3 HullMin{ -1.21f, -1.42f, -2.6f };
 	const Vec3 HullMax{ 1.21f, 1.55f, 7.74f };
-	// The engine refuses entities scaled to zero.
-	const Vec3 HiddenScale{ 0.001f, 0.001f, 0.001f };
+	// The windshield in the SpaceTruck model, before the Truck entity's scale. The portal sits just
+	// outside it, as wide as its narrower bottom edge.
+	const Vec3 WindshieldCenter{ 0.008f, 0.437f, -1.31f };
+	const Vec3 WindshieldSize{ 1.64f, 0.83f, 1 };
+	// Where the rooms wait while the camera is outside: far below the race, past the camera's far clip.
+	const Vec3 Away{ 0, -40000, 0 };
 
 	// One camera shared by both systems.
 	struct
@@ -44,13 +48,8 @@ namespace
 		Vec3 Anchor, Written; // where the game put the camera, and where we last put it
 		double Stepped = -1;  // the world time the controls were last read
 		std::vector<Entity> Hidden; // pages we hid
-		// Inside parts hidden from outside, with the scale and light they had.
-		struct Stowed
-		{
-			Vec3 Scale;
-			float Light = 0;
-		};
-		std::unordered_map<Entity, Stowed> Shrunk;
+		std::unordered_map<Entity, Vec3> Shifted; // inside parts sent Away, and where we put them
+		Entity Portal = NullEntity, PortalExit = NullEntity;
 		MeshComponent TruckMesh;     // the model, kept from before DriverSystem takes it off the truck
 		MaterialComponent TruckLook;
 		bool HasTruckMesh = false;
@@ -103,7 +102,41 @@ namespace
 	bool IsInsidePart(std::string_view name)
 	{
 		return name.starts_with("Cab") || name.starts_with("Canister") || name == "Wheel" || name == "Scrubber"
-			|| name == "Ghost" || name == "Crewmate In Cab";
+			|| name == "Ghost" || name == "Crewmate In Cab" || name == "FreeCam Self";
+	}
+
+	// The windshield is a portal into the cab, which waits Away while the camera is outside.
+	void PlacePortal(World& world, Entity truck, bool show)
+	{
+		if (!show)
+		{
+			for (Entity* entity : { &s_Cam.Portal, &s_Cam.PortalExit })
+			{
+				if (world.IsValid(*entity))
+					world.DestroyEntity(*entity);
+				*entity = NullEntity;
+			}
+			return;
+		}
+		if (!world.IsValid(s_Cam.Portal))
+		{
+			s_Cam.Portal = world.CreateEntity("FreeCam Portal");
+			world.Add<MeshComponent>(s_Cam.Portal).Mesh = "Quad";
+			world.Add<MaterialComponent>(s_Cam.Portal).Material = "Materials/Windshield.material";
+			world.Add<PortalComponent>(s_Cam.Portal).Target = "FreeCam Portal Exit";
+			s_Cam.PortalExit = world.CreateEntity("FreeCam Portal Exit");
+		}
+		// Fetched after creating entities, which can move the component storage.
+		const TransformComponent& hull = world.Get<TransformComponent>(truck);
+		TransformComponent& portal = world.Get<TransformComponent>(s_Cam.Portal);
+		portal.Position = hull.Position + hull.GetRotation().Rotate(WindshieldCenter * hull.Scale);
+		// The quad faces +Z, and the windshield faces the truck's front, -Z.
+		portal.Rotation = (hull.GetRotation() * Quat::FromEuler({ 0, 180, 0 })).ToEuler();
+		portal.Scale = WindshieldSize * hull.Scale;
+		TransformComponent& exit = world.Get<TransformComponent>(s_Cam.PortalExit);
+		exit.Position = portal.Position + Away;
+		exit.Rotation = portal.Rotation;
+		exit.Scale = portal.Scale;
 	}
 
 	void ShowOutside(World& world, Entity truck, bool outside)
@@ -114,27 +147,24 @@ namespace
 			{
 				if (!IsInsidePart(name.Name.CStr()) || !(world.Has<MeshComponent>(entity) || world.Has<PointLightComponent>(entity)))
 					continue;
-				// Ghosts, crewmates and the cab light are set again every frame, so they are hidden
-				// every frame. Point lights ignore scale, so lights are dimmed instead.
-				PointLightComponent* light = world.TryGet<PointLightComponent>(entity);
-				if (!s_Cam.Shrunk.contains(entity) || !(transform.Scale == HiddenScale) || (light && light->Intensity > 0))
-					s_Cam.Shrunk[entity] = { transform.Scale, light ? light->Intensity : 0 };
-				transform.Scale = HiddenScale;
-				if (light)
-					light->Intensity = 0;
+				// Most parts are put back in the truck every frame. One still where we left it is already Away.
+				const auto shifted = s_Cam.Shifted.find(entity);
+				if (shifted == s_Cam.Shifted.end() || !(transform.Position == shifted->second))
+					transform.Position += Away;
+				s_Cam.Shifted[entity] = transform.Position;
 			}
 		}
 		else
 		{
-			for (auto [entity, stowed] : s_Cam.Shrunk)
+			for (auto [entity, at] : s_Cam.Shifted)
 			{
 				if (!world.IsValid(entity))
 					continue;
-				world.Get<TransformComponent>(entity).Scale = stowed.Scale;
-				if (PointLightComponent* light = world.TryGet<PointLightComponent>(entity))
-					light->Intensity = stowed.Light;
+				TransformComponent& transform = world.Get<TransformComponent>(entity);
+				if (transform.Position == at)
+					transform.Position -= Away;
 			}
-			s_Cam.Shrunk.clear();
+			s_Cam.Shifted.clear();
 		}
 
 		if (outside && !s_Cam.ShellShown && s_Cam.HasTruckMesh)
@@ -147,6 +177,7 @@ namespace
 			world.Remove<MeshComponent>(truck);
 		}
 		s_Cam.ShellShown = outside && s_Cam.HasTruckMesh;
+		PlacePortal(world, truck, s_Cam.ShellShown);
 	}
 
 	// This player's character standing in the cab, which only other players' copies of it ever had.
@@ -189,9 +220,9 @@ namespace
 		const bool riding = world.Has<TruckState>(truck);
 		const TransformComponent& transform = world.Get<TransformComponent>(truck);
 		const bool outside = s_Cam.On && riding && !IsInside(world, eye, transform);
-		if (outside || s_Cam.ShellShown || !s_Cam.Shrunk.empty())
+		PlaceSelf(world, transform, s_Cam.On && riding);
+		if (outside || s_Cam.ShellShown || !s_Cam.Shifted.empty())
 			ShowOutside(world, truck, outside);
-		PlaceSelf(world, transform, s_Cam.On && riding && !outside);
 	}
 }
 
@@ -203,6 +234,13 @@ bool FreeCam::IsFlying()
 bool FreeCam::IsOn()
 {
 	return s_Cam.On;
+}
+
+void FreeCamSystem::OnStop(World&)
+{
+	// The camera outlives a play session in the editor, and its entities belong to the old world.
+	// Not on start: the driver launcher adds the second system after the truck's model is kept.
+	s_Cam = decltype(s_Cam){};
 }
 
 void FreeCamSystem::Update(World& world, float deltaTime)

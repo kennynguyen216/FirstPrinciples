@@ -87,7 +87,6 @@ private:
 
 	FP::Entity m_Truck = FP::NullEntity;
 	FP::Entity m_Driver = FP::NullEntity;
-	FP::Entity m_TravelMarker = FP::NullEntity;
 	FP::Entity m_CabLight = FP::NullEntity;
 	float m_CabLightIntensity = 0;
 	FP::Vec3 m_Wheel;

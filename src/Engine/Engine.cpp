@@ -270,6 +270,9 @@ namespace FP::Engine
 			.Field("DiskBrightness", &BlackHoleComponent::DiskBrightness).Range(0, 100)
 			.Field("StarBrightness", &BlackHoleComponent::StarBrightness).Range(0, 10).Tooltip("Procedural stars where no skybox covers the sky");
 
+		registry.Register<PortalComponent>("Portal")
+			.Field("Target", &PortalComponent::Target).Tooltip("Name of the entity the view through this glass mesh comes from");
+
 		registry.Register<GravityBodyComponent>("GravityBody")
 			.Field("Velocity", &GravityBodyComponent::Velocity).Tooltip("Ignored with a Dynamic RigidBody, which keeps its own")
 			.Field("Thrust", &GravityBodyComponent::Thrust).Range(0, 1000).Tooltip("Acceleration from the Move action")

@@ -155,6 +155,8 @@ namespace FP
 		// Bends the finished scene around every BlackHoleComponent and draws their accretion disks.
 		void DrawBlackHoles(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view, uint32 width, uint32 height);
 		void BuildFrameUniforms(World& world, const RenderView& view, uint32 width, uint32 height);
+		// Draws what each PortalComponent sees into its own texture, for its glass to show.
+		void RenderPortals(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view, const Array<Draw>& draws, uint32 width, uint32 height);
 		void DrawObject(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, World& world, const Draw& draw, const Mat4& viewProjection, uint32 instances = 1, uint32 commands = 0);
 		void PushBones(SDL_GPUCommandBuffer* cmd, const Array<Mat4>* skin);
 		SDL_GPUGraphicsPipeline* CreateShadowPipeline(Surface surface, bool occlusion = false, bool instanced = false);
@@ -214,6 +216,14 @@ namespace FP
 		String m_EnvironmentPath;
 		int64 m_EnvironmentModified = 0;
 		SDL_GPUGraphicsPipeline* m_UIPipeline = nullptr; // optional, no UI without it
+
+		struct PortalView
+		{
+			Entity Value = NullEntity; // NullEntity when unused this frame
+			RefPtr<GPUTexture> Color;
+			RefPtr<GPUTexture> Depth;
+		};
+		Array<PortalView> m_Portals;
 
 		// One texture per UI page, refilled when the page's version changes.
 		struct UITexture

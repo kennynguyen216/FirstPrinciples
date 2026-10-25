@@ -26,7 +26,9 @@ std::vector<BlackHole> BuildBlackHoles(const MatchPackage& package, const Route&
 		BlackHole hole;
 		hole.CoreRadius = settings.BlackHoleCoreRadius;
 		hole.RingRadius = settings.BlackHoleRingRadius;
-		hole.Position = route.Start + route.Direction * (route.Length * fraction)
+		// The first one comes up soon after the start.
+		const float along = i == 0 ? std::min(settings.FirstBlackHoleDistance, route.Length * fraction) : route.Length * fraction;
+		hole.Position = route.Start + route.Direction * along
 			+ (right * std::cos(angle) + up * std::sin(angle)) * (hole.RingRadius * settings.BlackHoleRouteOffset);
 		holes.push_back(hole);
 	}

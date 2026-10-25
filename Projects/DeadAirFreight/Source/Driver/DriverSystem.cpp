@@ -202,7 +202,6 @@ void DriverSystem::OnStart(World& world)
 	{
 		m_Driver = NullEntity;
 	}
-	m_TravelMarker = FindOrNull(world, "TravelMarker");
 	m_ScrubberLight = FindOrNull(world, "CabScrubberStatus");
 	m_CabLight = FindOrNull(world, "CabLight");
 	if (m_CabLight != NullEntity && world.Has<PointLightComponent>(m_CabLight))
@@ -223,6 +222,7 @@ void DriverSystem::OnStart(World& world)
 		transform.Position = truck.Position + Vec3{ random(), random(), random() };
 		transform.Scale = { 0.15f, 0.15f, 0.15f };
 		world.Add<MeshComponent>(dust).Mesh = "Cube";
+		world.Add<MaterialComponent>(dust).Material = "Materials/SpeedLine.material";
 		world.Add<DustComponent>(dust);
 	}
 
@@ -505,9 +505,6 @@ void DriverSystem::Display(World& world, const TruckState& truck, const LifeSupp
 		partTransform.Rotation = (truckRotation * part.Rotation).ToEuler();
 	}
 
-	if (m_TravelMarker != NullEntity && world.IsValid(m_TravelMarker))
-		world.Get<TransformComponent>(m_TravelMarker).Position = truck.Position + truck.Travel * 25.0f;
-
 	for (size_t i = 0; i < m_Rocks.size() && i < m_RockEntities.size(); ++i)
 	{
 		if (world.IsValid(m_RockEntities[i]))
@@ -521,6 +518,9 @@ void DriverSystem::Display(World& world, const TruckState& truck, const LifeSupp
 	const float streak = 0.15f + m_Settings.StreakLength * speedRatio;
 	const Vec3 rush = truck.Travel * (-m_Settings.StreakSpeed * speedRatio * deltaTime);
 	const float clearance = m_Settings.TruckRadius * 2;
+	// Fewer streaks in hyperdrive, where they are long enough to crowd the view.
+	const int32 shown = static_cast<int32>(truck.Boost > 0 ? m_Settings.BoostDustCount : m_Settings.DustCount);
+	int32 index = 0;
 	for (auto [entity, dustTransform] : world.View<DustComponent, TransformComponent>().each())
 	{
 		Vec3 offset = dustTransform.Position + rush - truck.Position;
@@ -531,7 +531,9 @@ void DriverSystem::Display(World& world, const TruckState& truck, const LifeSupp
 		dustTransform.Position = truck.Position + Vec3{ Wrap(offset.X, m_Settings.DustSpread),
 			Wrap(offset.Y, m_Settings.DustSpread), Wrap(offset.Z, m_Settings.DustSpread) };
 		dustTransform.Rotation = streakRotation;
-		dustTransform.Scale.Z = streak;
+		// Thicker the farther out, so every streak stays a couple of pixels wide instead of shimmering below one.
+		const float width = std::max(0.15f, (dustTransform.Position - truck.Position).Length() * m_Settings.StreakWidth);
+		dustTransform.Scale = index++ < shown ? Vec3{ width, width, streak } : Vec3{ 0, 0, 0 };
 	}
 
 	if (m_CabLight != NullEntity)
