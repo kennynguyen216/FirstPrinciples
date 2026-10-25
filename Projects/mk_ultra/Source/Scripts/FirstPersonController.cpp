@@ -74,7 +74,7 @@ private:
 	}
 };
 
-FP_SCRIPT(FirstPersonController)
+FP_SCRIPT_FIELDS(FirstPersonController)
 {
 	fields.Field("MoveSpeed", &FirstPersonController::MoveSpeed);
 	fields.Field("SprintMultiplier", &FirstPersonController::SprintMultiplier);
