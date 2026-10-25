@@ -5,6 +5,7 @@
 #include "Engine/Physics/Physics.h"
 #include "Engine/Material.h"
 #include "Engine/Json.h"
+#include "Engine/SaveData.h"
 #include "Engine/UI/UIDocument.h"
 #include "Engine/SceneSerializer.h"
 #include "Engine/Scripting/ScriptComponent.h"
@@ -397,7 +398,7 @@ namespace FP
 	}
 
 	// Bump when the script interface changes so stale modules are refused instead of crashing.
-	constexpr uint32 ScriptInterfaceVersion = 15;
+	constexpr uint32 ScriptInterfaceVersion = 16;
 
 	// Fingerprint of everything a script module shares with the host by layout. A module built
 	// against different engine headers or a different configuration gives a different value.
