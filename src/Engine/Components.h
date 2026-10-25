@@ -237,4 +237,34 @@ namespace FP
 		float Exposure = 1;
 		bool Tonemap = true; // soft roll off for lights brighter than white
 	};
+
+	// Sprays small camera facing quads, for fire, smoke, sparks, dust and magic. Particles fly on
+	// their own once emitted. Scripts call EmitParticles for one off bursts.
+	struct ParticleEmitterComponent
+	{
+		bool Emitting = true;
+		float Rate = 20;             // particles per second
+		int32 Burst = 0;             // particles all at once when play starts
+		int32 MaxParticles = 500;
+		float Lifetime = 1.5f;       // seconds
+		float LifetimeRandom = 0.3f; // up to this fraction shorter
+		String Shape = "Point";      // Point, Sphere or Box
+		Vec3 ShapeSize{ 0.5f, 0.5f, 0.5f }; // Sphere radius is X, Box is full size
+		Vec3 Direction{ 0, 1, 0 };   // in the entity's space
+		float Spread = 20;           // cone half angle in degrees, 180 sprays every way
+		float Speed = 2;
+		float SpeedRandom = 0.5f;    // up to this fraction slower
+		float Gravity = 0;           // 1 falls like everything else, negative rises
+		float Drag = 0;              // how fast they slow down
+		float StartSize = 0.25f;
+		float EndSize = 0.05f;
+		Color StartColor{ 1, 0.8f, 0.4f, 1 };
+		Color EndColor{ 1, 0.2f, 0.05f, 0 };
+		String Texture;              // a soft dot when empty
+		String Blend = "Additive";   // Additive glows, Alpha covers
+		bool WorldSpace = true;      // off makes particles move with the entity
+		bool DestroyWhenDone = false; // removes the entity once it stops emitting and its particles are gone
+
+		int32 PendingBurst = 0;      // queued by EmitParticles, not saved
+	};
 }

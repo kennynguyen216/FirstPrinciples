@@ -28,6 +28,7 @@
 #include "Engine/Physics/PhysicsSystem.h"
 #include "Engine/Physics/PlayerInputSystem.h"
 #include "Engine/UI/UISystem.h"
+#include "Engine/Particles/ParticleSystem.h"
 #include "Engine/Animation/SkeletalModel.h"
 #include "Game.h"
 
@@ -349,6 +350,7 @@ namespace FP::Editor
 		}
 		entity->addAction("Create &Point Light", this, [this]() { CreateEntity("Point Light"); });
 		entity->addAction("Create &Character", this, [this]() { CreateEntity("Character"); });
+		entity->addAction("Create Particle E&mitter", this, [this]() { CreateEntity("Particle Emitter"); });
 		entity->addAction("Create &Directional Light", this, [this]() { CreateEntity("Directional Light"); });
 		// Text fields take these keys first, so they still copy, paste and erase text there.
 		entity->addAction("&Copy", QKeySequence::Copy, this, &EditorWindow::CopySelected);
@@ -1066,6 +1068,9 @@ namespace FP::Editor
 			deltaTime = 0.1f;
 
 		m_Viewport->UpdateCursor();
+		// Emitters run while editing too, so effects can be tuned without playing.
+		if (!m_World->IsPlaying())
+			Particles::Simulate(*m_World.Get(), deltaTime, true);
 		m_World->Update(deltaTime);
 		Input::EndFrame();
 
@@ -1322,6 +1327,11 @@ namespace FP::Editor
 			m_World->SetParent(camera, entity, false);
 			m_World->SetActiveCamera(camera);
 		}
+		else if (kind == "Particle Emitter")
+		{
+			entity = m_World->CreateEntity(name);
+			m_World->Add<ParticleEmitterComponent>(entity);
+		}
 		else if (kind == "Camera")
 		{
 			entity = m_World->CreateEntity(name);
@@ -1424,11 +1434,14 @@ namespace FP::Editor
 		CommitHistory();
 		// Snapshot the scene so Stop can put everything back.
 		m_PlaySnapshot = SceneSerializer::SaveToString(*m_World.Get());
+		// Play starts from no particles, so bursts fire again.
+		Particles::Clear(*m_World.Get());
 		m_World->AddSystem<ScriptSystem>();
 		m_World->AddSystem<PlayerInputSystem>();
 		m_World->AddSystem<PhysicsSystem>();
 		m_World->AddSystem<AnimationSystem>();
 		m_World->AddSystem<UISystem>();
+		m_World->AddSystem<ParticleSystem>();
 		Game::AddSystems(*m_World.Get());
 		m_World->BeginPlay();
 		m_Viewport->SetPlaying(true);

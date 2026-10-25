@@ -170,6 +170,15 @@ namespace FP
 
 		bool IsActiveCamera() const { return m_World->GetActiveCamera() == m_Entity; }
 
+		// ---- Particles -------------------------------------------------------
+
+		// Sends a burst from a particle emitter, this entity's by default.
+		void EmitParticles(int32 count, Entity entity = NullEntity) const
+		{
+			if (ParticleEmitterComponent* emitter = TryGet<ParticleEmitterComponent>(entity == NullEntity ? m_Entity : entity))
+				emitter->PendingBurst += count;
+		}
+
 		// ---- Finding entities and scripts ------------------------------------
 
 		// The first entity with the name, or NullEntity.
@@ -387,7 +396,7 @@ namespace FP
 	}
 
 	// Bump when the script interface changes so stale modules are refused instead of crashing.
-	constexpr uint32 ScriptInterfaceVersion = 9;
+	constexpr uint32 ScriptInterfaceVersion = 10;
 
 	// Fingerprint of everything a script module shares with the host by layout. A module built
 	// against different engine headers or a different configuration gives a different value.

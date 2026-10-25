@@ -4,7 +4,8 @@ using namespace FP;
 
 // A flying first person camera that pokes at the physics scene. C switches between it and the
 // scene's main camera. While looking through it: the mouse looks, WASD flies, left click
-// pushes what is in the middle of the screen, F picks it up or drops it, right click blows up.
+// pushes what is in the middle of the screen, F picks it up or drops it, right click blows up
+// with a burst of sparks.
 FPCLASS(Category = "Physics")
 class FirstPersonHands : public Script
 {
@@ -51,7 +52,10 @@ public:
 		if (Input::WasMousePressed(MouseButton::Left) && aimed)
 			GetPhysics().AddImpulseAtPoint(hit.Entity, GetTransform().GetForward() * Push, hit.Point);
 		if (Input::WasMousePressed(MouseButton::Right) && aimed)
+		{
 			AddExplosion(hit.Point, BlastRadius, BlastImpulse);
+			Sparks(hit.Point);
+		}
 		if (Input::WasKeyPressed(SDL_SCANCODE_F))
 		{
 			if (m_Held != NullEntity)
@@ -105,6 +109,22 @@ private:
 	}
 
 	void Drop() { m_Held = NullEntity; }
+
+	// A one off burst of sparks that cleans itself up.
+	void Sparks(Vec3 at)
+	{
+		const Entity blast = Spawn("Sparks", at);
+		ParticleEmitterComponent& sparks = GetWorld().Add<ParticleEmitterComponent>(blast);
+		sparks.Rate = 0;
+		sparks.Burst = 80;
+		sparks.Spread = 180;
+		sparks.Speed = 6;
+		sparks.Gravity = 1;
+		sparks.Lifetime = 0.8f;
+		sparks.StartSize = 0.12f;
+		sparks.EndSize = 0.02f;
+		sparks.DestroyWhenDone = true;
+	}
 };
 
 FP_SCRIPT(FirstPersonHands);
