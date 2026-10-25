@@ -9,6 +9,8 @@
 
 #include <filesystem>
 #include <memory>
+#include <atomic>
+#include <mutex>
 
 namespace FP::Paths
 {
@@ -50,6 +52,13 @@ namespace FP::Paths
 			return {};
 		}
 
+		struct AssetState
+		{
+			std::mutex Mutex;
+			std::unique_ptr<AssetDatabase> Database;
+			std::atomic<AssetDatabase*> Ready{ nullptr };
+		};
+
 		struct State
 		{
 			Project Current;
@@ -57,7 +66,7 @@ namespace FP::Paths
 			String EngineDir;
 			String SavedDir;
 			bool Packaged = false;
-			std::unique_ptr<AssetDatabase> Assets;
+			std::unique_ptr<AssetState> Assets;
 		};
 
 		void SetCurrent(State& state, const Project& project)
@@ -67,7 +76,7 @@ namespace FP::Paths
 			state.SavedDir = project.Dir + "/Saved";
 			state.EngineDir.Clear();
 			state.Packaged = false;
-			state.Assets.reset();
+			state.Assets = std::make_unique<AssetState>();
 		}
 
 		State& GetState()
@@ -118,7 +127,7 @@ namespace FP::Paths
 		state.Current.Dir = directory;
 		state.SavedDir = savedDirectory + "/Saved";
 		state.Packaged = true;
-		state.Assets.reset();
+		state.Assets = std::make_unique<AssetState>();
 	}
 
 	bool IsPackaged()
@@ -165,12 +174,18 @@ namespace FP::Paths
 	AssetDatabase& GetAssets()
 	{
 		State& state = GetState();
-		if (!state.Assets)
+		AssetState& assets = *state.Assets;
+		if (AssetDatabase* ready = assets.Ready.load(std::memory_order_acquire)) return *ready;
+		std::lock_guard lock(assets.Mutex);
+		if (!assets.Database)
 		{
-			state.Assets = std::make_unique<AssetDatabase>();
-			state.Assets->Open(state.ContentDir);
+			auto database = std::make_unique<AssetDatabase>();
+			database->Open(state.ContentDir);
+			assets.Database = std::move(database);
+			// Publish only after the initial scan has finished
+			assets.Ready.store(assets.Database.get(), std::memory_order_release);
 		}
-		return *state.Assets;
+		return *assets.Database;
 	}
 
 	String AssetPath(std::string_view reference)

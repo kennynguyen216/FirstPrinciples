@@ -1,6 +1,6 @@
 #version 450
 layout(local_size_x = 64) in;
-struct Item { mat4 ClipFromLocal; vec4 Min; vec4 Max; uint First; uint Count; uint Pad0; uint Pad1; };
+struct Item { mat4 ClipFromLocal; vec4 Min; vec4 Max; uint First; uint Count; uint FirstInstance; uint Pad; };
 struct Command { uint Count; uint Instances; uint First; int VertexOffset; uint FirstInstance; };
 #ifdef FP_METAL
 #define ITEMS_BINDING 1
@@ -59,6 +59,6 @@ void main()
     if (i >= U.Count) return;
     Item item = Items.Values[i];
     uint reason = visibility(item);
-    Commands.Values[i] = Command(item.Count, reason == 0 ? 1u : 0u, item.First, 0, 0);
+    Commands.Values[i] = Command(item.Count, reason == 0 ? 1u : 0u, item.First, 0, item.FirstInstance);
     Reasons.Values[i] = reason;
 }

@@ -18,7 +18,7 @@ namespace FP
 		Mat4 ClipFromLocal;
 		Vec4 BoundsMin;
 		Vec4 BoundsMax;
-		uint32 FirstIndex = 0, IndexCount = 0, Padding[2] = {};
+		uint32 FirstIndex = 0, IndexCount = 0, FirstInstance = 0, Padding = 0;
 	};
 	struct MeshletStats
 	{

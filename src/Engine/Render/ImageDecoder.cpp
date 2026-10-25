@@ -37,11 +37,14 @@ namespace FP
 	{
 		Array<DecodedImage> images;
 		images.Resize(paths.Num());
+		Array<String> fullPaths;
+		fullPaths.Reserve(paths.Num());
+		for (const String& path : paths) fullPaths.Add(Paths::Content(path));
 		// Each job writes only its own slot, so no locking is needed.
 		JobSystem::ParallelFor(paths.Num(), 1, [&](int32 i) {
 			DecodedImage& image = images[i];
 			image.Path = paths[i];
-			const String fullPath = Paths::Content(paths[i]);
+			const String& fullPath = fullPaths[i];
 			int channels = 0;
 			image.Pixels = stbi_load(fullPath.CStr(), &image.Width, &image.Height, &channels, 4);
 			if (!image.Pixels)

@@ -369,6 +369,11 @@ project "Editor"
 		links { "CoreGraphics.framework" }
 	filter {}
 
+project "Benchmarks"
+	kind "ConsoleApp"
+	files { "src/Benchmarks/**.cpp" }
+	UseEngine(false)
+
 project "Tests"
 	kind "ConsoleApp"
 	files { "src/Tests/**.h", "src/Tests/**.cpp" }

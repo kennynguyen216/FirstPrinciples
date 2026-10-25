@@ -12,8 +12,8 @@ struct Item
     float4 Max;
     uint First;
     uint Count;
-    uint Pad0;
-    uint Pad1;
+    uint FirstInstance;
+    uint Pad;
 };
 
 struct Params
@@ -36,8 +36,8 @@ struct Item_1
     float4 Max;
     uint First;
     uint Count;
-    uint Pad0;
-    uint Pad1;
+    uint FirstInstance;
+    uint Pad;
 };
 
 struct ItemData
@@ -172,15 +172,15 @@ kernel void main0(constant Params& U [[buffer(0)]], device ItemData& Items [[buf
     item.Max = Items.Values[i].Max;
     item.First = Items.Values[i].First;
     item.Count = Items.Values[i].Count;
-    item.Pad0 = Items.Values[i].Pad0;
-    item.Pad1 = Items.Values[i].Pad1;
+    item.FirstInstance = Items.Values[i].FirstInstance;
+    item.Pad = Items.Values[i].Pad;
     Item param = item;
     uint reason = visibility(param, U, Tiles);
-    Command_1 _437 = Command_1{ item.Count, uint(reason == 0u), item.First, 0, 0u };
-    Commands.Values[i].Count = _437.Count;
-    Commands.Values[i].Instances = _437.Instances;
-    Commands.Values[i].First = _437.First;
-    Commands.Values[i].VertexOffset = _437.VertexOffset;
-    Commands.Values[i].FirstInstance = _437.FirstInstance;
+    Command_1 _439 = Command_1{ item.Count, uint(reason == 0u), item.First, 0, item.FirstInstance };
+    Commands.Values[i].Count = _439.Count;
+    Commands.Values[i].Instances = _439.Instances;
+    Commands.Values[i].First = _439.First;
+    Commands.Values[i].VertexOffset = _439.VertexOffset;
+    Commands.Values[i].FirstInstance = _439.FirstInstance;
     Reasons.Values[i] = reason;
 }

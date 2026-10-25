@@ -34,6 +34,16 @@ namespace FP
 		Vec4 Style{ 0, 0, 0, 0 }; // x cel shaded, yzw reserved
 	};
 
+	struct RenderStats
+	{
+		uint32 SceneDrawCalls = 0;
+		uint32 SceneInstances = 0;
+		uint32 InstancedDrawCalls = 0;
+		uint32 IndirectCommands = 0;
+		uint32 ShadowDrawCalls = 0;
+		uint32 OcclusionDrawCalls = 0;
+	};
+
 	constexpr int32 MaxLights = 16;
 
 	struct FrameUniforms
@@ -83,6 +93,10 @@ namespace FP
 		// Call after loading a scene so the first frame does not stall on image decoding.
 		void PreloadTextures(World& world);
 
+		void SetBatchingEnabled(bool enabled) { m_BatchingEnabled = enabled; }
+		bool IsBatchingEnabled() const { return m_BatchingEnabled; }
+		const RenderStats& GetRenderStats() const { return m_RenderStats; }
+
 		TextureCache& GetTextures() { return m_Textures; }
 		MeshLibrary& GetMeshes() { return m_Meshes; }
 		GPUDevice& GetDevice() { return m_Device; }
@@ -123,12 +137,17 @@ namespace FP
 			const Array<Mat4>* Skin; // bone matrices for skinned meshes, null for the bind pose
 			int32 IndirectFirst = -1;
 			uint32 MeshletCount = 0;
+			int32 InstanceIndex = -1;
 		};
 
 		void CreatePipelines();
 		SDL_GPUGraphicsPipeline* CreateFullscreenPipeline(const char* fragment, uint32 samplers, SDL_GPUTextureFormat format);
-		SDL_GPUGraphicsPipeline* CreateMeshPipeline(const char* fragment, uint32 numSamplers, uint32 numUniforms, Surface surface, bool glass, bool wireframe = false);
+		SDL_GPUGraphicsPipeline* CreateMeshPipeline(const char* fragment, uint32 numSamplers, uint32 numUniforms, Surface surface, bool glass, bool wireframe = false, bool instanced = false);
 		SDL_GPUGraphicsPipeline* GetPipeline(const Draw& draw) const;
+		SDL_GPUGraphicsPipeline* GetInstancedPipeline(const Draw& draw) const;
+		ObjectUniforms MakeObjectUniforms(World& world, const Draw& draw, const Mat4& viewProjection) const;
+		void PrepareInstances(SDL_GPUCommandBuffer* cmd, World& world, Array<Draw>& draws);
+		bool CanBatch(World& world, const Draw& a, const Draw& b) const;
 		void EnsureTargets(uint32 width, uint32 height);
 		void UploadLines(SDL_GPUCommandBuffer* cmd, const DebugLines& lines);
 		void PrepareEnvironment(World& world);
@@ -136,11 +155,14 @@ namespace FP
 		// Bends the finished scene around every BlackHoleComponent and draws their accretion disks.
 		void DrawBlackHoles(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view, uint32 width, uint32 height);
 		void BuildFrameUniforms(World& world, const RenderView& view, uint32 width, uint32 height);
-		void DrawObject(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, World& world, const Draw& draw, const Mat4& viewProjection);
+		void DrawObject(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, World& world, const Draw& draw, const Mat4& viewProjection, uint32 instances = 1, uint32 commands = 0);
 		void PushBones(SDL_GPUCommandBuffer* cmd, const Array<Mat4>* skin);
-		SDL_GPUGraphicsPipeline* CreateShadowPipeline(Surface surface, bool occlusion = false);
+		SDL_GPUGraphicsPipeline* CreateShadowPipeline(Surface surface, bool occlusion = false, bool instanced = false);
 		void PrepareMeshlets(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view, Array<Draw>& draws);
-		void RenderShadows(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view);
+		void RenderShadows(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view, const Array<Draw>& draws);
+		void DrawDepth(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, World& world, const Draw& draw,
+			const Mat4& viewProjection, SDL_GPUGraphicsPipeline* pipeline, bool instanced, uint32 instances);
+		bool CanBatchDepth(const Draw& a, const Draw& b) const;
 		void CreateParticlePipelines();
 		// Builds camera facing quads for every live particle and uploads them before the scene pass.
 		void PrepareParticles(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view);
@@ -160,10 +182,17 @@ namespace FP
 		bool m_HasCullingView = false;
 		uint32 m_ActiveMeshlets = 0;
 		SDL_GPUGraphicsPipeline* m_OcclusionPipeline = nullptr;
+		SDL_GPUGraphicsPipeline* m_InstancedOcclusionPipeline = nullptr;
+		SDL_GPUGraphicsPipeline* m_InstancedShadowPipeline = nullptr;
 		RefPtr<GPUTexture> m_CullDepth;
 
 		// Indexed by ShaderKind then Surface.
 		SDL_GPUGraphicsPipeline* m_ScenePipelines[3][3] = {};
+		SDL_GPUGraphicsPipeline* m_InstancedPipelines[3][2] = {};
+		SDL_GPUGraphicsPipeline* m_InstancedWirePipelines[2] = {};
+		RefPtr<GPUBuffer> m_Instances;
+		bool m_BatchingEnabled = true;
+		RenderStats m_RenderStats;
 
 		// Line fill versions of Unlit for the wireframe view mode, indexed by Surface.
 		// Optional so a GPU without line fill still renders the other modes.
