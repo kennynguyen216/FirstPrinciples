@@ -1,6 +1,9 @@
 #include "Tests/TestFramework.h"
 #include "Engine/Engine.h"
 #include "Engine/SceneSerializer.h"
+#include "Engine/SaveData.h"
+#include <filesystem>
+#include <limits>
 
 using namespace FP;
 
@@ -655,6 +658,71 @@ FP_TEST(Input_ActionsCombineKeysMouseAndPads)
 	Input::SetKey(SDL_SCANCODE_F, false);
 	Input::EndFrame();
 	Input::LoadActions(Input::GetDefaultActions());
+}
+
+FP_TEST(EngineSettings_PersistAllModesAndRejectInvalidData)
+{
+	const auto native = std::filesystem::temp_directory_path() / ("FPEngineSettings-" + std::string(Guid::New().ToString().View()) + ".settings");
+	const auto utf8 = native.generic_u8string();
+	const String path(reinterpret_cast<const char*>(utf8.data()), static_cast<int32>(utf8.size()));
+	EngineSettings settings;
+	FP_EXPECT(settings.ColorBlindMode == "None" && settings.ColorBlindStrength == 1);
+	FP_EXPECT(EngineSettings::ColorBlindModes().Num() == 9);
+	for (const char* mode : EngineSettings::ColorBlindModes())
+	{
+		settings.ColorBlindMode = mode;
+		settings.ColorBlindStrength = 0.65f;
+		FP_EXPECT(settings.Save(path.CStr()));
+		EngineSettings loaded;
+		FP_EXPECT(loaded.Load(path.CStr()));
+		FP_EXPECT(loaded.ColorBlindMode == mode && loaded.ColorBlindStrength == 0.65f);
+	}
+	settings.ColorBlindMode = "Invalid";
+	FP_EXPECT(!settings.Save(path.CStr()));
+	EngineSettings loaded;
+	FP_EXPECT(loaded.Load(path.CStr()) && loaded.ColorBlindMode == "Achromatomaly");
+	for (float value : { -1.0f, 1.01f, std::numeric_limits<float>::quiet_NaN() })
+	{
+		settings.ColorBlindMode = "None";
+		settings.ColorBlindStrength = value;
+		FP_EXPECT(!settings.Save(path.CStr()));
+	}
+	SaveData invalid;
+	invalid.SetString("ColorBlindMode", "Typo");
+	invalid.SetFloat("ColorBlindStrength", 0.5f);
+	FP_EXPECT(invalid.SaveToFile(path));
+	FP_EXPECT(!loaded.Load(path.CStr()));
+	FP_EXPECT(loaded.ColorBlindMode == "Achromatomaly" && loaded.ColorBlindStrength == 0.65f);
+	invalid.SetString("ColorBlindMode", "Protanopia");
+	invalid.SetString("ColorBlindStrength", "wrong type");
+	FP_EXPECT(invalid.SaveToFile(path));
+	FP_EXPECT(!loaded.Load(path.CStr()));
+	FP_EXPECT(loaded.ColorBlindMode == "Achromatomaly" && loaded.ColorBlindStrength == 0.65f);
+	std::error_code error;
+	std::filesystem::remove(native, error);
+}
+
+FP_TEST(PostProcess_SceneSettingsStayIndependentOfAccessibility)
+{
+	Engine::RegisterEngineComponents();
+	StrongObjectPtr<World> world(NewObject<World>());
+	const Entity entity = world->CreateEntity("Post Processing");
+	auto& post = world->Add<PostProcessComponent>(entity);
+	post.FXAA = true;
+	post.Bloom = true;
+	post.BloomIntensity = 0.4f;
+	post.BloomThreshold = 2;
+	const String text = SceneSerializer::SaveToString(*world.Get());
+	FP_EXPECT(!text.Contains("ColorBlind"));
+	StrongObjectPtr<World> loaded(NewObject<World>());
+	FP_EXPECT(SceneSerializer::LoadFromString(*loaded.Get(), text.View()));
+	const auto* copy = loaded->TryGet<PostProcessComponent>(loaded->FindEntityByName("Post Processing"));
+	FP_EXPECT(copy && copy->FXAA && copy->Bloom && copy->BloomIntensity == 0.4f && copy->BloomThreshold == 2);
+	post.BloomIntensity = -1;
+	FP_EXPECT(!SceneSerializer::Validate(*world.Get()));
+	post.BloomIntensity = 0;
+	post.BloomThreshold = -1;
+	FP_EXPECT(!SceneSerializer::Validate(*world.Get()));
 }
 
 FP_TEST(Input_ValidationLeavesLiveBindingsAndPressStateAlone)

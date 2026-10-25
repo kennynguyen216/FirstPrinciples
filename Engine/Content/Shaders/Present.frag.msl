@@ -5,9 +5,18 @@
 
 using namespace metal;
 
+// Implementation of signed integer mod accurate to SPIR-V specification
+template<typename Tx, typename Ty>
+inline Tx spvSMod(Tx x, Ty y)
+{
+    Tx remainder = x - y * (x / y);
+    return select(Tx(remainder + y), remainder, remainder == 0 || (x >= 0) == (y >= 0));
+}
+
 struct PresentData
 {
     float4 Params;
+    float4 Accessibility;
 };
 
 struct main0_out
@@ -24,16 +33,16 @@ static inline __attribute__((always_inline))
 float3 NeutralTonemap(thread float3& color)
 {
     float x = fast::min(color.x, fast::min(color.y, color.z));
-    float _32;
+    float _35;
     if (x < 0.07999999821186065673828125)
     {
-        _32 = x - ((6.25 * x) * x);
+        _35 = x - ((6.25 * x) * x);
     }
     else
     {
-        _32 = 0.039999999105930328369140625;
+        _35 = 0.039999999105930328369140625;
     }
-    float offset = _32;
+    float offset = _35;
     color -= float3(offset);
     float peak = fast::max(color.x, fast::max(color.y, color.z));
     if (peak < 0.7599999904632568359375)
@@ -46,17 +55,110 @@ float3 NeutralTonemap(thread float3& color)
     return mix(color, float3(newPeak), float3(g));
 }
 
-fragment main0_out main0(main0_in in [[stage_in]], constant PresentData& Present [[buffer(0)]], texture2d<float> SceneColor [[texture(0)]], sampler SceneColorSmplr [[sampler(0)]])
+static inline __attribute__((always_inline))
+float3 AssistColorVision(thread const float3& color, constant PresentData& Present)
+{
+    int mode = int(Present.Params.w);
+    bool _113 = mode == 0;
+    bool _122;
+    if (!_113)
+    {
+        _122 = Present.Accessibility.x <= 0.0;
+    }
+    else
+    {
+        _122 = _113;
+    }
+    if (_122)
+    {
+        return color;
+    }
+    float3 adjusted;
+    if (mode >= 7)
+    {
+        adjusted = float3(dot(color, float3(0.60000002384185791015625, 0.300000011920928955078125, 0.100000001490116119384765625)));
+        if (mode == 8)
+        {
+            adjusted = mix(color, adjusted, float3(0.5));
+        }
+    }
+    else
+    {
+        int type = spvSMod(mode - 1, 3);
+        float3x3 simulation;
+        if (mode == 1)
+        {
+            simulation = transpose(float3x3(float3(0.152285993099212646484375, 1.0525829792022705078125, -0.20486800372600555419921875), float3(0.114503003656864166259765625, 0.78628098964691162109375, 0.09921599924564361572265625), float3(-0.00388199998997151851654052734375, -0.0481159985065460205078125, 1.05199801921844482421875)));
+        }
+        else
+        {
+            if (mode == 2)
+            {
+                simulation = transpose(float3x3(float3(0.3673219978809356689453125, 0.8606460094451904296875, -0.2279680073261260986328125), float3(0.2800849974155426025390625, 0.672501027584075927734375, 0.047412998974323272705078125), float3(-0.0118199996650218963623046875, 0.042939998209476470947265625, 0.96888101100921630859375)));
+            }
+            else
+            {
+                if (mode == 3)
+                {
+                    simulation = transpose(float3x3(float3(1.255527973175048828125, -0.0767489969730377197265625, -0.17877900600433349609375), float3(-0.07841099798679351806640625, 0.93080902099609375, 0.14760200679302215576171875), float3(0.0047329999506473541259765625, 0.691366970539093017578125, 0.3039000034332275390625)));
+                }
+                else
+                {
+                    if (mode == 4)
+                    {
+                        simulation = transpose(float3x3(float3(0.4580639898777008056640625, 0.679578006267547607421875, -0.1376419961452484130859375), float3(0.09278500080108642578125, 0.846312999725341796875, 0.06090199947357177734375), float3(-0.007493999786674976348876953125, -0.01680699922144412994384765625, 1.024301052093505859375)));
+                    }
+                    else
+                    {
+                        if (mode == 5)
+                        {
+                            simulation = transpose(float3x3(float3(0.547493994235992431640625, 0.607765018939971923828125, -0.15525899827480316162109375), float3(0.18169200420379638671875, 0.78174197673797607421875, 0.0365660004317760467529296875), float3(-0.0104099996387958526611328125, 0.0272749997675418853759765625, 0.983135998249053955078125)));
+                        }
+                        else
+                        {
+                            simulation = transpose(float3x3(float3(1.0172770023345947265625, 0.027029000222682952880859375, -0.0443059988319873809814453125), float3(-0.006113000214099884033203125, 0.958478987216949462890625, 0.0476340018212795257568359375), float3(0.006378999911248683929443359375, 0.24870799481868743896484375, 0.74491298198699951171875)));
+                        }
+                    }
+                }
+            }
+        }
+        float3 error = color - (simulation * color);
+        float3 _280;
+        if (type == 0)
+        {
+            _280 = float3(0.0, error.y + (0.699999988079071044921875 * error.x), error.z + (0.699999988079071044921875 * error.x));
+        }
+        else
+        {
+            float3 _300;
+            if (type == 1)
+            {
+                _300 = float3(error.x + (0.699999988079071044921875 * error.y), 0.0, error.z + (0.699999988079071044921875 * error.y));
+            }
+            else
+            {
+                _300 = float3(error.x + (0.699999988079071044921875 * error.z), error.y + (0.699999988079071044921875 * error.z), 0.0);
+            }
+            _280 = _300;
+        }
+        float3 correction = _280;
+        adjusted = color + correction;
+    }
+    return mix(color, fast::clamp(adjusted, float3(0.0), float3(1.0)), float3(Present.Accessibility.x));
+}
+
+fragment main0_out main0(main0_in in [[stage_in]], constant PresentData& Present [[buffer(0)]], texture2d<float> SceneColor [[texture(0)]], texture2d<float> BloomColor [[texture(1)]], sampler SceneColorSmplr [[sampler(0)]], sampler BloomColorSmplr [[sampler(1)]])
 {
     main0_out out = {};
-    float3 color = SceneColor.sample(SceneColorSmplr, in.InUV).xyz * Present.Params.x;
+    float3 color = (SceneColor.sample(SceneColorSmplr, in.InUV).xyz + (BloomColor.sample(BloomColorSmplr, in.InUV).xyz * Present.Params.z)) * Present.Params.x;
     if (Present.Params.y > 0.5)
     {
         float3 param = color;
-        float3 _126 = NeutralTonemap(param);
-        color = _126;
+        float3 _377 = NeutralTonemap(param);
+        color = _377;
     }
-    out.OutColor = float4(fast::clamp(color, float3(0.0), float3(1.0)), 1.0);
+    float3 param_1 = fast::clamp(color, float3(0.0), float3(1.0));
+    out.OutColor = float4(AssistColorVision(param_1, Present), 1.0);
     return out;
 }
 

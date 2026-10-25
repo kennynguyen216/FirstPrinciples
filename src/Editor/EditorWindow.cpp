@@ -1,4 +1,5 @@
 #include "Editor/EditorWindow.h"
+#include "Engine/EngineSettings.h"
 #include "Editor/MeshletDebugWidget.h"
 #include "Editor/AudioImport.h"
 #include "Engine/Audio/AudioDevice.h"
@@ -46,6 +47,8 @@
 #include <QCloseEvent>
 #include <QCheckBox>
 #include <QDialog>
+#include <QDialogButtonBox>
+#include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QPushButton>
@@ -397,6 +400,15 @@ namespace FP::Editor
 		});
 
 		QMenu* entity = menuBar()->addMenu("&Entity");
+		entity->addAction("Post Processing...", this, [this]() {
+			for (Entity existing : m_World->GetEntities())
+				if (m_World->Has<PostProcessComponent>(existing)) { Select(existing); return; }
+			Entity settings = m_World->CreateEntity("Post Processing");
+			m_World->Add<PostProcessComponent>(settings);
+			MarkDirty();
+			RefreshHierarchy();
+			Select(settings);
+		});
 		entity->addAction("Create &Empty", QKeySequence("Ctrl+Shift+N"), this, [this]() { CreateEntity("Empty Entity"); });
 		entity->addAction("Create &Sprite", QKeySequence("Ctrl+Shift+A"), this, [this]() { CreateEntity("Sprite"); });
 		QMenu* meshes = entity->addMenu("Create &Mesh");
@@ -559,6 +571,8 @@ namespace FP::Editor
 		settings->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 		settings->setPopupMode(QToolButton::InstantPopup);
 		QMenu* settingsMenu = new QMenu(settings);
+		settingsMenu->addAction("Engine Settings...", this, &EditorWindow::ShowEngineSettings);
+		settingsMenu->addSeparator();
 		settingsMenu->addAction(autoReload);
 		settingsMenu->addAction("Collect Garbage", this, []() {
 			const GarbageCollectionStats stats = GarbageCollector::Get().Collect();
@@ -1866,6 +1880,49 @@ namespace FP::Editor
 		addDockWidget(Qt::BottomDockWidgetArea, m_AudioDebugger);
 		tabifyDockWidget(m_ContentDock, m_AudioDebugger);
 		m_AudioDebugger->show(); m_AudioDebugger->raise(); enabled(); refresh();
+	}
+
+	void EditorWindow::ShowEngineSettings()
+	{
+		const EngineSettings original = EngineSettings::Get();
+		QDialog dialog(this);
+		dialog.setWindowTitle("Engine Settings");
+		QVBoxLayout* layout = new QVBoxLayout(&dialog);
+		QLabel* description = new QLabel("Color-blind assistance applies across scenes and projects in the editor and runtime.");
+		description->setWordWrap(true);
+		layout->addWidget(description);
+		QFormLayout* form = new QFormLayout();
+		layout->addLayout(form);
+		QComboBox* mode = new QComboBox();
+		for (const char* name : EngineSettings::ColorBlindModes()) mode->addItem(name);
+		mode->setCurrentText(ToQString(original.ColorBlindMode));
+		mode->setAccessibleName("Color-blind assistance mode");
+		form->addRow("Color-blind mode", mode);
+		QDoubleSpinBox* strength = new QDoubleSpinBox();
+		strength->setRange(0, 1);
+		strength->setSingleStep(0.05);
+		strength->setKeyboardTracking(false);
+		strength->setValue(original.ColorBlindStrength);
+		strength->setAccessibleName("Color-blind assistance strength");
+		form->addRow("Strength", strength);
+		connect(mode, &QComboBox::currentTextChanged, &dialog, [](const QString& value) {
+			EngineSettings::Get().ColorBlindMode = ToString(value);
+		});
+		connect(strength, &QDoubleSpinBox::valueChanged, &dialog, [](double value) {
+			EngineSettings::Get().ColorBlindStrength = static_cast<float>(value);
+		});
+		QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel);
+		layout->addWidget(buttons);
+		connect(buttons, &QDialogButtonBox::accepted, &dialog, [&dialog]() {
+			if (!EngineSettings::Get().Save())
+			{
+				QMessageBox::warning(&dialog, "Engine Settings", "Could not save your engine preferences. Check that your user settings folder is writable.");
+				return;
+			}
+			dialog.accept();
+		});
+		connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+		if (dialog.exec() != QDialog::Accepted) EngineSettings::Get() = original;
 	}
 
 	void EditorWindow::ShowAudioSettings()

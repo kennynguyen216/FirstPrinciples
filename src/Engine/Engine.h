@@ -6,6 +6,7 @@
 #include "CoreObject/CoreObject.h"
 #include "Engine/ComponentRegistry.h"
 #include "Engine/Components.h"
+#include "Engine/EngineSettings.h"
 #include "Engine/Input.h"
 #include "Engine/Math.h"
 #include "Engine/Paths.h"

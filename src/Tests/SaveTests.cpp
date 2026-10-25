@@ -138,9 +138,9 @@ FP_TEST(Save_FileReplacementAndFailures)
 	FP_EXPECT(!loaded.LoadFromFile(folder.File("broken.save")));
 	FP_EXPECT(loaded.SaveToString() == before);
 	for (const auto& entry : fs::directory_iterator(folder.Path))
-		FP_EXPECT(!entry.path().filename().string().starts_with(".save-"));
+		FP_EXPECT(!entry.path().filename().u8string().starts_with(u8".save-"));
 	for (const auto& entry : fs::directory_iterator(folder.Path / "nested"))
-		FP_EXPECT(!entry.path().filename().string().starts_with(".save-"));
+		FP_EXPECT(!entry.path().filename().u8string().starts_with(u8".save-"));
 }
 
 FP_TEST(Save_SlotsAndSettingsAreIndependent)
