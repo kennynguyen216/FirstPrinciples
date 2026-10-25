@@ -5,6 +5,7 @@
 namespace FP
 {
 	class Project;
+	class AssetDatabase;
 }
 
 namespace FP::Paths
@@ -28,6 +29,10 @@ namespace FP::Paths
 
 	// The open project's Content folder.
 	const String& GetContentDir();
+
+	AssetDatabase& GetAssets();
+	String AssetPath(std::string_view reference);
+	String AssetReference(std::string_view path);
 
 	// Writable per user folder for this project's saves. Empty if it cannot be opened.
 	String GetSaveDir();

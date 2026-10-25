@@ -1,5 +1,6 @@
 #include "Engine/Audio/AudioClip.h"
 #include "Engine/Paths.h"
+#include "Engine/Assets/AssetDatabase.h"
 
 #include "Engine/Audio/AudioFileDecoder.h"
 #include <array>
@@ -57,6 +58,8 @@ namespace FP
 	{
 		struct Entry { std::shared_ptr<const AudioClip> Clip; uint64 Used = 0; };
 		fs::path Root;
+		bool ProjectContent = false;
+		std::map<std::string, uint64> AssetRevisions;
 		uint64 Budget, Transient, Serial = 0, Revision = 0;
 		std::map<std::string, Entry> Clips;
 		std::map<std::string, AudioResult> Failures;
@@ -69,6 +72,7 @@ namespace FP
 	AudioClipCache::AudioClipCache(const String& root, uint64 resident, uint64 transient) : m_Impl(std::make_unique<Impl>())
 	{
 		m_Impl->Root = Native(root.IsEmpty() ? Paths::GetContentDir() : root);
+		m_Impl->ProjectContent = root.IsEmpty() || root == Paths::GetContentDir();
 		m_Impl->Budget = resident;
 		m_Impl->Transient = transient;
 	}
@@ -95,11 +99,22 @@ namespace FP
 		try { return Decode(Native(path), 128 * MiB, true); }
 		catch (const std::exception&) { return Error(AudioError::DecodeFailed, "Could not allocate or access the audio snapshot."); }
 	}
-	AudioClipResult AudioClipCache::Load(const String& path, bool reload)
+	AudioClipResult AudioClipCache::Load(const String& reference, bool reload)
 	{
-		// shortcut: decoding is synchronous; add async loading if preloading cannot prevent measured stalls.
+		const String path = m_Impl->ProjectContent ? Paths::AssetPath(reference) : reference;
 		m_Impl->CheckThread();
 		const std::string requested(path.View());
+		if (m_Impl->ProjectContent)
+		{
+			const uint64 revision = Paths::GetAssets().Fingerprint(reference);
+			const auto previous = m_Impl->AssetRevisions.find(requested);
+			if (previous != m_Impl->AssetRevisions.end() && previous->second != revision)
+			{
+				reload = true;
+				m_Impl->Failures.erase(requested);
+			}
+			m_Impl->AssetRevisions[requested] = revision;
+		}
 		if (!reload) if (const auto failure = m_Impl->Failures.find(requested); failure != m_Impl->Failures.end()) return {failure->second, {}};
 		auto fail = [&](AudioClipResult result)
 		{

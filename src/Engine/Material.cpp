@@ -2,6 +2,7 @@
 #include "Engine/Engine.h"
 #include "Engine/FieldSerializer.h"
 #include "Engine/Paths.h"
+#include "Engine/Assets/AssetDatabase.h"
 #include "Core/Misc/File.h"
 #include "Core/Misc/ModuleContext.h"
 
@@ -108,12 +109,23 @@ namespace FP
 		return ResolveShared(&ModuleContext::MaterialLibrary, library);
 	}
 
-	Material* MaterialLibrary::Load(const String& path)
+	Material* MaterialLibrary::Load(const String& reference)
 	{
+		const String path = Paths::AssetReference(reference);
 		if (path.IsEmpty())
 			return nullptr;
+		const uint64 revision = Paths::GetAssets().Fingerprint(path);
+		const bool changed = !m_Revisions.Contains(path) || m_Revisions.FindRef(path) != revision;
+		if (changed)
+		{
+			m_Revisions.Add(path, revision);
+			m_Failed.Remove(path);
+		}
 		if (RefPtr<Material>* cached = m_Materials.Find(path))
+		{
+			if (changed && !(*cached)->IsDirty()) (*cached)->Load();
 			return cached->Get();
+		}
 		if (m_Failed.Contains(path))
 			return nullptr;
 
@@ -133,8 +145,10 @@ namespace FP
 		RefPtr<Material> material = MakeRef<Material>(path);
 		if (!material->Save())
 			return nullptr;
-		m_Failed.Remove(path);
-		m_Materials.Add(path, material);
+		Paths::GetAssets().Refresh();
+		const String key = Paths::AssetReference(path);
+		m_Failed.Remove(key);
+		m_Materials.Add(key, material);
 		return material.Get();
 	}
 
@@ -160,6 +174,7 @@ namespace FP
 	void MaterialLibrary::Clear()
 	{
 		m_Materials.Clear();
+		m_Revisions.Clear();
 		m_Failed.Clear();
 	}
 }

@@ -1,4 +1,5 @@
 #include "Engine/FieldSerializer.h"
+#include "Engine/Paths.h"
 
 #include <cstdlib>
 #include <cmath>
@@ -58,7 +59,9 @@ namespace FP::FieldSerializer
 				out.Appendf("%.9g %.9g %.9g %.9g", c.R, c.G, c.B, c.A);
 				break;
 			}
-			case FieldType::String: WriteQuotedImpl(out, Get<String>(field, data)); break;
+			case FieldType::String:
+				WriteQuotedImpl(out, field.AssetFilter ? Paths::AssetReference(Get<String>(field, data)) : Get<String>(field, data));
+				break;
 		}
 		out += '\n';
 	}
@@ -98,7 +101,9 @@ namespace FP::FieldSerializer
 			case FieldType::Color:
 				field.Get<Color>(data) = { values[0], values[1], values[2], values[3] };
 				break;
-			case FieldType::String: field.Get<String>(data) = tokens[1]; break;
+			case FieldType::String:
+				field.Get<String>(data) = field.AssetFilter ? Paths::AssetReference(tokens[1]) : tokens[1];
+				break;
 		}
 		return true;
 	}

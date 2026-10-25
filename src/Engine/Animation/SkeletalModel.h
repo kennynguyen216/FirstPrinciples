@@ -51,6 +51,7 @@ namespace FP
 
 	private:
 		HashMap<String, std::shared_ptr<SkeletalModel>> m_Models;
+		HashMap<String, uint64> m_Revisions;
 		Array<String> m_Failed;
 	};
 

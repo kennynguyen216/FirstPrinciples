@@ -327,7 +327,7 @@ namespace FP
 		m_Impl->Page = String(path);
 		m_Impl->Ready = false;
 		if (m_Impl->View && !path.empty())
-			m_Impl->View->LoadURL(ToUL("file:///" + std::string(path)));
+			m_Impl->View->LoadURL(ToUL("file:///" + std::string(Paths::AssetPath(path).View())));
 	}
 
 	bool UIDocumentInstance::IsReady() const { return m_Impl->Ready; }

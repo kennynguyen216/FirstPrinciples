@@ -36,6 +36,8 @@ namespace FP
 		RefPtr<GPUMesh> Upload(const MeshData& data);
 
 		GPUDevice& m_Device;
+		void CheckRevision(const String& path);
+		HashMap<String, uint64> m_Revisions;
 		HashMap<String, RefPtr<GPUMesh>> m_Meshes;
 		HashMap<String, RefPtr<GPUMesh>> m_Skinned;
 		Array<String> m_Failed;

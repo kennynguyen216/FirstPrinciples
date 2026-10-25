@@ -4,6 +4,7 @@
 #include "Engine/Physics/Physics.h"
 #include "Engine/Net/NetworkComponent.h"
 #include "Engine/Material.h"
+#include "Engine/Paths.h"
 #include "HAL/PlatformMisc.h"
 
 #include <algorithm>
@@ -36,7 +37,7 @@ namespace FP
 		void RecordHit(AudioDebugSource* debug, const RaycastHit& hit, const SoundSurface& surface, bool reflection)
 		{
 			if (debug && debug->Hits.size() < 64)
-				debug->Hits.push_back({hit.Entity, surface.Asset ? surface.Asset->GetPath() : String("Default"), hit.Point,
+				debug->Hits.push_back({hit.Entity, surface.Asset ? Paths::AssetPath(surface.Asset->GetPath()) : String("Default"), hit.Point,
 					surface.Transmission, surface.Absorption, surface.Damping, reflection});
 		}
 		bool Finite(Vec3 value)

@@ -28,7 +28,9 @@ namespace FP
 
 	private:
 		GPUDevice& m_Device;
+		void CheckRevision(const String& path, const String& key);
 		HashMap<String, RefPtr<GPUTexture>> m_Textures;
+		HashMap<String, uint64> m_Revisions;
 		Array<String> m_Failed;
 	};
 }
