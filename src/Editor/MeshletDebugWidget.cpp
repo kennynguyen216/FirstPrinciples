@@ -94,6 +94,15 @@ namespace FP::Editor
 		else ImGui::TextUnformatted("No active meshlet draws. Full mesh rendering or no static meshes.");
 		ImGui::TextWrapped("Static opaque meshes use indirect draws. Skinning and glass keep full draws. Cutouts do not act as occluders. Occlusion is off in wireframe.");
 		ImGui::Separator();
+		ImGui::TextUnformatted("DRAW BATCHING");
+		bool batching = renderer.IsBatchingEnabled();
+		if (ImGui::Checkbox("Batch compatible draws", &batching)) renderer.SetBatchingEnabled(batching);
+		const auto& draws = renderer.GetRenderStats();
+		ImGui::Text("Scene: %u submissions / %u section instances", draws.SceneDrawCalls, draws.SceneInstances);
+		ImGui::Text("Instanced groups: %u / indirect commands: %u", draws.InstancedDrawCalls, draws.IndirectCommands);
+		ImGui::Text("Depth submissions: %u shadow / %u occlusion", draws.ShadowDrawCalls, draws.OcclusionDrawCalls);
+		ImGui::TextWrapped("Compatible neighbors share a draw. Meshlet commands keep visibility per instance. Animated poses keep separate draws.");
+		ImGui::Separator();
 		ImGui::TextUnformatted(cameraContext ? "Live observer view (yellow frame = culling camera)" : "Live viewport camera (edit camera, or game camera during Play)");
 		if (auto* preview = m_Viewport->GetRenderTarget())
 		{

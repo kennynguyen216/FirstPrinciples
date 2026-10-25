@@ -1209,6 +1209,35 @@ Scripts/CompileShaders.sh
 
 On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\CompileShaders.ps1`.
 
+### Batching and mesh instancing
+
+Static meshes and sprites batch automatically when neighboring draws share a mesh, section,
+material, shader and texture. Each instance supplies its own transform, normal matrix, UV transform
+and tint through a reusable vertex buffer. Full mesh draws use an instance count instead of one draw
+per object. The shadow maps and occlusion depth prepass also instance compatible static meshes,
+after checking each object's visibility for that pass.
+
+Meshlet rendering keeps separate visibility decisions for every object's clusters. Compatible
+indirect command ranges share an SDL draw submission, with each command selecting its instance data.
+This reduces CPU submissions and repeated state binding while retaining cluster culling. It does
+not combine those commands into a single GPU instance count or guarantee a frame time improvement.
+
+Batching preserves the existing draw order: opaque meshes front to back, sprites by layer and depth,
+then glass back to front. Incompatible neighbors split a batch. Animated meshes keep independent
+bone uniforms and draws. Meshlet color debugging uses separate draws to preserve cluster colors.
+Missing instance pipelines fall back to the existing object path.
+
+`Renderer::SetBatchingEnabled(false)` provides a comparison path. `GetRenderStats()` reports the
+latest view's scene SDL draw submissions, section instances, direct instanced groups, indirect
+commands, shadow submissions and occlusion prepass submissions. These counts exclude particles,
+UI, debug lines and fullscreen passes, and are not GPU timing measurements. The meshlet debugger
+includes the batching toggle and counters.
+
+GPU regression tests compare pixels with batching enabled and disabled. On the 12-cube test scene,
+scene submissions fall from 12 to 1, the occlusion prepass from 12 to 1, and eight directional, spot
+and point shadow maps from 96 to 8. Tests also cover transparency order, texture and material splits,
+animated poses, movement, resizing, and multiple views recorded into one command buffer.
+
 ### Meshlets and visibility debugging
 
 Every mesh upload (primitives, OBJ, and glTF) builds clusters using meshoptimizer v0.25.
@@ -1223,7 +1252,7 @@ occluded only when every tile touched by its projected bounds is nearer than the
 Near-plane crossings, partially filled edge tiles, and very large projected bounds fail open.
 This avoids stale visibility after camera/object movement and supports orthographic cameras.
 The depth prepass still submits full occluder geometry; the counters describe the main pass,
-not total frame geometry or a guaranteed speedup. Shadows retain their existing draws.
+not total frame geometry or a guaranteed speedup. Shadows batch compatible static mesh instances.
 
 Open **Window > Nanite / Meshlet Debugger** for an ImGui window with:
 
@@ -1315,6 +1344,7 @@ Run `Projects/Sample/Binaries/Debug/Tests ImGui` for the headless docking and de
 - Dependency discovery cannot inspect paths built dynamically in code. Relative links in model and web files constrain asset moves.
 - Packaging preserves source asset formats and includes all content without compression or unused-asset removal.
 - Meshlets provide visibility culling, with no hierarchical LOD selection or virtualized geometry streaming. Animated meshes retain full draws.
+- Batching combines compatible neighboring draws. Material, texture and section changes split batches, and animated meshes do not instance their poses.
 - Games use the built-in material shaders. Custom game shaders are not supported yet. Lighting supports up to 16 lights and one shadow caster of each supported type.
 - Glass renders after opaque objects, so overlapping glass does not accumulate refraction through every surface.
 - Animation state machines are authored in C++. There is no animation graph editor, blend spaces, root motion or animation event authoring.
