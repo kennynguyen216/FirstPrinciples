@@ -20,6 +20,7 @@ namespace FP
 			Array<FieldInfo> list;
 			FieldListBuilder<MaterialData>(list)
 				.Field("Shader", &MaterialData::Shader).Choices(GetShaderNames())
+				.Field("CelShaded", &MaterialData::CelShaded).Tooltip("Banded lighting and dark silhouette edges; unlit materials use banded color")
 				.Field("BaseColor", &MaterialData::BaseColor)
 				.Field("BaseColorMap", &MaterialData::BaseColorMap).AssetPath(Engine::ImageFilter)
 				.Field("Tiling", &MaterialData::Tiling)

@@ -9,6 +9,7 @@ namespace FP
 	struct MaterialData
 	{
 		String Shader = "Lit"; // Lit, Unlit or Glass
+		bool CelShaded = false;
 
 		Color BaseColor;
 		String BaseColorMap;

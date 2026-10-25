@@ -2,6 +2,7 @@
 #extension GL_GOOGLE_include_directive : require
 #include "Common.glsl"
 #include "Lighting.glsl"
+#include "CelShading.glsl"
 #define FP_ENVIRONMENT_BINDING 16
 #define FP_ENVIRONMENT_LIGHTING
 #include "Environment.glsl"
@@ -107,7 +108,8 @@ void main()
 	vec3 diffuseColor = base.rgb * (1.0 - metallic);
 	float nDotV = max(dot(n, v), 1e-4);
 
-	vec3 color = vec3(0.0);
+	vec3 diffuseLighting = vec3(0.0);
+	vec3 specularLighting = vec3(0.0);
 	for (int i = 0; i < Frame.LightCount.x; ++i)
 	{
 		vec3 l;
@@ -122,26 +124,36 @@ void main()
 		float nDotH = max(dot(n, h), 0.0);
 		vec3 f = FresnelSchlick(max(dot(h, v), 0.0), f0);
 
-		vec3 diffuse = (1.0 - f) * diffuseColor;
 		vec3 spec = DistributionGGX(nDotH, roughness) * VisibilitySmith(nDotV, nDotL, roughness) * f * PI;
-		color += (diffuse + spec) * radiance * nDotL;
+		diffuseLighting += (1.0 - f) * radiance * nDotL;
+		specularLighting += spec * radiance * nDotL;
 
 		// Subsurface: light wraps past the terminator and shines through thin parts from behind.
 		if (subsurface > 0.0)
 		{
 			float wrapped = clamp((dot(n, l) + 0.5) / 1.5, 0.0, 1.0);
 			float through = pow(clamp(dot(v, -normalize(l + n * 0.4)), 0.0, 1.0), 4.0);
-			color += Material.Subsurface.rgb * diffuseColor * radiance * subsurface * (max(wrapped - nDotL, 0.0) + through);
+			diffuseLighting += Material.Subsurface.rgb * radiance * subsurface * (max(wrapped - nDotL, 0.0) + through);
 		}
 	}
 
-	color += Frame.Ambient.rgb * (diffuseColor + EnvironmentBRDF(f0, roughness, nDotV)) * occlusion;
+	diffuseLighting += Frame.Ambient.rgb * occlusion;
+	specularLighting += Frame.Ambient.rgb * EnvironmentBRDF(f0, roughness, nDotV) * occlusion;
 	if (Frame.EnvironmentSize.z > 0.0)
 	{
-		vec3 diffuse = EnvironmentDiffuse(n) * diffuseColor * (1.0 - f0);
+		vec3 diffuse = EnvironmentDiffuse(n) * (1.0 - f0);
 		vec3 specularLight = EnvironmentReflection(n, v, roughness) * EnvironmentBRDF(f0, roughness, nDotV);
-		color += (diffuse + specularLight) * occlusion;
+		diffuseLighting += diffuse * occlusion;
+		specularLighting += specularLight * occlusion;
 	}
+	if (IsCelShaded())
+	{
+		diffuseLighting = CelBands(diffuseLighting);
+		specularLighting = CelBands(specularLighting);
+	}
+	vec3 color = diffuseColor * diffuseLighting + specularLighting;
+	if (IsCelShaded())
+		color *= CelEdge(max(dot(faceNormal, v), 0.0));
 	color += texture(EmissiveMap, InUV).rgb * Material.Emissive.rgb;
 	OutColor = vec4(color, base.a);
 }

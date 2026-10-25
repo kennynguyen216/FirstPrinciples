@@ -756,6 +756,12 @@ Each material picks a base shader:
 | `Unlit` | Base color times tint plus emissive. No lights needed |
 | `Glass` | Transparent. Refracts what is behind it through the normal map, tints it, blurs it with roughness |
 
+Every material has a **Cel Shaded** checkbox, saved as `CelShaded true` in its `.material` file.
+Enable it for stepped lighting and dark silhouette edges on Lit and Glass surfaces. Lit materials
+keep their base color texture detail; Glass keeps its refracted background. Unlit materials band
+their base color instead. Emission stays smooth so glowing signs and lights keep their brightness.
+The toggle defaults to off, including for older material files.
+
 Every map is optional and its scalar multiplies it. `Tiling` and `Offset` move all maps together.
 Colors are picked in sRGB. Light comes from `PointLight`, `DirectionalLight` and `AmbientLight`
 components (Entity menu has shortcuts). In 2D a point light's `Position.Z` is its height above the
