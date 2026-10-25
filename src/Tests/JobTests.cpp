@@ -1,4 +1,5 @@
 #include "Tests/TestFramework.h"
+#include "Tests/TestProject.h"
 #include "Core/Jobs/JobSystem.h"
 #include "HAL/PlatformMisc.h"
 #include "Core/Log.h"
@@ -163,4 +164,39 @@ FP_TEST(Job_DecodesImagesInParallel)
 		FP_EXPECT(images[i].Path == paths[i]);
 	}
 	FP_EXPECT(images[3].Pixels == nullptr);
+}
+
+FP_TEST(Job_DecodesImagesFromAColdProject)
+{
+	Test::ScopedProject project;
+	const String content = Paths::GetContentDir();
+	const String reference = String("asset://") + Guid::New().ToString();
+	{
+		const unsigned char pixel[] = {
+			0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 32, 0x28, 0x10, 0x20, 0x40, 0xff };
+		std::ofstream image((content + "/pixel.tga").CStr(), std::ios::binary);
+		image.write(reinterpret_cast<const char*>(pixel), sizeof(pixel));
+		std::ofstream metadata((content + "/pixel.tga.fpmeta").CStr());
+		metadata << "version 1\nid " << reference.Substring(8).CStr() << "\nmipmaps true\ncolorSpace auto\n";
+		std::ofstream corrupt((content + "/corrupt.tga").CStr());
+		corrupt << "not an image";
+	}
+	// Keep the asset database unopened until DecodeImages resolves the first batch.
+	ScopedJobs jobs;
+	FP_EXPECT(DecodeImages({}).IsEmpty());
+	const Array<String> paths = { reference, "pixel.tga", "missing.tga", "corrupt.tga" };
+	const auto images = DecodeImages(paths);
+	FP_EXPECT(images.Num() == paths.Num());
+	for (int32 i = 0; i < images.Num(); ++i)
+	{
+		FP_EXPECT(images[i].Path == paths[i]);
+		if (i < 2)
+		{
+			FP_EXPECT(images[i].Pixels && images[i].Width == 1 && images[i].Height == 1);
+			if (images[i].Pixels)
+				FP_EXPECT(images[i].Pixels[0] == 0x40 && images[i].Pixels[1] == 0x20
+					&& images[i].Pixels[2] == 0x10 && images[i].Pixels[3] == 0xff);
+		}
+		else FP_EXPECT(images[i].Pixels == nullptr);
+	}
 }
