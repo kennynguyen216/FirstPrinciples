@@ -1597,6 +1597,11 @@ component OnFootConfig
   FireInterval 0.15
   LaserDamage 1
   BeamSeconds 0.06
+  HeatUpSeconds 2.5
+  HeatDownSeconds 1
+  ShakeDegrees 1.2
+  ShakeRollDegrees 0.8
+  RecoilDegrees 0.35
   PatchSecondsPerHole 1.5
 component SoundCues
   LaserFire "Audio/PlaceholderClick.wav"
@@ -1621,7 +1626,8 @@ component AirlockConfig
   CooldownSeconds 6
 component SiphonConfig
   MitePoolPerCrew 24
-  MiteHealth 2
+  MiteHealth 4
+  MiteHitSwell 0.7
   MiteSpeed 4
   MiteDrainKgPerSecond 0.5
   MiteBellyKg 4

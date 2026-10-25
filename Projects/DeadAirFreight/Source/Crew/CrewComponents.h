@@ -14,6 +14,13 @@ struct OnFootConfigComponent
 	float FireInterval = 0.15f; // seconds between shots while the left button is held
 	float LaserDamage = 1;
 	float BeamSeconds = 0.06f; // how long a shot's beam stays visible
+	// Holding the trigger heats the gun: the beam fattens, sparks fly harder and the view shakes more
+	// and more. It takes this long to get fully hot, and this long to cool after letting go.
+	float HeatUpSeconds = 2.5f;
+	float HeatDownSeconds = 1.0f;
+	float ShakeDegrees = 1.2f; // the view's wander at full heat
+	float ShakeRollDegrees = 0.8f;
+	float RecoilDegrees = 0.35f; // each shot's kick
 	// Repair mode: hold the beam on a tank to patch it.
 	float PatchSecondsPerHole = 1.5f;
 };
@@ -45,6 +52,11 @@ struct OnFootComponent
 	float Cooldown = 0;
 	float BeamTimeLeft = 0;
 	float RepairSoundIn = 0;
+	float Heat = 0; // 0 cold to 1 fully hot, from holding the trigger
+	float Kick = 0; // the latest shot's recoil, dying away
+	float Time = 0; // drives the shake and the beam's flicker
 	FP::Entity Beam = FP::NullEntity;
 	FP::Entity Crosshair = FP::NullEntity;
+	FP::Entity Embers = FP::NullEntity; // off the hot gun
+	FP::Entity Sparkle = FP::NullEntity; // where the repair beam touches
 };

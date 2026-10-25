@@ -1,6 +1,7 @@
 #include "Crew/OnFootSystem.h"
 #include "Audio/Sounds.h"
 #include "Crew/BayActions.h"
+#include "Effects/CombatEffects.h"
 #include "Engine/Physics/Physics.h"
 #include "Enemies/Airlock.h"
 #include "Enemies/SiphonComponents.h"
@@ -64,8 +65,14 @@ namespace
 		return NullEntity;
 	}
 
-	// Stretches the beam cube from one point to another.
-	void ShowBeam(World& world, Entity beam, Vec3 from, Vec3 to, LaserMode mode)
+	// Smooth wandering in -1 to 1, from a few sines that never line up. Drives the shake.
+	float Wander(float t, float seed)
+	{
+		return (std::sin(t + seed) + 0.6f * std::sin(t * 2.3f + seed * 1.7f) + 0.3f * std::sin(t * 4.7f + seed * 0.3f)) / 1.9f;
+	}
+
+	// Stretches the beam cube from one point to another. A hot laser is fatter and flickers.
+	void ShowBeam(World& world, Entity beam, Vec3 from, Vec3 to, LaserMode mode, float heat = 0, float time = 0)
 	{
 		TransformComponent& transform = world.Get<TransformComponent>(beam);
 		const Vec3 along = to - from;
@@ -73,7 +80,8 @@ namespace
 		const float flat = std::sqrt(along.X * along.X + along.Z * along.Z);
 		transform.Position = from + along * 0.5f;
 		transform.Rotation = { std::atan2(along.Y, flat) * RadToDeg, YawToward(from, to), 0 };
-		transform.Scale = { BeamWidth, BeamWidth, length };
+		const float width = BeamWidth * (1 + 0.9f * heat) * (1 + (0.05f + 0.15f * heat) * std::sin(time * 70));
+	transform.Scale = { width, width, length };
 		world.Get<MaterialComponent>(beam).Material = BeamMaterials[static_cast<int32>(mode)];
 	}
 
@@ -199,9 +207,12 @@ namespace
 			}
 		}
 		Sounds::Play(world, SoundCue::LaserFire);
-		ShowBeam(world, onFoot.Beam, aim.Muzzle, aim.End, LaserMode::Vaporize);
+		const ImpactKind kind = !aim.Hit ? ImpactKind::Nothing : siphon ? ImpactKind::Mite : tank ? ImpactKind::Tank : ImpactKind::Wall;
+		Effects::LaserShot(world, aim.Muzzle, eye.GetForward(), aim.End, aim.Hit ? aim.RayHit.Normal : -eye.GetForward(), kind, onFoot.Heat);
+		ShowBeam(world, onFoot.Beam, aim.Muzzle, aim.End, LaserMode::Vaporize, onFoot.Heat, onFoot.Time);
 		onFoot.BeamTimeLeft = config.BeamSeconds;
 		onFoot.Cooldown = config.FireInterval;
+		onFoot.Kick = std::min(1.0f, onFoot.Kick + 0.6f);
 	}
 
 	void Repair(World& world, const OnFootConfigComponent& config, OnFootComponent& onFoot, const TransformComponent& eye, Entity shooter, float deltaTime)
@@ -230,8 +241,28 @@ namespace
 			onFoot.RepairSoundIn = RepairSoundInterval;
 		}
 		// The repair beam stays on for as long as the button is held.
-		ShowBeam(world, onFoot.Beam, aim.Muzzle, aim.End, LaserMode::Repair);
+		ShowBeam(world, onFoot.Beam, aim.Muzzle, aim.End, LaserMode::Repair, 0, onFoot.Time);
 		onFoot.BeamTimeLeft = deltaTime * 1.5f;
+
+		// Green sparkle where it touches: a fierce flickering weld on a hole, a faint shimmer
+		// anywhere else.
+		const bool welding = tank && tank->Holes > 0;
+		const Vec3 normal = aim.Hit ? aim.RayHit.Normal : -eye.GetForward();
+		ParticleEmitterComponent& sparkle = Effects::Hold(world, onFoot.Sparkle, "Repair Sparkle", aim.End + normal * 0.03f);
+		const float flicker = 0.5f + 0.5f * Wander(onFoot.Time * 25, 3);
+		sparkle.Emitting = aim.Hit;
+		sparkle.Rate = welding ? 50 + 50 * flicker : 6.0f;
+		sparkle.Direction = normal;
+		sparkle.Spread = welding ? 80.0f : 120.0f;
+		sparkle.Speed = welding ? 1.5f + 2 * flicker : 0.4f;
+		sparkle.Gravity = welding ? 0.4f : -0.2f;
+		sparkle.Drag = 1.5f;
+		sparkle.Lifetime = welding ? 0.35f : 0.5f;
+		sparkle.StartSize = welding ? 0.05f + 0.03f * flicker : 0.04f;
+		sparkle.EndSize = 0;
+		sparkle.StartColor = { 0.5f, 1, 0.6f + 0.3f * flicker, 1 };
+		sparkle.EndColor = { 0.1f, 0.8f, 0.3f, 0 };
+		sparkle.MaxParticles = 200;
 	}
 }
 
@@ -307,13 +338,57 @@ void OnFootSystem::Update(World& world, float deltaTime)
 	crosshair.Scale = { CrosshairSize, CrosshairSize, CrosshairSize };
 	world.Get<MaterialComponent>(onFoot.Crosshair).Material = BeamMaterials[static_cast<int32>(onFoot.Mode)];
 
+	onFoot.Time += deltaTime;
 	onFoot.Cooldown = std::max(0.0f, onFoot.Cooldown - deltaTime);
-	if (racing && Input::IsMouseDown(MouseButton::Left))
+	const bool trigger = racing && Input::IsMouseDown(MouseButton::Left);
+	const bool firing = trigger && onFoot.Mode == LaserMode::Vaporize;
+	if (trigger)
 	{
 		if (onFoot.Mode == LaserMode::Repair)
 			Repair(world, config, onFoot, eye, walker, deltaTime);
 		else if (onFoot.Cooldown <= 0)
 			Vaporize(world, config, onFoot, eye, walker);
+	}
+	if (!trigger || onFoot.Mode != LaserMode::Repair)
+		Effects::Release(world, onFoot.Sparkle);
+
+	// Heat builds while the trigger is held and bleeds off after.
+	onFoot.Heat = std::clamp(onFoot.Heat + (firing ? deltaTime / std::max(config.HeatUpSeconds, 0.01f) : -deltaTime / std::max(config.HeatDownSeconds, 0.01f)), 0.0f, 1.0f);
+	onFoot.Kick *= std::exp(-18 * deltaTime);
+
+	// Embers drift off a hot gun.
+	const Vec3 muzzle = eye.Position + eye.GetRight() * MuzzleOffset.X + eye.GetUp() * MuzzleOffset.Y + eye.GetForward() * 0.15f;
+	if (onFoot.Heat > 0.05f)
+	{
+		ParticleEmitterComponent& embers = Effects::Hold(world, onFoot.Embers, "Laser Embers", muzzle);
+		embers.Emitting = true;
+		embers.Rate = 50 * onFoot.Heat * onFoot.Heat;
+		embers.Direction = { 0, 1, 0 };
+		embers.Spread = 60;
+		embers.Speed = 0.3f + 0.4f * onFoot.Heat;
+		embers.Gravity = -0.3f;
+		embers.Drag = 1;
+		embers.Lifetime = 0.45f;
+		embers.StartSize = 0.015f + 0.02f * onFoot.Heat;
+		embers.EndSize = 0;
+		embers.StartColor = { 1, 0.3f + 0.5f * onFoot.Heat, 0.1f + 0.3f * onFoot.Heat, 1 };
+		embers.EndColor = { 1, 0.05f, 0.02f, 0 };
+		embers.MaxParticles = 100;
+	}
+	else
+		Effects::Release(world, onFoot.Embers);
+
+	// Shake only moves the camera, never the aim: it builds with the square of the heat, so a
+	// tap is steady and a long burst rattles, plus a jolt from each shot.
+	if (const Entity camera = FindCamera(world); camera != NullEntity)
+	{
+		const float trauma = std::min(1.0f, onFoot.Heat * onFoot.Heat + 0.4f * onFoot.Kick);
+		const float buzz = onFoot.Time * 28;
+		TransformComponent& cameraTransform = world.Get<TransformComponent>(camera);
+		cameraTransform.Rotation.X += config.ShakeDegrees * trauma * Wander(buzz, 0) + config.RecoilDegrees * onFoot.Kick;
+		cameraTransform.Rotation.Y += config.ShakeDegrees * trauma * Wander(buzz, 11);
+		cameraTransform.Rotation.Z += config.ShakeRollDegrees * trauma * Wander(buzz * 0.7f, 23);
+		cameraTransform.Position += eye.GetUp() * (0.015f * trauma * Wander(buzz * 1.3f, 37));
 	}
 
 	if (onFoot.BeamTimeLeft > 0)

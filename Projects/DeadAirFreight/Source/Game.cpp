@@ -1,6 +1,7 @@
 #include "Game.h"
 #include "Audio/Sounds.h"
 #include "Crew/OnFootSystem.h"
+#include "Effects/CombatEffects.h"
 #include "Enemies/Airlock.h"
 #include "Enemies/SiphonSystems.h"
 #include "LifeSupport/LifeSupportSystems.h"
@@ -113,11 +114,17 @@ namespace Game
 			.Field("FireInterval", &OnFootConfigComponent::FireInterval)
 			.Field("LaserDamage", &OnFootConfigComponent::LaserDamage)
 			.Field("BeamSeconds", &OnFootConfigComponent::BeamSeconds)
+			.Field("HeatUpSeconds", &OnFootConfigComponent::HeatUpSeconds)
+			.Field("HeatDownSeconds", &OnFootConfigComponent::HeatDownSeconds)
+			.Field("ShakeDegrees", &OnFootConfigComponent::ShakeDegrees)
+			.Field("ShakeRollDegrees", &OnFootConfigComponent::ShakeRollDegrees)
+			.Field("RecoilDegrees", &OnFootConfigComponent::RecoilDegrees)
 			.Field("PatchSecondsPerHole", &OnFootConfigComponent::PatchSecondsPerHole);
 
 		registry.Register<SiphonConfigComponent>("SiphonConfig")
 			.Field("MitePoolPerCrew", &SiphonConfigComponent::MitePoolPerCrew)
 			.Field("MiteHealth", &SiphonConfigComponent::MiteHealth)
+			.Field("MiteHitSwell", &SiphonConfigComponent::MiteHitSwell)
 			.Field("MiteSpeed", &SiphonConfigComponent::MiteSpeed)
 			.Field("MiteDrainKgPerSecond", &SiphonConfigComponent::MiteDrainKgPerSecond)
 			.Field("MiteBellyKg", &SiphonConfigComponent::MiteBellyKg)
@@ -159,6 +166,7 @@ namespace Game
 		world.AddSystem<SiphonSystem>();
 		world.AddSystem<AirlockSystem>();
 		world.AddSystem<OnFootSystem>();
+		world.AddSystem<CombatEffectsSystem>();
 		// Starts the Driver's own systems at GO for a seated Driver, and the hatch between cab and bay.
 		world.AddSystem<DriverLauncherSystem>();
 		world.AddSystem<LifeSupportReadoutSystem>();

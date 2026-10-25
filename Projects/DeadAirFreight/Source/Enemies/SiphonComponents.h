@@ -7,7 +7,9 @@ struct SiphonConfigComponent
 {
 	// Mites made per crew when play starts and reused after. Nothing is created or destroyed while racing.
 	FP::int32 MitePoolPerCrew = 24;
-	float MiteHealth = 2;
+	float MiteHealth = 4;
+	// How much bigger a Mite swells as it takes damage, at the brink of popping.
+	float MiteHitSwell = 0.7f;
 	float MiteSpeed = 4;
 	float MiteDrainKgPerSecond = 0.5f;
 	// Most oxygen a Mite holds. A full one keeps its grip but stops feeding.
@@ -41,4 +43,11 @@ struct SiphonComponent
 	float LatchedSeconds = 0;
 	bool Bitten = false; // already chewed a hole in this tank
 	float Age = 0;
+
+	// What every machine needs to draw it, kept by the host and sent with the bay. Size grows with
+	// its belly and with every hit it takes, like a water balloon filling. The counters only go up,
+	// so a machine that sees one change knows the Mite was hit, or popped, since it last looked.
+	float Size = 0.7f;
+	FP::uint8 Hits = 0;
+	FP::uint8 Pops = 0;
 };

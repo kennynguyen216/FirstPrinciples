@@ -14,6 +14,7 @@ namespace BayActions
 		if (!siphon || !siphon->Active)
 			return;
 		siphon->Health -= damage;
+		++siphon->Hits;
 		if (siphon->Health <= 0)
 			Siphons::Kill(world, entity);
 	}
@@ -24,6 +25,7 @@ namespace BayActions
 		if (!tank)
 			return;
 		++tank->Holes;
+		tank->LeakPoint = where;
 		if (TruckResourcesComponent* resources = Cargo::FindResources(world, tank->Crew))
 			++resources->TanksShot;
 		FP_LOG("Laser: shot punctured %s", world.GetEntityName(entity).CStr());

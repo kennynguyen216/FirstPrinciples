@@ -68,6 +68,7 @@ namespace
 		FindBay(world, siphon.Crew, bay, info);
 		transform.Position = bay - Vec3{ 0, ParkDepth, 0 };
 		transform.Scale = { MiteScale, MiteScale, MiteScale };
+		siphon.Size = MiteScale;
 	}
 
 	bool IsFeedable(World& world, Entity tankEntity, int32 crew)
@@ -114,9 +115,14 @@ namespace Siphons
 			if (siphon.Active || siphon.Crew != crew || siphon.Kind != kind)
 				continue;
 			const int32 poolIndex = siphon.Index;
+			const uint8 hits = siphon.Hits;
+			const uint8 pops = siphon.Pops;
 			siphon = SiphonComponent{};
 			siphon.Crew = crew;
 			siphon.Index = poolIndex;
+			siphon.Hits = hits;
+			siphon.Pops = pops;
+			siphon.Size = MiteScale;
 			siphon.Kind = kind;
 			siphon.Active = true;
 			siphon.Health = config.MiteHealth;
@@ -137,6 +143,7 @@ namespace Siphons
 		if (!siphon.Active)
 			return;
 		Sounds::PlayAt(world, SoundCue::MiteDeath, world.Get<TransformComponent>(entity).Position);
+		++siphon.Pops;
 		const float returned = Cargo::Refill(world, siphon.Crew, CargoKind::Oxygen, siphon.StolenOxygenKg);
 		if (TruckResourcesComponent* resources = Cargo::FindResources(world, siphon.Crew))
 		{
@@ -272,14 +279,20 @@ void SiphonSystem::Update(World& world, float deltaTime)
 			if (config.MiteBiteHoleSeconds > 0 && !siphon.Bitten && siphon.LatchedSeconds >= config.MiteBiteHoleSeconds)
 			{
 				++tank.Holes;
+				// The hole is in the dome under the Mite, where the air will hiss out.
+				const float radius = tankTransform.Scale.X * 0.5f;
+				const float out = std::max(0.0f, radius - LatchInset);
+				const float shoulder = tankTransform.Scale.Y * 0.5f - radius;
+				tank.LeakPoint = tankTransform.Position + side * out + Vec3{ 0, shoulder + std::sqrt(std::max(0.0f, radius * radius - out * out)), 0 };
 				siphon.Bitten = true;
 				Sounds::PlayAt(world, SoundCue::MiteBite, transform.Position);
 			}
 		}
 
-		// A Mite swells as it feeds, so a fat one is worth shooting first.
+		// A Mite swells as it feeds, so a fat one is worth shooting first, and again with every hit
+		// until it pops. Every machine animates the jiggle on top (CombatEffectsSystem).
 		const float fullness = config.MiteBellyKg > 0 ? siphon.StolenOxygenKg / config.MiteBellyKg : 0;
-		const float size = MiteScale + MiteFullGrowth * fullness + 0.05f * std::sin(siphon.Age * 12);
-		transform.Scale = { size, size, size };
+		const float hurt = config.MiteHealth > 0 ? std::clamp(1 - siphon.Health / config.MiteHealth, 0.0f, 1.0f) : 0;
+		siphon.Size = (MiteScale + MiteFullGrowth * fullness) * (1 + config.MiteHitSwell * hurt);
 	}
 }

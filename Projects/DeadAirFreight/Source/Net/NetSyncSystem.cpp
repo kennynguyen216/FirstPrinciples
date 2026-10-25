@@ -7,6 +7,7 @@
 #include "Net/DriverNet.h"
 #include "Net/GameNet.h"
 
+#include <algorithm>
 #include <cstring>
 
 using namespace FP;
@@ -33,6 +34,8 @@ namespace
 			const float amount = in.ReadFloat();
 			const int32 holes = in.ReadU8();
 			const float patch = in.ReadFloat();
+			// Only a holed tank sends where it leaks from.
+			const Vec3 leak = holes > 0 ? in.ReadVec3() : Vec3{};
 			if (!in.IsValid())
 				return;
 			if (CargoTankComponent* tank = world.TryGet<CargoTankComponent>(BayActions::FindTank(world, crew, i)))
@@ -40,6 +43,8 @@ namespace
 				tank->AmountKg = amount;
 				tank->Holes = holes;
 				tank->PatchProgress = patch;
+				if (holes > 0)
+					tank->LeakPoint = leak;
 			}
 		}
 		const int32 siphons = in.ReadU8();
@@ -47,16 +52,20 @@ namespace
 		{
 			const bool active = in.ReadBool();
 			const Vec3 position = in.ReadVec3();
-			const float scale = in.ReadFloat();
+			const float size = in.ReadFloat();
+			const uint8 hits = in.ReadU8();
+			const uint8 pops = in.ReadU8();
 			if (!in.IsValid())
 				return;
 			const Entity entity = BayActions::FindSiphon(world, crew, i);
 			if (entity == NullEntity)
 				continue;
-			world.Get<SiphonComponent>(entity).Active = active;
-			TransformComponent& transform = world.Get<TransformComponent>(entity);
-			transform.Position = position;
-			transform.Scale = { scale, scale, scale };
+			SiphonComponent& siphon = world.Get<SiphonComponent>(entity);
+			siphon.Active = active;
+			siphon.Size = size;
+			siphon.Hits = hits;
+			siphon.Pops = pops;
+			world.Get<TransformComponent>(entity).Position = position;
 		}
 		const float airlockOpen = in.ReadFloat();
 		for (auto [entity, airlock] : world.View<AirlockComponent>().each())
@@ -254,8 +263,11 @@ void NetSyncSystem::SendBayState(World& world, int32 crew)
 	{
 		const CargoTankComponent* tank = world.TryGet<CargoTankComponent>(BayActions::FindTank(world, crew, i));
 		message.WriteFloat(tank ? tank->AmountKg : 0);
-		message.WriteU8(static_cast<uint8>(tank ? tank->Holes : 0));
+		const uint8 holes = tank ? static_cast<uint8>(std::clamp(tank->Holes, 0, 255)) : 0;
+		message.WriteU8(holes);
 		message.WriteFloat(tank ? tank->PatchProgress : 0);
+		if (holes > 0)
+			message.WriteVec3(tank->LeakPoint);
 	}
 
 	int32 siphons = 0;
@@ -269,7 +281,9 @@ void NetSyncSystem::SendBayState(World& world, int32 crew)
 		const TransformComponent* transform = entity == NullEntity ? nullptr : world.TryGet<TransformComponent>(entity);
 		message.WriteBool(siphon && siphon->Active);
 		message.WriteVec3(transform ? transform->Position : Vec3{});
-		message.WriteFloat(transform ? transform->Scale.X : 0);
+		message.WriteFloat(siphon ? siphon->Size : 0);
+		message.WriteU8(siphon ? siphon->Hits : 0);
+		message.WriteU8(siphon ? siphon->Pops : 0);
 	}
 
 	float airlockOpen = 0;

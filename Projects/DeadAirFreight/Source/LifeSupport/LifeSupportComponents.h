@@ -77,6 +77,9 @@ struct CargoTankComponent
 	FP::int32 Holes = 0;
 	// Seconds of repair beam on the current hole.
 	float PatchProgress = 0;
+	// Where the newest hole is, in the world: under the Mite that bit it, or where the shot landed.
+	// The leak's hiss of air or water comes out here.
+	FP::Vec3 LeakPoint;
 };
 
 // One crew's air, water and power. Lives on its own entity, made when play starts, so both
