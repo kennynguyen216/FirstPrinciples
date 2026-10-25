@@ -1,0 +1,858 @@
+# FirstPrinciples scene
+version 2
+
+entity f1b70000-0000-4000-8000-000000000001
+component Name
+  Name "Open terrain"
+component Transform
+  Position 0 -0.5 0
+  Rotation 0 0 0
+  Scale 1000 1 600
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyGround.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000002
+component Name
+  Name "500 m flyby lane"
+component Transform
+  Position 0 0.025 0
+  Rotation 0 0 0
+  Scale 550 0.05 14
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyRoad.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000003
+component Name
+  Name "Lane marker -250 m"
+component Transform
+  Position -250 0.07 0
+  Rotation 0 0 0
+  Scale 7 0.04 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000004
+component Name
+  Name "Distance post -250 m"
+component Transform
+  Position -250 1.5 -9
+  Rotation 0 0 0
+  Scale 0.5 3 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000005
+component Name
+  Name "Lane marker -225 m"
+component Transform
+  Position -225 0.07 0
+  Rotation 0 0 0
+  Scale 7 0.04 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000006
+component Name
+  Name "Distance post -225 m"
+component Transform
+  Position -225 1.5 -9
+  Rotation 0 0 0
+  Scale 0.5 3 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000007
+component Name
+  Name "Lane marker -200 m"
+component Transform
+  Position -200 0.07 0
+  Rotation 0 0 0
+  Scale 7 0.04 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000008
+component Name
+  Name "Distance post -200 m"
+component Transform
+  Position -200 1.5 -9
+  Rotation 0 0 0
+  Scale 0.5 3 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000009
+component Name
+  Name "Lane marker -175 m"
+component Transform
+  Position -175 0.07 0
+  Rotation 0 0 0
+  Scale 7 0.04 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-00000000000a
+component Name
+  Name "Distance post -175 m"
+component Transform
+  Position -175 1.5 -9
+  Rotation 0 0 0
+  Scale 0.5 3 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-00000000000b
+component Name
+  Name "Lane marker -150 m"
+component Transform
+  Position -150 0.07 0
+  Rotation 0 0 0
+  Scale 7 0.04 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-00000000000c
+component Name
+  Name "Distance post -150 m"
+component Transform
+  Position -150 1.5 -9
+  Rotation 0 0 0
+  Scale 0.5 3 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-00000000000d
+component Name
+  Name "Lane marker -125 m"
+component Transform
+  Position -125 0.07 0
+  Rotation 0 0 0
+  Scale 7 0.04 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-00000000000e
+component Name
+  Name "Distance post -125 m"
+component Transform
+  Position -125 1.5 -9
+  Rotation 0 0 0
+  Scale 0.5 3 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-00000000000f
+component Name
+  Name "Lane marker -100 m"
+component Transform
+  Position -100 0.07 0
+  Rotation 0 0 0
+  Scale 7 0.04 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000010
+component Name
+  Name "Distance post -100 m"
+component Transform
+  Position -100 1.5 -9
+  Rotation 0 0 0
+  Scale 0.5 3 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000011
+component Name
+  Name "Lane marker -75 m"
+component Transform
+  Position -75 0.07 0
+  Rotation 0 0 0
+  Scale 7 0.04 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000012
+component Name
+  Name "Distance post -75 m"
+component Transform
+  Position -75 1.5 -9
+  Rotation 0 0 0
+  Scale 0.5 3 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000013
+component Name
+  Name "Lane marker -50 m"
+component Transform
+  Position -50 0.07 0
+  Rotation 0 0 0
+  Scale 7 0.04 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000014
+component Name
+  Name "Distance post -50 m"
+component Transform
+  Position -50 1.5 -9
+  Rotation 0 0 0
+  Scale 0.5 3 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000015
+component Name
+  Name "Lane marker -25 m"
+component Transform
+  Position -25 0.07 0
+  Rotation 0 0 0
+  Scale 7 0.04 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000016
+component Name
+  Name "Distance post -25 m"
+component Transform
+  Position -25 1.5 -9
+  Rotation 0 0 0
+  Scale 0.5 3 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000017
+component Name
+  Name "Lane marker +0 m"
+component Transform
+  Position 0 0.07 0
+  Rotation 0 0 0
+  Scale 7 0.04 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000018
+component Name
+  Name "Distance post +0 m"
+component Transform
+  Position 0 1.5 -9
+  Rotation 0 0 0
+  Scale 0.5 3 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000019
+component Name
+  Name "Lane marker +25 m"
+component Transform
+  Position 25 0.07 0
+  Rotation 0 0 0
+  Scale 7 0.04 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-00000000001a
+component Name
+  Name "Distance post +25 m"
+component Transform
+  Position 25 1.5 -9
+  Rotation 0 0 0
+  Scale 0.5 3 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-00000000001b
+component Name
+  Name "Lane marker +50 m"
+component Transform
+  Position 50 0.07 0
+  Rotation 0 0 0
+  Scale 7 0.04 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-00000000001c
+component Name
+  Name "Distance post +50 m"
+component Transform
+  Position 50 1.5 -9
+  Rotation 0 0 0
+  Scale 0.5 3 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-00000000001d
+component Name
+  Name "Lane marker +75 m"
+component Transform
+  Position 75 0.07 0
+  Rotation 0 0 0
+  Scale 7 0.04 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-00000000001e
+component Name
+  Name "Distance post +75 m"
+component Transform
+  Position 75 1.5 -9
+  Rotation 0 0 0
+  Scale 0.5 3 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-00000000001f
+component Name
+  Name "Lane marker +100 m"
+component Transform
+  Position 100 0.07 0
+  Rotation 0 0 0
+  Scale 7 0.04 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000020
+component Name
+  Name "Distance post +100 m"
+component Transform
+  Position 100 1.5 -9
+  Rotation 0 0 0
+  Scale 0.5 3 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000021
+component Name
+  Name "Lane marker +125 m"
+component Transform
+  Position 125 0.07 0
+  Rotation 0 0 0
+  Scale 7 0.04 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000022
+component Name
+  Name "Distance post +125 m"
+component Transform
+  Position 125 1.5 -9
+  Rotation 0 0 0
+  Scale 0.5 3 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000023
+component Name
+  Name "Lane marker +150 m"
+component Transform
+  Position 150 0.07 0
+  Rotation 0 0 0
+  Scale 7 0.04 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000024
+component Name
+  Name "Distance post +150 m"
+component Transform
+  Position 150 1.5 -9
+  Rotation 0 0 0
+  Scale 0.5 3 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000025
+component Name
+  Name "Lane marker +175 m"
+component Transform
+  Position 175 0.07 0
+  Rotation 0 0 0
+  Scale 7 0.04 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000026
+component Name
+  Name "Distance post +175 m"
+component Transform
+  Position 175 1.5 -9
+  Rotation 0 0 0
+  Scale 0.5 3 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000027
+component Name
+  Name "Lane marker +200 m"
+component Transform
+  Position 200 0.07 0
+  Rotation 0 0 0
+  Scale 7 0.04 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000028
+component Name
+  Name "Distance post +200 m"
+component Transform
+  Position 200 1.5 -9
+  Rotation 0 0 0
+  Scale 0.5 3 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000029
+component Name
+  Name "Lane marker +225 m"
+component Transform
+  Position 225 0.07 0
+  Rotation 0 0 0
+  Scale 7 0.04 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-00000000002a
+component Name
+  Name "Distance post +225 m"
+component Transform
+  Position 225 1.5 -9
+  Rotation 0 0 0
+  Scale 0.5 3 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-00000000002b
+component Name
+  Name "Lane marker +250 m"
+component Transform
+  Position 250 0.07 0
+  Rotation 0 0 0
+  Scale 7 0.04 0.35
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-00000000002c
+component Name
+  Name "Distance post +250 m"
+component Transform
+  Position 250 1.5 -9
+  Rotation 0 0 0
+  Scale 0.5 3 0.5
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-00000000002d
+component Name
+  Name "Start -250 m"
+component Transform
+  Position -250 3 -12
+  Rotation 0 0 0
+  Scale 2 6 2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStart.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-00000000002e
+component Name
+  Name "Closest pass"
+component Transform
+  Position 0 3 -12
+  Rotation 0 0 0
+  Scale 2 6 2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyStripe.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-00000000002f
+component Name
+  Name "Turnaround +250 m"
+component Transform
+  Position 250 3 -12
+  Rotation 0 0 0
+  Scale 2 6 2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Acoustics/FlybyEnd.material"
+component Collider
+  Shape "Box"
+  Size 1 1 1
+  Trigger false
+
+entity f1b70000-0000-4000-8000-000000000030
+component Name
+  Name "Listener - WASD, Shift run, mouse look"
+component Transform
+  Position 0 1 80
+  Rotation 0 0 0
+  Scale 1 1 1
+component CharacterController
+  Radius 0.35
+  Height 1.8
+  StepHeight 0.35
+component PlayerInput
+  WalkSpeed 12
+  RunSpeed 25
+  JumpSpeed 5
+  LookSpeed 0.15
+  Camera "Player Camera"
+
+entity f1b70000-0000-4000-8000-000000000031
+component Name
+  Name "Player Camera"
+component Transform
+  Position 0 0.65 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component Parent
+  Parent f1b70000-0000-4000-8000-000000000030
+component Camera
+  Perspective true
+  Primary true
+  FieldOfView 100
+  NearClip 0.05
+  FarClip 1500
+  Background 0.12 0.22 0.34 1
+component AudioListener
+  Enabled true
+
+entity f1b70000-0000-4000-8000-000000000032
+component Name
+  Name "Sun"
+component Transform
+  Position 0 0 0
+  Rotation -55 -25 0
+  Scale 1 1 1
+component DirectionalLight
+  Color 1 0.94 0.84 1
+  Intensity 1.3
+  CastShadows true
+  ShadowResolution 2048
+  ShadowDistance 100
+
+entity f1b70000-0000-4000-8000-000000000033
+component Name
+  Name "Sky fill"
+component Transform
+  Position 0 0 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component AmbientLight
+  Color 0.8 0.9 1 1
+  Intensity 0.7
+
+entity f1b70000-0000-4000-8000-000000000034
+component Name
+  Name "Long Doppler Emitter - assign mono MP3"
+component Transform
+  Position 0 4 0
+  Rotation 0 0 0
+  Scale 8 8 8
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Acoustics/DopplerEmitter.material"
+component AudioSource
+  Clip "Audio/PlaygroundDoppler.mp3"
+  Enabled true
+  Volume 0.6
+  Pitch 1
+  Loop true
+  PlayOnStart false
+  Bus "SFX"
+  Spatial true
+  Occlusion false
+  DopplerScale 1
+  MinDistance 80
+  MaxDistance 750
+component Scripts
+  script "DopplerFlyby"
+    HalfDistance 250
+    Speed 45
+    Center 0 4 0
+
+entity f1b70000-0000-4000-8000-000000000035
+component Name
+  Name "500 M DOPPLER RUN"
+component Transform
+  Position 0 30 -20
+  Rotation 0 0 0
+  Scale 70 35 1
+component Mesh
+  Mesh "Quad"
+component Material
+  Material "Materials/Acoustics/FlybyGuide.material"
