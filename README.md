@@ -331,7 +331,7 @@ handles become invalid immediately. Voice-chat mute/disconnect, scene cleanup an
 discard playback immediately. Stop fades have a separate pool of 65 tails so they do not consume
 active voice slots. These are digital sample peaks, not true-peak loudness mastering.
 
-Compressed music streaming and HRTF remain deferred.
+HRTF remains deferred.
 
 ### C++ scripts
 
@@ -880,9 +880,61 @@ Changes to assets or their texture and buffer files refresh the thumbnails autom
   and **Save All** saves the scene, materials and script tabs. Back, forward and the folder path
   above the files move between folders.
 - Right click an asset to Rename (F2), Duplicate, Delete, Copy Path or Show in Finder or Explorer.
-- Renaming rewrites references in every scene and material. Delete moves files to the system Trash.
+- Renaming keeps asset IDs and migrates old scene and material paths to IDs. Delete moves files and their metadata to the system Trash.
 - The browser refreshes on its own when files change, and the Output Log comes forward when a script
   build fails.
+
+### Asset pipeline
+
+Every file under a project's `Content` has a versioned `.fpmeta` file beside it. The editor creates
+missing metadata automatically. **Commit these files with the assets**. They contain the asset's
+stable ID and import settings. Moving an asset outside the editor requires moving its metadata too.
+Deleting metadata and importing again gives the asset a new ID.
+
+Scene and material asset fields save references as `asset://<guid>`. Inspectors show the resolved
+path, and loaders resolve the ID to the current file. Existing path references still load and
+convert to IDs when saved. Renaming in the Content Browser keeps the ID, updates legacy references
+on disk, and keeps unsaved scene and material edits usable. Duplicates get new IDs and retain their
+import settings. The project start scene is retained by ID when assets are renamed.
+
+Select a texture to edit **Generate mipmaps** and **Color space**, then choose **Apply and Reimport**.
+**Auto** uses sRGB for color maps and linear for data maps. **sRGB** and **Linear** override that choice
+for every use of the texture. The same settings are used in the editor and packaged games.
+Original files remain the import sources, so there are no machine-specific source paths to repair.
+Game code can call `Paths::AssetReference(path)` when a stored reference must survive a rename.
+
+The registry tracks scene and material asset fields, glTF and GLB external buffers and images,
+OBJ material libraries, MTL texture maps, exposed script asset fields, and static HTML, CSS and
+JavaScript resource links. Content changes refresh the registry and invalidate affected texture, mesh, skeletal model and
+material caches on their next use. UI pages reload when their tracked resources change. Material
+reimport preserves unsaved edits. Audio changes apply to subsequent loads and playback while existing voices retain their current audio snapshot.
+
+Use **Validate** in the Content Browser to report missing dependencies, duplicate IDs, invalid
+metadata, unsafe paths and names that differ only by case. The Output Log includes each issue's
+asset path. Packaging runs the same validation before staging a game. Cooked content includes the
+metadata, and the runtime reads it without writing into Content.
+
+After building, the same pipeline is available without opening the editor:
+
+```bash
+Projects/Sample/Binaries/Debug/AssetTool --import
+Projects/Sample/Binaries/Debug/AssetTool --validate
+Projects/Sample/Binaries/Debug/AssetTool --dependencies Scenes/Showcase3D.scene
+Projects/Sample/Binaries/Debug/AssetTool --project Projects/MyGame --import
+Projects/Sample/Binaries/Debug/Tests Assets
+python3 Scripts/TestAssetPipeline.py
+```
+
+Use `AssetTool.exe` on Windows. `--import` creates missing metadata and preserves existing IDs and
+settings. Validation returns a nonzero exit code when issues are found. A read-only scan accepts
+legacy projects without metadata, but ID references require their matching metadata files.
+
+Dependency discovery covers static references. Script path discovery needs the corresponding built
+script types and fields marked with `Asset`. Explicit ID references are tracked even for unknown
+scripts. Paths constructed in game code or JavaScript need to be managed by the game. glTF, OBJ and web resources retain their format's relative references,
+so moves that would break those links are rejected. Move a self-contained resource folder together,
+or update its source references first. Imports and refreshes are synchronous, and the cooker still
+preserves source formats without compression or unused-asset removal.
 
 ### Undo and redo
 
@@ -1188,7 +1240,8 @@ The committed Vulkan SPIR-V uses SDL's normal descriptor sets. See
 | Game | The project's components and systems (`Source`) |
 | Editor | Qt editor |
 | Runtime | Standalone player for a scene |
-| PackageTool | Cooks content and stages a Release game for distribution |
+| AssetTool | Imports metadata, validates assets and lists dependencies |
+| PackageTool | Validates assets, cooks content and stages a Release game for distribution |
 | GameScripts | Hot reloadable C++ scripts (`Source/Scripts`) |
 | Tests | Unit tests. Run `Projects/Sample/Binaries/Debug/Tests [filter]` |
 | EditorTests | Input actions editor tests. Run `Projects/Sample/Binaries/Debug/EditorTests` |
@@ -1220,11 +1273,18 @@ Run `Projects/Sample/Binaries/Debug/Tests ImGui` for the headless docking and de
 
 ## Known limitations
 
-- The editor viewport renders offscreen and copies each frame back to Qt. Fine for editing, but slower than a native view.
-- File paths go through `fopen`, so non ASCII paths on Windows are not supported yet.
-- No undo yet.
-- The job queue uses a lock. A lock free queue will help when many tiny jobs are queued at once.
-- Glass draws after everything else, so glass behind glass is not refracted twice.
-- No shadows yet.
-- Editor grid and gizmo lines draw on top of everything.
-- Rotations are euler angles, so very large combined rotations can gimbal lock.
+- The editor viewport copies each rendered frame back to Qt, which adds GPU synchronization and CPU overhead.
+- Some file loaders still use `fopen`, so non-ASCII paths on Windows are not supported consistently.
+- Asset scans and imports run synchronously. There is no general asynchronous asset streaming or residency budget.
+- Dependency discovery cannot inspect paths built dynamically in code. Relative links in model and web files constrain asset moves.
+- Packaging preserves source asset formats and includes all content without compression or unused-asset removal.
+- Meshlets provide visibility culling, with no hierarchical LOD selection or virtualized geometry streaming. Animated meshes retain full draws.
+- Games use the built-in material shaders. Custom game shaders are not supported yet. Lighting supports up to 16 lights and one shadow caster of each supported type.
+- Glass renders after opaque objects, so overlapping glass does not accumulate refraction through every surface.
+- Animation state machines are authored in C++. There is no animation graph editor, blend spaces, root motion or animation event authoring.
+- Scene spawning creates copies, with no linked prefab instances or overrides.
+- Networking trusts participating peers, supports up to 16 peers, and has no relay for strict NATs.
+- Scene undo stores full snapshots and retains up to 100 steps. Large scenes can increase its memory and serialization cost.
+- The job queue uses a lock.
+- Editor grid and gizmo lines draw on top of scene geometry.
+- Transform rotations are Euler angles and can gimbal lock under combined rotations.

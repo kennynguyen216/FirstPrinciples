@@ -100,6 +100,7 @@ namespace FP
 
 	private:
 		HashMap<String, RefPtr<Material>> m_Materials;
+		HashMap<String, uint64> m_Revisions;
 		Array<String> m_Failed;
 	};
 }

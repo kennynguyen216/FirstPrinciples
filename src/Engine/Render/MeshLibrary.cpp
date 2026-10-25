@@ -1,13 +1,26 @@
 #include "Engine/Render/MeshLibrary.h"
 #include "Engine/Animation/SkeletalModel.h"
 #include "Engine/Paths.h"
+#include "Engine/Assets/AssetDatabase.h"
 
 namespace FP
 {
-	GPUMesh* MeshLibrary::Get(const String& nameOrPath, bool reload)
+	void MeshLibrary::CheckRevision(const String& path)
 	{
+		const uint64 revision = Paths::GetAssets().Fingerprint(path);
+		if (const uint64* previous = m_Revisions.Find(path); previous && *previous == revision) return;
+		m_Meshes.Remove(path);
+		m_Skinned.Remove(path);
+		m_Failed.Remove(path);
+		m_Revisions.Add(path, revision);
+	}
+
+	GPUMesh* MeshLibrary::Get(const String& reference, bool reload)
+	{
+		const String nameOrPath = Paths::AssetReference(reference);
 		if (nameOrPath.IsEmpty())
 			return nullptr;
+		CheckRevision(nameOrPath);
 		if (!reload)
 		{
 			if (RefPtr<GPUMesh>* cached = m_Meshes.Find(nameOrPath))
@@ -40,8 +53,10 @@ namespace FP
 		return mesh.Get();
 	}
 
-	GPUMesh* MeshLibrary::GetSkinned(const String& path)
+	GPUMesh* MeshLibrary::GetSkinned(const String& reference)
 	{
+		const String path = Paths::AssetReference(reference);
+		CheckRevision(path);
 		if (RefPtr<GPUMesh>* cached = m_Skinned.Find(path))
 			return cached->Get();
 		const SkeletalModel* model = SkeletalModelLibrary::Get().Load(path);

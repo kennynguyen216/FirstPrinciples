@@ -39,10 +39,6 @@ namespace FP::Editor
 		// Kind of asset from the file extension, for example "Scene" or "Texture".
 		static QString AssetKind(const QString& path);
 
-		// Points every scene and material that used oldPath at newPath instead. Paths are relative
-		// to Content. Returns how many files changed.
-		static int ReplaceReferences(const QString& oldPath, const QString& newPath);
-
 	signals:
 		// Double clicked. Paths are absolute.
 		void AssetActivated(const QString& path);
@@ -54,8 +50,7 @@ namespace FP::Editor
 		// The toolbar's Save All. The editor owns the scene and script tabs.
 		void SaveAllRequested();
 
-		// Files on disk were renamed and references rewritten, so open scenes may be stale.
-		void ReferencesChanged();
+		void AssetMoved(const QString& oldPath, const QString& newPath);
 
 	protected:
 		bool eventFilter(QObject* watched, QEvent* event) override;
@@ -74,6 +69,7 @@ namespace FP::Editor
 		void SelectPath(const QString& path);
 
 		void ImportFiles();
+		void ValidateAssets();
 		void GoBack();
 		void GoForward();
 		void RebuildCrumbs();

@@ -1,5 +1,11 @@
 // Builds a distributable folder from Release binaries and cooked content.
 #include "Core/Misc/Pak.h"
+#include "Engine/Assets/AssetDatabase.h"
+#include "Engine/Engine.h"
+#include "Engine/Paths.h"
+#include "Engine/Scripting/ScriptRuntime.h"
+#include "Core/Misc/File.h"
+#include "Game.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -244,8 +250,29 @@ namespace
 		if (!name.hasMatch())
 			throw std::runtime_error("The project needs a valid Name");
 		const QString scenePath = !scene.hasMatch() ? "Scenes/Main.scene" : (scene.captured(1).isEmpty() ? scene.captured(2) : scene.captured(1));
+		if (!FP::Paths::OpenProject(FP::String(project.toUtf8().constData())))
+			throw std::runtime_error("Could not open the project for asset validation");
+		FP::Engine::RegisterEngineComponents();
+		Game::RegisterComponents();
+#if defined(_WIN32)
+		const QString scriptLibrary = project + "/Binaries/Release/GameScripts.dll";
+#else
+		const QString scriptLibrary = project + "/Binaries/Release/GameScripts.dylib";
+#endif
+		const FP::String scripts(scriptLibrary.toUtf8().constData());
+		if (FP::File::Exists(scripts.CStr()) && !FP::ScriptRuntime::Get().LoadModule(scripts))
+			throw std::runtime_error("Cannot load GameScripts for asset validation");
+		auto& assets = FP::Paths::GetAssets();
+		if (!assets.Refresh())
+		{
+			QStringList issues;
+			for (const auto& issue : assets.GetIssues())
+				issues.append(QString::fromUtf8(issue.Path.CStr()) + ": " + QString::fromUtf8(issue.Message.CStr()));
+			throw std::runtime_error(("Asset validation failed:\n" + issues.join("\n")).toStdString());
+		}
 		const QString content = QFileInfo(project + "/Content").canonicalFilePath();
-		const QString startScene = QFileInfo(content + "/" + scenePath).canonicalFilePath();
+		const QString resolvedScene = QString::fromUtf8(assets.Resolve(scenePath.toUtf8().constData()).CStr());
+		const QString startScene = resolvedScene.isEmpty() ? QString() : QFileInfo(content + "/" + resolvedScene).canonicalFilePath();
 		if (content.isEmpty() || startScene.isEmpty() || !startScene.startsWith(content + "/") || !QFileInfo(startScene).isFile())
 			throw std::runtime_error("StartScene must name an existing file inside Content");
 

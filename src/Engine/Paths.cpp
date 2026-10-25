@@ -1,5 +1,6 @@
 #include "Engine/Paths.h"
 #include "Engine/Project.h"
+#include "Engine/Assets/AssetDatabase.h"
 #include "Core/Log.h"
 #include "Core/Misc/ModuleContext.h"
 
@@ -7,6 +8,7 @@
 #include <SDL3/SDL_stdinc.h>
 
 #include <filesystem>
+#include <memory>
 
 namespace FP::Paths
 {
@@ -55,6 +57,7 @@ namespace FP::Paths
 			String EngineDir;
 			String SavedDir;
 			bool Packaged = false;
+			std::unique_ptr<AssetDatabase> Assets;
 		};
 
 		void SetCurrent(State& state, const Project& project)
@@ -64,6 +67,7 @@ namespace FP::Paths
 			state.SavedDir = project.Dir + "/Saved";
 			state.EngineDir.Clear();
 			state.Packaged = false;
+			state.Assets.reset();
 		}
 
 		State& GetState()
@@ -114,6 +118,7 @@ namespace FP::Paths
 		state.Current.Dir = directory;
 		state.SavedDir = savedDirectory + "/Saved";
 		state.Packaged = true;
+		state.Assets.reset();
 	}
 
 	bool IsPackaged()
@@ -153,7 +158,29 @@ namespace FP::Paths
 
 	String Content(std::string_view relative)
 	{
-		return GetContentDir() + "/" + relative;
+		const String path = AssetPath(relative);
+		return path.IsEmpty() ? String() : GetContentDir() + "/" + path;
+	}
+
+	AssetDatabase& GetAssets()
+	{
+		State& state = GetState();
+		if (!state.Assets)
+		{
+			state.Assets = std::make_unique<AssetDatabase>();
+			state.Assets->Open(state.ContentDir);
+		}
+		return *state.Assets;
+	}
+
+	String AssetPath(std::string_view reference)
+	{
+		return GetAssets().Resolve(reference);
+	}
+
+	String AssetReference(std::string_view path)
+	{
+		return GetAssets().Reference(path);
 	}
 
 	const String& GetEngineDir()

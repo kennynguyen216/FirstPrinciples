@@ -2,29 +2,10 @@
 #include "Engine/Json.h"
 #include "Engine/Scripting/Script.h"
 #include "Engine/Paths.h"
-
-#include <filesystem>
+#include "Engine/Assets/AssetDatabase.h"
 
 namespace FP
 {
-	namespace
-	{
-		// Newest write time of the files beside a page, which covers its CSS and scripts.
-		int64 FolderStamp(const String& page)
-		{
-			namespace fs = std::filesystem;
-			std::error_code ec;
-			const fs::path folder = fs::path(Paths::Content(page.View()).CStr()).parent_path();
-			int64 newest = 0;
-			for (const fs::directory_entry& entry : fs::directory_iterator(folder, ec))
-			{
-				const int64 time = static_cast<int64>(entry.last_write_time(ec).time_since_epoch().count());
-				newest = time > newest ? time : newest;
-			}
-			return newest;
-		}
-	}
-
 	UIDocumentInstance* UISystem::For(World& world, Entity entity)
 	{
 		const UIComponent* ui = world.IsValid(entity) ? world.TryGet<UIComponent>(entity) : nullptr;
@@ -45,17 +26,17 @@ namespace FP
 			if (document->GetPage() != ui.Page.View())
 			{
 				document->LoadPage(ui.Page.View());
-				state.FolderStamp = FolderStamp(ui.Page);
+				state.AssetFingerprint = Paths::GetAssets().Fingerprint(ui.Page);
 			}
 			// Edits to the page, its styles or its scripts show up twice a second while playing.
 			state.CheckTimer += deltaTime;
 			if (state.CheckTimer > 0.5f && !ui.Page.IsEmpty())
 			{
 				state.CheckTimer = 0;
-				const int64 stamp = FolderStamp(ui.Page);
-				if (stamp != state.FolderStamp)
+				const uint64 stamp = Paths::GetAssets().Fingerprint(ui.Page);
+				if (stamp != state.AssetFingerprint)
 				{
-					state.FolderStamp = stamp;
+					state.AssetFingerprint = stamp;
 					document->LoadPage(ui.Page.View());
 					FP_LOG("Reloaded %s", ui.Page.CStr());
 				}

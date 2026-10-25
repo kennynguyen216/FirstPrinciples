@@ -1,4 +1,6 @@
 #include "Tests/TestFramework.h"
+#include "Tests/TestProject.h"
+#include "Engine/Assets/AssetDatabase.h"
 #include "Engine/Audio/AudioClip.h"
 #include "Engine/Audio/AudioDevice.h"
 
@@ -190,6 +192,36 @@ FP_TEST(Audio_CacheAliasesSurviveOfflineFilesAndRevalidateAfterEviction)
 	first.Clip.reset();
 	FP_EXPECT(cache.Load("b.wav"));
 	FP_EXPECT(!cache.Load("Audio/./a.wav"));
+}
+
+FP_TEST(Audio_CachedAssetReferencesReimportAndSurviveMoves)
+{
+	Test::ScopedProject project;
+	auto write = [](const char* name, uint32 frames) {
+		const auto bytes = Wav(1, 8000, false, frames);
+		std::ofstream file(Paths::Content(name).CStr(), std::ios::binary);
+		file.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+	};
+	write("tone.wav", 16);
+	FP_EXPECT(Paths::GetAssets().Open(Paths::GetContentDir(), true));
+	const String reference = Paths::AssetReference("tone.wav");
+	FP_EXPECT(reference.StartsWith("asset://"));
+	AudioClipCache cache;
+	const auto first = cache.Load(reference);
+	FP_EXPECT(first && first.Clip->Frames == 16);
+	FP_EXPECT(cache.Load("tone.wav").Clip == first.Clip);
+	write("tone.wav", 32);
+	FP_EXPECT(Paths::GetAssets().Refresh());
+	const auto changed = cache.Load(reference);
+	FP_EXPECT(changed && changed.Clip != first.Clip && changed.Clip->Frames == 32);
+	String error;
+	FP_EXPECT(Paths::GetAssets().Move("tone.wav", "renamed.wav", error));
+	const auto moved = cache.Load(reference);
+	FP_EXPECT(moved && moved.Clip->Path == "renamed.wav" && moved.Clip->Frames == 32);
+	FP_EXPECT(cache.Load("tone.wav").Clip == moved.Clip);
+	std::filesystem::remove(Paths::Content("renamed.wav").CStr());
+	FP_EXPECT(cache.Load(reference).Clip == moved.Clip);
+	FP_EXPECT(!cache.Load(reference, true));
 }
 
 FP_TEST(Audio_DummyDeviceAdmissionPauseAndShutdown)
