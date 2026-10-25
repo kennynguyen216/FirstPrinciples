@@ -279,7 +279,8 @@ project "Jolt"
 
 project "ImGui"
 	kind "StaticLib"
-	files { ImGuiDir .. "/*.h", ImGuiDir .. "/*.cpp" }
+	files { ImGuiDir .. "/*.h", ImGuiDir .. "/*.cpp", ImGuiDir .. "/backends/imgui_impl_sdlgpu3.cpp" }
+	externalincludedirs { SdlDir .. "/include", ImGuiDir }
 
 -- Engine: HAL, Core, CoreObject and Engine in one static lib.
 project "Engine"

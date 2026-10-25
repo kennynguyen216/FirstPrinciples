@@ -1,0 +1,232 @@
+# FirstPrinciples scene
+# Open Window > Nanite / Meshlet Debugger, enable colors and freeze the camera.
+version 2
+
+entity a7100000-0000-4000-8000-000000000001
+component Name
+  Name "Visibility Camera"
+component Transform
+  Position 0 2 10
+  Rotation 0 0 0
+  Scale 1 1 1
+component Camera
+  Perspective true
+  FieldOfView 55
+  NearClip 0.1
+  FarClip 100
+  Primary true
+  Background 0.025 0.03 0.05 1
+
+entity a7100000-0000-4000-8000-000000000002
+component Name
+  Name "Ambient"
+component Transform
+  Position 0 0 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component AmbientLight
+  Color 0.7 0.8 1 1
+  Intensity 0.5
+
+entity a7100000-0000-4000-8000-000000000003
+component Name
+  Name "Sun"
+component Transform
+  Position 0 0 0
+  Rotation -35 45 0
+  Scale 1 1 1
+component DirectionalLight
+  Color 1 0.9 0.8 1
+  Intensity 1.5
+
+entity a7100000-0000-4000-8000-000000000004
+component Name
+  Name "Occluder - move this wall to reveal the spheres"
+component Transform
+  Position 0 2 -1
+  Rotation 0 0 0
+  Scale 5.5 4 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Plastic.material"
+
+entity a7100000-0000-4000-8000-000000000005
+component Name
+  Name "Floor"
+component Transform
+  Position 0 -0.15 -2
+  Rotation 0 0 0
+  Scale 18 1 18
+component Mesh
+  Mesh "Plane"
+component Material
+  Material "Materials/Plastic.material"
+
+entity a7100000-0000-4000-8000-000000000006
+component Name
+  Name "Hidden sphere 1"
+component Transform
+  Position -1.4 0.6 -4
+  Rotation 0 0 0
+  Scale 1.1 1.1 1.1
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Gold.material"
+
+entity a7100000-0000-4000-8000-000000000007
+component Name
+  Name "Hidden sphere 2"
+component Transform
+  Position 0.0 0.6 -4
+  Rotation 0 0 0
+  Scale 1.1 1.1 1.1
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Gold.material"
+
+entity a7100000-0000-4000-8000-000000000008
+component Name
+  Name "Hidden sphere 3"
+component Transform
+  Position 1.4 0.6 -4
+  Rotation 0 0 0
+  Scale 1.1 1.1 1.1
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Gold.material"
+
+entity a7100000-0000-4000-8000-000000000009
+component Name
+  Name "Hidden sphere 4"
+component Transform
+  Position -1.4 1.9 -4
+  Rotation 0 0 0
+  Scale 1.1 1.1 1.1
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Gold.material"
+
+entity a7100000-0000-4000-8000-00000000000a
+component Name
+  Name "Hidden sphere 5"
+component Transform
+  Position 0.0 1.9 -4
+  Rotation 0 0 0
+  Scale 1.1 1.1 1.1
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Gold.material"
+
+entity a7100000-0000-4000-8000-00000000000b
+component Name
+  Name "Hidden sphere 6"
+component Transform
+  Position 1.4 1.9 -4
+  Rotation 0 0 0
+  Scale 1.1 1.1 1.1
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Gold.material"
+
+entity a7100000-0000-4000-8000-00000000000c
+component Name
+  Name "Hidden sphere 7"
+component Transform
+  Position -1.4 3.2 -4
+  Rotation 0 0 0
+  Scale 1.1 1.1 1.1
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Gold.material"
+
+entity a7100000-0000-4000-8000-00000000000d
+component Name
+  Name "Hidden sphere 8"
+component Transform
+  Position 0.0 3.2 -4
+  Rotation 0 0 0
+  Scale 1.1 1.1 1.1
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Gold.material"
+
+entity a7100000-0000-4000-8000-00000000000e
+component Name
+  Name "Hidden sphere 9"
+component Transform
+  Position 1.4 3.2 -4
+  Rotation 0 0 0
+  Scale 1.1 1.1 1.1
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Gold.material"
+
+entity a7100000-0000-4000-8000-00000000000f
+component Name
+  Name "Foreground sphere -4"
+component Transform
+  Position -4 0.6 1.5
+  Rotation 0 0 0
+  Scale 1.3 1.3 1.3
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Gold.material"
+
+entity a7100000-0000-4000-8000-000000000010
+component Name
+  Name "Foreground sphere 0"
+component Transform
+  Position 0 0.6 1.5
+  Rotation 0 0 0
+  Scale 1.3 1.3 1.3
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Gold.material"
+
+entity a7100000-0000-4000-8000-000000000011
+component Name
+  Name "Foreground sphere 4"
+component Transform
+  Position 4 0.6 1.5
+  Rotation 0 0 0
+  Scale 1.3 1.3 1.3
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Gold.material"
+
+entity a7100000-0000-4000-8000-000000000012
+component Name
+  Name "Outside camera sphere -30"
+component Transform
+  Position -30 1 -4
+  Rotation 0 0 0
+  Scale 1 1 1
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Gold.material"
+
+entity a7100000-0000-4000-8000-000000000013
+component Name
+  Name "Outside camera sphere 30"
+component Transform
+  Position 30 1 -4
+  Rotation 0 0 0
+  Scale 1 1 1
+component Mesh
+  Mesh "Sphere"
+component Material
+  Material "Materials/Gold.material"

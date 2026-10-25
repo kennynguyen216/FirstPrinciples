@@ -62,6 +62,8 @@ namespace FP::Editor
 		// Draws one frame. The editor calls this from its tick.
 		void RenderFrame();
 
+		GPUTexture* GetRenderTarget() const { return m_Target.Get(); }
+
 		Renderer* GetRenderer() const { return m_Renderer; }
 
 	signals:
