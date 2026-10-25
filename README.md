@@ -788,7 +788,10 @@ The editor follows Unreal Engine 5's layout and dark theme, using this engine's 
 ### Content browser
 
 The **Content Browser** tab next to the **Output Log** at the bottom of the editor shows everything in
-the project's `Content` plus its scripts in `Source/Scripts`. Textures show thumbnails and materials show their color.
+the project's `Content` plus its scripts in `Source/Scripts`. Textures show image thumbnails with a
+checkerboard behind transparency. Materials show a lit sphere, and OBJ, glTF and GLB meshes show
+a fitted preview in their bind pose. Previews fill in as you browse, with type icons for unreadable assets.
+Changes to assets or their texture and buffer files refresh the thumbnails automatically.
 
 - Double click a scene to open it or a script to edit it in a tab. Click a material to edit it in
   the Details panel, or a texture to preview it.

@@ -4,17 +4,30 @@
 
 namespace FP
 {
-	GPUMesh* MeshLibrary::Get(const String& nameOrPath)
+	GPUMesh* MeshLibrary::Get(const String& nameOrPath, bool reload)
 	{
 		if (nameOrPath.IsEmpty())
 			return nullptr;
-		if (RefPtr<GPUMesh>* cached = m_Meshes.Find(nameOrPath))
-			return cached->Get();
-		if (m_Failed.Contains(nameOrPath))
-			return nullptr;
+		if (!reload)
+		{
+			if (RefPtr<GPUMesh>* cached = m_Meshes.Find(nameOrPath))
+				return cached->Get();
+			if (m_Failed.Contains(nameOrPath))
+				return nullptr;
+		}
 
 		MeshData data;
-		if (!LoadMesh(nameOrPath.View(), data))
+		bool loaded = false;
+		if (reload && IsGltfPath(nameOrPath.View()))
+		{
+			// Thumbnail refreshes read the file without changing the shared animation cache.
+			SkeletalModel model;
+			loaded = LoadGltf(Paths::Content(nameOrPath).CStr(), model);
+			data = std::move(model.Mesh);
+		}
+		else
+			loaded = LoadMesh(nameOrPath.View(), data);
+		if (!loaded)
 		{
 			FP_LOG_WARN("Could not load mesh %s", Paths::Content(nameOrPath.View()).CStr());
 			m_Failed.Add(nameOrPath);
@@ -22,6 +35,7 @@ namespace FP
 		}
 
 		RefPtr<GPUMesh> mesh = Upload(data);
+		m_Failed.Remove(nameOrPath);
 		m_Meshes.Add(nameOrPath, mesh);
 		return mesh.Get();
 	}

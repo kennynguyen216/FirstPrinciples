@@ -26,8 +26,8 @@ namespace FP
 	public:
 		explicit MeshLibrary(GPUDevice& device) : m_Device(device) {}
 
-		// Null when the name is empty or the file fails to load (logged once).
-		GPUMesh* Get(const String& nameOrPath);
+		// Null when the name is empty or the file fails to load. Reload bypasses cached data.
+		GPUMesh* Get(const String& nameOrPath, bool reload = false);
 
 		// A glTF with its skin weights. Null when it fails to load or has no skin.
 		GPUMesh* GetSkinned(const String& path);
