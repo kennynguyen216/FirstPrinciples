@@ -943,6 +943,13 @@ metadata, unsafe paths and names that differ only by case. The Output Log includ
 asset path. Packaging runs the same validation before staging a game. Cooked content includes the
 metadata, and the runtime reads it without writing into Content.
 
+Editor refreshes reuse source hashes when file size and modification time are unchanged. File-change
+notifications invalidate the affected source, including edits that preserve timestamps. Metadata and
+dependencies are still checked on every refresh. **Validate**, CLI validation and packaging reread
+all source bytes. Code can choose `AssetRefreshMode::ChangedFiles` for incremental scans, call
+`Invalidate(path)` for known changes, or use the default `Refresh()` for full verification.
+`GetLastScanStats()` reports how many files and source bytes were hashed.
+
 After building, the same pipeline is available without opening the editor:
 
 ```bash
@@ -1097,6 +1104,37 @@ FP::JobSystem::ParallelFor(enemyCount, 32, [&](int32 i) { UpdateEnemy(i); });
 - Systems update on the main thread. Use jobs for work that does not touch the world from many
   jobs at once, such as math over arrays or loading.
 
+### Performance benchmarks
+
+Build and run the standalone CPU benchmarks in Release:
+
+```bash
+premake5 gmake
+make -C Projects/Sample/Build config=release -j8 Benchmarks
+Projects/Sample/Binaries/Release/Benchmarks
+```
+
+On Windows, build the `Benchmarks` target in Release and run `Benchmarks.exe`. The tool prints CSV,
+uses temporary assets, and reports median time per operation across seven batches. Build the same
+configuration and use the same hardware when comparing revisions.
+
+An Apple M2 run measured these changes from the engine before this optimization pass:
+
+| Operation | Before | After | Speedup |
+|---|---:|---:|---:|
+| World matrix through 128 ancestors | 0.0570 ms | 0.00600 ms | 9.5x |
+| World rotation through 128 ancestors | 0.0512 ms | 0.00258 ms | 19.9x |
+| Repeated creation-order query over 10,000 entities | 0.0750 ms | 0.00107 ms | 70.2x |
+| Query 16 children among 10,000 entities | 0.1768 ms | 0.00056 ms | 313.5x |
+| Refresh 129 unchanged assets including a 64 MiB source | 105.107 ms | 5.319 ms | 19.8x |
+| Lookup an asset fingerprint by ID | 0.661 microseconds | 0.117 microseconds | 5.6x |
+
+Hierarchy traversal is iterative with cycle detection. Creation order is sorted after structural
+changes and reused between queries. Child queries inspect parent components and sort only their
+matches. Asset ID lookups use parsed IDs and fingerprints stored directly in asset records.
+These are CPU microbenchmarks with warm filesystem caches. Frame time also depends on rendering,
+physics, audio, scene content and editor presentation.
+
 ### Editor controls
 
 Open **Settings > Engine Settings...** for color-blind assistance. Choose None, Protanopia,
@@ -1205,6 +1243,35 @@ Scripts/CompileShaders.sh
 
 On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\CompileShaders.ps1`.
 
+### Batching and mesh instancing
+
+Static meshes and sprites batch automatically when neighboring draws share a mesh, section,
+material, shader and texture. Each instance supplies its own transform, normal matrix, UV transform
+and tint through a reusable vertex buffer. Full mesh draws use an instance count instead of one draw
+per object. The shadow maps and occlusion depth prepass also instance compatible static meshes,
+after checking each object's visibility for that pass.
+
+Meshlet rendering keeps separate visibility decisions for every object's clusters. Compatible
+indirect command ranges share an SDL draw submission, with each command selecting its instance data.
+This reduces CPU submissions and repeated state binding while retaining cluster culling. It does
+not combine those commands into a single GPU instance count or guarantee a frame time improvement.
+
+Batching preserves the existing draw order: opaque meshes front to back, sprites by layer and depth,
+then glass back to front. Incompatible neighbors split a batch. Animated meshes keep independent
+bone uniforms and draws. Meshlet color debugging uses separate draws to preserve cluster colors.
+Missing instance pipelines fall back to the existing object path.
+
+`Renderer::SetBatchingEnabled(false)` provides a comparison path. `GetRenderStats()` reports the
+latest view's scene SDL draw submissions, section instances, direct instanced groups, indirect
+commands, shadow submissions and occlusion prepass submissions. These counts exclude particles,
+UI, debug lines and fullscreen passes, and are not GPU timing measurements. The meshlet debugger
+includes the batching toggle and counters.
+
+GPU regression tests compare pixels with batching enabled and disabled. On the 12-cube test scene,
+scene submissions fall from 12 to 1, the occlusion prepass from 12 to 1, and eight directional, spot
+and point shadow maps from 96 to 8. Tests also cover transparency order, texture and material splits,
+animated poses, movement, resizing, and multiple views recorded into one command buffer.
+
 ### Meshlets and visibility debugging
 
 Every mesh upload (primitives, OBJ, and glTF) builds clusters using meshoptimizer v0.25.
@@ -1219,7 +1286,7 @@ occluded only when every tile touched by its projected bounds is nearer than the
 Near-plane crossings, partially filled edge tiles, and very large projected bounds fail open.
 This avoids stale visibility after camera/object movement and supports orthographic cameras.
 The depth prepass still submits full occluder geometry; the counters describe the main pass,
-not total frame geometry or a guaranteed speedup. Shadows retain their existing draws.
+not total frame geometry or a guaranteed speedup. Shadows batch compatible static mesh instances.
 
 Open **Window > Nanite / Meshlet Debugger** for an ImGui window with:
 
@@ -1274,6 +1341,7 @@ The committed Vulkan SPIR-V uses SDL's normal descriptor sets. See
 | AssetTool | Imports metadata, validates assets and lists dependencies |
 | PackageTool | Validates assets, cooks content and stages a Release game for distribution |
 | GameScripts | Hot reloadable C++ scripts (`Source/Scripts`) |
+| Benchmarks | Repeatable CPU benchmarks. Run the Release executable |
 | Tests | Unit tests. Run `Projects/Sample/Binaries/Debug/Tests [filter]` |
 | EditorTests | Input actions editor tests. Run `Projects/Sample/Binaries/Debug/EditorTests` |
 
@@ -1310,6 +1378,7 @@ Run `Projects/Sample/Binaries/Debug/Tests ImGui` for the headless docking and de
 - Dependency discovery cannot inspect paths built dynamically in code. Relative links in model and web files constrain asset moves.
 - Packaging preserves source asset formats and includes all content without compression or unused-asset removal.
 - Meshlets provide visibility culling, with no hierarchical LOD selection or virtualized geometry streaming. Animated meshes retain full draws.
+- Batching combines compatible neighboring draws. Material, texture and section changes split batches, and animated meshes do not instance their poses.
 - Games use the built-in material shaders. Custom game shaders are not supported yet. Lighting supports up to 16 lights and one shadow caster of each supported type.
 - Glass renders after opaque objects, so overlapping glass does not accumulate refraction through every surface.
 - Animation state machines are authored in C++. There is no animation graph editor, blend spaces, root motion or animation event authoring.

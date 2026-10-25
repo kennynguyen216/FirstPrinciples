@@ -44,6 +44,7 @@ FP_TEST(Meshlet_GPUOcclusionFrustumAndConservativeEdges)
 			items.Add({ {}, {2,-0.2f,0.2f,0}, {3,0.2f,0.25f,0}, 9, 3, {} }); // outside
 			items.Add({ {}, {-0.2f,-0.2f,-0.1f,0}, {0.2f,0.2f,0.7f,0}, 12, 3, {} }); // near-plane crossing
 			items.Add({ {}, {0.95f,-0.2f,0.6f,0}, {1,0.2f,0.7f,0}, 15, 3, {} }); // far padded tile
+			items[1].FirstInstance = 7;
 			MeshletSettings settings;
 			auto run = [&](float clearDepth) {
 				auto* cmd = SDL_AcquireGPUCommandBuffer(device->GetHandle());
@@ -61,7 +62,7 @@ FP_TEST(Meshlet_GPUOcclusionFrustumAndConservativeEdges)
 			{
 				FP_EXPECT(commands[i].num_instances == expected[i]);
 				FP_EXPECT(commands[i].num_indices == items[i].IndexCount && commands[i].first_index == items[i].FirstIndex);
-				FP_EXPECT(commands[i].vertex_offset == 0 && commands[i].first_instance == 0);
+				FP_EXPECT(commands[i].vertex_offset == 0 && commands[i].first_instance == items[i].FirstInstance);
 			}
 			culling.ReadStats(); SDL_WaitForGPUIdle(device->GetHandle());
 			const auto stats = culling.ReadStats();

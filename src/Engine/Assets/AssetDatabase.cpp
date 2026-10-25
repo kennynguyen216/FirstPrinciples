@@ -148,7 +148,7 @@ namespace FP
 		m_Assets.clear();
 		m_Ids.clear();
 		m_Aliases.clear();
-		m_Fingerprints.clear();
+		m_SourceSnapshots.clear();
 		return Refresh();
 	}
 
@@ -201,13 +201,20 @@ namespace FP
 		return AtomicWrite(Native(m_Root) / Native(asset.Path + MetadataExtension), text);
 	}
 
-	bool AssetDatabase::Refresh()
+	void AssetDatabase::Invalidate(std::string_view path)
+	{
+		m_SourceSnapshots.erase(std::string(Normalize(path).View()));
+	}
+
+	bool AssetDatabase::Refresh(AssetRefreshMode mode)
 	{
 		m_Issues.Clear();
+		m_ScanStats = {};
+		std::map<std::string, SourceSnapshot, std::less<>> snapshots;
 		std::map<std::string, AssetRecord, std::less<>> assets;
-		std::map<std::string, std::string, std::less<>> ids;
+		std::map<Guid, std::string> ids;
 		std::set<std::string> folded;
-		std::set<std::string> duplicates;
+		std::set<Guid> duplicates;
 		std::error_code ec;
 		fs::recursive_directory_iterator it(Native(m_Root), ec), end;
 		if (ec)
@@ -255,14 +262,30 @@ namespace FP
 			}
 			if (asset.Id.IsValid())
 			{
-				const std::string id(asset.Id.ToString().View());
-				if (!ids.emplace(id, std::string(path.View())).second)
+				asset.StableReference = String("asset://") + asset.Id.ToString();
+				if (!ids.emplace(asset.Id, std::string(path.View())).second)
 				{
 					m_Issues.Add({ path, "Duplicate asset ID" });
-					duplicates.insert(id);
+					duplicates.insert(asset.Id);
 				}
 			}
-			asset.Fingerprint = FileHash(it->path());
+			SourceSnapshot snapshot;
+			snapshot.Modified = it->last_write_time(ec);
+			const bool timeValid = !ec;
+			snapshot.Size = it->file_size(ec);
+			const bool statValid = timeValid && !ec;
+			const auto cached = m_SourceSnapshots.find(path.View());
+			if (mode == AssetRefreshMode::ChangedFiles && statValid && cached != m_SourceSnapshots.end() &&
+				cached->second.Modified == snapshot.Modified && cached->second.Size == snapshot.Size)
+				snapshot.Hash = cached->second.Hash;
+			else
+			{
+				snapshot.Hash = FileHash(it->path());
+				++m_ScanStats.FilesHashed;
+				if (snapshot.Hash && statValid) m_ScanStats.BytesHashed += snapshot.Size;
+			}
+			if (snapshot.Hash && statValid) snapshots.emplace(std::string(path.View()), snapshot);
+			asset.Fingerprint = snapshot.Hash;
 			if (!asset.Fingerprint)
 				m_Issues.Add({ path, "Cannot read asset" });
 			asset.Fingerprint = Hash(std::string_view(asset.Settings.GenerateMipmaps ? "mips" : "no-mips"), asset.Fingerprint);
@@ -273,11 +296,12 @@ namespace FP
 		for (const auto& id : duplicates) ids.erase(id);
 		for (const auto& [path, asset] : m_Assets)
 		{
-			if (asset.Id.IsValid() && ids.contains(std::string(asset.Id.ToString().View())))
-				m_Aliases[path] = std::string(asset.Id.ToString().View());
+			if (asset.Id.IsValid() && ids.contains(asset.Id))
+				m_Aliases[path] = asset.Id;
 		}
 		m_Assets = std::move(assets);
 		m_Ids = std::move(ids);
+		m_SourceSnapshots = std::move(snapshots);
 		for (auto& [path, asset] : m_Assets)
 			ReadDependencies(asset);
 		for (const auto& [path, asset] : m_Assets)
@@ -288,11 +312,10 @@ namespace FP
 					m_Issues.Add({ asset.Path, String("Missing dependency ") + reference });
 			}
 		}
-		m_Fingerprints.clear();
-		for (const auto& [path, asset] : m_Assets)
+		for (auto& [path, asset] : m_Assets)
 		{
 			std::set<std::string> visited;
-			m_Fingerprints[path] = FingerprintImpl(asset, visited);
+			asset.DependencyFingerprint = FingerprintImpl(asset, visited);
 		}
 		return m_Issues.IsEmpty();
 	}
@@ -303,13 +326,19 @@ namespace FP
 		{
 			Guid id;
 			if (!Guid::Parse(reference.substr(8), id) || !id.IsValid()) return nullptr;
-			const auto found = m_Ids.find(std::string(id.ToString().View()));
+			const auto found = m_Ids.find(id);
 			return found == m_Ids.end() ? nullptr : &m_Assets.at(found->second);
 		}
-		const auto found = m_Assets.find(std::string(Normalize(reference).View()));
+		auto found = m_Assets.find(reference);
 		if (found != m_Assets.end()) return &found->second;
 		const auto alias = m_Aliases.find(reference);
-		if (alias != m_Aliases.end()) return Find("asset://" + alias->second);
+		if (alias != m_Aliases.end())
+		{
+			const auto moved = m_Ids.find(alias->second);
+			if (moved != m_Ids.end()) return &m_Assets.at(moved->second);
+		}
+		found = m_Assets.find(Normalize(reference).View());
+		if (found != m_Assets.end()) return &found->second;
 		return nullptr;
 	}
 
@@ -322,7 +351,7 @@ namespace FP
 	String AssetDatabase::Reference(std::string_view path) const
 	{
 		if (const AssetRecord* asset = Find(path); asset && asset->Id.IsValid())
-			return String("asset://") + asset->Id.ToString();
+			return asset->StableReference;
 		return String(path);
 	}
 
@@ -350,8 +379,7 @@ namespace FP
 	uint64 AssetDatabase::Fingerprint(std::string_view reference) const
 	{
 		const AssetRecord* asset = Find(reference);
-		const auto found = asset ? m_Fingerprints.find(std::string(asset->Path.View())) : m_Fingerprints.end();
-		return found == m_Fingerprints.end() ? 0 : found->second;
+		return asset ? asset->DependencyFingerprint : 0;
 	}
 
 	Array<String> AssetDatabase::Dependents(std::string_view reference) const

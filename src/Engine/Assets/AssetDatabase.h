@@ -5,10 +5,18 @@
 #include <map>
 #include <set>
 #include <string>
+#include <filesystem>
 
 namespace FP
 {
 	enum class AssetColorSpace { Auto, SRGB, Linear };
+	enum class AssetRefreshMode { VerifyAll, ChangedFiles };
+
+	struct AssetScanStats
+	{
+		uint64 FilesHashed = 0;
+		uint64 BytesHashed = 0;
+	};
 
 	struct AssetImportSettings
 	{
@@ -24,6 +32,8 @@ namespace FP
 		AssetImportSettings Settings;
 		Array<String> Dependencies;
 		uint64 Fingerprint = 0;
+		uint64 DependencyFingerprint = 0;
+		String StableReference;
 	};
 
 	struct AssetIssue
@@ -39,7 +49,9 @@ namespace FP
 
 		// Runtime scans never create or change metadata
 		bool Open(const String& contentRoot, bool writable = false);
-		bool Refresh();
+		bool Refresh(AssetRefreshMode mode = AssetRefreshMode::VerifyAll);
+		void Invalidate(std::string_view path);
+		const AssetScanStats& GetLastScanStats() const { return m_ScanStats; }
 		const AssetRecord* Find(std::string_view reference) const;
 		// Unknown IDs stay unresolved so missing assets cannot load another file
 		String Resolve(std::string_view reference) const;
@@ -61,10 +73,17 @@ namespace FP
 		String m_Root;
 		bool m_Writable = false;
 		std::map<std::string, AssetRecord, std::less<>> m_Assets;
-		std::map<std::string, std::string, std::less<>> m_Ids;
-		std::map<std::string, uint64, std::less<>> m_Fingerprints;
+		std::map<Guid, std::string> m_Ids;
+		struct SourceSnapshot
+		{
+			std::filesystem::file_time_type Modified;
+			uintmax_t Size = 0;
+			uint64 Hash = 0;
+		};
+		std::map<std::string, SourceSnapshot, std::less<>> m_SourceSnapshots;
+		AssetScanStats m_ScanStats;
 		// Old paths keep unsaved edits usable after a move
-		std::map<std::string, std::string, std::less<>> m_Aliases;
+		std::map<std::string, Guid, std::less<>> m_Aliases;
 		Array<AssetIssue> m_Issues;
 	};
 }
