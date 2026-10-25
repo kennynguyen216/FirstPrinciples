@@ -186,12 +186,15 @@ When output recovers, active loops and pending PlayOnStart loops restart from th
 Explicit pauses, stops and disabled sources stay in effect; old one-shot effects are not replayed.
 Preloaded resident clips play from memory; choose **Reload Clip** to validate and use file changes.
 
-For positional sound, enable **Spatial** on a mono source and add an **AudioListener** to the player
-or another entity. The listener follows that entity's position and rotation. Without an explicit
-listener, audio uses a primary camera, then the origin. **MinDistance** and **MaxDistance** control
-distance attenuation in world units; panning follows the listener's right direction. Stereo sources
-play without positioning. Master, SFX, Music and UI volumes are available through the editor's
-**Audio...** controls. Pitch changes both pitch and speed.
+For positional sound, enable **Spatial** on a source and add an **AudioListener** to the player
+or another entity. Stereo WAVs and MP3s are automatically mixed to mono for spatial playback,
+including streamed music. The original file and non-spatial playback stay stereo; no external
+converter or extra audio file is needed. The listener follows that entity's position and rotation.
+Without an explicit listener, audio uses a primary camera, then the origin. **MinDistance** and
+**MaxDistance** control distance attenuation in world units; panning follows the listener's right
+direction. Sources with **Spatial** off keep their original channels. Master, SFX, Music and UI
+volumes are available through the editor's **Audio...** controls. Pitch changes both pitch and speed.
+Changing **Spatial** during playback restarts that source and preserves its pause state.
 
 Game systems can preload a clip in `OnStart` and play overlapping effects during play:
 
@@ -263,7 +266,8 @@ For a longer Doppler demonstration, open **`Scenes/DopplerFlyby.scene`**. The cy
 The listener starts 80 meters beside the route, with enough audio range to hear the full approach
 and departure. **P** toggles Doppler, **F** freezes motion while audio continues, and **R** restarts
 the pass. **WASD**, **Shift** and the mouse let you walk, run and look along the route.
-Assign a mono WAV/MP3 to **Long Doppler Emitter - assign mono MP3** to hear your own sound.
+Assign a WAV/MP3 to **Long Doppler Emitter - assign mono MP3** to hear your own sound; stereo
+clips are mixed to mono automatically.
 This scene uses open air with no room effects or occlusion so the pitch shift is easy to compare.
 Regenerate its scene and distance markers with `python Scripts/GenerateDopplerFlyby.py` (Pillow required).
 
@@ -271,7 +275,7 @@ For a ready-to-use MP3 test, open **`Scenes/AudioPlayground.scene`**. Import you
 **File > Import Audio...**, select **MP3 Music (M)** in the hierarchy, and replace its **AudioSource > Clip**.
 Press Play, click the viewport and press **M** to start/stop music. Stereo files are supported here;
 the included original 65-second MP3 demonstrates automatic streaming.
-Select **MP3 Doppler (5)** and assign a **mono** MP3 to test your own sound moving through space.
+Select **MP3 Doppler (5)** and assign a WAV/MP3 to test your own sound moving through space.
 Press **5** to start its sweep and **P** to compare Doppler on/off. **1–4**, **Space**, **T**, **R** and **B**
 keep the room, clap, dry/wet and overlap controls below. Open **Window > Audio Debugger** to inspect the result.
 The scene and bundled original sounds regenerate with `python Scripts/GenerateAudioPlayground.py`
@@ -294,9 +298,10 @@ claps come from the nearest enabled spatial AudioSource object, so walking aroun
 distance, stereo panning, obstruction and room reflections. Its AudioSource settings control
 the clip, volume and range; the debugger names the emitter object rather than the camera.
 
-Press **5** for a moving cyan emitter in the large hall. It plays an original looping 660 Hz
-tone while sweeping left and right at up to 30 m/s. **P** toggles Doppler for comparison; **1–4**
-stops the tone and returns to the clap areas. Walking changes the listener's contribution too.
+Press **5** for a moving cyan emitter on the outdoor promenade. It loops `Audio/Misery.mp3`,
+automatically mixed to mono, over an 80 m sweep at up to 30 m/s. The asset generator uses the
+original 660 Hz tone when that local music file is absent. **P** toggles Doppler for comparison; **1–4**
+stops the emitter and returns to the clap areas. Walking changes the listener's contribution too.
 The debugger's **Pitch x** column shows the applied playback pitch.
 
 Spatial sources have **Doppler Scale**: 0 disables the shift, 1 uses world units as meters, and

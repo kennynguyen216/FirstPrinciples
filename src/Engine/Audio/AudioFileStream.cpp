@@ -9,7 +9,7 @@ namespace FP
 	std::unique_ptr<AudioFileStream> AudioFileStream::Open(const AudioClip& clip, bool loop, AudioResult& result) try
 	{
 		auto stream = std::unique_ptr<AudioFileStream>(new AudioFileStream);
-		result = stream->m_Decoder.Open(clip.StreamPath);
+		result = stream->m_Decoder.Open(clip.StreamPath, clip.Channels == 1);
 		if (!result) return {};
 		const auto& info = stream->m_Decoder.Info();
 		if (info.SourceBytes != clip.SourceBytes || info.LastWriteTicks != clip.LastWriteTicks || info.Frames != clip.Frames || info.SampleRate != clip.SampleRate || info.Channels != clip.Channels)

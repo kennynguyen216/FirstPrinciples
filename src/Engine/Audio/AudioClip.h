@@ -39,7 +39,8 @@ namespace FP
 		~AudioClipCache();
 		AudioClipCache(const AudioClipCache&) = delete;
 		AudioClipCache& operator=(const AudioClipCache&) = delete;
-		AudioClipResult Load(const String& path, bool reload = false);
+		// Spatial playback requests a cached mono mix; the source file stays unchanged.
+		AudioClipResult Load(const String& path, bool reload = false, bool mono = false);
 		static AudioClipResult ValidateFile(const String& absolutePath);
 		void ClearFailures();
 		uint64 ResidentBytes() const;

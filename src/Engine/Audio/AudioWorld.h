@@ -74,6 +74,7 @@ namespace FP
 			Entity Owner = NullEntity;
 			VoiceHandle Voice;
 			String RequestedClip;
+			bool RequestedSpatial = false;
 			bool Recover = false;
 			bool Paused = false;
 		};

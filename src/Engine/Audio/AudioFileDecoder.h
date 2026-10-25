@@ -10,7 +10,7 @@ namespace FP
 	public:
 		AudioFileDecoder();
 		~AudioFileDecoder();
-		AudioResult Open(const String& absolutePath);
+		AudioResult Open(const String& absolutePath, bool mono = false);
 		const AudioClip& Info() const;
 		uint64 Read(float* samples, uint64 frames);
 		bool Rewind();

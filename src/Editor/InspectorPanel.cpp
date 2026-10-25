@@ -664,7 +664,7 @@ namespace FP::Editor
 			{
 				text += state->Metadata;
 				if (source->Spatial && state->Channels != 1)
-					text += "\nSpatial audio requires a mono clip. Disable Spatial or choose a mono WAV or MP3.";
+					text += "\nStereo is automatically mixed to mono for spatial playback. The original file stays stereo.";
 				if (state->ClippedSamples)
 					text += QString("\n%1 out-of-range samples were clamped.").arg(state->ClippedSamples);
 				const String path = Paths::Content(source->Clip.View());

@@ -127,7 +127,7 @@ FP_TEST(AudioMp3_ImportPreservesFormatAndNeverOverwrites)
 		FP_EXPECT(!Utf8(entry.path().filename()).StartsWith(".audio-import-"));
 }
 
-FP_TEST(AudioMp3_PlaybackSpatialDopplerAndStereoRules)
+FP_TEST(AudioMp3_StereoSourcesAutomaticallyMixToMonoForSpatialPlayback)
 {
 	Engine::RegisterEngineComponents();
 	const char* previous = SDL_GetHint(SDL_HINT_AUDIO_DRIVER); const String saved = previous ? previous : "";
@@ -140,7 +140,7 @@ FP_TEST(AudioMp3_PlaybackSpatialDopplerAndStereoRules)
 		world->Add<AudioListenerComponent>(world->CreateEntity("Listener"));
 		const Entity emitter = world->CreateEntity("MP3 source"); world->Get<TransformComponent>(emitter).Position = {10, 0, 0};
 		auto& source = world->Add<AudioSourceComponent>(emitter);
-		source.Clip = fixture.Relative("Mono.mp3"); source.Spatial = true; source.Loop = true; source.PlayOnStart = true;
+		source.Clip = fixture.Relative("Stereo.mp3"); source.Spatial = true; source.Loop = true; source.PlayOnStart = true;
 		world->BeginPlay();
 		const VoiceHandle handle = world->GetAudio().GetSourceVoice(emitter); FP_EXPECT(handle);
 		FP_EXPECT(device.GetState(handle) == VoiceState::Playing);
@@ -148,8 +148,22 @@ FP_TEST(AudioMp3_PlaybackSpatialDopplerAndStereoRules)
 		bool shifted = false;
 		for (const auto& voice : device.GetVoices()) if (voice.Handle == handle) shifted = voice.Params.Pitch > 1.02f;
 		FP_EXPECT(shifted);
+		FP_EXPECT(source.Clip == fixture.Relative("Stereo.mp3"));
+		const auto stereo = device.GetClipCache().Load(source.Clip);
+		const auto mono = device.GetClipCache().Load(source.Clip, false, true);
+		FP_EXPECT(stereo && stereo.Clip->Channels == 2 && mono && mono.Clip->Channels == 1);
+		if (stereo && mono)
+			for (size_t i = 0; i < mono.Clip->Samples.size(); ++i)
+				FP_EXPECT(mono.Clip->Samples[i] == (stereo.Clip->Samples[i * 2] + stereo.Clip->Samples[i * 2 + 1]) * .5f);
+		FP_EXPECT(world->GetAudio().Pause(handle));
+		source.Spatial = false; world->Update(.016f);
+		const auto unpositioned = world->GetAudio().GetSourceVoice(emitter);
+		FP_EXPECT(unpositioned && unpositioned != handle && device.GetState(unpositioned) == VoiceState::Paused);
+		source.Spatial = true; world->Update(.016f);
+		const auto positioned = world->GetAudio().GetSourceVoice(emitter);
+		FP_EXPECT(positioned && positioned != unpositioned && device.GetState(positioned) == VoiceState::Paused);
 		OneShotParams shot; shot.Spatial = true;
-		FP_EXPECT(world->GetAudio().PlayOneShot(fixture.Relative("Stereo.mp3"), shot).Result.Code == AudioError::InvalidSettings);
+		FP_EXPECT(world->GetAudio().PlayOneShot(fixture.Relative("Stereo.mp3"), shot));
 		shot.Spatial = false; FP_EXPECT(world->GetAudio().PlayOneShot(fixture.Relative("Stereo.mp3"), shot));
 		world->EndPlay(); world->GetAudio().Attach(nullptr);
 	}

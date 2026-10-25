@@ -31,6 +31,7 @@ namespace FP
 		bool IsMp3 = false, EndChecked = false;
 		uint64 Position = 0, DataOffset = 0;
 		uint16 Bits = 0;
+		int SourceChannels = 0;
 		~Impl() { if (IsMp3) drmp3_uninit(&Mp3); }
 		AudioResult Fail(AudioError code, const char* message) { return Status = {code, message}; }
 		static size_t ReadBytes(void* user, void* output, size_t count)
@@ -59,7 +60,7 @@ namespace FP
 	AudioFileDecoder::~AudioFileDecoder() = default;
 	const AudioClip& AudioFileDecoder::Info() const { return m_Impl->Info; }
 	const AudioResult& AudioFileDecoder::Result() const { return m_Impl->Status; }
-	AudioResult AudioFileDecoder::Open(const String& absolutePath)
+	AudioResult AudioFileDecoder::Open(const String& absolutePath, bool mono)
 	{
 		m_Impl = std::make_unique<Impl>();
 		auto& d = *m_Impl;
@@ -129,6 +130,8 @@ namespace FP
 			d.Info.Frames = drmp3_get_pcm_frame_count(&d.Mp3); d.Info.Encoding = "MP3";
 			if (!d.Info.Frames) return d.Fail(AudioError::DecodeFailed, "MP3 contains no decodable audio frames.");
 		}
+		d.SourceChannels = d.Info.Channels;
+		if (mono) d.Info.Channels = 1;
 		d.Info.Duration = double(d.Info.Frames) / d.Info.SampleRate;
 		if (!Rewind()) return d.Status;
 		return {};
@@ -149,30 +152,35 @@ namespace FP
 		if (!d.Status) return 0;
 		const uint64 count = std::min(frames, d.Info.Frames - d.Position);
 		std::array<uint8, 576 * 2 * 4> bytes{};
+		std::array<float, 576 * 2> stereo{};
 		uint64 offset = 0;
 		while (offset < count)
 		{
 			const uint64 batch = std::min<uint64>(576, count - offset);
 			float* output = samples + offset * d.Info.Channels;
+			const bool downmix = d.SourceChannels != d.Info.Channels;
+			float* decoded = downmix ? stereo.data() : output;
 			if (d.IsMp3)
 			{
-				const auto read = drmp3_read_pcm_frames_f32(&d.Mp3, batch, output);
-				if (d.Mp3.mp3FrameChannels != unsigned(d.Info.Channels) || d.Mp3.mp3FrameSampleRate != unsigned(d.Info.SampleRate))
+				const auto read = drmp3_read_pcm_frames_f32(&d.Mp3, batch, decoded);
+				if (d.Mp3.mp3FrameChannels != unsigned(d.SourceChannels) || d.Mp3.mp3FrameSampleRate != unsigned(d.Info.SampleRate))
 					{ d.Fail(AudioError::UnsupportedFormat, "MP3 channel count and sample rate must remain constant."); return 0; }
 				if (read != batch) { d.Fail(AudioError::DecodeFailed, "MP3 ended before its declared audio frame count."); return 0; }
 			}
 			else
 			{
-				d.File.read(reinterpret_cast<char*>(bytes.data()), std::streamsize(batch * d.Info.Channels * (d.Bits / 8)));
+				d.File.read(reinterpret_cast<char*>(bytes.data()), std::streamsize(batch * d.SourceChannels * (d.Bits / 8)));
 				if (!d.File) { d.Fail(AudioError::DecodeFailed, "Could not read complete WAV samples."); return 0; }
-				for (size_t i = 0; i < batch * d.Info.Channels; ++i)
-					output[i] = d.Bits == 16 ? float(std::bit_cast<int16>(U16(bytes.data() + i * 2))) / 32768.f : std::bit_cast<float>(U32(bytes.data() + i * 4));
+				for (size_t i = 0; i < batch * d.SourceChannels; ++i)
+					decoded[i] = d.Bits == 16 ? float(std::bit_cast<int16>(U16(bytes.data() + i * 2))) / 32768.f : std::bit_cast<float>(U32(bytes.data() + i * 4));
 			}
-			for (size_t i = 0; i < batch * d.Info.Channels; ++i)
+			for (size_t i = 0; i < batch * d.SourceChannels; ++i)
 			{
-				if (!std::isfinite(output[i])) { d.Fail(AudioError::DecodeFailed, "Audio contains NaN or infinity; export finite samples."); return 0; }
-				if (output[i] < -1 || output[i] > 1) { ++d.Info.ClippedSamples; output[i] = std::clamp(output[i], -1.f, 1.f); }
+				if (!std::isfinite(decoded[i])) { d.Fail(AudioError::DecodeFailed, "Audio contains NaN or infinity; export finite samples."); return 0; }
+				if (decoded[i] < -1 || decoded[i] > 1) { ++d.Info.ClippedSamples; decoded[i] = std::clamp(decoded[i], -1.f, 1.f); }
 			}
+			if (downmix)
+				for (size_t i = 0; i < batch; ++i) output[i] = (decoded[i * 2] + decoded[i * 2 + 1]) * 0.5f;
 			offset += batch;
 		}
 		d.Position += count;

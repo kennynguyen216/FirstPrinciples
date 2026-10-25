@@ -93,7 +93,7 @@ void AcousticsTestSystem::OnStart(World& world)
 	if (!loaded) FP_LOG_WARN("Acoustics test: %s", loaded.Message.CStr());
 	const auto tone = world.GetAudio().Preload("Audio/DopplerTone.wav");
 	if (!tone) FP_LOG_WARN("Doppler demo: %s", tone.Message.CStr());
-	FP_LOG("3D acoustics: WASD walk, mouse look, 1 soft room, 2 bright room, 3 hall, 4 outdoors, 5 moving Doppler tone. P toggles Doppler. Space clap, B overlap test, T auto-clap, R room effects on/off.");
+	FP_LOG("3D acoustics: WASD walk, mouse look, 1 soft room, 2 bright room, 3 hall, 4 outdoors, 5 moving Doppler emitter. P toggles Doppler. Space clap, B overlap test, T auto-clap, R room effects on/off.");
 }
 
 void AcousticsTestSystem::Update(World& world, float deltaTime)
@@ -117,7 +117,7 @@ void AcousticsTestSystem::Update(World& world, float deltaTime)
 		if (Input::WasKeyPressed(SDL_SCANCODE_5))
 		{
 			test.DopplerDemo = true;
-			transform.Position = {24, 1.65f, 4}; transform.Rotation = {};
+			transform.Position = {12, 1.65f, 22}; transform.Rotation = {};
 			for (auto [movingEntity, moving, source] : world.View<MovingAudioComponent, AudioSourceComponent>().each())
 			{
 				source.Enabled = true;

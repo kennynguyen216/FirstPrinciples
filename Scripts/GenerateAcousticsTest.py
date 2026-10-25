@@ -161,15 +161,16 @@ component AudioSource
         sign("ClapSourceSign", "CLAP SOURCE", ["Walk around this object",
              "SPACE clap / T auto-clap", "B overlap test"], "#ffce80", (x, 2.8, -1), 2.4)
     material("DopplerEmitter", "0.1 0.75 1", unlit=True)
-    entity("Moving Doppler emitter", (24, 1.7, 2), (1.2, 1.2, 1.2), components='''component Mesh
+    doppler_clip = "Misery.mp3" if (ROOT / "Audio/Misery.mp3").is_file() else "DopplerTone.wav"
+    entity("Moving Doppler emitter", (12, 1.7, 18), (1.2, 1.2, 1.2), components=f'''component Mesh
   Mesh "Sphere"
 component Material
   Material "Materials/Acoustics/DopplerEmitter.material"
 component MovingAudio
-  Distance 8
+  Distance 40
   Speed 30
 component AudioSource
-  Clip "Audio/DopplerTone.wav"
+  Clip "Audio/{doppler_clip}"
   Enabled false
   Volume 0.55
   Pitch 1
@@ -179,12 +180,12 @@ component AudioSource
   Spatial true
   Occlusion true
   DopplerScale 1
-  MinDistance 6
-  MaxDistance 45
+  MinDistance 10
+  MaxDistance 80
   Priority 128
 ''')
-    sign("DopplerSign", "DOPPLER / PRESS 5", ["Cyan sphere: moving tone", "P compares Doppler ON / OFF",
-         "Walk closer to hear the passing shift", "1 - 4 returns to clap rooms"], "#80dfff", (24, 4, 1.9), 5)
+    sign("DopplerSign", "DOPPLER / PRESS 5", ["Cyan sphere: 80m outdoor flyby", "P compares Doppler ON / OFF",
+         "Walk closer to hear the passing shift", "1 - 4 returns to clap rooms"], "#80dfff", (12, 3, 17.9), 5)
     (ROOT / "Scenes/Acoustics3D.scene").write_text("# FirstPrinciples scene\nversion 2\n\n" + "\n".join(entities), encoding="utf-8")
     rng = random.Random(2718)
     rate = 48000

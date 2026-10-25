@@ -181,9 +181,12 @@ namespace FP
 		m_Playing = true;
 		m_Paused = false;
 		m_Context = AllocateAudioContext();
-		if (GetDevice()) m_Device->GetClipCache().ClearFailures();
-		for (auto [entity, source] : m_World.View<AudioSourceComponent>().each())
-			if (source.Enabled && !source.Clip.IsEmpty()) Preload(source.Clip);
+		if (AudioDevice* device = GetDevice())
+		{
+			device->GetClipCache().ClearFailures();
+			for (auto [entity, source] : m_World.View<AudioSourceComponent>().each())
+				if (source.Enabled && !source.Clip.IsEmpty()) device->GetClipCache().Load(source.Clip, false, source.Spatial);
+		}
 		Update();
 	}
 
@@ -263,12 +266,11 @@ namespace FP
 		if (!m_Playing || !GetDevice() || !m_Device->IsReady()) return Failure(AudioError::NotReady, "Audio world is stopped or output is unavailable");
 		Source& tracked = TrackSource(entity);
 		tracked.RequestedClip = source->Clip;
+		tracked.RequestedSpatial = source->Spatial;
 		AudioPlaybackParams params;
 		if (!SourceParams(*source, params)) return Failure(AudioError::InvalidSettings, "Invalid audio volume, pitch, bus, priority or distance");
-		const auto loaded = m_Device->GetClipCache().Load(source->Clip);
+		const auto loaded = m_Device->GetClipCache().Load(source->Clip, false, source->Spatial);
 		if (!loaded.Result) return { {}, loaded.Result };
-		if (source->Spatial && loaded.Clip->Channels != 1)
-			return Failure(AudioError::InvalidSettings, "Spatial playback requires a mono clip; export a mono version");
 		Voice voice{ {}, entity, true, source->Spatial, {}, source->MinDistance, source->MaxDistance, params };
 		voice.Channels = loaded.Clip->Channels;
 		voice.Occlusion = source->Occlusion;
@@ -305,11 +307,10 @@ namespace FP
 		if (!ValidParams(params) || !ValidDistances(p.MinDistance, p.MaxDistance) || !Finite(p.Position)
 			|| !std::isfinite(p.DopplerScale) || p.DopplerScale < 0 || p.DopplerScale > 4)
 			return Failure(AudioError::InvalidSettings, "Invalid one-shot playback settings");
-		const auto loaded = m_Device->GetClipCache().Load(clip);
+		const auto loaded = m_Device->GetClipCache().Load(clip, false, p.Spatial);
 		if (!loaded.Result) return { {}, loaded.Result };
-		if (p.Spatial && loaded.Clip->Channels != 1)
-			return Failure(AudioError::InvalidSettings, "Spatial playback requires a mono clip; export a mono version");
 		Voice voice{ {}, p.Owner, false, p.Spatial, p.Position, p.MinDistance, p.MaxDistance, params };
+		voice.Channels = loaded.Clip->Channels;
 		voice.Occlusion = p.Occlusion;
 		voice.BasePitch = p.Pitch; voice.DopplerScale = p.DopplerScale;
 		SelectListener();
@@ -683,6 +684,7 @@ namespace FP
 			if (added)
 			{
 				tracked.RequestedClip = source->Clip;
+				tracked.RequestedSpatial = source->Spatial;
 				if (!source->Enabled) StopSource(entity);
 				else if (source->PlayOnStart)
 				{
@@ -693,9 +695,10 @@ namespace FP
 			else if (!source->Enabled) StopSource(entity);
 			else if (recovered && tracked.Recover && source->Loop && state == VoiceState::Invalid)
 				report(entity, PlayInternal(entity, true));
-			else if (state != VoiceState::Invalid && source->Clip != tracked.RequestedClip)
+			else if (state != VoiceState::Invalid && (source->Clip != tracked.RequestedClip || source->Spatial != tracked.RequestedSpatial))
 			{
 				tracked.RequestedClip = source->Clip;
+				tracked.RequestedSpatial = source->Spatial;
 				report(entity, PlayInternal(entity, true));
 			}
 		}
