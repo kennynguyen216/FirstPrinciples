@@ -93,6 +93,49 @@ FP_TEST(World_SystemsRunOnlyWhilePlaying)
 	world->EndPlay();
 }
 
+FP_TEST(World_PauseHoldsSystemsAndGameTime)
+{
+	StrongObjectPtr<World> world(NewObject<World>());
+	CounterSystem* counter = world->AddSystem<CounterSystem>();
+	world->SetPaused(true);
+	FP_EXPECT(!world->IsPaused());
+	world->BeginPlay();
+	world->Update(0.25f);
+	FP_EXPECT(counter->Updates == 1);
+	FP_EXPECT(world->GetTime() == 0.25);
+	FP_EXPECT(world->GetProfileFrame() == 1);
+	FP_EXPECT(world->GetSystemTimings().Num() == 1);
+	FP_EXPECT(world->GetSystemTimings()[0].Name == "Counter");
+	FP_EXPECT(world->GetSystemTimings()[0].Samples == 1);
+	world->Step(0.25f);
+	FP_EXPECT(counter->Updates == 1);
+
+	world->SetPaused(true);
+	world->Update(0.5f);
+	FP_EXPECT(world->IsPlaying() && world->IsPaused());
+	FP_EXPECT(counter->Updates == 1);
+	FP_EXPECT(world->GetTime() == 0.25);
+	FP_EXPECT(world->GetProfileFrame() == 1);
+	world->Step(0.25f);
+	FP_EXPECT(world->IsPaused());
+	FP_EXPECT(counter->Updates == 2);
+	FP_EXPECT(world->GetTime() == 0.5);
+	FP_EXPECT(world->GetProfileFrame() == 2);
+	FP_EXPECT(world->GetSystemTimings()[0].Samples == 2);
+	FP_EXPECT(world->GetLastUpdateMilliseconds() >= world->GetSystemTimings()[0].LastMilliseconds);
+
+	world->SetPaused(false);
+	world->Update(0.25f);
+	FP_EXPECT(counter->Updates == 3);
+	FP_EXPECT(world->GetTime() == 0.75);
+	world->SetPaused(true);
+	world->EndPlay();
+	FP_EXPECT(!world->IsPaused());
+	world->BeginPlay();
+	FP_EXPECT(!world->IsPaused() && world->GetTime() == 0);
+	world->EndPlay();
+}
+
 FP_TEST(Scene_RoundTrip)
 {
 	RegisterTestComponents();
@@ -121,6 +164,31 @@ FP_TEST(Scene_RoundTrip)
 	FP_EXPECT(loaded->Has<TagComponent>(l));
 	FP_EXPECT(loaded->Get<SpriteComponent>(l).Tint.B == 0.75f);
 	FP_EXPECT(SceneSerializer::SaveToString(*loaded.Get()) == text);
+}
+
+FP_TEST(Scene_ShadowLightsRoundTrip)
+{
+	RegisterTestComponents();
+	StrongObjectPtr<World> world(NewObject<World>());
+	const Entity point = world->CreateEntity("Point");
+	PointLightComponent& pointLight = world->Add<PointLightComponent>(point);
+	pointLight.ShadowResolution = 256;
+	pointLight.ShadowStrength = 0.7f;
+	const Entity spot = world->CreateEntity("Spot");
+	SpotLightComponent& spotLight = world->Add<SpotLightComponent>(spot);
+	spotLight.Range = 12;
+	spotLight.InnerAngle = 15;
+	spotLight.OuterAngle = 30;
+	spotLight.ShadowResolution = 512;
+	const String text = SceneSerializer::SaveToString(*world.Get());
+
+	StrongObjectPtr<World> loaded(NewObject<World>());
+	FP_EXPECT(SceneSerializer::LoadFromString(*loaded.Get(), text.View()));
+	const auto& loadedPoint = loaded->Get<PointLightComponent>(loaded->FindEntityByName("Point"));
+	const auto& loadedSpot = loaded->Get<SpotLightComponent>(loaded->FindEntityByName("Spot"));
+	FP_EXPECT(loadedPoint.CastShadows && loadedPoint.ShadowResolution == 256 && loadedPoint.ShadowStrength == 0.7f);
+	FP_EXPECT(loadedSpot.CastShadows && loadedSpot.Range == 12 && loadedSpot.InnerAngle == 15);
+	FP_EXPECT(loadedSpot.OuterAngle == 30 && loadedSpot.ShadowResolution == 512);
 }
 
 FP_TEST(Scene_CopiesOneEntity)

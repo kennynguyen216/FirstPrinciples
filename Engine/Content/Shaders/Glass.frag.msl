@@ -55,8 +55,10 @@ struct FrameData
     int4 LightCount;
     float4 LightPosition[16];
     float4 LightColor[16];
-    float4x4 ShadowMatrix;
-    float4 ShadowParams;
+    float4 LightDirection[16];
+    float4 LightCone[16];
+    float4x4 ShadowMatrix[8];
+    float4 ShadowParams[3];
 };
 
 struct MaterialData
@@ -68,7 +70,7 @@ struct MaterialData
     float4 Params2;
 };
 
-constant spvUnsafeArray<float2, 8> _501 = spvUnsafeArray<float2, 8>({ float2(0.707099974155426025390625), float2(-0.707099974155426025390625, 0.707099974155426025390625), float2(0.707099974155426025390625, -0.707099974155426025390625), float2(-0.707099974155426025390625), float2(1.0, 0.0), float2(-1.0, 0.0), float2(0.0, 1.0), float2(0.0, -1.0) });
+constant spvUnsafeArray<float2, 8> _539 = spvUnsafeArray<float2, 8>({ float2(0.707099974155426025390625), float2(-0.707099974155426025390625, 0.707099974155426025390625), float2(0.707099974155426025390625, -0.707099974155426025390625), float2(-0.707099974155426025390625), float2(1.0, 0.0), float2(-1.0, 0.0), float2(0.0, 1.0), float2(0.0, -1.0) });
 
 struct main0_out
 {
@@ -91,10 +93,10 @@ float3 ApplyNormalMap(thread const float3& normal, thread const float4& tangent,
     float3 t = fast::normalize(tangent.xyz - (n * dot(n, tangent.xyz)));
     float3 b = cross(n, t) * tangent.w;
     float3 local = (sampled * 2.0) - float3(1.0);
-    float3 _122 = local;
-    float2 _124 = _122.xy * strength;
-    local.x = _124.x;
-    local.y = _124.y;
+    float3 _127 = local;
+    float2 _129 = _127.xy * strength;
+    local.x = _129.x;
+    local.y = _129.y;
     return fast::normalize(((t * local.x) + (b * local.y)) + (n * local.z));
 }
 
@@ -131,6 +133,12 @@ void GetLight(thread const int& i, thread const float3& worldPosition, thread fl
     float ratio = _distance / fast::max(color.w, 9.9999997473787516355514526367188e-05);
     float window = fast::clamp(1.0 - (((ratio * ratio) * ratio) * ratio), 0.0, 1.0);
     radiance = ((color.xyz * window) * window) / float3((_distance * _distance) + 1.0);
+    if (position.w > 1.5)
+    {
+        float cosine = dot(-toLight, fast::normalize(Frame.LightDirection[i].xyz));
+        float2 cone = Frame.LightCone[i].xy;
+        radiance *= smoothstep(cone.y, fast::max(cone.x, cone.y + 9.9999997473787516355514526367188e-05), cosine);
+    }
 }
 
 static inline __attribute__((always_inline))
@@ -199,7 +207,7 @@ fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Materi
     {
         for (int i = 0; i < 8; i++)
         {
-            behind += SceneColor.sample(SceneColorSmplr, (screenUV + (_501[i] * blur))).xyz;
+            behind += SceneColor.sample(SceneColorSmplr, (screenUV + (_539[i] * blur))).xyz;
         }
         behind /= float3(9.0);
     }

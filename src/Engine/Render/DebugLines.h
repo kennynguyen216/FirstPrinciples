@@ -25,6 +25,9 @@ namespace FP
 		// Box from local min to max, placed by transform.
 		void AddBox(const Mat4& transform, Vec3 min, Vec3 max, Color color);
 
+		// Outline a camera's clip volume. Also shows a frame when viewed from that camera.
+		void AddFrustum(const RenderView& camera, Color color);
+
 		// Grid on the y = 0 floor around center. X axis red, Z axis blue.
 		void AddGrid3D(Vec3 center, float extent, float step);
 

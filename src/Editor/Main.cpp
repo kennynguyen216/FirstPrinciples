@@ -1,4 +1,5 @@
 #include "Editor/ContentBrowser.h"
+#include "Editor/MeshletDebugWidget.h"
 #include "Editor/EditorStyle.h"
 #include "Editor/EditorWindow.h"
 #include "Editor/ScriptBuilder.h"
@@ -13,6 +14,7 @@
 #include <SDL3/SDL.h>
 
 #include <QApplication>
+#include <QDialog>
 #include <QTimer>
 
 int main(int argc, char** argv)
@@ -53,10 +55,11 @@ int main(int argc, char** argv)
 		FP::Editor::EditorWindow window(*device, audio);
 		window.show();
 
-		// Smoke test flags. --scene path opens a scene relative to Content, --2d or --3d picks the view,
-		// --viewmode lit, unlit or wireframe picks the shading,
-		// --select Name picks an entity, --play starts play mode and --screenshot out.png grabs the
-		// window after a second and quits.
+		// Smoke test flags. --scene path opens a scene relative to Content.
+		// --2d or --3d picks the view and --viewmode picks the shading.
+		// --select Name picks an entity.
+		// --play starts the game. --pause holds it and --step advances one frame.
+		// --profiler opens the timing panel. --screenshot out.png saves the window and quits.
 		const QStringList args = QApplication::arguments();
 		const int sceneIndex = static_cast<int>(args.indexOf("--scene"));
 		if (sceneIndex >= 0 && sceneIndex + 1 < args.size())
@@ -91,8 +94,22 @@ int main(int argc, char** argv)
 			window.Select(window.GetWorld().FindEntityByName(args[selectIndex + 1].toUtf8().constData()));
 		if (args.contains("--play"))
 			window.Play();
+		if (args.contains("--pause"))
+			window.SetPaused(true);
+		if (args.contains("--step"))
+			window.StepFrame();
+		if (args.contains("--profiler"))
+			window.ShowProfiler();
 		if (args.contains("--audio-debugger"))
 			window.ShowAudioDebugger();
+		if (args.contains("--meshlet-debugger"))
+		{
+			if (auto* viewport = window.findChild<FP::Editor::ViewportWidget*>())
+			{
+				viewport->GetRenderer()->GetMeshletSettings().Colorize = args.contains("--meshlet-colors");
+				FP::Editor::ShowMeshletDebugger(*viewport, &window);
+			}
+		}
 		// --new-script Name writes a script from the template, then builds like --build-scripts.
 		const int newScriptIndex = static_cast<int>(args.indexOf("--new-script"));
 		if (newScriptIndex >= 0 && newScriptIndex + 1 < args.size() && !window.NewScript(args[newScriptIndex + 1]))
@@ -141,6 +158,7 @@ int main(int argc, char** argv)
 			const int waitMs = waitIndex >= 0 && waitIndex + 1 < args.size() ? static_cast<int>(args[waitIndex + 1].toDouble() * 1000) : 1000;
 			QTimer::singleShot(waitMs, &window, [&window, path]() {
 				window.grab().save(path);
+				if (auto* debugger = window.findChild<QDialog*>("MeshletDebugger")) debugger->grab().save(path + ".meshlets.png");
 				FP_LOG("Saved screenshot %s", path.toUtf8().constData());
 				// Quitting closes the window, which would offer to save. Test runs must never save.
 				window.DiscardUnsavedChanges();

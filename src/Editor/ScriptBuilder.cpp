@@ -159,7 +159,7 @@ FP_SCRIPT(NAME);
 		return files;
 	}
 
-	bool ScriptBuilder::PlanSteps(QList<Step>& steps, const QString& projectDir, const QString& target, bool regenerate)
+	bool ScriptBuilder::PlanSteps(QList<Step>& steps, const QString& projectDir, const QString& target, bool regenerate, bool release)
 	{
 		const QString root = RootDir();
 		const QString buildDir = projectDir + "/Build";
@@ -168,7 +168,10 @@ FP_SCRIPT(NAME);
 #if defined(_WIN32)
 		// The solution format tells which Visual Studio generated it. A project without one
 		// matches the open project's.
-		const QString name = QDir(projectDir).dirName();
+		Project project;
+		if (!project.Load(projectDir.toUtf8().constData()))
+			return false;
+		const QString name = QString::fromUtf8(project.Name.CStr());
 		const QString current = BuildDir() + "/" + QDir(ProjectDir()).dirName();
 		const bool vs2026 = QFileInfo::exists(buildDir + "/" + name + ".slnx")
 			|| (!QFileInfo::exists(buildDir + "/" + name + ".sln") && QFileInfo::exists(current + ".slnx"));
@@ -180,12 +183,12 @@ FP_SCRIPT(NAME);
 		}
 		if (regenerate)
 			steps.append({ root + "/ThirdParty/premake/premake5.exe", premakeArgs + QStringList{ vs2026 ? "vs2026" : "vs2022" } });
-		const QString config = FP_BUILD_DEBUG ? "Debug" : "Release";
+		const QString config = release || !FP_BUILD_DEBUG ? "Release" : "Debug";
 		steps.append({ FindMSBuild(), { solution, "/t:" + target, "/p:Configuration=" + config, "/p:Platform=x64", "/m", "/nologo", "/v:minimal" } });
 #else
 		if (regenerate)
 			steps.append({ FindProgram("premake5"), premakeArgs + QStringList{ "gmake" } });
-		const QString config = FP_BUILD_DEBUG ? "debug" : "release";
+		const QString config = release || !FP_BUILD_DEBUG ? "release" : "debug";
 		steps.append({ FindProgram("make"), { "-C", buildDir, target, "config=" + config, QString("-j%1").arg(QThread::idealThreadCount()) } });
 #endif
 		return true;
@@ -198,6 +201,34 @@ FP_SCRIPT(NAME);
 #else
 		return projectDir + (FP_BUILD_DEBUG ? "/Binaries/Debug/Editor" : "/Binaries/Release/Editor");
 #endif
+	}
+
+	void ScriptBuilder::Package(const QString& output)
+	{
+		if (m_Process)
+		{
+			FP_LOG_WARN("Wait for the current build to finish first.");
+			return;
+		}
+		m_Steps.clear();
+		m_RegeneratedThisBuild = false;
+		if (!PlanSteps(m_Steps, ProjectDir(), "Runtime", true, true)
+			|| !PlanSteps(m_Steps, ProjectDir(), "PackageTool", false, true))
+		{
+			m_Steps.clear();
+			emit Packaged(false, output);
+			return;
+		}
+#if defined(_WIN32)
+		const QString tool = ProjectDir() + "/Binaries/Release/PackageTool.exe";
+#else
+		const QString tool = ProjectDir() + "/Binaries/Release/PackageTool";
+#endif
+		m_Steps.append({ tool, { RootDir(), ProjectDir(), output } });
+		m_PackageOutput = output;
+		FP_LOG("Packaging Release build to %s", output.toUtf8().constData());
+		emit Started();
+		RunNext();
 	}
 
 	void ScriptBuilder::BuildProject(const QString& projectDir)
@@ -325,7 +356,17 @@ FP_SCRIPT(NAME);
 				stamp.write(ListScriptFiles().join('\n').toUtf8());
 		}
 		m_Steps.clear();
-		if (!m_OtherProject.isEmpty())
+		if (!m_PackageOutput.isEmpty())
+		{
+			const QString output = m_PackageOutput;
+			m_PackageOutput.clear();
+			if (ok)
+				FP_LOG("Packaged game: %s", output.toUtf8().constData());
+			else
+				FP_LOG_ERROR("Packaging failed. The Output Log has the errors.");
+			emit Packaged(ok, output);
+		}
+		else if (!m_OtherProject.isEmpty())
 		{
 			const QString projectDir = m_OtherProject;
 			m_OtherProject.clear();

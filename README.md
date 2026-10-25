@@ -25,6 +25,10 @@ go in `Projects/Sample/Build` and everything builds into `Projects/Sample/Binari
 for an optimised build, and a project folder to build another one, like `Scripts/Build.sh debug Projects/MyGame`.
 For Xcode run `Scripts/GenerateXcode.sh` instead.
 
+If an incremental build reports missing symbols after a merge or branch switch, run
+`Scripts/Build.sh debug Projects/Sample --clean`. This removes cached output for the selected
+configuration before rebuilding. Source files and content are kept.
+
 ### Windows
 
 1. Install Visual Studio 2022 or 2026 (the IDE or Build Tools) with the "Desktop development with C++" workload.
@@ -47,6 +51,50 @@ Scripts\GenerateProjects.bat
 run `msbuild Projects\Sample\Build\Sample.slnx /m /p:Configuration=Debug /p:Platform=x64` from its Developer
 PowerShell or Developer Command Prompt (use `.sln` for VS 2022). Use `Configuration=Release` for an optimised build.
 Run `powershell -ExecutionPolicy Bypass -File Scripts\TestGenerateProjects.ps1` to check Windows project generation.
+
+## Packaging a game
+
+Use **File > Package Game > macOS (Release)** or **Windows (Release)** in the editor and choose
+an output folder. The target for the other operating system is disabled. Build on macOS for a macOS
+app and on Windows for a Windows game. Packaging needs the same compiler, Premake and Qt setup as
+building the editor. The first Release build can take a few minutes. Progress and errors appear in
+the Output Log, and the editor shows the result when packaging finishes.
+
+The build uses the project's `StartScene`. Save scene, material and script changes before packaging.
+The editor offers to save unsaved scenes and scripts. Packaging builds the Release runtime and
+`GameScripts`, then puts them together with their required libraries and Ultralight resources.
+macOS produces `<Project>.app` and Windows produces a `<Project>-Windows` folder with `Runtime.exe`.
+The output must be new so an earlier build is never overwritten. Copy the whole app or folder to
+another machine of the same operating system and architecture.
+
+Project `Content` and `Engine/Content` are cooked into `Content.pak`. The cooker stores all files,
+including model buffers, textures, audio, scenes, materials, web pages and compiled shaders, with
+relative paths and per-file checksums. It preserves their existing runtime formats and does not
+compress them or remove unreferenced assets. Symlinks, unsafe paths and names that differ only by
+ASCII case are rejected. Game code is linked into the runtime and C++ scripts go into `GameScripts`.
+Source code, build tools and editor binaries are left out of the package.
+
+At launch the runtime verifies and unpacks the archive into a private directory under the user's
+application data folder. All asset loaders and scripts use that content directory, which is removed
+on normal exit. Use `Paths::GetSavedDir()` for writable saved data outside the app. Runtime logs go there too.
+Each running game gets its own content directory.
+This also lets audio streaming, glTF external files and relative web resources use their normal file
+access. A corrupt archive or a missing script library stops a packaged game at startup.
+
+The macOS packager copies the library dependency tree, rewrites library paths and applies local
+ad hoc signatures. Public distribution still needs your own signing and notarization. Windows
+collects imported DLLs and the installed x64 MSVC redistributable libraries. Qt is used by the
+packaging tool and is not included in the game.
+
+After generating projects, packaging is also available from the command line. Build `Runtime` and
+`PackageTool` in Release first, then run:
+
+```bash
+Projects/Sample/Binaries/Release/PackageTool "$PWD" "$PWD/Projects/Sample" /path/to/Sample.app
+```
+
+On Windows use `PackageTool.exe` and a new output folder instead of an `.app` path. Run `Tests Pak`
+for archive format, corruption and path validation tests.
 
 ## Projects
 
@@ -109,7 +157,9 @@ Game code lives in your project's `Source` folder. The editor and the runtime bo
    `FP::Input::IsKeyDown(SDL_SCANCODE_SPACE)`.
 
 5. **Scenes** live in the project's `Content/Scenes`. Build them in the editor and press Play to run your systems.
-   Stop restores the scene. `Runtime` plays `Game::StartScene` or a scene passed on the command line.
+   Pause holds the current game state and audio. Step advances one 1/60-second game frame while
+   remaining paused. Resume continues play. Stop restores the scene.
+   `Runtime` plays `Game::StartScene` or a scene passed on the command line.
 
 Textures are `.png`, `.jpg`, `.tga` or `.bmp` files under `Content/`. Use the `...` button next to a texture
 field to pick one.
@@ -335,6 +385,7 @@ that `FP_SCRIPT` registers. There is nothing to list by hand.
 | Parents | `GetParent()`, `GetChildren()`, `FindChild(name, recursive)`, `SetParent(entity)`, `AddChild(entity)` |
 | World space | `GetWorldPosition()`, `SetWorldPosition(position)`, `GetWorldRotation()` |
 | Timers | `After(seconds, fn)`, `Every(seconds, fn)`, `CancelTimer(id)`, `CancelAllTimers()` |
+| Saving | `SaveData` holds typed values. `Save(slot)`, `Load(slot)`, `Exists(slot)`, `Delete(slot)` |
 | Physics | `AddForce(force)`, `AddImpulse(impulse)`, `AddForceAtPoint`, `AddImpulseAtPoint`, `GetVelocity()`, `SetVelocity(velocity)`, `GetMass()`, `GetPhysics()` for the rest |
 | Characters | `Move(velocity)` every frame, `Jump(speed)`, `IsGrounded()` |
 | Particles | `EmitParticles(count)` bursts from this entity's emitter, or another's |
@@ -390,6 +441,59 @@ they read zero at rest.
 
 `SpawnScene` copies every entity in a scene file with new ids, so any scene works as a prefab and
 can be spawned many times. Timers stop when the script stops or reloads.
+
+**Saving and loading**
+
+`SaveData` saves progress and settings as named values. It is available from `Script.h`, or
+include `Engine/SaveData.h` in other game code. Use a separate slot for each profile or purpose:
+
+```cpp
+SaveData progress;
+progress.SetInt("score", Score);
+progress.SetVec3("position", GetWorldPosition());
+if (!progress.Save("player-1"))
+    FP_LOG_WARN("Could not save progress");
+
+SaveData loaded;
+if (loaded.Load("player-1"))
+{
+    Score = loaded.GetInt("score", 0);
+    SetWorldPosition(loaded.GetVec3("position", GetWorldPosition()));
+}
+
+SaveData settings;
+settings.Load("settings");
+float volume = settings.GetFloat("volume", 1.0f);
+settings.SetFloat("volume", volume);
+if (!settings.Save("settings"))
+    FP_LOG_WARN("Could not save settings");
+```
+
+Use `SetBool`, `SetInt`, `SetFloat`, `SetVec2`, `SetVec3`, `SetColor` and `SetString`, with matching
+`Get` functions. Getters return the fallback when a key is missing or has another type. This lets
+new settings have defaults when loading older saves. `Has(key)`, `Remove(key)`, `Clear()` and `Num()`
+inspect and edit the values. `SaveData::Exists(slot)` checks for a file and `SaveData::Delete(slot)`
+removes one. An existing file can still fail to load if it is damaged.
+
+Slot names use 1 to 64 lowercase letters, digits, underscores or hyphens. Files are readable text
+with a format version and keep their value types. Each project name gets its own folder under
+the current user's application data, so saves work when the game is installed in a read only
+folder. `Paths::GetSaveDir()` gives the folder. On macOS it is
+`~/Library/Application Support/FirstPrinciples/<ProjectName>/Saves`. On Windows it is under
+`%APPDATA%/FirstPrinciples/<ProjectName>/Saves`. Editor play and the runtime share these saves,
+including across script reloads. Projects with the same name share saves.
+
+Save and load calls are synchronous and return `false` on failure. A failed load leaves the
+current values alone. Saving writes and flushes a temporary file before replacing the previous
+save. Invalid slot names, nonfinite numbers, unsupported format versions and files over 16 MiB
+are rejected. `SaveToString()` and `LoadFromString(text)` use the same format in memory, and
+`SaveToFile(path)` and `LoadFromFile(path)` accept explicit paths for tools. Save at checkpoints
+or when settings change, since disk access can stall a frame. SaveData does not capture the
+world or script fields automatically.
+
+The Sample project's `Checkpoint` script saves a player's position and score. Attach it to an
+entity and use **Save Progress** and **Load Progress** in Details while playing. It loads its
+slot at play start. Run `Projects/Sample/Binaries/Debug/Tests Save_` for the save tests.
 
 **Scene scripts**
 
@@ -604,18 +708,21 @@ down their local -Z axis.
 
 ### Shadows
 
-The first `DirectionalLight` with `CastShadows` on casts shadows from meshes and skeletal meshes onto
-anything using the `Lit` shader. Glass sections do not cast. It is kept cheap:
+The first shadow enabled `DirectionalLight`, `SpotLight`, and `PointLight` of each type cast shadows
+from meshes and skeletal meshes onto anything using the `Lit` shader. Glass sections do not
+cast. Each type has its own shadow maps, so a directional, spot, and point light can cast together.
+Point lights render six depth views to cover all directions. Spot lights render one cone view.
 
-- One small shadow map, `ShadowResolution` pixels square (1024 by default) in 16 bit depth.
-- It covers only `ShadowDistance` world units just ahead of the camera, so nearby shadows get the
-  detail. Meshes outside that box are skipped before drawing.
+- Each map is `ShadowResolution` pixels square (1024 for directional and spot, 512 for point) in 16 bit depth.
+- Directional shadows cover `ShadowDistance` world units just ahead of the camera. Point and spot
+  shadows cover their light's `Range`. Meshes outside each region are skipped before drawing.
 - Edges are softened by four hardware filtered taps instead of many manual ones.
-- The box snaps to whole shadow pixels so edges stay still while the camera moves.
+- The directional box snaps to whole shadow pixels so edges stay still while the camera moves.
 - Scenes with no meshes, and the Unlit and Wireframe view modes, skip the pass.
 
-Lower `ShadowResolution` for speed and softer edges, or lower `ShadowDistance` for sharper shadows
-close up. `ShadowStrength` fades them. Point lights do not cast shadows.
+Lower `ShadowResolution` for speed and softer edges. For directional lights, lower `ShadowDistance`
+for sharper shadows close up. For point and spot lights, `Range` bounds the shadowed region.
+`InnerAngle` and `OuterAngle` control the spot cone. `ShadowStrength` fades shadows for each light.
 
 ### Skeletal meshes and animation
 
@@ -673,14 +780,18 @@ The editor follows Unreal Engine 5's layout and dark theme, using this engine's 
 - **Hierarchy** lists every entity nested under its parent with its type, plus a search box. The scene row at the top holds scene scripts.
 - Drag a panel by its title to move it, or drop it on another panel to share a spot as tabs. Pull a tab
   out to separate it again. **Window** reopens closed panels and **Reset Layout** puts everything back.
-- **Content Browser** and **Output Log** share the bottom. The status bar has buttons for both and a
-  console box: type `help` for the commands (play, stop, save, undo, redo, gc, 2d, 3d, viewmode,
-  select, create).
+- **Content Browser**, **Output Log** and **Profiler** share the bottom. The profiler shows each
+  system's last and smoothed average CPU update time, plus the total game update time. Rendering and
+  editor UI time are not included. The status bar opens each panel and has a console box: type
+  `help` for commands including play, pause, resume, step and stop.
 
 ### Content browser
 
 The **Content Browser** tab next to the **Output Log** at the bottom of the editor shows everything in
-the project's `Content` plus its scripts in `Source/Scripts`. Textures show thumbnails and materials show their color.
+the project's `Content` plus its scripts in `Source/Scripts`. Textures show image thumbnails with a
+checkerboard behind transparency. Materials show a lit sphere, and OBJ, glTF and GLB meshes show
+a fitted preview in their bind pose. Previews fill in as you browse, with type icons for unreadable assets.
+Changes to assets or their texture and buffer files refresh the thumbnails automatically.
 
 - Double click a scene to open it or a script to edit it in a tab. Click a material to edit it in
   the Details panel, or a texture to preview it.
@@ -848,6 +959,9 @@ FP::JobSystem::ParallelFor(enemyCount, 32, [&](int32 i) { UpdateEnemy(i); });
 | Delete | Delete or Backspace |
 | Undo / redo | Ctrl+Z / Ctrl+Shift+Z |
 | Play | Ctrl+P |
+| Pause / resume | Ctrl+Shift+P or the toolbar button. The game camera stays visible |
+| Step one frame | F10 while paused |
+| System profiler | Profiler button in the status bar or Window > Profiler |
 | New script / reload scripts | Scripts menu / Ctrl+R |
 | Save | Ctrl+S |
 
@@ -888,15 +1002,73 @@ Scripts/CompileShaders.sh
 
 On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\CompileShaders.ps1`.
 
+### Meshlets and visibility debugging
+
+Every mesh upload (primitives, OBJ, and glTF) builds clusters using meshoptimizer v0.25.
+Clusters have at most 32 vertices and 60 triangles, preserve material sections and triangle
+winding, and keep original vertex indices so skeletal weights remain aligned. Meshes are cached
+by path; uploading a shared mesh builds its clusters once. The smaller clusters give occlusion
+tighter bounds, trading more cluster metadata and indirect commands for finer rejection.
+
+Static opaque meshes use compute frustum and occlusion culling followed by indexed indirect
+main-pass draws. A current-frame depth prepass feeds an 8x8 max-depth tile buffer. A cluster is
+occluded only when every tile touched by its projected bounds is nearer than the entire cluster.
+Near-plane crossings, partially filled edge tiles, and very large projected bounds fail open.
+This avoids stale visibility after camera/object movement and supports orthographic cameras.
+The depth prepass still submits full occluder geometry; the counters describe the main pass,
+not total frame geometry or a guaranteed speedup. Shadows retain their existing draws.
+
+Open **Window > Nanite / Meshlet Debugger** for an ImGui window with:
+
+- Enable, frustum, and compute occlusion toggles to compare with full mesh rendering.
+- **Color meshlets** for stable colors per cluster.
+- **Show outside camera** (on when the debugger opens) widens the observer view by 1.35x while
+  culling continues from the original camera. The yellow frame marks that camera's frustum, so
+  you can see meshlets crossing its edges in real time. Adjust **Observer width** for more context;
+  closing the debugger restores the normal viewport. Picking and gizmos use the wider view too.
+- **Freeze culling camera** to hold visibility at a captured viewpoint while moving the editor camera.
+  The yellow outline then shows the frozen camera's volume from your new viewpoint.
+- A live viewport preview, plus asynchronous GPU counts of visible, frustum-rejected and occluded
+  meshlets and main-pass triangles. Counts are from the last completed readback.
+
+Open `Scenes/Meshlets.scene` in the Sample project and press Play to see the demo camera.
+Nine spheres sit behind a movable wall, three sit in front, and two sit outside the camera.
+In edit mode, hold right mouse and use WASD in the viewport to move the live camera. The yellow
+frame and culling update together; meshlets outside the frame disappear while clusters that cross
+its edges remain visible. Disable **Frustum culling** to compare the surrounding geometry.
+Freeze the culling camera to inspect its results from another viewpoint, or move the wall to watch
+occlusion update. Camera movement does not require freezing.
+The feature works in the Runtime too; the debugger is editor-only. For a reproducible editor smoke test:
+
+```bash
+Projects/Sample/Binaries/Debug/Editor --scene Scenes/Meshlets.scene --3d --play --meshlet-debugger --meshlet-colors --screenshot /tmp/meshlets.png --wait 3
+Projects/Sample/Binaries/Debug/Tests Meshlet
+```
+
+The screenshot command also saves the debugger as `/tmp/meshlets.png.meshlets.png`.
+
+This is a meshlet visibility implementation, with no hierarchical LOD selection, streaming, or
+virtualized geometry yet. Animated meshes build meshlets but keep full draws until deformation-aware
+bounds are available. Glass and sprites keep their existing paths. Alpha-cutout materials are not
+used as occluders, and wireframe disables occlusion. If compute pipelines or buffers cannot be
+created, rendering falls back to ordinary indexed draws. The debug window uses the editor's
+existing GPU-to-Qt readback approach; close it when measuring rendering performance.
+
+The shader scripts build both Vulkan SPIR-V and Metal MSL, including `.comp` files. Compute sources
+use `FP_METAL` for SDL's different Metal buffer binding order; only the MSL compilation defines it.
+The committed Vulkan SPIR-V uses SDL's normal descriptor sets. See
+[SDL compute binding conventions](https://wiki.libsdl.org/SDL3/SDL_CreateGPUComputePipeline).
+
 ## Build targets
 
 | Target | What it is |
 |---|---|
 | Engine | Static lib with `src/HAL`, `src/Core`, `src/CoreObject` and `src/Engine` |
-| ImGui | Dear ImGui core, widgets, tables, drawing and demo from the docking branch |
+| ImGui | Dear ImGui core, demo and SDL_GPU renderer backend from the docking branch |
 | Game | The project's components and systems (`Source`) |
 | Editor | Qt editor |
 | Runtime | Standalone player for a scene |
+| PackageTool | Cooks content and stages a Release game for distribution |
 | GameScripts | Hot reloadable C++ scripts (`Source/Scripts`) |
 | Tests | Unit tests. Run `Projects/Sample/Binaries/Debug/Tests [filter]` |
 
@@ -911,6 +1083,7 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 | [dr_mp3](https://github.com/mackron/dr_libs) (public domain or MIT-0) | MP3 decoding | Git submodule in `ThirdParty/dr_libs`, pinned to `bad753d5ade4f30e40fcf80a757210b650681f8f` |
 | [Monocypher](https://monocypher.org) | Key exchange and encryption for network packets | Git submodule in `ThirdParty/monocypher` |
 | [spdlog](https://github.com/gabime/spdlog) | Logging to the console, files and the editor | Git submodule in `ThirdParty/spdlog` |
+| [meshoptimizer](https://github.com/zeux/meshoptimizer) v0.25 (MIT) | Automatic meshlet construction and index cache optimization | Git submodule in `ThirdParty/meshoptimizer`, pinned to `6daea4695c48338363b08022d2fb15deaef6ac09` |
 | [cgltf](https://github.com/jkuhlmann/cgltf) | glTF loading for skeletal meshes and animations | Git submodule in `ThirdParty/cgltf` |
 | [Jolt Physics](https://github.com/jrouwe/JoltPhysics) 5.6 | Rigid body physics, collisions and raycasts | Git submodule in `ThirdParty/JoltPhysics`, built as the `Jolt` project |
 | [Ultralight](https://ultralig.ht) 2.0 beta | Game UI in HTML, CSS and JavaScript | Binary SDK downloaded by `Scripts/GetUltralight.sh` or `.ps1` into `ThirdParty/Ultralight`. Optional: without it game UI draws nothing |
@@ -919,9 +1092,9 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 The ImGui submodule includes the complete upstream repository: core, demo, backends, examples,
 fonts, documentation and MIT license. Its commit is pinned by this repository. The `ImGui` static
 library builds every core source including `imgui_demo.cpp` and is linked through `UseEngine`;
-engine and game targets can include `imgui.h`. Backends and examples remain available in the
-submodule but are not compiled into the engine. Window, input and renderer integration is still
-required before displaying ImGui in an application. The editor currently uses Qt.
+engine and game targets can include `imgui.h`. The SDL_GPU renderer backend is also compiled.
+The meshlet debugger hosts ImGui in a Qt window, forwards mouse input, and renders into an offscreen
+GPU target. The rest of the editor remains Qt. Other backends and examples are not built.
 Run `Projects/Sample/Binaries/Debug/Tests ImGui` for the headless docking and demo smoke test.
 
 ## Known limitations

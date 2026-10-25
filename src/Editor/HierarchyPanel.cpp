@@ -24,6 +24,7 @@ namespace FP::Editor
 		{
 			if (type == "Camera") return EditorIcon::Camera;
 			if (type == "Point Light") return EditorIcon::PointLight;
+			if (type == "Spot Light") return EditorIcon::DirectionalLight;
 			if (type == "Directional Light") return EditorIcon::DirectionalLight;
 			if (type == "Ambient Light") return EditorIcon::AmbientLight;
 			if (type == "Mesh" || type == "Skeletal Mesh") return EditorIcon::Mesh;
@@ -131,6 +132,7 @@ namespace FP::Editor
 	{
 		if (world.Has<CameraComponent>(entity)) return "Camera";
 		if (world.Has<PointLightComponent>(entity)) return "Point Light";
+		if (world.Has<SpotLightComponent>(entity)) return "Spot Light";
 		if (world.Has<DirectionalLightComponent>(entity)) return "Directional Light";
 		if (world.Has<AmbientLightComponent>(entity)) return "Ambient Light";
 		if (world.Has<MeshComponent>(entity)) return "Mesh";
