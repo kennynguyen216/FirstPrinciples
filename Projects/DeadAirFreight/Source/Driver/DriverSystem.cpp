@@ -119,20 +119,20 @@ void DriverSystem::OnStart(World& world)
 		m_RockEntities.push_back(entity);
 	}
 
-	// Placeholders: a black core inside a see-through ring that marks where the slingshot charges.
+	// The engine's lensed black hole, as in Sample's BlackHole.scene. Its shadow (about 2.6 horizon radii)
+	// is the core that spits you out, and the accretion disk reaches out to the ring where the slingshot charges.
 	m_BlackHoles = BuildBlackHoles(m_Package, m_Route, m_Settings);
-	auto addSphere = [&](Vec3 position, float radius, const char* material) {
-		const Entity entity = world.CreateEntity("BlackHole");
-		TransformComponent& transform = world.Get<TransformComponent>(entity);
-		transform.Position = position;
-		transform.Scale = Vec3{ 1, 1, 1 } * (radius * 2);
-		world.Add<MeshComponent>(entity).Mesh = "Sphere";
-		world.Add<MaterialComponent>(entity).Material = material;
-	};
 	for (const BlackHole& hole : m_BlackHoles)
 	{
-		addSphere(hole.Position, hole.CoreRadius, "Materials/BlackHole.material");
-		addSphere(hole.Position, hole.RingRadius, "Materials/BlackHoleRing.material");
+		const Entity entity = world.CreateEntity("BlackHole");
+		world.Get<TransformComponent>(entity).Position = hole.Position;
+		BlackHoleComponent& lens = world.Add<BlackHoleComponent>(entity);
+		lens.SchwarzschildRadius = hole.CoreRadius / 2.6f;
+		lens.SpeedOfLight = 20;
+		lens.DiskOuterRadius = hole.RingRadius;
+		lens.DiskTemperature = 4500;
+		lens.DiskBrightness = 1.5f;
+		lens.LastPosition = hole.Position;
 	}
 
 	m_Driver = FindOrNull(world, "Driver");
