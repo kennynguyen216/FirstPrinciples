@@ -451,6 +451,12 @@ namespace FP::Editor
 			window->addAction(toggle);
 		}
 		window->addSeparator();
+		// Hides the buttons over the viewport, for an unobstructed view.
+		QAction* overlay = window->addAction("Viewport &Toolbar");
+		overlay->setCheckable(true);
+		overlay->setChecked(true);
+		overlay->setShortcut(QKeySequence("Ctrl+Shift+H"));
+		connect(overlay, &QAction::toggled, m_ViewportToolbar, &QWidget::setVisible);
 		window->addAction("Nanite / Meshlet Debugger", this, [this]() { ShowMeshletDebugger(*m_Viewport, this); });
 		window->addAction("Audio Debugger", this, &EditorWindow::ShowAudioDebugger);
 		window->addAction("&Reset Layout", this, &EditorWindow::ResetLayout);
