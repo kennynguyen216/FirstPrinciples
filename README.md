@@ -911,6 +911,13 @@ metadata, unsafe paths and names that differ only by case. The Output Log includ
 asset path. Packaging runs the same validation before staging a game. Cooked content includes the
 metadata, and the runtime reads it without writing into Content.
 
+Editor refreshes reuse source hashes when file size and modification time are unchanged. File-change
+notifications invalidate the affected source, including edits that preserve timestamps. Metadata and
+dependencies are still checked on every refresh. **Validate**, CLI validation and packaging reread
+all source bytes. Code can choose `AssetRefreshMode::ChangedFiles` for incremental scans, call
+`Invalidate(path)` for known changes, or use the default `Refresh()` for full verification.
+`GetLastScanStats()` reports how many files and source bytes were hashed.
+
 After building, the same pipeline is available without opening the editor:
 
 ```bash
@@ -1064,6 +1071,37 @@ FP::JobSystem::ParallelFor(enemyCount, 32, [&](int32 i) { UpdateEnemy(i); });
 - Never spin inside a job waiting for the main thread. It may be the thread running that job.
 - Systems update on the main thread. Use jobs for work that does not touch the world from many
   jobs at once, such as math over arrays or loading.
+
+### Performance benchmarks
+
+Build and run the standalone CPU benchmarks in Release:
+
+```bash
+premake5 gmake
+make -C Projects/Sample/Build config=release -j8 Benchmarks
+Projects/Sample/Binaries/Release/Benchmarks
+```
+
+On Windows, build the `Benchmarks` target in Release and run `Benchmarks.exe`. The tool prints CSV,
+uses temporary assets, and reports median time per operation across seven batches. Build the same
+configuration and use the same hardware when comparing revisions.
+
+An Apple M2 run measured these changes from the engine before this optimization pass:
+
+| Operation | Before | After | Speedup |
+|---|---:|---:|---:|
+| World matrix through 128 ancestors | 0.0570 ms | 0.00600 ms | 9.5x |
+| World rotation through 128 ancestors | 0.0512 ms | 0.00258 ms | 19.9x |
+| Repeated creation-order query over 10,000 entities | 0.0750 ms | 0.00107 ms | 70.2x |
+| Query 16 children among 10,000 entities | 0.1768 ms | 0.00056 ms | 313.5x |
+| Refresh 129 unchanged assets including a 64 MiB source | 105.107 ms | 5.319 ms | 19.8x |
+| Lookup an asset fingerprint by ID | 0.661 microseconds | 0.117 microseconds | 5.6x |
+
+Hierarchy traversal is iterative with cycle detection. Creation order is sorted after structural
+changes and reused between queries. Child queries inspect parent components and sort only their
+matches. Asset ID lookups use parsed IDs and fingerprints stored directly in asset records.
+These are CPU microbenchmarks with warm filesystem caches. Frame time also depends on rendering,
+physics, audio, scene content and editor presentation.
 
 ### Editor controls
 
@@ -1240,6 +1278,7 @@ The committed Vulkan SPIR-V uses SDL's normal descriptor sets. See
 | AssetTool | Imports metadata, validates assets and lists dependencies |
 | PackageTool | Validates assets, cooks content and stages a Release game for distribution |
 | GameScripts | Hot reloadable C++ scripts (`Source/Scripts`) |
+| Benchmarks | Repeatable CPU benchmarks. Run the Release executable |
 | Tests | Unit tests. Run `Projects/Sample/Binaries/Debug/Tests [filter]` |
 | EditorTests | Input actions editor tests. Run `Projects/Sample/Binaries/Debug/EditorTests` |
 
