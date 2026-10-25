@@ -12,6 +12,7 @@
 #include "Engine/Animation/AnimationSystem.h"
 #include "Engine/Physics/PhysicsSystem.h"
 #include "Engine/UI/UISystem.h"
+#include "Engine/Particles/ParticleSystem.h"
 #include "Engine/Audio/AudioDevice.h"
 #include "Engine/Project.h"
 #include "Core/Jobs/JobSystem.h"
@@ -169,6 +170,7 @@ int main(int argc, char** argv)
 	world->AddSystem<PhysicsSystem>();
 	world->AddSystem<AnimationSystem>();
 	world->AddSystem<UISystem>();
+	world->AddSystem<ParticleSystem>();
 	Game::AddSystems(*world.Get());
 	world->BeginPlay();
 

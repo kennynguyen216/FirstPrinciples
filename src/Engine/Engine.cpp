@@ -146,6 +146,32 @@ namespace FP::Engine
 			.Field("OnePerPeer", &NetworkComponent::OnePerPeer)
 			.Field("SendRate", &NetworkComponent::SendRate);
 
+		static const Array<const char*> emitterShapes{ "Point", "Sphere", "Box" };
+		static const Array<const char*> blendModes{ "Additive", "Alpha" };
+		registry.Register<ParticleEmitterComponent>("ParticleEmitter")
+			.Field("Emitting", &ParticleEmitterComponent::Emitting)
+			.Field("Rate", &ParticleEmitterComponent::Rate).Range(0, 1000).Tooltip("Particles per second")
+			.Field("Burst", &ParticleEmitterComponent::Burst).Range(0, 1000).Tooltip("Particles all at once when play starts")
+			.Field("MaxParticles", &ParticleEmitterComponent::MaxParticles).Range(1, 10000)
+			.Field("Lifetime", &ParticleEmitterComponent::Lifetime).Range(0.01f, 30).Tooltip("Seconds each particle lives")
+			.Field("LifetimeRandom", &ParticleEmitterComponent::LifetimeRandom).Range(0, 1).Tooltip("Up to this fraction shorter")
+			.Field("Shape", &ParticleEmitterComponent::Shape).Choices(emitterShapes)
+			.Field("ShapeSize", &ParticleEmitterComponent::ShapeSize).Tooltip("Sphere radius is X, Box is full size")
+			.Field("Direction", &ParticleEmitterComponent::Direction).Tooltip("In the entity's space")
+			.Field("Spread", &ParticleEmitterComponent::Spread).Range(0, 180).Tooltip("Cone half angle in degrees, 180 sprays every way")
+			.Field("Speed", &ParticleEmitterComponent::Speed).Range(0, 100)
+			.Field("SpeedRandom", &ParticleEmitterComponent::SpeedRandom).Range(0, 1).Tooltip("Up to this fraction slower")
+			.Field("Gravity", &ParticleEmitterComponent::Gravity).Range(-5, 5).Tooltip("1 falls like everything else, negative rises")
+			.Field("Drag", &ParticleEmitterComponent::Drag).Range(0, 10)
+			.Field("StartSize", &ParticleEmitterComponent::StartSize).Range(0, 10)
+			.Field("EndSize", &ParticleEmitterComponent::EndSize).Range(0, 10)
+			.Field("StartColor", &ParticleEmitterComponent::StartColor)
+			.Field("EndColor", &ParticleEmitterComponent::EndColor)
+			.Field("Texture", &ParticleEmitterComponent::Texture).AssetPath(ImageFilter).Tooltip("A soft dot when empty")
+			.Field("Blend", &ParticleEmitterComponent::Blend).Choices(blendModes).Tooltip("Additive glows, Alpha covers")
+			.Field("WorldSpace", &ParticleEmitterComponent::WorldSpace).Tooltip("Off makes particles move with the entity")
+			.Field("DestroyWhenDone", &ParticleEmitterComponent::DestroyWhenDone).Tooltip("Removes the entity once it stops emitting and its particles are gone");
+
 		static const Array<const char*> colliderShapes{ "Box", "Sphere", "Capsule", "Mesh" };
 		registry.Register<ColliderComponent>("Collider")
 			.Field("Shape", &ColliderComponent::Shape).Choices(colliderShapes)
