@@ -370,7 +370,7 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 	const bool scrubberWasBroken = life.ScrubberBroken;
 	if (m_Net.Authority)
 	{
-		StepTruck(truck, controls, { m_WindNow, m_KpNow }, GetDisturbanceScale(life, m_Settings), m_Settings, deltaTime);
+		StepTruck(truck, controls, { m_WindNow, m_KpNow }, m_Calm ? 0 : GetDisturbanceScale(life, m_Settings), m_Settings, deltaTime);
 		if (CollideWithRocks(truck, m_Rocks, truck.Time, m_Settings))
 		{
 			const bool fixBanked = life.AutoFix;

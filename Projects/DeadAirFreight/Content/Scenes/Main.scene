@@ -9,14 +9,13 @@ component Transform
   Rotation 0 0 0
   Scale 3.5 3.5 3.5
 component Mesh
-  Mesh "asset://b387b5b4-2d15-4dd8-b6a1-0daf889793a9"
+  Mesh "asset://24abdd49-3ea4-4318-a748-1746eb05a844"
 component Material
   Material "asset://af74972f-146e-4dae-9b52-b18c6cde65e9"
   Slot 1 "asset://7303a9e2-94c8-4c81-bebe-82097f9d2751"
-  Slot 2 "asset://01ef0c0a-d089-45f0-9b24-e476d51425b1"
-  Slot 3 "asset://86a0a5e4-3b75-4b8c-a8a7-32603315f303"
-  Slot 4 "asset://77de1503-2db1-4dfd-9c38-30a87f37a514"
-  Slot 5 "asset://e19d5e2f-bd4a-4f30-87e9-c3e7e14dc524"
+  Slot 2 "asset://86a0a5e4-3b75-4b8c-a8a7-32603315f303"
+  Slot 3 "asset://77de1503-2db1-4dfd-9c38-30a87f37a514"
+  Slot 4 "asset://e19d5e2f-bd4a-4f30-87e9-c3e7e14dc524"
 
 entity 498ad1e0-20b3-43f7-8c15-2f066b7eb746
 component Name
