@@ -780,7 +780,7 @@ entity ac00571c-0000-4000-8000-000000000031
 component Name
   Name "Moving Doppler emitter"
 component Transform
-  Position 24 1.7 2
+  Position 12 1.7 18
   Rotation 0 0 0
   Scale 1.2 1.2 1.2
 component Mesh
@@ -788,10 +788,10 @@ component Mesh
 component Material
   Material "Materials/Acoustics/DopplerEmitter.material"
 component MovingAudio
-  Distance 8
+  Distance 40
   Speed 30
 component AudioSource
-  Clip "Audio/DopplerTone.wav"
+  Clip "Audio/Misery-Mono.mp3"
   Enabled false
   Volume 0.55
   Pitch 1
@@ -801,15 +801,15 @@ component AudioSource
   Spatial true
   Occlusion true
   DopplerScale 1
-  MinDistance 6
-  MaxDistance 45
+  MinDistance 10
+  MaxDistance 80
   Priority 128
 
 entity ac00571c-0000-4000-8000-000000000032
 component Name
   Name "DOPPLER / PRESS 5"
 component Transform
-  Position 24 4 1.9
+  Position 12 3 17.9
   Rotation 0 0 0
   Scale 5 2.5 1
 component Mesh

@@ -294,9 +294,10 @@ claps come from the nearest enabled spatial AudioSource object, so walking aroun
 distance, stereo panning, obstruction and room reflections. Its AudioSource settings control
 the clip, volume and range; the debugger names the emitter object rather than the camera.
 
-Press **5** for a moving cyan emitter in the large hall. It plays an original looping 660 Hz
-tone while sweeping left and right at up to 30 m/s. **P** toggles Doppler for comparison; **1–4**
-stops the tone and returns to the clap areas. Walking changes the listener's contribution too.
+Press **5** for a moving cyan emitter on the outdoor promenade. It loops `Audio/Misery-Mono.mp3`
+over an 80 m sweep at up to 30 m/s. The asset generator uses the original 660 Hz tone when that
+local music file is absent. **P** toggles Doppler for comparison; **1–4**
+stops the emitter and returns to the clap areas. Walking changes the listener's contribution too.
 The debugger's **Pitch x** column shows the applied playback pitch.
 
 Spatial sources have **Doppler Scale**: 0 disables the shift, 1 uses world units as meters, and
