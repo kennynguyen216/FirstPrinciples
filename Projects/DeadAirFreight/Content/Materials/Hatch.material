@@ -1,6 +1,6 @@
 # FirstPrinciples material
 Shader "Lit"
-BaseColor 1 0.45 0.1 1
+BaseColor 0.9 0.6 0.1 1
 BaseColorMap ""
 Tiling 1 1
 Offset 0 0
@@ -9,14 +9,14 @@ NormalStrength 1
 AmbientOcclusionMap ""
 AmbientOcclusionStrength 1
 MetallicMap ""
-Metallic 0.2
+Metallic 0.6
 RoughnessMap ""
-Roughness 0.4
+Roughness 0.5
 SpecularMap ""
 Specular 0.5
 EmissiveMap ""
-EmissiveColor 0 0 0 1
-EmissiveIntensity 1
+EmissiveColor 1 0.6 0.1 1
+EmissiveIntensity 2
 SubsurfaceMap ""
 SubsurfaceColor 1 0.400000006 0.300000012 1
 Subsurface 0

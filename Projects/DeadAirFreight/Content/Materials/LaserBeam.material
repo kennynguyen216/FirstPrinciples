@@ -1,6 +1,6 @@
 # FirstPrinciples material
 Shader "Unlit"
-BaseColor 0.4 1 0.9 1
+BaseColor 1 0.08 0.05 1
 BaseColorMap ""
 Tiling 1 1
 Offset 0 0
@@ -15,8 +15,8 @@ Roughness 0.9
 SpecularMap ""
 Specular 0.5
 EmissiveMap ""
-EmissiveColor 0.4 1 0.9 1
-EmissiveIntensity 4
+EmissiveColor 1 0.08 0.05 1
+EmissiveIntensity 0.6
 SubsurfaceMap ""
 SubsurfaceColor 1 0.400000006 0.300000012 1
 Subsurface 0

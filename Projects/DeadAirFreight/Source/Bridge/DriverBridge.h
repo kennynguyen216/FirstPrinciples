@@ -2,17 +2,16 @@
 
 #include "Engine/Engine.h"
 
-// Joins the Driver's game (Source/Driver, kept exactly as its author wrote it) to the rest of
-// Dead Air Freight without changing it:
+// Joins the Driver's game (Source/Driver, as its author wrote it apart from DriverState::InCab for
+// the hatch to the cargo bay) to the rest of Dead Air Freight:
 //
-// - At GO, a seated local Driver gets the Driver's systems, so the lobby, seats and countdown still
-//   decide who drives.
+// - At GO every seated local player gets the Driver's systems: the cab, the truck and its HUD.
+//   Either crewmate can then fly or defend (see TransitSystem).
 // - The Driver's single cargo number is the crew's oxygen tanks. Each frame it is set to what the
 //   tanks hold before the Driver's systems run, and whatever they spent (breathing, tickets) or won
 //   back (jackpots) goes into the tanks after. So Mites, leaks and missed shots in the bay show on
 //   the Driver's HUD, and the Driver's spending empties the tanks the Defender guards.
 // - The Driver's cab breathes for the crew, so LifeSupportSystem leaves that crew's cab alone.
-// - The Driver's truck is copied onto the Driver's networked crew entity, ready for multiplayer.
 // - When the Driver's match ends (delivered, the colony out of air, or no cargo left) the shared
 //   match goes to Results too.
 class DriverLauncherSystem : public FP::System
@@ -38,8 +37,8 @@ private:
 	FP::int32 m_Crew;
 };
 
-// Runs just after the Driver's systems: their spending comes out of the tanks, the truck is copied
-// to the crew entity, and the end of the Driver's match ends the shared one.
+// Runs just after the Driver's systems: their spending comes out of the tanks, and the end of the
+// Driver's match ends the shared one.
 class CargoBridgeOutSystem : public FP::System
 {
 public:

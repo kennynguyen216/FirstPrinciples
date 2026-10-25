@@ -111,6 +111,9 @@ struct TruckResourcesComponent
 	float WaterUsedKg = 0;
 	float WaterRecycledKg = 0;
 	FP::int32 SiphonsKilled = 0;
+	FP::int32 SiphonsFlushed = 0;
+	float OxygenFlushedKg = 0; // out of the airlock inside Siphons, lost for good
+	float OxygenVentedKg = 0; // let out by venting the bay
 	FP::int32 TanksShot = 0; // missed shots that punctured cargo
 	FP::int32 HolesPatched = 0;
 };

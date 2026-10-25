@@ -143,6 +143,19 @@ namespace Siphons
 		Park(world, entity, siphon);
 	}
 
+	void Flush(World& world, Entity entity)
+	{
+		SiphonComponent& siphon = world.Get<SiphonComponent>(entity);
+		if (!siphon.Active)
+			return;
+		if (TruckResourcesComponent* resources = Cargo::FindResources(world, siphon.Crew))
+		{
+			resources->OxygenFlushedKg += siphon.StolenOxygenKg;
+			++resources->SiphonsFlushed;
+		}
+		Park(world, entity, siphon);
+	}
+
 	int32 CountActive(World& world, int32 crew)
 	{
 		int32 count = 0;

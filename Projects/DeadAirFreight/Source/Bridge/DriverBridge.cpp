@@ -1,4 +1,5 @@
 #include "Bridge/DriverBridge.h"
+#include "Driver/Cab.h"
 #include "Driver/DriverSystem.h"
 #include "LifeSupport/Cargo.h"
 #include "Match/MatchQueries.h"
@@ -8,9 +9,11 @@ using namespace MatchQueries;
 
 namespace
 {
-	// The Driver scene names its truck and colony; the Driver's systems find them the same way.
+	// The Driver scene names its truck, colony and the player's body in the cab; the Driver's
+	// systems find them the same way.
 	constexpr const char* TruckName = "Truck";
 	constexpr const char* ColonyName = "Colony";
+	constexpr const char* CabBodyName = "Driver";
 
 	// What the tanks held when the Driver's systems started this frame.
 	struct CargoBridgeComponent
@@ -41,7 +44,7 @@ void DriverLauncherSystem::Update(World& world, float)
 	if (local == NullEntity)
 		return;
 	const CrewMemberComponent& member = world.Get<CrewMemberComponent>(local);
-	if (member.Slot < 0 || member.Role != CrewRole::Driver)
+	if (member.Slot < 0)
 		return;
 	if (FindByName(world, TruckName) == NullEntity)
 	{
@@ -55,7 +58,12 @@ void DriverLauncherSystem::Update(World& world, float)
 	world.AddSystem<CargoBridgeInSystem>(member.Crew);
 	world.AddSystem<DriverSystem>();
 	world.AddSystem<CargoBridgeOutSystem>(member.Crew);
-	FP_LOG("Driver bridge: Crew %s's Driver has the wheel", GetCrewName(member.Crew));
+
+	// Either crewmate can fly or defend. The Driver's seat starts in the cab, the Defender's in the bay.
+	const Entity cabBody = FindByName(world, CabBodyName);
+	if (DriverState* cab = cabBody == NullEntity ? nullptr : world.TryGet<DriverState>(cabBody))
+		cab->InCab = member.Role == CrewRole::Driver;
+	FP_LOG("Driver bridge: Crew %s's cab is running, you start in the %s", GetCrewName(member.Crew), member.Role == CrewRole::Driver ? "cab" : "cargo bay");
 }
 
 void CargoBridgeInSystem::Update(World& world, float)
@@ -93,14 +101,7 @@ void CargoBridgeOutSystem::Update(World& world, float)
 	else if (spent < 0)
 		Cargo::Refill(world, m_Crew, CargoKind::Oxygen, -spent);
 
-	// The networked crew entity follows the truck, so other peers can see it once trucks are shared.
 	const TransformComponent& truckTransform = world.Get<TransformComponent>(truck);
-	if (const Entity local = FindLocalMember(world); local != NullEntity)
-	{
-		TransformComponent& crewTransform = world.Get<TransformComponent>(local);
-		crewTransform.Position = truckTransform.Position;
-		crewTransform.Rotation = truckTransform.Rotation;
-	}
 
 	// The Driver's match ends on the same three conditions the Driver's systems use.
 	MatchStateComponent* state = GetState(world);

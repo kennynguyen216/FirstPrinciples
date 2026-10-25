@@ -1,8 +1,9 @@
 #include "Crew/OnFootSystem.h"
 #include "Audio/Sounds.h"
+#include "Crew/BayActions.h"
 #include "Engine/Physics/Physics.h"
-#include "Enemies/SiphonSystems.h"
-#include "LifeSupport/Cargo.h"
+#include "Enemies/SiphonComponents.h"
+#include "LifeSupport/LifeSupportComponents.h"
 #include "Match/MatchQueries.h"
 
 #include <algorithm>
@@ -136,24 +137,14 @@ namespace
 	void Vaporize(World& world, const OnFootConfigComponent& config, OnFootComponent& onFoot, const TransformComponent& eye, Entity shooter)
 	{
 		const Aim aim = Trace(world, config, eye, shooter);
-		if (aim.Hit)
-		{
-			if (SiphonComponent* siphon = world.TryGet<SiphonComponent>(aim.RayHit.Entity); siphon && siphon->Active)
-			{
-				siphon->Health -= config.LaserDamage;
-				if (siphon->Health <= 0)
-					Siphons::Kill(world, aim.RayHit.Entity);
-			}
-			else if (CargoTankComponent* tank = world.TryGet<CargoTankComponent>(aim.RayHit.Entity))
-			{
-				// A miss that lands on cargo punctures it.
-				++tank->Holes;
-				if (TruckResourcesComponent* resources = Cargo::FindResources(world, tank->Crew))
-					++resources->TanksShot;
-				FP_LOG("Laser: shot punctured %s", world.GetEntityName(aim.RayHit.Entity).CStr());
-				Sounds::PlayAt(world, SoundCue::TankPuncture, aim.RayHit.Point);
-			}
-		}
+		const SiphonComponent* siphon = aim.Hit ? world.TryGet<SiphonComponent>(aim.RayHit.Entity) : nullptr;
+		const CargoTankComponent* tank = aim.Hit ? world.TryGet<CargoTankComponent>(aim.RayHit.Entity) : nullptr;
+		if (siphon && !siphon->Active)
+			siphon = nullptr;
+		if (siphon)
+			BayActions::HitSiphon(world, aim.RayHit.Entity, config.LaserDamage);
+		else if (tank)
+			BayActions::PunctureTank(world, aim.RayHit.Entity, aim.RayHit.Point); // a miss that lands on cargo
 		Sounds::Play(world, SoundCue::LaserFire);
 		ShowBeam(world, onFoot.Beam, aim.Muzzle, aim.End, LaserMode::Vaporize);
 		onFoot.BeamTimeLeft = config.BeamSeconds;
@@ -163,23 +154,9 @@ namespace
 	void Repair(World& world, const OnFootConfigComponent& config, OnFootComponent& onFoot, const TransformComponent& eye, Entity shooter, float deltaTime)
 	{
 		const Aim aim = Trace(world, config, eye, shooter);
-		if (aim.Hit)
-		{
-			if (CargoTankComponent* tank = world.TryGet<CargoTankComponent>(aim.RayHit.Entity); tank && tank->Holes > 0)
-			{
-				tank->PatchProgress += deltaTime;
-				if (tank->PatchProgress >= config.PatchSecondsPerHole)
-				{
-					tank->PatchProgress = 0;
-					--tank->Holes;
-					if (TruckResourcesComponent* resources = Cargo::FindResources(world, tank->Crew))
-						++resources->HolesPatched;
-					Sounds::PlayAt(world, SoundCue::TankPatched, aim.RayHit.Point);
-					if (tank->Holes == 0)
-						FP_LOG("Laser: patched %s", world.GetEntityName(aim.RayHit.Entity).CStr());
-				}
-			}
-		}
+		const CargoTankComponent* tank = aim.Hit ? world.TryGet<CargoTankComponent>(aim.RayHit.Entity) : nullptr;
+		if (tank && tank->Holes > 0)
+			BayActions::RepairTank(world, aim.RayHit.Entity, deltaTime, aim.RayHit.Point);
 
 		onFoot.RepairSoundIn -= deltaTime;
 		if (onFoot.RepairSoundIn <= 0)
@@ -199,9 +176,10 @@ void OnFootSystem::Update(World& world, float deltaTime)
 	if (!state || state->Phase == MatchPhase::Lobby)
 		return;
 
-	// A seated Defender is on foot in their bay from the countdown on.
+	// A player seated as their crew's Defender starts the match on foot in the bay. After that
+	// TransitSystem moves players between the bay and the cab.
 	const Entity local = FindLocalMember(world);
-	if (local != NullEntity && !world.Has<OnFootComponent>(local))
+	if (state->Phase == MatchPhase::Countdown && local != NullEntity && !world.Has<OnFootComponent>(local))
 	{
 		const CrewMemberComponent& member = world.Get<CrewMemberComponent>(local);
 		if (member.Slot >= 0 && member.Role == CrewRole::Defender)
@@ -222,11 +200,12 @@ void OnFootSystem::Update(World& world, float deltaTime)
 
 	TransformComponent& body = world.Get<TransformComponent>(walker);
 
-	// Look while the right button is held, like the editor.
+	// Look follows the mouse, the same way the Driver's cab does. Until the engine can lock the
+	// cursor, turning stops at the edge of the view; move the mouse back to keep turning.
 	const Vec2 mouse = Input::GetMousePosition();
-	if (Input::IsMouseDown(MouseButton::Right))
+	const Vec2 delta = mouse - onFoot.LastMouse;
+	if (std::abs(delta.X) <= config.MouseJumpLimit && std::abs(delta.Y) <= config.MouseJumpLimit)
 	{
-		const Vec2 delta = mouse - onFoot.LastMouse;
 		body.Rotation.Y = std::fmod(body.Rotation.Y - delta.X * config.LookSensitivity, 360.0f);
 		body.Rotation.X = std::clamp(body.Rotation.X - delta.Y * config.LookSensitivity, -85.0f, 85.0f);
 		body.Rotation.Z = 0;
@@ -245,7 +224,7 @@ void OnFootSystem::Update(World& world, float deltaTime)
 			body.Position += move.Normalized() * (config.MoveSpeed * deltaTime);
 		KeepClear(world, onFoot, config.BodyRadius, body);
 
-		if (Input::WasKeyPressed(SDL_SCANCODE_R))
+		if (Input::WasKeyPressed(SDL_SCANCODE_Q))
 		{
 			onFoot.Mode = onFoot.Mode == LaserMode::Vaporize ? LaserMode::Repair : LaserMode::Vaporize;
 			FP_LOG("Laser: %s mode", onFoot.Mode == LaserMode::Vaporize ? "vaporize" : "repair");

@@ -30,8 +30,12 @@ can be tried on one machine.
 Seats are ordered by each peer's random network id, not by join order, so every peer works out the
 same seating without sending anything. They lock when the countdown starts.
 
-Defender: WASD walk, hold the right mouse button to look, left button uses the laser at the speck in
-the middle of the screen. R swaps it between vaporize (cyan) and repair (amber). Two vaporize hits
+Either crewmate can fly or defend: where you stand is your role. A hatch joins the cab and the cargo
+bay; press E at it to climb through, or R at the cab's end to vent the bay through its airlock (the
+creatures are dragged out with the air they stole). Seats only pick your crew and where you start.
+
+In the bay: WASD walk, the mouse looks, the left button uses the laser at the speck in the middle of
+the screen. Q swaps it between vaporize (red) and repair (green). Two vaporize hits
 kill a Mite and put the oxygen it ate back in the tanks, and a shot that hits a tank instead punctures
 it. Holding the repair beam on a tank patches one hole every 1.5 seconds.
 

@@ -1,5 +1,6 @@
 #include "Match/MatchSystems.h"
 #include "Audio/Sounds.h"
+#include "Crew/CrewComponents.h"
 #include "Match/MatchQueries.h"
 #include "LifeSupport/Cargo.h"
 
@@ -17,15 +18,15 @@ namespace
 		Entity Member = NullEntity;
 	};
 
-	const char* TruckMaterials[CrewCount] = { "Materials/TruckCrewA.material", "Materials/TruckCrewB.material" };
+	// Hidden things shrink to almost nothing. The engine refuses entities scaled to zero, and players
+	// are sent to each other as entities.
+	const Vec3 HiddenScale{ 0.001f, 0.001f, 0.001f };
 
-	// Placeholder looks until the real models are in: a box in the crew's color for a truck and a
-	// white post for a Defender. Every peer works these out for every player, so nothing is sent.
-	// A local Driver flies the Driver scene's own truck, so their crew entity stays hidden.
+	// A white post until the real models are in, shown while the player walks the cargo bay. In the
+	// cab the driver bridge places it, so it hides until then.
 	void ApplyLook(World& world, Entity entity, const CrewMemberComponent& member)
 	{
-		const bool driver = member.Slot >= 0 && member.Role == CrewRole::Driver;
-		const char* material = driver ? TruckMaterials[member.Crew] : "Materials/Defender.material";
+		const char* material = "Materials/Defender.material";
 		MaterialComponent* look = world.TryGet<MaterialComponent>(entity);
 		if (!look)
 			look = &world.Add<MaterialComponent>(entity);
@@ -36,7 +37,7 @@ namespace
 		if (!IsRemote(world, entity))
 		{
 			TransformComponent& transform = world.Get<TransformComponent>(entity);
-			transform.Scale = driver ? Vec3{} : member.Slot >= 0 ? Vec3{ 0.8f, 1.8f, 0.8f } : Vec3{ 0.3f, 0.3f, 0.3f };
+			transform.Scale = member.Slot < 0 ? Vec3{ 0.3f, 0.3f, 0.3f } : world.Has<OnFootComponent>(entity) ? WalkerSize : HiddenScale;
 		}
 	}
 }
@@ -232,8 +233,9 @@ void MatchSystem::PlaceLocalMember(World& world)
 		// In the aisle in front of the tanks, facing them. The body's middle is half its height up.
 		Vec3 bayPosition;
 		InteriorComponent bay;
+		transform.Scale = WalkerSize;
 		if (FindInterior(world, member.Crew, "Bay", &bayPosition, &bay) != NullEntity)
-			transform.Position = bayPosition + Vec3{ 0, transform.Scale.Y * 0.5f, bay.HalfLength * 0.6f };
+			transform.Position = bayPosition + Vec3{ 0, WalkerSize.Y * 0.5f, bay.HalfLength * 0.6f };
 		transform.Rotation = {};
 		return;
 	}

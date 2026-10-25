@@ -1,6 +1,8 @@
 #include "Game.h"
 #include "Audio/Sounds.h"
 #include "Crew/OnFootSystem.h"
+#include "Crew/TransitSystem.h"
+#include "Enemies/Airlock.h"
 #include "Enemies/SiphonSystems.h"
 #include "LifeSupport/LifeSupportSystems.h"
 #include "Match/MatchSystems.h"
@@ -73,9 +75,24 @@ namespace Game
 			.Field("HalfWidth", &InteriorComponent::HalfWidth)
 			.Field("HalfLength", &InteriorComponent::HalfLength);
 
+		registry.Register<AirlockConfigComponent>("AirlockConfig")
+			.Field("OpenSeconds", &AirlockConfigComponent::OpenSeconds)
+			.Field("PullSpeed", &AirlockConfigComponent::PullSpeed)
+			.Field("FlushRadius", &AirlockConfigComponent::FlushRadius)
+			.Field("VentOxygenKg", &AirlockConfigComponent::VentOxygenKg)
+			.Field("LeakPenaltyKg", &AirlockConfigComponent::LeakPenaltyKg)
+			.Field("CooldownSeconds", &AirlockConfigComponent::CooldownSeconds);
+
+		registry.Register<AirlockComponent>("Airlock")
+			.Field("Crew", &AirlockComponent::Crew);
+
+		registry.Register<BayHatchComponent>("BayHatch")
+			.Field("Crew", &BayHatchComponent::Crew);
+
 		registry.Register<OnFootConfigComponent>("OnFootConfig")
 			.Field("MoveSpeed", &OnFootConfigComponent::MoveSpeed)
 			.Field("LookSensitivity", &OnFootConfigComponent::LookSensitivity)
+			.Field("MouseJumpLimit", &OnFootConfigComponent::MouseJumpLimit)
 			.Field("EyeHeight", &OnFootConfigComponent::EyeHeight)
 			.Field("BodyRadius", &OnFootConfigComponent::BodyRadius)
 			.Field("LaserRange", &OnFootConfigComponent::LaserRange)
@@ -104,6 +121,8 @@ namespace Game
 			.Field("MiteBite", &SoundCuesComponent::MiteBite).AssetPath(wav)
 			.Field("MiteDeath", &SoundCuesComponent::MiteDeath).AssetPath(wav)
 			.Field("Boost", &SoundCuesComponent::Boost).AssetPath(wav)
+			.Field("Hatch", &SoundCuesComponent::Hatch).AssetPath(wav)
+			.Field("AirlockVent", &SoundCuesComponent::AirlockVent).AssetPath(wav)
 			.Field("Countdown", &SoundCuesComponent::Countdown).AssetPath(wav)
 			.Field("Go", &SoundCuesComponent::Go).AssetPath(wav);
 	}
@@ -119,7 +138,9 @@ namespace Game
 		world.AddSystem<CargoTankSystem>();
 		world.AddSystem<SiphonSpawnerSystem>();
 		world.AddSystem<SiphonSystem>();
+		world.AddSystem<AirlockSystem>();
 		world.AddSystem<OnFootSystem>();
+		world.AddSystem<TransitSystem>();
 		// Starts the Driver's own systems at GO for a seated Driver.
 		world.AddSystem<DriverLauncherSystem>();
 		world.AddSystem<LifeSupportReadoutSystem>();

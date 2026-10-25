@@ -15,6 +15,8 @@ struct SoundCuesComponent
 	FP::String MiteBite; // a Mite chews a hole
 	FP::String MiteDeath;
 	FP::String Boost;
+	FP::String Hatch; // climbing between the cab and the cargo bay
+	FP::String AirlockVent;
 	FP::String Countdown;
 	FP::String Go;
 };
@@ -30,6 +32,8 @@ enum class SoundCue : FP::uint8
 	MiteBite,
 	MiteDeath,
 	Boost,
+	Hatch,
+	AirlockVent,
 	Countdown,
 	Go,
 };

@@ -13,7 +13,7 @@ namespace
 {
 	// Tanks stand this tall and wide before the real models arrive. Just under eye height, so the
 	// Defender can see a Mite perched on any of them.
-	const Vec3 TankScale{ 1.2f, 1.5f, 1.2f };
+	const Vec3 TankScale{ 1.2f, 1.4f, 1.2f };
 
 	bool IsRacing(World& world)
 	{
@@ -234,11 +234,11 @@ void LifeSupportReadoutSystem::Update(World& world, float deltaTime)
 	for (auto [entity, resources] : world.View<TruckResourcesComponent>().each())
 	{
 		const Cargo::Totals cargo = Cargo::Sum(world, resources.Crew);
-		FP_LOG("  Crew %s%s | cab O2 %.1f kg H2O %.1f kg CO2 %.2f kg | cargo O2 %.0f/%.0f kg H2O %.0f/%.0f kg | %d leaking | power %.0f%% | %d mites, %d killed, %.1f kg eaten, %.1f kg recovered",
+		FP_LOG("  Crew %s%s | cab O2 %.1f kg H2O %.1f kg CO2 %.2f kg | cargo O2 %.0f/%.0f kg H2O %.0f/%.0f kg | %d leaking | power %.0f%% | %d mites, %d killed, %d flushed, %.1f kg eaten, %.1f kg recovered",
 			GetCrewName(resources.Crew), resources.Crew == localCrew ? " (you)" : "",
 			resources.CabOxygenKg, resources.CabWaterKg, resources.CabCarbonDioxideKg,
 			cargo.OxygenKg, cargo.OxygenCapacityKg, cargo.WaterKg, cargo.WaterCapacityKg,
-			cargo.LeakingTanks, resources.Power * 100, Siphons::CountActive(world, resources.Crew), resources.SiphonsKilled,
+			cargo.LeakingTanks, resources.Power * 100, Siphons::CountActive(world, resources.Crew), resources.SiphonsKilled, resources.SiphonsFlushed,
 			resources.OxygenEatenKg, resources.OxygenRecoveredKg);
 	}
 }

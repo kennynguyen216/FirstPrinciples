@@ -6,9 +6,11 @@
 struct OnFootConfigComponent
 {
 	float MoveSpeed = 6;
-	float LookSensitivity = 0.2f; // degrees per pixel while the right mouse button is held
+	float LookSensitivity = 0.15f; // degrees per pixel the mouse moves
+	// Mouse jumps bigger than this many pixels in a frame (the cursor entering the view) are ignored.
+	float MouseJumpLimit = 150;
 	float EyeHeight = 1.6f;
-	float BodyRadius = 0.4f; // keeps walkers out of tanks and walls
+	float BodyRadius = 0.5f; // keeps walkers, and the camera at their eyes, out of tanks and walls
 	float LaserRange = 60;
 	// Vaporize mode.
 	float FireInterval = 0.15f; // seconds between shots while the left button is held
@@ -22,6 +24,16 @@ enum class LaserMode : FP::uint8
 {
 	Vaporize,
 	Repair,
+};
+
+// A player's body while they walk, until the real models are in.
+inline const FP::Vec3 WalkerSize{ 0.8f, 1.8f, 0.8f };
+
+// The bay end of the hatch between a crew's cab and its cargo bay. The cab end is the Driver scene's
+// "CabHatch" entity, which rides along with the cab.
+struct BayHatchComponent
+{
+	FP::int32 Crew = 0;
 };
 
 // On the local player's walking body while they are on foot. Added while playing.

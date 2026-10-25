@@ -13,6 +13,9 @@ namespace Siphons
 	// Kills a creature: what it ate goes back into the crew's tanks and it returns to the pool.
 	void Kill(FP::World& world, FP::Entity entity);
 
+	// Blows a creature out of the airlock: what it ate is lost with it and it returns to the pool.
+	void Flush(FP::World& world, FP::Entity entity);
+
 	FP::int32 CountActive(FP::World& world, FP::int32 crew);
 }
 

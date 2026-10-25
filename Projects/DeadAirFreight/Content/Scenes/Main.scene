@@ -329,9 +329,10 @@ component TankConfig
   PerRow 6
 component OnFootConfig
   MoveSpeed 6
-  LookSensitivity 0.2
+  LookSensitivity 0.15
+  MouseJumpLimit 150
   EyeHeight 1.6
-  BodyRadius 0.4
+  BodyRadius 0.5
   LaserRange 60
   FireInterval 0.15
   LaserDamage 1
@@ -347,8 +348,17 @@ component SoundCues
   MiteBite ""
   MiteDeath ""
   Boost ""
+  Hatch ""
+  AirlockVent ""
   Countdown "Audio/PlaceholderClick.wav"
   Go ""
+component AirlockConfig
+  OpenSeconds 1.2
+  PullSpeed 25
+  FlushRadius 2
+  VentOxygenKg 3
+  LeakPenaltyKg 1
+  CooldownSeconds 6
 component SiphonConfig
   MitePoolPerCrew 24
   MiteHealth 2
@@ -626,3 +636,95 @@ component PointLight
   Color 1 0.92 0.8 1
   Intensity 3
   Range 40
+
+entity f9569a89-a5f4-4f90-b8c7-b5dd48939be3
+component Name
+  Name "CabHatch"
+component Transform
+  Position -3.3 -4999 5.95
+  Rotation 0 0 0
+  Scale 1.2 2 0.1
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Hatch.material"
+
+entity 8c0f2176-3bed-4b66-ac49-4be09d01c81a
+component Name
+  Name "Cargo Bay A Hatch"
+component Transform
+  Position -3000 -2999 19.95
+  Rotation 0 0 0
+  Scale 1.6 2 0.1
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Hatch.material"
+component BayHatch
+  Crew 0
+
+entity f3350d79-a2b5-4376-a12e-795fdda660cf
+component Name
+  Name "Cargo Bay B Hatch"
+component Transform
+  Position 3000 -2999 19.95
+  Rotation 0 0 0
+  Scale 1.6 2 0.1
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Hatch.material"
+component BayHatch
+  Crew 1
+
+entity 6986a542-7fe3-422e-85af-14c16b3ea237
+component Name
+  Name "Cargo Bay A Ceiling"
+component Transform
+  Position -3000 -2993.8 0
+  Rotation 0 0 0
+  Scale 21 0.4 41
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/BayWall.material"
+
+entity 79c09a5b-5c56-494b-b748-582fae4e18e0
+component Name
+  Name "Cargo Bay B Ceiling"
+component Transform
+  Position 3000 -2993.8 0
+  Rotation 0 0 0
+  Scale 21 0.4 41
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/BayWall.material"
+
+entity a354f1ac-9826-495e-a1e9-3fe95c989ae1
+component Name
+  Name "Cargo Bay A Airlock"
+component Transform
+  Position -3009.95 -2998.5 0
+  Rotation 0 0 0
+  Scale 0.1 3 4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Airlock.material"
+component Airlock
+  Crew 0
+
+entity 2e38a242-6295-437c-86b1-5cc81e09603b
+component Name
+  Name "Cargo Bay B Airlock"
+component Transform
+  Position 2990.05 -2998.5 0
+  Rotation 0 0 0
+  Scale 0.1 3 4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Airlock.material"
+component Airlock
+  Crew 1

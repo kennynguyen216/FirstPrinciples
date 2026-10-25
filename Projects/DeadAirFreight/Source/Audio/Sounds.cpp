@@ -11,7 +11,7 @@ namespace
 	const String* GetField(const SoundCuesComponent& cues, SoundCue cue)
 	{
 		const String* fields[] = { &cues.LaserFire, &cues.RepairBeam, &cues.TankPuncture, &cues.TankPatched, &cues.MiteSpawn,
-			&cues.MiteChitter, &cues.MiteBite, &cues.MiteDeath, &cues.Boost,
+			&cues.MiteChitter, &cues.MiteBite, &cues.MiteDeath, &cues.Boost, &cues.Hatch, &cues.AirlockVent,
 			&cues.Countdown, &cues.Go };
 		const int32 index = static_cast<int32>(cue);
 		return index < static_cast<int32>(sizeof(fields) / sizeof(fields[0])) ? fields[index] : nullptr;

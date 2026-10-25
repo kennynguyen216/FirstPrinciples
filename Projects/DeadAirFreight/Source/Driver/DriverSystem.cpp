@@ -197,7 +197,7 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 
 	const bool awake = !IsBlackedOut(life);
 	bool repairing = false;
-	if (driver && awake)
+	if (driver && driver->InCab && awake)
 	{
 		if (Input::WasKeyPressed(SDL_SCANCODE_E) && !ticket.Active)
 		{
@@ -251,7 +251,7 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 		}
 	}
 
-	if (driver && !driver->Seated && awake)
+	if (driver && driver->InCab && !driver->Seated && awake)
 		StepOnFoot(*driver, mouseMove * m_Settings.LookSensitivity, Input::GetMoveAxis(), m_CabBounds, m_Settings, deltaTime);
 
 	if (GetAltitude(truck) <= m_Settings.DeliveryAltitude)
@@ -385,6 +385,10 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 			cameraTransformIt.Position = truck.Position - GetNose(truck) * m_Settings.ChaseDistance
 				+ truckRotation.Rotate({ 0, m_Settings.ChaseHeight, 0 });
 			cameraTransformIt.Rotation = { truck.Pitch, truck.Yaw, m_Bank };
+		}
+		else if (!driver->InCab)
+		{
+			// Down in the cargo bay, where Dead Air Freight's OnFootSystem places the camera.
 		}
 		else if (seated)
 		{

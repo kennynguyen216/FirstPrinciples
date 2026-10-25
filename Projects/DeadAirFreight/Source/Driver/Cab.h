@@ -9,6 +9,9 @@ struct DriverState
 	float Yaw = 0;
 	float Pitch = 0;
 	bool Seated = false;
+	// False while this player is down the hatch in the cargo bay. The cab then leaves the player's
+	// input and camera alone (Dead Air Freight's TransitSystem moves them between the two).
+	bool InCab = true;
 };
 
 struct CabBounds
