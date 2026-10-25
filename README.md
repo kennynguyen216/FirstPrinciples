@@ -52,6 +52,50 @@ run `msbuild Projects\Sample\Build\Sample.slnx /m /p:Configuration=Debug /p:Plat
 PowerShell or Developer Command Prompt (use `.sln` for VS 2022). Use `Configuration=Release` for an optimised build.
 Run `powershell -ExecutionPolicy Bypass -File Scripts\TestGenerateProjects.ps1` to check Windows project generation.
 
+## Packaging a game
+
+Use **File > Package Game > macOS (Release)** or **Windows (Release)** in the editor and choose
+an output folder. The target for the other operating system is disabled. Build on macOS for a macOS
+app and on Windows for a Windows game. Packaging needs the same compiler, Premake and Qt setup as
+building the editor. The first Release build can take a few minutes. Progress and errors appear in
+the Output Log, and the editor shows the result when packaging finishes.
+
+The build uses the project's `StartScene`. Save scene, material and script changes before packaging.
+The editor offers to save unsaved scenes and scripts. Packaging builds the Release runtime and
+`GameScripts`, then puts them together with their required libraries and Ultralight resources.
+macOS produces `<Project>.app` and Windows produces a `<Project>-Windows` folder with `Runtime.exe`.
+The output must be new so an earlier build is never overwritten. Copy the whole app or folder to
+another machine of the same operating system and architecture.
+
+Project `Content` and `Engine/Content` are cooked into `Content.pak`. The cooker stores all files,
+including model buffers, textures, audio, scenes, materials, web pages and compiled shaders, with
+relative paths and per-file checksums. It preserves their existing runtime formats and does not
+compress them or remove unreferenced assets. Symlinks, unsafe paths and names that differ only by
+ASCII case are rejected. Game code is linked into the runtime and C++ scripts go into `GameScripts`.
+Source code, build tools and editor binaries are left out of the package.
+
+At launch the runtime verifies and unpacks the archive into a private directory under the user's
+application data folder. All asset loaders and scripts use that content directory, which is removed
+on normal exit. Use `Paths::GetSavedDir()` for writable saved data outside the app. Runtime logs go there too.
+Each running game gets its own content directory.
+This also lets audio streaming, glTF external files and relative web resources use their normal file
+access. A corrupt archive or a missing script library stops a packaged game at startup.
+
+The macOS packager copies the library dependency tree, rewrites library paths and applies local
+ad hoc signatures. Public distribution still needs your own signing and notarization. Windows
+collects imported DLLs and the installed x64 MSVC redistributable libraries. Qt is used by the
+packaging tool and is not included in the game.
+
+After generating projects, packaging is also available from the command line. Build `Runtime` and
+`PackageTool` in Release first, then run:
+
+```bash
+Projects/Sample/Binaries/Release/PackageTool "$PWD" "$PWD/Projects/Sample" /path/to/Sample.app
+```
+
+On Windows use `PackageTool.exe` and a new output folder instead of an `.app` path. Run `Tests Pak`
+for archive format, corruption and path validation tests.
+
 ## Projects
 
 Each game is a project in its own folder under `Projects`, like Unreal's. A project only sees its own files.
@@ -209,7 +253,28 @@ Packets are tied to their peer's player, with size and rate limits. Proximity fi
 peer-replicated positions; a trusted server/relay is needed to enforce who may receive speech.
 The existing session has no relay for peers behind strict NATs.
 
-Open `Scenes/Acoustics3D.scene` in the editor and press Play, or run:
+Open `Scenes/Acoustics3D.scene` in the editor for the original room comparison.
+
+For a longer Doppler demonstration, open **`Scenes/DopplerFlyby.scene`**. The cyan emitter travels
+**500 meters at 45 m/s**, taking about **11 seconds each way** without teleporting at the ends.
+The listener starts 80 meters beside the route, with enough audio range to hear the full approach
+and departure. **P** toggles Doppler, **F** freezes motion while audio continues, and **R** restarts
+the pass. **WASD**, **Shift** and the mouse let you walk, run and look along the route.
+Assign a mono WAV/MP3 to **Long Doppler Emitter - assign mono MP3** to hear your own sound.
+This scene uses open air with no room effects or occlusion so the pitch shift is easy to compare.
+Regenerate its scene and distance markers with `python Scripts/GenerateDopplerFlyby.py` (Pillow required).
+
+For a ready-to-use MP3 test, open **`Scenes/AudioPlayground.scene`**. Import your file with
+**File > Import Audio...**, select **MP3 Music (M)** in the hierarchy, and replace its **AudioSource > Clip**.
+Press Play, click the viewport and press **M** to start/stop music. Stereo files are supported here;
+the included original 65-second MP3 demonstrates automatic streaming.
+Select **MP3 Doppler (5)** and assign a **mono** MP3 to test your own sound moving through space.
+Press **5** to start its sweep and **P** to compare Doppler on/off. **1–4**, **Space**, **T**, **R** and **B**
+keep the room, clap, dry/wet and overlap controls below. Open **Window > Audio Debugger** to inspect the result.
+The scene and bundled original sounds regenerate with `python Scripts/GenerateAudioPlayground.py`
+(FFmpeg and Pillow required only for regeneration).
+
+Run the original acoustics scene directly with:
 
 ```powershell
 Projects/Sample/Binaries/Debug/Runtime.exe Scenes/Acoustics3D.scene
@@ -364,6 +429,58 @@ The game sees through the first camera with `Primary` on. `SetActiveCamera` cuts
 by turning `Primary` off everywhere else.
 
 **Input actions and gamepads**
+
+Choose **Edit > Input Actions...** or double click `Input.actions` in the Content Browser to edit
+bindings in a tab. Each row has an action name, device, input, optional direction and scale.
+Use **Add Binding** and **Remove Selected** to change the rows. The input picker offers the names
+accepted by each device. Leave a scale blank to keep its default behavior, especially for sticks.
+
+The **Source** view edits the same document and preserves comments. Undo and redo work in both
+views. Save with Ctrl+S, the tab's **Save** button or **Save All**. Invalid lines are listed below
+the bindings and cannot be saved. Click an error to jump to its source. Unsaved edits are checked
+when closing a tab, quitting or packaging. Changes apply the next time Play starts and when the
+runtime next opens the project. Opening the editor from the Edit menu recreates a missing
+`Input.actions` with the defaults.
+
+Gameplay scripts can also change bindings immediately through `Input`:
+
+```cpp
+const auto names = Input::GetActionNames();
+const auto bindings = Input::GetActionBindings("Jump");
+Input::RebindAction("Jump", 0, "Key:G");
+Input::SetActionBindings("Jump", { "Key:G", "Button:South" });
+Input::SetActionBindings("Jump", {}); // leave the action unbound
+Input::ResetActionBindings("Jump");
+Input::ResetAllActionBindings();
+```
+
+Replacement strings use the same device, direction and scale syntax as `Input.actions`.
+Invalid replacements leave the current bindings alone. Reset restores the bindings from the most
+recent `LoadActions` or `LoadActionsFile`, so project defaults stay separate from player preferences.
+
+For a menu that asks the player to press a new control, call
+`Input::BeginActionRebind("Jump", 0)`, then check `Input::GetActionRebindStatus()` for `Listening`,
+`Complete` or `Cancelled`. `GetLastReboundInput()` returns the completed binding string.
+Capture accepts fresh keyboard, mouse button and gamepad button presses. Escape or
+`CancelActionRebind()` cancels, and losing focus cancels too. Held controls are ignored.
+Named actions are suppressed during capture and until the captured control is released.
+
+Pass `true` as the third argument to capture individual gamepad axes too. An axis must first
+return near its center and then move past 75 percent. Capturing preserves the binding's direction
+and scale, with negative axis movement inverted to match the chosen direction. Mouse motion is
+ignored during capture. Use `SetActionBindings` for whole sticks or mouse delta bindings.
+
+Use `Input::SaveActionBindings()` to save player overrides and `Input::LoadActionBindings()` at
+play start to restore them. Both accept an optional SaveData slot name for profiles. These files
+live in the project's user save folder and leave `Content/Input.actions` unchanged. Only changed
+actions are saved, so new project actions remain available. Failed loads leave current bindings
+alone. Saving after a reset keeps the reset for the next launch.
+
+Open `Scenes/InputBindings.scene` and press Play for a working menu, backed by the
+`InputRebindMenu` script and `UI/InputBindings.html`. It lists bindings, captures replacements,
+accepts typed bindings and saves or restores controls through the existing `engine.send` bridge.
+The Jump counter lets you try the new binding after releasing its capture press. The menu uses
+the same optional Ultralight SDK as other game UI pages.
 
 Games ask for actions like Jump or Move instead of keys, so the keyboard, mouse and any gamepad
 all play. `Content/Input.actions` binds them, one input per line, and new projects get a copy of
@@ -741,10 +858,16 @@ The editor follows Unreal Engine 5's layout and dark theme, using this engine's 
   editor UI time are not included. The status bar opens each panel and has a console box: type
   `help` for commands including play, pause, resume, step and stop.
 
+The Hierarchy tab is active when the editor opens. Selecting an entity or asset brings Details
+forward so its properties can be edited.
+
 ### Content browser
 
 The **Content Browser** tab next to the **Output Log** at the bottom of the editor shows everything in
-the project's `Content` plus its scripts in `Source/Scripts`. Textures show thumbnails and materials show their color.
+the project's `Content` plus its scripts in `Source/Scripts`. Textures show image thumbnails with a
+checkerboard behind transparency. Materials show a lit sphere, and OBJ, glTF and GLB meshes show
+a fitted preview in their bind pose. Previews fill in as you browse, with type icons for unreadable assets.
+Changes to assets or their texture and buffer files refresh the thumbnails automatically.
 
 - Double click a scene to open it or a script to edit it in a tab. Click a material to edit it in
   the Details panel, or a texture to preview it.
@@ -952,6 +1075,29 @@ Projects/Sample/Binaries/Debug/Editor --drop Textures/Bricks_AO.png --undo --red
 Projects/Sample/Binaries/Debug/Editor --new-project MyGame
 ```
 
+### Skybox and environment lighting
+
+Create a **Skybox** from **Place Entities > Lights** or the **Entity** menu, then choose its
+**Texture** in Details. Use a 2:1 equirectangular panorama under `Content`, up to 8192 pixels wide.
+Radiance `.hdr` files retain values above white. PNG, JPG, TGA and BMP panoramas are read as sRGB.
+
+The panorama supplies the visible sky, diffuse light and roughness filtered reflections on lit
+materials and glass. **Intensity** scales the sky and lighting together. **Rotation** turns both
+around Y. Turn off **Visible** to keep the lighting while showing the camera background, or turn off
+**Enabled** to disable both. The first enabled Skybox in creation order is used. Existing ambient
+and direct lights add to the environment lighting.
+
+Open `Scenes/Environment.scene` to compare gold, plastic and glass with no direct or ambient lights.
+The original sunset panorama and demo regenerate with `python3 Scripts/GenerateEnvironmentDemo.py`.
+Run `Projects/Sample/Binaries/Debug/Tests Environment` for the environment tests.
+
+Panoramas are filtered to at most 512 by 256 for rendering. Diffuse light uses nine spherical
+harmonic coefficients and reflections use GGX filtered levels. Changes to the panorama reload it
+automatically. Loading and filtering happen on first use and can briefly pause rendering.
+Environment lighting does not cast shadows or capture nearby objects. Use direct lights for shadows
+and material ambient occlusion maps for local detail. Missing or invalid panoramas use the camera
+background and existing lights.
+
 ## Rendering
 
 Rendering uses SDL_GPU. macOS runs on Metal and Windows runs on Vulkan, so Windows machines need a
@@ -973,17 +1119,76 @@ Scripts/CompileShaders.sh
 
 On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\CompileShaders.ps1`.
 
+### Meshlets and visibility debugging
+
+Every mesh upload (primitives, OBJ, and glTF) builds clusters using meshoptimizer v0.25.
+Clusters have at most 32 vertices and 60 triangles, preserve material sections and triangle
+winding, and keep original vertex indices so skeletal weights remain aligned. Meshes are cached
+by path; uploading a shared mesh builds its clusters once. The smaller clusters give occlusion
+tighter bounds, trading more cluster metadata and indirect commands for finer rejection.
+
+Static opaque meshes use compute frustum and occlusion culling followed by indexed indirect
+main-pass draws. A current-frame depth prepass feeds an 8x8 max-depth tile buffer. A cluster is
+occluded only when every tile touched by its projected bounds is nearer than the entire cluster.
+Near-plane crossings, partially filled edge tiles, and very large projected bounds fail open.
+This avoids stale visibility after camera/object movement and supports orthographic cameras.
+The depth prepass still submits full occluder geometry; the counters describe the main pass,
+not total frame geometry or a guaranteed speedup. Shadows retain their existing draws.
+
+Open **Window > Nanite / Meshlet Debugger** for an ImGui window with:
+
+- Enable, frustum, and compute occlusion toggles to compare with full mesh rendering.
+- **Color meshlets** for stable colors per cluster.
+- **Show outside camera** (on when the debugger opens) widens the observer view by 1.35x while
+  culling continues from the original camera. The yellow frame marks that camera's frustum, so
+  you can see meshlets crossing its edges in real time. Adjust **Observer width** for more context;
+  closing the debugger restores the normal viewport. Picking and gizmos use the wider view too.
+- **Freeze culling camera** to hold visibility at a captured viewpoint while moving the editor camera.
+  The yellow outline then shows the frozen camera's volume from your new viewpoint.
+- A live viewport preview, plus asynchronous GPU counts of visible, frustum-rejected and occluded
+  meshlets and main-pass triangles. Counts are from the last completed readback.
+
+Open `Scenes/Meshlets.scene` in the Sample project and press Play to see the demo camera.
+Nine spheres sit behind a movable wall, three sit in front, and two sit outside the camera.
+In edit mode, hold right mouse and use WASD in the viewport to move the live camera. The yellow
+frame and culling update together; meshlets outside the frame disappear while clusters that cross
+its edges remain visible. Disable **Frustum culling** to compare the surrounding geometry.
+Freeze the culling camera to inspect its results from another viewpoint, or move the wall to watch
+occlusion update. Camera movement does not require freezing.
+The feature works in the Runtime too; the debugger is editor-only. For a reproducible editor smoke test:
+
+```bash
+Projects/Sample/Binaries/Debug/Editor --scene Scenes/Meshlets.scene --3d --play --meshlet-debugger --meshlet-colors --screenshot /tmp/meshlets.png --wait 3
+Projects/Sample/Binaries/Debug/Tests Meshlet
+```
+
+The screenshot command also saves the debugger as `/tmp/meshlets.png.meshlets.png`.
+
+This is a meshlet visibility implementation, with no hierarchical LOD selection, streaming, or
+virtualized geometry yet. Animated meshes build meshlets but keep full draws until deformation-aware
+bounds are available. Glass and sprites keep their existing paths. Alpha-cutout materials are not
+used as occluders, and wireframe disables occlusion. If compute pipelines or buffers cannot be
+created, rendering falls back to ordinary indexed draws. The debug window uses the editor's
+existing GPU-to-Qt readback approach; close it when measuring rendering performance.
+
+The shader scripts build both Vulkan SPIR-V and Metal MSL, including `.comp` files. Compute sources
+use `FP_METAL` for SDL's different Metal buffer binding order; only the MSL compilation defines it.
+The committed Vulkan SPIR-V uses SDL's normal descriptor sets. See
+[SDL compute binding conventions](https://wiki.libsdl.org/SDL3/SDL_CreateGPUComputePipeline).
+
 ## Build targets
 
 | Target | What it is |
 |---|---|
 | Engine | Static lib with `src/HAL`, `src/Core`, `src/CoreObject` and `src/Engine` |
-| ImGui | Dear ImGui core, widgets, tables, drawing and demo from the docking branch |
+| ImGui | Dear ImGui core, demo and SDL_GPU renderer backend from the docking branch |
 | Game | The project's components and systems (`Source`) |
 | Editor | Qt editor |
 | Runtime | Standalone player for a scene |
+| PackageTool | Cooks content and stages a Release game for distribution |
 | GameScripts | Hot reloadable C++ scripts (`Source/Scripts`) |
 | Tests | Unit tests. Run `Projects/Sample/Binaries/Debug/Tests [filter]` |
+| EditorTests | Input actions editor tests. Run `Projects/Sample/Binaries/Debug/EditorTests` |
 
 ## Third party
 
@@ -996,6 +1201,7 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 | [dr_mp3](https://github.com/mackron/dr_libs) (public domain or MIT-0) | MP3 decoding | Git submodule in `ThirdParty/dr_libs`, pinned to `bad753d5ade4f30e40fcf80a757210b650681f8f` |
 | [Monocypher](https://monocypher.org) | Key exchange and encryption for network packets | Git submodule in `ThirdParty/monocypher` |
 | [spdlog](https://github.com/gabime/spdlog) | Logging to the console, files and the editor | Git submodule in `ThirdParty/spdlog` |
+| [meshoptimizer](https://github.com/zeux/meshoptimizer) v0.25 (MIT) | Automatic meshlet construction and index cache optimization | Git submodule in `ThirdParty/meshoptimizer`, pinned to `6daea4695c48338363b08022d2fb15deaef6ac09` |
 | [cgltf](https://github.com/jkuhlmann/cgltf) | glTF loading for skeletal meshes and animations | Git submodule in `ThirdParty/cgltf` |
 | [Jolt Physics](https://github.com/jrouwe/JoltPhysics) 5.6 | Rigid body physics, collisions and raycasts | Git submodule in `ThirdParty/JoltPhysics`, built as the `Jolt` project |
 | [Ultralight](https://ultralig.ht) 2.0 beta | Game UI in HTML, CSS and JavaScript | Binary SDK downloaded by `Scripts/GetUltralight.sh` or `.ps1` into `ThirdParty/Ultralight`. Optional: without it game UI draws nothing |
@@ -1004,9 +1210,9 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 The ImGui submodule includes the complete upstream repository: core, demo, backends, examples,
 fonts, documentation and MIT license. Its commit is pinned by this repository. The `ImGui` static
 library builds every core source including `imgui_demo.cpp` and is linked through `UseEngine`;
-engine and game targets can include `imgui.h`. Backends and examples remain available in the
-submodule but are not compiled into the engine. Window, input and renderer integration is still
-required before displaying ImGui in an application. The editor currently uses Qt.
+engine and game targets can include `imgui.h`. The SDL_GPU renderer backend is also compiled.
+The meshlet debugger hosts ImGui in a Qt window, forwards mouse input, and renders into an offscreen
+GPU target. The rest of the editor remains Qt. Other backends and examples are not built.
 Run `Projects/Sample/Binaries/Debug/Tests ImGui` for the headless docking and demo smoke test.
 
 ## Known limitations

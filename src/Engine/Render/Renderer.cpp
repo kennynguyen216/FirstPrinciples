@@ -1,6 +1,7 @@
 #include "Engine/Render/Renderer.h"
 #include "Engine/EngineSettings.h"
 #include "Engine/Material.h"
+#include "Engine/Paths.h"
 #include "Engine/Animation/SkeletalModel.h"
 #include "Engine/UI/UISystem.h"
 #include "Engine/Particles/ParticleSystem.h"
@@ -8,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 
 namespace FP
 {
@@ -77,12 +79,15 @@ namespace FP
 	}
 
 	Renderer::Renderer(GPUDevice& device, SDL_GPUTextureFormat targetFormat)
-		: m_Device(device), m_TargetFormat(targetFormat), m_Textures(device), m_Meshes(device)
+		: m_Device(device), m_TargetFormat(targetFormat), m_Textures(device), m_Meshes(device), m_Culling(device)
 	{
 		m_QuadVertices = device.CreateBuffer(SDL_GPU_BUFFERUSAGE_VERTEX, QuadVertices, sizeof(QuadVertices));
 		m_QuadIndices = device.CreateBuffer(SDL_GPU_BUFFERUSAGE_INDEX, QuadIndices, sizeof(QuadIndices));
 		m_BoneUpload.Resize(MaxSkinBones);
+		const Vec4 empty;
+		m_EmptyEnvironment = device.CreateBuffer(SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ, &empty, sizeof(empty));
 		CreatePipelines();
+		m_OcclusionPipeline = CreateShadowPipeline(Surface::Mesh, true);
 	}
 
 	Renderer::~Renderer()
@@ -97,7 +102,7 @@ namespace FP
 					SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
 			}
 		}
-		for (SDL_GPUGraphicsPipeline* pipeline : { m_PresentPipeline, m_PostPipeline, m_FXAAPipeline, m_BloomPipeline, m_UIPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1], m_ParticlePipelines[0], m_ParticlePipelines[1] })
+		for (SDL_GPUGraphicsPipeline* pipeline : { m_OcclusionPipeline, m_PresentPipeline, m_SkyboxPipeline, m_PostPipeline, m_FXAAPipeline, m_BloomPipeline, m_UIPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1], m_ParticlePipelines[0], m_ParticlePipelines[1] })
 		{
 			if (pipeline)
 				SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
@@ -114,7 +119,7 @@ namespace FP
 					return false;
 			}
 		}
-		return m_PresentPipeline && m_PostPipeline && m_FXAAPipeline && m_BloomPipeline && m_LinePipeline;
+		return m_PresentPipeline && m_PostPipeline && m_FXAAPipeline && m_BloomPipeline && m_SkyboxPipeline && m_LinePipeline && m_EmptyEnvironment;
 	}
 
 	SDL_GPUGraphicsPipeline* Renderer::GetPipeline(const Draw& draw) const
@@ -129,7 +134,7 @@ namespace FP
 		SDL_GPUDevice* gpu = m_Device.GetHandle();
 		const bool skinned = surface == Surface::SkinnedMesh;
 		SDL_GPUShader* vert = skinned ? m_Device.LoadShader("SkinnedMesh.vert", 0, 2) : m_Device.LoadShader("Mesh.vert", 0, 1);
-		SDL_GPUShader* frag = m_Device.LoadShader(fragment, numSamplers, numUniforms);
+		SDL_GPUShader* frag = m_Device.LoadShader(fragment, numSamplers, numUniforms, std::string_view(fragment) == "Unlit.frag" ? 0 : 1);
 		SDL_GPUGraphicsPipeline* pipeline = nullptr;
 		if (vert && frag)
 		{
@@ -271,6 +276,27 @@ namespace FP
 		m_PostPipeline = CreateFullscreenPipeline("Present.frag", 2, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB);
 		m_FXAAPipeline = CreateFullscreenPipeline("FXAA.frag", 1, m_TargetFormat);
 		m_BloomPipeline = CreateFullscreenPipeline("Bloom.frag", 1, SceneFormat);
+
+		SDL_GPUShader* skyFrag = m_Device.LoadShader("Skybox.frag", 0, 1, 1);
+		if (presentVert && skyFrag)
+		{
+			SDL_GPUColorTargetDescription skyTarget = {};
+			skyTarget.format = SceneFormat;
+			SDL_GPUGraphicsPipelineCreateInfo info = {};
+			info.vertex_shader = presentVert;
+			info.fragment_shader = skyFrag;
+			info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+			info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+			info.target_info.color_target_descriptions = &skyTarget;
+			info.target_info.num_color_targets = 1;
+			info.target_info.has_depth_stencil_target = true;
+			info.target_info.depth_stencil_format = m_Device.GetDepthFormat();
+			m_SkyboxPipeline = SDL_CreateGPUGraphicsPipeline(gpu, &info);
+			if (!m_SkyboxPipeline)
+				FP_LOG_ERROR("Skybox pipeline failed: %s", SDL_GetError());
+		}
+		if (skyFrag)
+			SDL_ReleaseGPUShader(gpu, skyFrag);
 
 		SDL_GPUShader* lineVert = m_Device.LoadShader("Line.vert", 0, 1);
 		SDL_GPUShader* lineFrag = m_Device.LoadShader("Line.frag", 0, 0);
@@ -472,6 +498,67 @@ namespace FP
 		m_Device.UploadToBuffer(cmd, *m_LineVertices, lines.GetVertices().Data(), bytes);
 	}
 
+	void Renderer::PrepareEnvironment(World& world)
+	{
+		if (world.View<SkyboxComponent>().empty())
+			return;
+		const SkyboxComponent* sky = nullptr;
+		for (Entity entity : world.GetEntities())
+		{
+			const SkyboxComponent* candidate = world.TryGet<SkyboxComponent>(entity);
+			if (candidate && candidate->Enabled)
+			{
+				sky = candidate;
+				break;
+			}
+		}
+		if (!sky || sky->Texture.IsEmpty())
+			return;
+
+		const String path = Paths::Content(sky->Texture);
+		std::error_code ec;
+		const auto modified = std::filesystem::last_write_time(path.CStr(), ec);
+		const int64 stamp = ec ? 0 : modified.time_since_epoch().count();
+		if (path != m_EnvironmentPath || stamp != m_EnvironmentModified)
+		{
+			m_EnvironmentPath = path;
+			m_EnvironmentModified = stamp;
+			m_EnvironmentBuffer.Reset();
+			if (m_Environment.Load(path.CStr()))
+				m_EnvironmentBuffer = m_Device.CreateBuffer(SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ, m_Environment.Pixels.Data(),
+					static_cast<uint32>(m_Environment.Pixels.Num()) * sizeof(Vec4));
+			else
+				FP_LOG_WARN("Could not load skybox %s. Use a 2:1 panorama up to 8192 pixels wide.", path.CStr());
+		}
+		if (!m_EnvironmentBuffer)
+			return;
+		m_Frame.EnvironmentParams = { std::max(sky->Intensity, 0.0f), sky->Rotation * DegToRad, sky->Visible ? 1.0f : 0.0f, 0 };
+		m_Frame.EnvironmentSize = { static_cast<float>(m_Environment.Width), static_cast<float>(m_Environment.Height), static_cast<float>(m_Environment.Levels), 0 };
+		for (int32 i = 0; i < 9; ++i)
+			m_Frame.EnvironmentDiffuse[i] = m_Environment.Diffuse[i];
+	}
+
+	void Renderer::DrawSkybox(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, const RenderView& view)
+	{
+		if (m_Frame.EnvironmentSize.Z == 0 || m_Frame.EnvironmentParams.Z == 0)
+			return;
+		struct SkyboxUniforms
+		{
+			Mat4 InverseViewProjection;
+			Vec4 CameraPosition;
+			Vec4 CameraForward;
+			Vec4 Params;
+			Vec4 Size;
+		};
+		const SkyboxUniforms uniforms{ view.GetViewProjection().Inverse(), m_Frame.CameraPosition, m_Frame.CameraForward,
+			m_Frame.EnvironmentParams, m_Frame.EnvironmentSize };
+		SDL_BindGPUGraphicsPipeline(pass, m_SkyboxPipeline);
+		SDL_PushGPUFragmentUniformData(cmd, 0, &uniforms, sizeof(uniforms));
+		SDL_GPUBuffer* buffer = m_EnvironmentBuffer->GetHandle();
+		SDL_BindGPUFragmentStorageBuffers(pass, 0, &buffer, 1);
+		SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+	}
+
 	void Renderer::BuildFrameUniforms(World& world, const RenderView& view, uint32 width, uint32 height)
 	{
 		m_Frame = FrameUniforms();
@@ -624,7 +711,7 @@ namespace FP
 		uint32 count = 0;
 		auto bind = [&](GPUTexture* texture, SDL_GPUSampler* s = nullptr) { bindings[count++] = { texture->GetHandle(), s ? s : sampler }; };
 
-		bind(wireframe ? white : Texture(baseMap, true, white));
+		bind(wireframe || (m_MeshletSettings.Colorize && draw.IndirectFirst >= 0) ? white : Texture(baseMap, true, white));
 		if (draw.Kind == ShaderKind::Lit)
 		{
 			bind(Texture(data.NormalMap, false, m_Device.GetFlatNormalTexture()));
@@ -643,8 +730,30 @@ namespace FP
 			bind(Texture(data.RoughnessMap, false, white));
 			bind(m_SceneCopy.Get(), m_Device.GetClampSampler());
 		}
+		if (draw.Kind != ShaderKind::Unlit)
+		{
+			SDL_GPUBuffer* environment = m_EnvironmentBuffer ? m_EnvironmentBuffer->GetHandle() : m_EmptyEnvironment->GetHandle();
+			SDL_BindGPUFragmentStorageBuffers(pass, 0, &environment, 1);
+		}
 		SDL_BindGPUFragmentSamplers(pass, 0, bindings, count);
-		SDL_DrawGPUIndexedPrimitives(pass, sprite ? 6 : draw.IndexCount, 1, sprite ? 0 : draw.FirstIndex, 0, 0);
+		if (draw.IndirectFirst >= 0)
+		{
+			if (m_MeshletSettings.Colorize)
+			{
+				material = MaterialUniforms();
+				material.Params2.Y = 0;
+				SDL_PushGPUFragmentUniformData(cmd, 0, &material, sizeof(material));
+				for (uint32 i = 0; i < draw.MeshletCount; ++i)
+				{
+					uint32 hash = (draw.FirstIndex + i + 1) * 2654435761u ^ (static_cast<uint32>(draw.Value) * 2246822519u);
+					object.Tint = { 0.2f + 0.8f * (hash & 255) / 255.0f, 0.2f + 0.8f * ((hash >> 8) & 255) / 255.0f, 0.2f + 0.8f * ((hash >> 16) & 255) / 255.0f, 1 };
+					SDL_PushGPUVertexUniformData(cmd, 0, &object, sizeof(object));
+					SDL_DrawGPUIndexedPrimitivesIndirect(pass, m_Culling.Commands(), (draw.IndirectFirst + i) * sizeof(SDL_GPUIndexedIndirectDrawCommand), 1);
+				}
+			}
+			else SDL_DrawGPUIndexedPrimitivesIndirect(pass, m_Culling.Commands(), draw.IndirectFirst * sizeof(SDL_GPUIndexedIndirectDrawCommand), draw.MeshletCount);
+		}
+		else SDL_DrawGPUIndexedPrimitives(pass, sprite ? 6 : draw.IndexCount, 1, sprite ? 0 : draw.FirstIndex, 0, 0);
 	}
 
 	void Renderer::PushBones(SDL_GPUCommandBuffer* cmd, const Array<Mat4>* skin)
@@ -656,7 +765,7 @@ namespace FP
 		SDL_PushGPUVertexUniformData(cmd, 1, m_BoneUpload.Data(), static_cast<uint32>(MaxSkinBones * sizeof(Mat4)));
 	}
 
-	SDL_GPUGraphicsPipeline* Renderer::CreateShadowPipeline(Surface surface)
+	SDL_GPUGraphicsPipeline* Renderer::CreateShadowPipeline(Surface surface, bool occlusion)
 	{
 		SDL_GPUDevice* gpu = m_Device.GetHandle();
 		const bool skinned = surface == Surface::SkinnedMesh;
@@ -685,10 +794,11 @@ namespace FP
 			info.vertex_input_state.num_vertex_attributes = skinned ? 6 : 4;
 			info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
 			// Both faces cast so open meshes like planes still shadow. The slope bias keeps
-			// lit surfaces from shadowing themselves.
-			info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+			// lit surfaces from shadowing themselves. The camera occlusion prepass instead
+			// matches scene back-face culling and uses unbiased depth.
+			info.rasterizer_state.cull_mode = occlusion ? SDL_GPU_CULLMODE_BACK : SDL_GPU_CULLMODE_NONE;
 			info.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
-			info.rasterizer_state.enable_depth_bias = true;
+			info.rasterizer_state.enable_depth_bias = !occlusion;
 			info.rasterizer_state.depth_bias_constant_factor = 2;
 			info.rasterizer_state.depth_bias_slope_factor = 2;
 			info.depth_stencil_state.enable_depth_test = true;
@@ -696,10 +806,10 @@ namespace FP
 			info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
 			info.target_info.num_color_targets = 0;
 			info.target_info.has_depth_stencil_target = true;
-			info.target_info.depth_stencil_format = m_Device.GetShadowFormat();
+			info.target_info.depth_stencil_format = occlusion ? m_Device.GetDepthFormat() : m_Device.GetShadowFormat();
 			pipeline = SDL_CreateGPUGraphicsPipeline(gpu, &info);
 			if (!pipeline)
-				FP_LOG_WARN("Shadow pipeline failed, so there will be no shadows: %s", SDL_GetError());
+				FP_LOG_WARN("%s depth pipeline failed: %s", occlusion ? "Occlusion" : "Shadow", SDL_GetError());
 		}
 		if (vert)
 			SDL_ReleaseGPUShader(gpu, vert);
@@ -874,8 +984,76 @@ namespace FP
 		return textures;
 	}
 
+	void Renderer::PrepareMeshlets(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view, Array<Draw>& draws)
+	{
+		m_ActiveMeshlets = 0;
+		if (!m_MeshletSettings.Enabled || !HasMeshletCulling()) return;
+		if (!m_HasCullingView || !m_MeshletSettings.FreezeCamera)
+		{
+			m_CullingView = view;
+			m_HasCullingView = true;
+		}
+		const uint32 width = m_SceneColor->GetWidth(), height = m_SceneColor->GetHeight();
+		if (!m_CullDepth || m_CullDepth->GetWidth() != width || m_CullDepth->GetHeight() != height)
+			m_CullDepth = m_Device.CreateRenderTarget(m_Device.GetDepthFormat(), width, height, true, true);
+		if (!m_CullDepth) return;
+		MeshletSettings settings = m_MeshletSettings;
+		settings.Occlusion &= m_Mode != ViewMode::Wireframe;
+		const Mat4 clip = m_CullingView.GetViewProjection();
+		Array<MeshletCullItem> items;
+		for (Draw& draw : draws)
+		{
+			// Animated bounds need deformation-aware bounds; transparent surfaces keep their ordered path.
+			if (draw.Type != Surface::Mesh || draw.Kind == ShaderKind::Glass) continue;
+			if (draw.Mat && draw.Mat->GetData().Shader == "Glass") continue;
+			const int32 first = items.Num();
+			const Mat4 localToClip = clip * world.GetWorldMatrix(draw.Value);
+			for (const auto& meshlet : draw.Mesh->Meshlets)
+			{
+				if (meshlet.FirstIndex < draw.FirstIndex || meshlet.FirstIndex >= draw.FirstIndex + draw.IndexCount) continue;
+				items.Add({ localToClip, Vec4(meshlet.BoundsMin, 0), Vec4(meshlet.BoundsMax, 0), meshlet.FirstIndex, meshlet.IndexCount, {} });
+			}
+			if (items.Num() > first) { draw.IndirectFirst = first; draw.MeshletCount = static_cast<uint32>(items.Num() - first); }
+		}
+		if (items.IsEmpty()) return;
+		// Current-frame depth avoids temporal false occlusion when objects or cameras move.
+		SDL_GPUDepthStencilTargetInfo depth{};
+		depth.texture = m_CullDepth->GetHandle(); depth.clear_depth = 1;
+		depth.load_op = SDL_GPU_LOADOP_CLEAR; depth.store_op = SDL_GPU_STOREOP_STORE;
+		depth.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE; depth.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+		auto* pass = SDL_BeginGPURenderPass(cmd, nullptr, 0, &depth);
+		if (settings.Occlusion)
+		{
+			SDL_BindGPUGraphicsPipeline(pass, m_OcclusionPipeline);
+			for (const Draw& draw : draws)
+			{
+				if (draw.IndirectFirst < 0) continue;
+				// Cutout textures cannot safely occlude without reproducing their alpha test.
+				const MaterialData defaults;
+				const auto& data = draw.Mat ? draw.Mat->GetData() : defaults;
+				if (data.BaseColor.A < data.AlphaCutoff || (!data.BaseColorMap.IsEmpty() && data.AlphaCutoff > 0)) continue;
+				ObjectUniforms object;
+				object.ViewProjection = clip; object.Model = world.GetWorldMatrix(draw.Value);
+				object.NormalMatrix = object.Model.Inverse().Transposed();
+				SDL_PushGPUVertexUniformData(cmd, 0, &object, sizeof(object));
+				SDL_GPUBufferBinding vertices{ draw.Mesh->Vertices->GetHandle(), 0 }, indices{ draw.Mesh->Indices->GetHandle(), 0 };
+				SDL_BindGPUVertexBuffers(pass, 0, &vertices, 1);
+				SDL_BindGPUIndexBuffer(pass, &indices, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+				SDL_DrawGPUIndexedPrimitives(pass, draw.IndexCount, 1, draw.FirstIndex, 0, 0);
+			}
+		}
+		SDL_EndGPURenderPass(pass);
+		if (m_Culling.Dispatch(cmd, m_CullDepth->GetHandle(), width, height, items, settings))
+		{
+			m_ActiveMeshlets = static_cast<uint32>(items.Num());
+			if (settings.Colorize)
+				for (Draw& draw : draws) if (draw.IndirectFirst >= 0) draw.Kind = ShaderKind::Unlit;
+		}
+		else for (Draw& draw : draws) { draw.IndirectFirst = -1; draw.MeshletCount = 0; }
+	}
+
 	void Renderer::Render(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* target, uint32 width, uint32 height,
-		World& world, const RenderView& view, const DebugLines* lines)
+		World& world, const RenderView& view, const DebugLines* lines, const RenderView* cullingView)
 	{
 		if (!IsValid() || width == 0 || height == 0)
 			return;
@@ -883,6 +1061,7 @@ namespace FP
 		EnsureTargets(width, height);
 		if (!m_SceneColor || !m_SceneCopy || !m_Depth) return;
 		BuildFrameUniforms(world, view, width, height);
+		PrepareEnvironment(world);
 		RenderShadows(cmd, world, view);
 
 		const bool hasLines = lines && !lines->GetVertices().IsEmpty();
@@ -946,6 +1125,7 @@ namespace FP
 			return a.Depth > b.Depth;
 		});
 
+		PrepareMeshlets(cmd, world, cullingView ? *cullingView : view, draws);
 		const Mat4 viewProjection = view.GetViewProjection();
 		SDL_PushGPUFragmentUniformData(cmd, 1, &m_Frame, sizeof(m_Frame));
 
@@ -986,6 +1166,7 @@ namespace FP
 			++firstGlass;
 
 		SDL_GPURenderPass* pass = beginScenePass(true);
+		DrawSkybox(cmd, pass, view);
 		drawRange(pass, 0, firstGlass);
 		// Particles go before glass so glass refracts them.
 		DrawParticles(cmd, pass, viewProjection);

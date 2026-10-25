@@ -86,7 +86,7 @@ namespace FP
 		return SDL_GetGPUDeviceDriver(m_Device);
 	}
 
-	SDL_GPUShader* GPUDevice::LoadShader(const char* name, uint32 numSamplers, uint32 numUniformBuffers)
+	SDL_GPUShader* GPUDevice::LoadShader(const char* name, uint32 numSamplers, uint32 numUniformBuffers, uint32 numStorageBuffers)
 	{
 		const bool isMsl = m_ShaderFormat == SDL_GPU_SHADERFORMAT_MSL;
 		const String path = Paths::EngineContent(String::Format("Shaders/%s.%s", name, isMsl ? "msl" : "spv"));
@@ -106,11 +106,33 @@ namespace FP
 		info.stage = String(name).EndsWith(".frag") ? SDL_GPU_SHADERSTAGE_FRAGMENT : SDL_GPU_SHADERSTAGE_VERTEX;
 		info.num_samplers = numSamplers;
 		info.num_uniform_buffers = numUniformBuffers;
+		info.num_storage_buffers = numStorageBuffers;
 
 		SDL_GPUShader* shader = SDL_CreateGPUShader(m_Device, &info);
 		if (!shader)
 			FP_LOG_ERROR("Shader %s failed: %s", name, SDL_GetError());
 		return shader;
+	}
+
+	SDL_GPUComputePipeline* GPUDevice::LoadComputeShader(const char* name, uint32 samplers, uint32 readBuffers, uint32 writeBuffers, uint32 threadsX, uint32 threadsY)
+	{
+		const bool metal = m_ShaderFormat == SDL_GPU_SHADERFORMAT_MSL;
+		String code;
+		const String path = Paths::EngineContent(String::Format("Shaders/%s.%s", name, metal ? "msl" : "spv"));
+		if (!File::ReadAllText(path.CStr(), code)) return nullptr;
+		SDL_GPUComputePipelineCreateInfo info{};
+		info.code = reinterpret_cast<const uint8*>(code.CStr());
+		info.code_size = static_cast<usize>(code.Length());
+		info.entrypoint = metal ? "main0" : "main";
+		info.format = m_ShaderFormat;
+		info.num_samplers = samplers;
+		info.num_readonly_storage_buffers = readBuffers;
+		info.num_readwrite_storage_buffers = writeBuffers;
+		info.num_uniform_buffers = 1;
+		info.threadcount_x = threadsX; info.threadcount_y = threadsY; info.threadcount_z = 1;
+		auto* pipeline = SDL_CreateGPUComputePipeline(m_Device, &info);
+		if (!pipeline) FP_LOG_WARN("Compute shader %s failed: %s", name, SDL_GetError());
+		return pipeline;
 	}
 
 	RefPtr<GPUTexture> GPUDevice::CreateTexture(const void* rgba, uint32 width, uint32 height, bool srgb, bool mipmaps)

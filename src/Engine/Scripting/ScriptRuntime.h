@@ -14,7 +14,7 @@ namespace FP
 
 	// Loads the game scripts library and creates script instances. Host side only.
 	//
-	// The library is copied to a fresh file before loading so the original can be rebuilt while
+	// The editor copies the library to a fresh file so the original can be rebuilt while
 	// the copy is in use (Windows locks loaded DLLs). Reload swaps in a new build and moves every
 	// running script across, keeping its exposed field values.
 	class ScriptRuntime

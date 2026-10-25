@@ -4,6 +4,7 @@
 #include "Engine/Material.h"
 #include "Engine/Paths.h"
 #include "Engine/Project.h"
+#include "Engine/Render/ImageDecoder.h"
 #include "Core/Misc/Guid.h"
 
 #include <QApplication>
@@ -63,7 +64,7 @@ namespace FP::Editor
 		QString ProjectDir() { return QString::fromUtf8(Paths::GetProjectDir().CStr()); }
 	}
 
-	ContentBrowser::ContentBrowser(QWidget* parent) : QWidget(parent)
+	ContentBrowser::ContentBrowser(GPUDevice& device, QWidget* parent) : QWidget(parent), m_Thumbnails(device)
 	{
 		m_ContentRoot = QDir::cleanPath(QString::fromUtf8(Paths::GetContentDir().CStr()));
 		m_ScriptsRoot = QDir::cleanPath(QString::fromUtf8(Paths::GetProject().GetScriptsDir().CStr()));
@@ -193,6 +194,11 @@ namespace FP::Editor
 		m_RefreshTimer->setInterval(250);
 		connect(m_RefreshTimer, &QTimer::timeout, this, &ContentBrowser::Refresh);
 		connect(m_Watcher, &QFileSystemWatcher::directoryChanged, m_RefreshTimer, qOverload<>(&QTimer::start));
+
+		m_ThumbnailTimer = new QTimer(this);
+		m_ThumbnailTimer->setInterval(16);
+		connect(m_ThumbnailTimer, &QTimer::timeout, this, &ContentBrowser::RenderNextThumbnail);
+		connect(m_Watcher, &QFileSystemWatcher::fileChanged, m_RefreshTimer, qOverload<>(&QTimer::start));
 
 		m_CurrentFolder = m_ContentRoot;
 		Refresh();
@@ -548,8 +554,10 @@ namespace FP::Editor
 	QString ContentBrowser::AssetKind(const QString& path)
 	{
 		const QString suffix = QFileInfo(path).suffix().toLower();
+		if (suffix == "actions") return "Input Actions";
 		if (suffix == "scene") return "Scene";
 		if (suffix == "material") return "Material";
+		if (suffix == "hdr") return "Environment";
 		if (suffix == "wav" || suffix == "mp3") return "Audio";
 		if (QStringList{ "png", "jpg", "jpeg", "tga", "bmp" }.contains(suffix)) return "Texture";
 		if (QStringList{ "obj", "gltf", "glb" }.contains(suffix)) return "Mesh";
@@ -584,6 +592,8 @@ namespace FP::Editor
 
 	void ContentBrowser::Refresh()
 	{
+		m_IconCache.clear();
+		m_Thumbnails.Clear();
 		if (!QFileInfo(m_CurrentFolder).isDir())
 			m_CurrentFolder = m_ContentRoot;
 		RebuildTree();
@@ -622,6 +632,9 @@ namespace FP::Editor
 
 	void ContentBrowser::RebuildFiles()
 	{
+		m_ThumbnailTimer->stop();
+		m_PendingThumbnails.clear();
+		m_Thumbnails.Clear();
 		m_Files->clear();
 		const QString filter = m_Search->text().trimmed();
 		const QDir project(ProjectDir());
@@ -653,6 +666,8 @@ namespace FP::Editor
 			item->setToolTip(QString("%1\n%2").arg(project.relativeFilePath(info.absoluteFilePath()), info.isDir() ? "Folder" : AssetKind(info.fileName())));
 			m_Files->addItem(item);
 		}
+		if (!m_PendingThumbnails.isEmpty())
+			m_ThumbnailTimer->start();
 		m_Count->setText(QString("%1 items%2").arg(m_Files->count()).arg(filter.isEmpty() ? "" : QString(" matching \"%1\"").arg(filter)));
 	}
 
@@ -723,7 +738,7 @@ namespace FP::Editor
 
 	void ContentBrowser::ImportFiles()
 	{
-		const QStringList files = QFileDialog::getOpenFileNames(this, "Import", QString(), "Assets (*.png *.jpg *.jpeg *.tga *.bmp *.obj *.gltf *.glb *.bin *.material *.scene);;All files (*)");
+		const QStringList files = QFileDialog::getOpenFileNames(this, "Import", QString(), "Assets (*.actions *.hdr *.png *.jpg *.jpeg *.tga *.bmp *.obj *.gltf *.glb *.bin *.material *.scene);;All files (*)");
 		QString last;
 		for (const QString& file : files)
 		{
@@ -746,15 +761,26 @@ namespace FP::Editor
 	{
 		if (!m_Watcher->directories().isEmpty())
 			m_Watcher->removePaths(m_Watcher->directories());
+		if (!m_Watcher->files().isEmpty())
+			m_Watcher->removePaths(m_Watcher->files());
 		QStringList dirs;
+		QStringList files;
 		for (const QString& root : { m_ContentRoot, m_ScriptsRoot })
 		{
 			dirs.append(root);
-			QDirIterator it(root, QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+			QDirIterator it(root, QDir::AllEntries | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
 			while (it.hasNext())
-				dirs.append(it.next());
+			{
+				const QString path = it.next();
+				if (it.fileInfo().isDir())
+					dirs.append(path);
+				else if (AssetKind(path) == "Texture" || AssetKind(path) == "Material" || AssetKind(path) == "Mesh" || it.fileInfo().suffix() == "bin")
+					files.append(path);
+			}
 		}
 		m_Watcher->addPaths(dirs);
+		if (!files.isEmpty())
+			m_Watcher->addPaths(files);
 	}
 
 	QIcon ContentBrowser::TileIcon(EditorIcon icon, const QColor& color) const
@@ -777,14 +803,60 @@ namespace FP::Editor
 		return QIcon(pixmap);
 	}
 
+	QIcon ContentBrowser::ThumbnailIcon(const QImage& image, const QColor& color) const
+	{
+		QPixmap pixmap(IconSize * 2, IconSize * 2);
+		pixmap.setDevicePixelRatio(2);
+		pixmap.fill(Qt::transparent);
+		QPainter painter(&pixmap);
+		painter.setRenderHint(QPainter::Antialiasing);
+		painter.setRenderHint(QPainter::SmoothPixmapTransform);
+		const QRectF card(4, 4, IconSize - 8, IconSize - 8);
+		QPainterPath shape;
+		shape.addRoundedRect(card, 4, 4);
+		painter.setClipPath(shape);
+		// A checkerboard makes transparent textures visible.
+		for (int y = 4; y < IconSize - 4; y += 8)
+			for (int x = 4; x < IconSize - 4; x += 8)
+				painter.fillRect(x, y, 8, 8, (x / 8 + y / 8) % 2 ? QColor(75, 75, 75) : QColor(50, 50, 50));
+		const QSizeF size = QSizeF(image.size()).scaled(card.size(), Qt::KeepAspectRatio);
+		painter.drawImage(QRectF(card.center() - QPointF(size.width() / 2, size.height() / 2), size), image);
+		painter.fillRect(QRectF(card.left(), card.bottom() - 4, card.width(), 4), color);
+		return QIcon(pixmap);
+	}
+
+	void ContentBrowser::RenderNextThumbnail()
+	{
+		if (m_PendingThumbnails.isEmpty())
+		{
+			m_ThumbnailTimer->stop();
+			m_Thumbnails.Clear();
+			return;
+		}
+		const QString path = m_PendingThumbnails.takeFirst();
+		const bool material = AssetKind(path) == "Material";
+		const QColor color = material ? QColor(0x80, 0xc0, 0x60) : QColor(0x3a, 0xa0, 0xd0);
+		const QImage image = m_Thumbnails.Render(path, material);
+		const QIcon icon = image.isNull() ? TileIcon(material ? EditorIcon::Material : EditorIcon::Mesh, color) : ThumbnailIcon(image, color);
+		m_IconCache.insert(path, new QIcon(icon));
+		for (int i = 0; i < m_Files->count(); ++i)
+		{
+			QListWidgetItem* item = m_Files->item(i);
+			if (item->data(PathRole).toString() == path)
+			{
+				item->setIcon(icon);
+				break;
+			}
+		}
+	}
+
 	QIcon ContentBrowser::IconFor(const QString& path)
 	{
 		const QFileInfo info(path);
 		if (info.isDir())
 			return EditorIcons::Get(EditorIcon::Folder);
 
-		const QString key = path + "|" + QString::number(info.lastModified().toMSecsSinceEpoch());
-		if (const auto cached = m_IconCache.find(key); cached != m_IconCache.end())
+		if (const QIcon* cached = m_IconCache.object(path))
 			return *cached;
 
 		QIcon icon;
@@ -795,48 +867,33 @@ namespace FP::Editor
 			QImageReader reader(path);
 			const QSize size = reader.size();
 			if (size.isValid())
-				reader.setScaledSize(size.scaled(IconSize, IconSize, Qt::KeepAspectRatio));
-			const QImage image = reader.read();
-			icon = image.isNull() ? TileIcon(EditorIcon::Texture, QColor(0xd0, 0x5a, 0x5a)) : QIcon(QPixmap::fromImage(image));
-		}
-		else if (kind == "Material")
-		{
-			// A swatch of the base color, or the base color map when there is one.
-			const QString relative = QDir(m_ContentRoot).relativeFilePath(path);
-			const Material* material = MaterialLibrary::Get().Load(String(relative.toUtf8().constData()));
-			QPixmap pixmap(IconSize, IconSize);
-			pixmap.fill(Qt::transparent);
-			QPainter painter(&pixmap);
-			painter.setRenderHint(QPainter::Antialiasing);
-			QColor base(160, 160, 160);
-			QImage map;
-			if (material)
+				reader.setScaledSize(size.scaled(IconSize * 2, IconSize * 2, Qt::KeepAspectRatio));
+			reader.setAutoTransform(true);
+			QImage image = reader.read();
+			if (image.isNull() && info.suffix().compare("tga", Qt::CaseInsensitive) == 0)
 			{
-				const MaterialData& data = material->GetData();
-				base = QColor::fromRgbF(data.BaseColor.R, data.BaseColor.G, data.BaseColor.B);
-				if (!data.BaseColorMap.IsEmpty())
-					map = QImage(m_ContentRoot + "/" + QString::fromUtf8(data.BaseColorMap.CStr())).scaled(IconSize, IconSize);
+				const String relative(QDir(m_ContentRoot).relativeFilePath(path).toUtf8().constData());
+				const Array<DecodedImage> decoded = DecodeImages({ relative });
+				if (decoded[0].Pixels)
+					image = QImage(decoded[0].Pixels, decoded[0].Width, decoded[0].Height, QImage::Format_RGBA8888)
+						.scaled(IconSize * 2, IconSize * 2, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 			}
-			QPainterPath circle;
-			circle.addEllipse(QRectF(6, 6, IconSize - 12, IconSize - 12));
-			painter.setClipPath(circle);
-			if (!map.isNull())
-				painter.drawImage(0, 0, map);
-			else
-				painter.fillRect(pixmap.rect(), base);
-			painter.setClipping(false);
-			painter.setPen(QPen(QColor(255, 255, 255, 60), 2));
-			painter.drawEllipse(QRectF(6, 6, IconSize - 12, IconSize - 12));
-			icon = QIcon(pixmap);
+			icon = image.isNull() ? TileIcon(EditorIcon::Texture, QColor(0xd0, 0x5a, 0x5a)) : ThumbnailIcon(image, QColor(0xd0, 0x5a, 0x5a));
 		}
+		else if (kind == "Material" || kind == "Mesh")
+		{
+			m_PendingThumbnails.append(path);
+			return kind == "Material" ? TileIcon(EditorIcon::Material, QColor(0x80, 0xc0, 0x60)) : TileIcon(EditorIcon::Mesh, QColor(0x3a, 0xa0, 0xd0));
+		}
+		else if (kind == "Environment") icon = TileIcon(EditorIcon::Texture, QColor(0x60, 0xb0, 0xc0));
 		else if (kind == "Scene") icon = TileIcon(EditorIcon::Scene, QColor(0xf0, 0xa0, 0x30));
-		else if (kind == "Mesh") icon = TileIcon(EditorIcon::Mesh, QColor(0x3a, 0xa0, 0xd0));
+		else if (kind == "Input Actions") icon = TileIcon(EditorIcon::Script, QColor(0x60, 0xc0, 0xb0));
 		else if (kind == "Script") icon = TileIcon(EditorIcon::Script, QColor(0x4f, 0xa3, 0xe0));
 		else if (kind == "Page") icon = TileIcon(EditorIcon::Script, QColor(0xe0, 0x8a, 0x3a));
 		else if (kind == "Web") icon = TileIcon(EditorIcon::Script, QColor(0xc0, 0xa0, 0x40));
 		else icon = TileIcon(EditorIcon::OutputLog, QColor(0x80, 0x80, 0x80));
 
-		m_IconCache.insert(key, icon);
+		m_IconCache.insert(path, new QIcon(icon));
 		return icon;
 	}
 }

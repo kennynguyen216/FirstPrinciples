@@ -63,6 +63,14 @@ namespace FP
 		Locked,  // hidden and held in place, for mouse look. Read GetMouseDelta for movement
 	};
 
+	enum class RebindStatus : uint8
+	{
+		Idle,
+		Listening,
+		Complete,
+		Cancelled,
+	};
+
 	// Global input state for the current frame. The runtime feeds it SDL events and the editor
 	// feeds it Qt events, so game code reads input the same way in both.
 	namespace Input
@@ -134,6 +142,12 @@ namespace FP
 		// rest still load.
 		bool LoadActions(std::string_view text, std::vector<std::string>* errors = nullptr);
 
+		// Checks bindings without changing the active actions.
+		bool ValidateActions(std::string_view text, std::vector<std::string>* errors = nullptr);
+
+		// Names accepted after a device, for binding pickers.
+		std::vector<std::string> GetBindingInputs(std::string_view device);
+
 		// Loads the file, or the defaults when it does not exist.
 		bool LoadActionsFile(const char* path);
 
@@ -142,6 +156,24 @@ namespace FP
 
 		// Every action name, in the order they were first bound.
 		std::vector<std::string> GetActionNames();
+
+		// Binding strings use Device:Input, an optional direction and an optional scale.
+		std::vector<std::string> GetActionBindings(std::string_view action);
+		bool SetActionBindings(std::string_view action, const std::vector<std::string>& bindings);
+		bool RebindAction(std::string_view action, size_t index, std::string_view binding);
+		bool ResetActionBindings(std::string_view action);
+		void ResetAllActionBindings();
+
+		// Player overrides live in a SaveData slot and leave Content/Input.actions alone.
+		bool SaveActionBindings(std::string_view slot = "input_bindings");
+		bool LoadActionBindings(std::string_view slot = "input_bindings");
+
+		// Captures the next fresh press. Escape cancels and held controls are ignored.
+		// Actions stay quiet during capture and until the captured control is released.
+		bool BeginActionRebind(std::string_view action, size_t index, bool allowAxes = false);
+		void CancelActionRebind();
+		RebindStatus GetActionRebindStatus();
+		std::string GetLastReboundInput();
 
 		// ---- Fed by the platform layer -------------------------------------
 

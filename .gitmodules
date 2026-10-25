@@ -26,3 +26,6 @@
 [submodule "ThirdParty/dr_libs"]
 	path = ThirdParty/dr_libs
 	url = https://github.com/mackron/dr_libs.git
+[submodule "ThirdParty/meshoptimizer"]
+	path = ThirdParty/meshoptimizer
+	url = https://github.com/zeux/meshoptimizer.git

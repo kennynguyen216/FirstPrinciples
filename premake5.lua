@@ -38,8 +38,9 @@ local HasUltralight = os.isdir(UltralightDir .. "/include/Ultralight")
 if not HasUltralight then
 	premake.warn("Ultralight is missing, so game UI will not draw. Run Scripts/GetUltralight to get it.")
 end
+local MeshoptimizerDir = Root .. "/ThirdParty/meshoptimizer"
 local ImGuiDir = Root .. "/ThirdParty/imgui"
-if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) or not os.isdir(SpdlogInclude) or not os.isdir(CgltfInclude) or not os.isfile(ImGuiDir .. "/imgui.h") or not os.isdir(JoltDir .. "/Jolt") or not os.isfile(DrLibsDir .. "/dr_mp3.h") then
+if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) or not os.isdir(SpdlogInclude) or not os.isdir(CgltfInclude) or not os.isfile(ImGuiDir .. "/imgui.h") or not os.isdir(JoltDir .. "/Jolt") or not os.isfile(DrLibsDir .. "/dr_mp3.h") or not os.isfile(MeshoptimizerDir .. "/src/meshoptimizer.h") then
 	premake.warn("Submodules are missing. Run: git submodule update --init")
 end
 
@@ -93,7 +94,7 @@ local ProjectName = io.readfile(ProjectFile):match('Name%s+"?([%w_]+)"?') or pat
 
 -- Include paths every project that touches engine headers needs.
 local function EngineIncludes()
-	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir, SpdlogInclude, CgltfInclude, ImGuiDir, JoltDir, OpusDir .. "/include", DrLibsDir }
+	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir, SpdlogInclude, CgltfInclude, ImGuiDir, MeshoptimizerDir .. "/src", JoltDir, OpusDir .. "/include", DrLibsDir }
 	if HasUltralight then
 		externalincludedirs { UltralightDir .. "/include" }
 		defines { "FP_WITH_ULTRALIGHT=1" }
@@ -134,14 +135,15 @@ local function UseSDL()
 	end
 end
 
-local function UseQt()
+local function UseQt(modules)
+	modules = modules or QtModules
 	if not QtDir then
 		premake.warn("Qt was not found. Install a 64-bit MSVC Qt kit on Windows and set QT_DIR if it is outside C:/Qt. The Editor project will not build without Qt.")
 		return
 	end
 
 	externalincludedirs { QtDir .. "/include" }
-	for _, m in ipairs(QtModules) do
+	for _, m in ipairs(modules) do
 		externalincludedirs { QtDir .. "/include/Qt" .. m }
 	end
 
@@ -149,9 +151,9 @@ local function UseQt()
 		libdirs { QtDir .. "/lib" }
 		buildoptions { "/Zc:__cplusplus", "/permissive-" }
 		filter "configurations:Debug"
-			for _, m in ipairs(QtModules) do links { "Qt6" .. m .. "d" } end
+			for _, m in ipairs(modules) do links { "Qt6" .. m .. "d" } end
 		filter "configurations:Release"
-			for _, m in ipairs(QtModules) do links { "Qt6" .. m } end
+			for _, m in ipairs(modules) do links { "Qt6" .. m } end
 		filter {}
 		-- Copies the Qt DLLs and plugins next to the exe.
 		postbuildcommands { '"' .. QtDir .. '/bin/windeployqt.exe" --no-translations --no-compiler-runtime "%{cfg.buildtarget.abspath}"' }
@@ -160,7 +162,7 @@ local function UseQt()
 		local lib = QtDir .. "/lib"
 		buildoptions { "-F" .. lib }
 		linkoptions { "-F" .. lib, "-Wl,-rpath," .. lib }
-		for _, m in ipairs(QtModules) do
+		for _, m in ipairs(modules) do
 			linkoptions { "-framework Qt" .. m }
 		end
 	end
@@ -278,7 +280,8 @@ project "Jolt"
 
 project "ImGui"
 	kind "StaticLib"
-	files { ImGuiDir .. "/*.h", ImGuiDir .. "/*.cpp" }
+	files { ImGuiDir .. "/*.h", ImGuiDir .. "/*.cpp", ImGuiDir .. "/backends/imgui_impl_sdlgpu3.cpp" }
+	externalincludedirs { SdlDir .. "/include", ImGuiDir }
 
 -- Engine: HAL, Core, CoreObject and Engine in one static lib.
 project "Engine"
@@ -289,7 +292,7 @@ project "Engine"
 		"src/CoreObject/**.h", "src/CoreObject/**.cpp",
 		"src/Engine/**.h", "src/Engine/**.cpp",
 	}
-	files { MonocypherDir .. "/monocypher.c" }
+	files { MonocypherDir .. "/monocypher.c", MeshoptimizerDir .. "/src/**.cpp", MeshoptimizerDir .. "/src/**.h" }
 	-- Module entry points belong to the scripts library only.
 	removefiles { "src/Engine/Scripting/Module/**" }
 	-- Shader sources are compiled by Scripts/CompileShaders, not by the C++ build.
@@ -334,6 +337,12 @@ project "GameScripts"
 		linkoptions { '/PDB:"$(OutDir)GameScripts_$([System.DateTime]::Now.Ticks).pdb"' }
 	filter {}
 
+-- Packaging uses Qt Core for processes and file operations, with no engine dependencies.
+project "PackageTool"
+	kind "ConsoleApp"
+	files { "src/Tools/PackageTool/**.h", "src/Tools/PackageTool/**.cpp", "src/Core/Misc/Pak.h", "src/Core/Misc/Pak.cpp" }
+	UseQt({ "Core" })
+
 project "Runtime"
 	kind "ConsoleApp"
 	files { "src/Runtime/**.h", "src/Runtime/**.cpp" }
@@ -361,3 +370,15 @@ project "Tests"
 	files { "src/Tools/HeaderTool/HeaderParser.h", "src/Tools/HeaderTool/HeaderParser.cpp" }
 	UseEngine(false)
 	dependson { "GameScripts" }
+
+project "EditorTests"
+	kind "ConsoleApp"
+	dependson { "Editor" }
+	files {
+		"src/EditorTests/**.cpp",
+		"src/Editor/CodeEditor.h", "src/Editor/CodeEditor.cpp",
+		"src/Editor/InputActionsEditor.h", "src/Editor/InputActionsEditor.cpp",
+	}
+	UseEngine(false)
+	UseQt()
+	AddMocRules("src/Editor")

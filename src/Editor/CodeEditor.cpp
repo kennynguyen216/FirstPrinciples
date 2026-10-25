@@ -122,6 +122,13 @@ namespace FP::Editor
 		HighlightCurrentLine();
 	}
 
+	void CodeEditor::SetHighlighter(QSyntaxHighlighter* highlighter)
+	{
+		delete m_Highlighter;
+		m_Highlighter = highlighter;
+		m_Highlighter->setDocument(document());
+	}
+
 	bool CodeEditor::LoadFile(const QString& path)
 	{
 		QFile file(path);

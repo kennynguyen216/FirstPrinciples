@@ -190,7 +190,7 @@ namespace FP::Editor
 		m_Image.setDevicePixelRatio(dpr);
 	}
 
-	RenderView ViewportWidget::CurrentView() const
+	RenderView ViewportWidget::CurrentView(bool observer) const
 	{
 		const uint32 width = m_Target ? m_Target->GetWidth() : 1;
 		const uint32 height = m_Target ? m_Target->GetHeight() : 1;
@@ -199,7 +199,7 @@ namespace FP::Editor
 			RenderView game = RenderView::FromWorld(*m_World, width, height);
 			game.Mode = m_ViewMode;
 			game.PixelScale = static_cast<float>(devicePixelRatioF());
-			return game;
+			return observer && m_MeshletCameraContext ? game.Expanded(m_MeshletObserverWidth) : game;
 		}
 
 		RenderView view;
@@ -219,7 +219,7 @@ namespace FP::Editor
 		}
 		view.Background = { 0.12f, 0.12f, 0.14f, 1 };
 		view.Mode = m_ViewMode;
-		return view;
+		return observer && m_MeshletCameraContext ? view.Expanded(m_MeshletObserverWidth) : view;
 	}
 
 	TransformComponent ViewportWidget::EditorCamera() const
@@ -614,6 +614,12 @@ namespace FP::Editor
 
 		const RenderView view = CurrentView();
 		m_Lines.Clear();
+		const RenderView cullingView = CurrentView(false);
+		if (m_MeshletCameraContext)
+		{
+			const RenderView* frozen = m_Renderer->GetFrozenMeshletView();
+			m_Lines.AddFrustum(frozen ? *frozen : cullingView, { 1, 0.8f, 0.1f, 1 });
+		}
 		if (!m_Playing)
 		{
 			if (m_3D)
@@ -645,7 +651,7 @@ namespace FP::Editor
 			}
 		}
 		SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(m_Device.GetHandle());
-		m_Renderer->Render(cmd, m_Target->GetHandle(), m_Target->GetWidth(), m_Target->GetHeight(), *m_World, view, &m_Lines);
+		m_Renderer->Render(cmd, m_Target->GetHandle(), m_Target->GetWidth(), m_Target->GetHeight(), *m_World, view, &m_Lines, &cullingView);
 		SDL_SubmitGPUCommandBuffer(cmd);
 		m_Device.ReadPixels(m_Target->GetHandle(), m_Target->GetWidth(), m_Target->GetHeight(), m_Image.bits());
 		update();

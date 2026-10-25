@@ -1,0 +1,64 @@
+#version 450
+layout(local_size_x = 64) in;
+struct Item { mat4 ClipFromLocal; vec4 Min; vec4 Max; uint First; uint Count; uint Pad0; uint Pad1; };
+struct Command { uint Count; uint Instances; uint First; int VertexOffset; uint FirstInstance; };
+#ifdef FP_METAL
+#define ITEMS_BINDING 1
+#define TILES_BINDING 2
+#define COMMANDS_BINDING 3
+#define REASONS_BINDING 4
+#else
+#define ITEMS_BINDING 0
+#define TILES_BINDING 1
+#define COMMANDS_BINDING 0
+#define REASONS_BINDING 1
+#endif
+layout(std430, set = 0, binding = ITEMS_BINDING) readonly buffer ItemData { Item Values[]; } Items;
+layout(std430, set = 0, binding = TILES_BINDING) readonly buffer TileData { float Values[]; } Tiles;
+layout(std430, set = 1, binding = COMMANDS_BINDING) writeonly buffer CommandData { Command Values[]; } Commands;
+layout(std430, set = 1, binding = REASONS_BINDING) writeonly buffer ReasonData { uint Values[]; } Reasons;
+layout(set = 2, binding = 0) uniform Params { uint Width; uint Height; uint Count; uint Flags; } U;
+uint visibility(Item item)
+{
+    uint outside = 63;
+    bool nearPlane = false;
+    vec3 lo = vec3(1e30), hi = vec3(-1e30);
+    for (uint i = 0; i < 8; ++i) {
+        vec3 p = mix(item.Min.xyz, item.Max.xyz, bvec3((i & 1) != 0, (i & 2) != 0, (i & 4) != 0));
+        vec4 c = item.ClipFromLocal * vec4(p, 1);
+        // Invalid transforms fail open.
+        if (any(isnan(c)) || any(isinf(c))) return 0;
+        uint mask = (c.x < -c.w ? 1u : 0u) | (c.x > c.w ? 2u : 0u) |
+            (c.y < -c.w ? 4u : 0u) | (c.y > c.w ? 8u : 0u) |
+            (c.z < 0 ? 16u : 0u) | (c.z > c.w ? 32u : 0u);
+        outside &= mask;
+        nearPlane = nearPlane || c.w <= 1e-6 || c.z <= 0;
+        if (c.w > 1e-6) { lo = min(lo, c.xyz / c.w); hi = max(hi, c.xyz / c.w); }
+    }
+    if ((U.Flags & 1) != 0 && outside != 0) return 1;
+    if ((U.Flags & 2) == 0 || nearPlane || outside != 0) return 0;
+    // SDL's framebuffer origin is top left, clip-space Y points up.
+    vec2 a = vec2(lo.x * 0.5 + 0.5, 0.5 - hi.y * 0.5) * vec2(U.Width, U.Height);
+    vec2 b = vec2(hi.x * 0.5 + 0.5, 0.5 - lo.y * 0.5) * vec2(U.Width, U.Height);
+    a = clamp(a, vec2(0), vec2(U.Width, U.Height));
+    b = clamp(b, vec2(0), vec2(U.Width, U.Height));
+    ivec2 size = ivec2((U.Width + 7) / 8, (U.Height + 7) / 8);
+    // Expand by one pixel for rasterization precision. Every touched tile must occlude.
+    ivec2 first = clamp(ivec2(floor((a - 1) / 8)), ivec2(0), size - 1);
+    ivec2 last = clamp(ivec2(floor((b + 1) / 8)), ivec2(0), size - 1);
+    // Bound work for huge/near-camera clusters. Keeping them is conservative.
+    if ((last.x - first.x + 1) * (last.y - first.y + 1) > 1024) return 0;
+    for (int y = first.y; y <= last.y; ++y)
+        for (int x = first.x; x <= last.x; ++x)
+            if (lo.z <= Tiles.Values[y * size.x + x] + 0.0001) return 0;
+    return 2;
+}
+void main()
+{
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= U.Count) return;
+    Item item = Items.Values[i];
+    uint reason = visibility(item);
+    Commands.Values[i] = Command(item.Count, reason == 0 ? 1u : 0u, item.First, 0, 0);
+    Reasons.Values[i] = reason;
+}

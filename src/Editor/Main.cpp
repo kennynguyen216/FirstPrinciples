@@ -1,4 +1,5 @@
 #include "Editor/ContentBrowser.h"
+#include "Editor/MeshletDebugWidget.h"
 #include "Editor/EditorStyle.h"
 #include "Editor/EditorWindow.h"
 #include "Editor/ScriptBuilder.h"
@@ -13,6 +14,7 @@
 #include <SDL3/SDL.h>
 
 #include <QApplication>
+#include <QDialog>
 #include <QTimer>
 
 int main(int argc, char** argv)
@@ -100,6 +102,14 @@ int main(int argc, char** argv)
 			window.ShowProfiler();
 		if (args.contains("--audio-debugger"))
 			window.ShowAudioDebugger();
+		if (args.contains("--meshlet-debugger"))
+		{
+			if (auto* viewport = window.findChild<FP::Editor::ViewportWidget*>())
+			{
+				viewport->GetRenderer()->GetMeshletSettings().Colorize = args.contains("--meshlet-colors");
+				FP::Editor::ShowMeshletDebugger(*viewport, &window);
+			}
+		}
 		// --new-script Name writes a script from the template, then builds like --build-scripts.
 		const int newScriptIndex = static_cast<int>(args.indexOf("--new-script"));
 		if (newScriptIndex >= 0 && newScriptIndex + 1 < args.size() && !window.NewScript(args[newScriptIndex + 1]))
@@ -148,6 +158,7 @@ int main(int argc, char** argv)
 			const int waitMs = waitIndex >= 0 && waitIndex + 1 < args.size() ? static_cast<int>(args[waitIndex + 1].toDouble() * 1000) : 1000;
 			QTimer::singleShot(waitMs, &window, [&window, path]() {
 				window.grab().save(path);
+				if (auto* debugger = window.findChild<QDialog*>("MeshletDebugger")) debugger->grab().save(path + ".meshlets.png");
 				FP_LOG("Saved screenshot %s", path.toUtf8().constData());
 				// Quitting closes the window, which would offer to save. Test runs must never save.
 				window.DiscardUnsavedChanges();

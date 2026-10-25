@@ -1,0 +1,19 @@
+* { box-sizing: border-box; }
+body { margin: 0; color: #e8edf5; background: #101722; font-family: Arial, sans-serif; }
+main { max-width: 1000px; margin: 4vh auto; padding: 30px; background: #192331; border: 1px solid #334155; border-radius: 14px; }
+.eyebrow { color: #75c5b1; font-size: 12px; font-weight: bold; letter-spacing: 2px; }
+h1 { margin: 10px 0; font-size: 32px; }
+p { color: #adb9ca; line-height: 1.5; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 22px 0; }
+label { display: flex; align-items: center; gap: 9px; font-size: 14px; }
+button, select, input[type=text] { color: #e8edf5; background: #273548; border: 1px solid #43536a; border-radius: 6px; padding: 10px 13px; font-size: 14px; }
+button { cursor: pointer; }
+button:hover { background: #374c64; }
+button:disabled { opacity: 0.45; cursor: default; }
+.primary { background: #246d5d; border-color: #4aa08b; }
+.binding { display: flex; gap: 10px; align-items: center; margin: 8px 0; }
+.binding input { flex: 1; min-width: 120px; font-family: monospace; }
+.status { min-height: 50px; padding: 15px; margin-top: 20px; background: #111a26; border-left: 3px solid #75c5b1; color: #b9dfd3; }
+.counter { margin-left: auto; color: #adb9ca; }
+.counter b { color: white; padding-left: 10px; }
+.hint { font-size: 13px; margin-bottom: 0; }

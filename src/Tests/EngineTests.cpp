@@ -724,3 +724,44 @@ FP_TEST(PostProcess_SceneSettingsStayIndependentOfAccessibility)
 	post.BloomThreshold = -1;
 	FP_EXPECT(!SceneSerializer::Validate(*world.Get()));
 }
+
+FP_TEST(Input_ValidationLeavesLiveBindingsAndPressStateAlone)
+{
+	Input::Reset();
+	Input::LoadActions("Live Key:F\n");
+	Input::SetKey(SDL_SCANCODE_F, true);
+	std::vector<std::string> errors;
+	FP_EXPECT(Input::ValidateActions(Input::GetDefaultActions(), &errors));
+	FP_EXPECT(errors.empty());
+	FP_EXPECT(!Input::ValidateActions("Broken Key:NotAKey\n", &errors));
+	FP_EXPECT(errors.size() == 1);
+	FP_EXPECT(Input::GetActionNames() == std::vector<std::string>{ "Live" });
+	FP_EXPECT(Input::IsActionDown("Live") && Input::WasActionPressed("Live"));
+	Input::EndFrame();
+	FP_EXPECT(Input::ValidateActions("Other Mouse:Left\n"));
+	FP_EXPECT(Input::IsActionDown("Live") && !Input::WasActionPressed("Live"));
+	Input::Reset();
+	Input::LoadActions(Input::GetDefaultActions());
+}
+
+FP_TEST(Input_ValidationRejectsInvalidScalesAndRepeatedOptions)
+{
+	FP_EXPECT(!Input::ValidateActions("Look Stick:Right nan\n"));
+	FP_EXPECT(!Input::ValidateActions("Look Stick:Right inf\n"));
+	FP_EXPECT(!Input::ValidateActions("Look Stick:Right 1e100\n"));
+	FP_EXPECT(!Input::ValidateActions("Move Key:W +Y -X\n"));
+	FP_EXPECT(!Input::ValidateActions("Look Stick:Right 100 200\n"));
+	FP_EXPECT(Input::ValidateActions("Move Key:W +Y -2\nLook Stick:Right 800 # speed\n"));
+}
+
+FP_TEST(Input_BindingPickerNamesAreAcceptedByTheParser)
+{
+	for (const char* device : { "Key", "Mouse", "Button", "Axis", "Stick" })
+	{
+		const auto names = Input::GetBindingInputs(device);
+		FP_EXPECT(!names.empty());
+		for (const std::string& name : names)
+			FP_EXPECT(Input::ValidateActions(std::string("Action ") + device + ":" + name));
+	}
+	FP_EXPECT(Input::GetBindingInputs("Missing").empty());
+}

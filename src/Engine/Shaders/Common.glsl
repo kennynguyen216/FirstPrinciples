@@ -53,6 +53,9 @@ layout(set = 3, binding = 1) uniform FrameData
 	vec4 LightCone[MAX_LIGHTS];      // x cos(inner), y cos(outer)
 	mat4 ShadowMatrix[8];            // directional, spot, six point faces
 	vec4 ShadowParams[3];            // directional, spot, point: strength, texel, offset, light index
+	vec4 EnvironmentParams;
+	vec4 EnvironmentSize;
+	vec4 EnvironmentDiffuse[9];
 } Frame;
 
 #endif

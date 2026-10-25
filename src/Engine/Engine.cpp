@@ -259,5 +259,12 @@ namespace FP::Engine
 			.Field("Color", &AmbientLightComponent::Color)
 			.Field("Intensity", &AmbientLightComponent::Intensity);
 
+		registry.Register<SkyboxComponent>("Skybox")
+			.Field("Texture", &SkyboxComponent::Texture).AssetPath("Environment panoramas (*.hdr *.png *.jpg *.jpeg *.tga *.bmp)")
+			.Field("Intensity", &SkyboxComponent::Intensity).Range(0, 20)
+			.Field("Rotation", &SkyboxComponent::Rotation).Range(0, 360)
+			.Field("Visible", &SkyboxComponent::Visible)
+			.Field("Enabled", &SkyboxComponent::Enabled);
+
 	}
 }

@@ -1,0 +1,21 @@
+# FirstPrinciples scene
+version 2
+
+entity 1b000001-0000-4000-8000-000000000001
+component Name
+  Name "Input Rebinding Menu"
+component Transform
+  Position 0 0 10
+  Rotation 0 0 0
+  Scale 1 1 1
+component Camera
+  Primary true
+  Background 0.03 0.04 0.06 1
+component UI
+  Page "UI/InputBindings.html"
+  Visible true
+  Input true
+  Order 0
+component Scripts
+  script "InputRebindMenu"
+    SaveSlot "input_bindings"

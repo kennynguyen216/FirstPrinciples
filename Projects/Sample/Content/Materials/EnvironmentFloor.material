@@ -1,0 +1,5 @@
+# FirstPrinciples material
+Shader "Lit"
+BaseColor 0.42 0.42 0.42 1
+Roughness 0.85
+Metallic 0

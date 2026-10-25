@@ -1,0 +1,90 @@
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+struct Params
+{
+    uint Width;
+    uint Height;
+    uint Count;
+    uint Flags;
+};
+
+struct TileData
+{
+    float Values[1];
+};
+
+constant uint3 gl_WorkGroupSize [[maybe_unused]] = uint3(8u, 8u, 1u);
+
+kernel void main0(constant Params& U [[buffer(0)]], device TileData& Tiles [[buffer(1)]], texture2d<float> Depth [[texture(0)]], sampler DepthSmplr [[sampler(0)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]], uint gl_LocalInvocationIndex [[thread_index_in_threadgroup]], uint3 gl_WorkGroupID [[threadgroup_position_in_grid]])
+{
+    threadgroup spvUnsafeArray<float, 64> Depths;
+    uint2 pixel = gl_GlobalInvocationID.xy;
+    uint lane = gl_LocalInvocationIndex;
+    float _44;
+    if (all(pixel < uint2(U.Width, U.Height)))
+    {
+        _44 = Depth.read(uint2(int2(pixel)), 0).x;
+    }
+    else
+    {
+        _44 = 1.0;
+    }
+    Depths[lane] = _44;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    for (uint stride = 32u; stride > 0u; stride = stride >> uint(1))
+    {
+        if (lane < stride)
+        {
+            Depths[lane] = fast::max(Depths[lane], Depths[lane + stride]);
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    if (lane == 0u)
+    {
+        Tiles.Values[(gl_WorkGroupID.y * ((U.Width + 7u) / 8u)) + gl_WorkGroupID.x] = Depths[0];
+    }
+}
