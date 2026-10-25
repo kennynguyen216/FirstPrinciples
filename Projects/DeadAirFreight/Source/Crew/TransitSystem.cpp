@@ -199,7 +199,8 @@ void TransitSystem::Update(World& world, float)
 	}
 
 	// Ghosts: the bay behind the cab's doorway, where the cab has ridden with the truck this frame,
-	// and the cab behind the bay's.
+	// and the cab behind the bay's. Only the room the player is not in is ever seen through a
+	// doorway, so only that one is copied; the other set is cleared below.
 	const Doorway cabDoor = DoorwayOf(world.Get<TransformComponent>(m_CabHatchEntity));
 	auto show = [&](Entity source, const Doorway& from, const Doorway& to)
 	{
@@ -224,22 +225,28 @@ void TransitSystem::Update(World& world, float)
 			world.Add<PointLightComponent>(ghost.Entity, PointLightComponent{ *light });
 	};
 
-	for (Entity part : m_CabParts)
+	if (world.Has<OnFootComponent>(body))
 	{
-		if (world.IsValid(part))
-			show(part, cabDoor, bayDoor);
+		for (Entity part : m_CabParts)
+		{
+			if (world.IsValid(part))
+				show(part, cabDoor, bayDoor);
+		}
 	}
-	// The bay is whatever is in it right now: walls, tanks, creatures, beams.
-	std::vector<Entity> bayParts;
-	for (auto [entity, transform] : world.View<TransformComponent>().each())
+	else
 	{
-		const Vec3 at = transform.Position - room;
-		if (std::abs(at.X) <= bay.HalfWidth + 1 && std::abs(at.Z) <= bay.HalfLength + 1 && at.Y >= -1 && at.Y <= 8
-			&& IsShown(world, entity) && !world.Has<GhostComponent>(entity))
-			bayParts.push_back(entity);
+		// The bay is whatever is in it right now: walls, tanks, creatures, beams.
+		std::vector<Entity> bayParts;
+		for (auto [entity, transform] : world.View<TransformComponent>().each())
+		{
+			const Vec3 at = transform.Position - room;
+			if (std::abs(at.X) <= bay.HalfWidth + 1 && std::abs(at.Z) <= bay.HalfLength + 1 && at.Y >= -1 && at.Y <= 8
+				&& IsShown(world, entity) && !world.Has<GhostComponent>(entity))
+				bayParts.push_back(entity);
+		}
+		for (Entity part : bayParts)
+			show(part, bayDoor, cabDoor);
 	}
-	for (Entity part : bayParts)
-		show(part, bayDoor, cabDoor);
 
 	for (auto it = m_Ghosts.begin(); it != m_Ghosts.end();)
 	{
