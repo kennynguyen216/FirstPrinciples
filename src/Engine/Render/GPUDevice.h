@@ -61,6 +61,9 @@ namespace FP
 		// Loads Engine/Content/Shaders/<name>.spv or .msl depending on the backend.
 		SDL_GPUShader* LoadShader(const char* name, uint32 numSamplers, uint32 numUniformBuffers);
 
+		// Compute shaders use one uniform buffer; resource counts follow SDL binding order.
+		SDL_GPUComputePipeline* LoadComputeShader(const char* name, uint32 samplers, uint32 readBuffers, uint32 writeBuffers, uint32 threadsX, uint32 threadsY);
+
 		// Uploads tightly packed RGBA8 pixels. Mipmaps are generated on the GPU when asked.
 		RefPtr<GPUTexture> CreateTexture(const void* rgba, uint32 width, uint32 height, bool srgb, bool mipmaps);
 

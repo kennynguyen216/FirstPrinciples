@@ -113,6 +113,27 @@ namespace FP
 		return shader;
 	}
 
+	SDL_GPUComputePipeline* GPUDevice::LoadComputeShader(const char* name, uint32 samplers, uint32 readBuffers, uint32 writeBuffers, uint32 threadsX, uint32 threadsY)
+	{
+		const bool metal = m_ShaderFormat == SDL_GPU_SHADERFORMAT_MSL;
+		String code;
+		const String path = Paths::EngineContent(String::Format("Shaders/%s.%s", name, metal ? "msl" : "spv"));
+		if (!File::ReadAllText(path.CStr(), code)) return nullptr;
+		SDL_GPUComputePipelineCreateInfo info{};
+		info.code = reinterpret_cast<const uint8*>(code.CStr());
+		info.code_size = static_cast<usize>(code.Length());
+		info.entrypoint = metal ? "main0" : "main";
+		info.format = m_ShaderFormat;
+		info.num_samplers = samplers;
+		info.num_readonly_storage_buffers = readBuffers;
+		info.num_readwrite_storage_buffers = writeBuffers;
+		info.num_uniform_buffers = 1;
+		info.threadcount_x = threadsX; info.threadcount_y = threadsY; info.threadcount_z = 1;
+		auto* pipeline = SDL_CreateGPUComputePipeline(m_Device, &info);
+		if (!pipeline) FP_LOG_WARN("Compute shader %s failed: %s", name, SDL_GetError());
+		return pipeline;
+	}
+
 	RefPtr<GPUTexture> GPUDevice::CreateTexture(const void* rgba, uint32 width, uint32 height, bool srgb, bool mipmaps)
 	{
 		uint32 levels = 1;
