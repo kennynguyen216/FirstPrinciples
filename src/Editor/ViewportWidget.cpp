@@ -58,11 +58,8 @@ namespace FP::Editor
 		void WarpCursor(QPoint global)
 		{
 #ifdef __APPLE__
-			// Qt posts a fake event for this, which macOS can block. A plain warp works, and
-			// unhooking the mouse around it skips the short freeze macOS adds after one.
-			CGAssociateMouseAndMouseCursorPosition(false);
-			CGWarpMouseCursorPosition(CGPointMake(global.x(), global.y()));
-			CGAssociateMouseAndMouseCursorPosition(true);
+			// Qt posts a fake event for this, which macOS can block. SDL's warp moves it right away.
+			SDL_WarpMouseGlobal(static_cast<float>(global.x()), static_cast<float>(global.y()));
 #else
 			QCursor::setPos(global);
 #endif
@@ -152,6 +149,13 @@ namespace FP::Editor
 				setCursor(Qt::BlankCursor);
 			else
 				unsetCursor();
+#ifdef __APPLE__
+			// A blank cursor still grows when the mouse is shaken. Hiding it in the system doesn't.
+			if (hide)
+				CGDisplayHideCursor(kCGDirectMainDisplay);
+			else
+				CGDisplayShowCursor(kCGDirectMainDisplay);
+#endif
 			m_CursorHidden = hide;
 		}
 		if (lock != m_CursorLocked)
@@ -166,12 +170,13 @@ namespace FP::Editor
 		{
 			const QPoint center = rect().center();
 			const QPoint global = mapToGlobal(center);
+			// Only warp when the mouse moved: macOS briefly freezes the mouse after every warp, so
+			// warping each frame would keep it pinned and report no movement.
+			const QPoint moved = QCursor::pos() - global;
 			if (m_CursorLocked)
-			{
-				const QPoint moved = QCursor::pos() - global;
 				Input::AddMouseDelta(Vec2(static_cast<float>(moved.x()), static_cast<float>(moved.y())) * static_cast<float>(devicePixelRatioF()));
-			}
-			WarpCursor(global);
+			if (!m_CursorLocked || !moved.isNull())
+				WarpCursor(global);
 			Input::SetMousePosition(ToPixels(QPointF(center)));
 		}
 		m_CursorLocked = lock;

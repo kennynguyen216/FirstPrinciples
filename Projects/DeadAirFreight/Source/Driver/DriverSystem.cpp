@@ -94,6 +94,7 @@ void DriverSystem::OnStart(World& world)
 	truck.Position = start.Position;
 	truck.Yaw = start.Rotation.Y;
 	truck.Pitch = start.Rotation.X;
+	truck.Look = { truck.Yaw, truck.Pitch };
 	truck.Travel = GetNose(truck);
 	truck.Random = m_Package.Seed;
 
@@ -122,6 +123,7 @@ void DriverSystem::OnStart(World& world)
 	const Entity floor = FindOrNull(world, "CabFloor");
 	const Entity wheel = FindOrNull(world, "Wheel");
 	const Entity scrubber = FindOrNull(world, "Scrubber");
+	const Entity rack = FindOrNull(world, "CabCanisterRack");
 	if (m_Driver != NullEntity && floor != NullEntity && wheel != NullEntity)
 	{
 		DriverState driver;
@@ -143,6 +145,16 @@ void DriverSystem::OnStart(World& world)
 		}
 		m_Wheel = world.Get<TransformComponent>(wheel).Position;
 		m_Scrubber = scrubber != NullEntity ? world.Get<TransformComponent>(scrubber).Position : Vec3{ 1e9f, 0, 0 };
+		m_CanisterRack = rack != NullEntity ? world.Get<TransformComponent>(rack).Position : Vec3{ 1e9f, 0, 0 };
+		m_Canisters.clear();
+		for (int i = 1;; ++i)
+		{
+			const Entity canister = FindOrNull(world, Format("Canister%d", i).c_str());
+			if (canister == NullEntity)
+				break;
+			const TransformComponent& canisterTransform = world.Get<TransformComponent>(canister);
+			m_Canisters.push_back({ canister, canisterTransform.Position, canisterTransform.GetRotation() });
+		}
 
 		m_CabOrigin = floorTransform.Position;
 		m_CabParts.clear();
@@ -163,6 +175,7 @@ void DriverSystem::OnStart(World& world)
 		m_Driver = NullEntity;
 	}
 	m_TravelMarker = FindOrNull(world, "TravelMarker");
+	m_ScrubberLight = FindOrNull(world, "CabScrubberStatus");
 	m_CabLight = FindOrNull(world, "CabLight");
 	if (m_CabLight != NullEntity && world.Has<PointLightComponent>(m_CabLight))
 		m_CabLightIntensity = world.Get<PointLightComponent>(m_CabLight).Intensity;
@@ -245,6 +258,9 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 	bool repairing = false;
 	if (driver && driver->InCab && awake)
 	{
+		// Last frame's slotting finished the repair, so the canister in hand is in the scrubber now.
+		if (driver->Carrying && m_LocalRepairing && !life.ScrubberBroken)
+			driver->Carrying = false;
 		if (Input::WasKeyPressed(SDL_SCANCODE_E) && !ticket.Active)
 		{
 			if (driver->Seated)
@@ -252,13 +268,17 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 			else if (CanReach(*driver, m_Wheel, m_Settings))
 			{
 				// Networked, only one crewmate holds the wheel at a time.
-				if (m_WheelTaken)
+				if (driver->Carrying)
+					Notify("HANDS FULL: PUT THE CANISTER BACK ON THE RACK", Warn, 2);
+				else if (m_WheelTaken)
 					Notify("YOUR CREWMATE HAS THE WHEEL", Warn, 2);
 				else
 					driver->Seated = true;
 			}
+			else if (CanReach(*driver, m_CanisterRack, m_Settings) && (driver->Carrying || life.Canisters > 0))
+				driver->Carrying = !driver->Carrying;
 		}
-		repairing = !driver->Seated && Input::IsKeyDown(SDL_SCANCODE_E) && CanReach(*driver, m_Scrubber, m_Settings);
+		repairing = !driver->Seated && driver->Carrying && life.ScrubberBroken && Input::IsKeyDown(SDL_SCANCODE_E) && CanReach(*driver, m_Scrubber, m_Settings);
 	}
 	const bool seated = driver ? driver->Seated : true;
 	m_LocalSeated = seated;
@@ -295,7 +315,11 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 	{
 		StepTruck(truck, controls, { m_WindNow, m_KpNow }, GetDisturbanceScale(life, m_Settings), m_Settings, deltaTime);
 		if (CollideWithRocks(truck, m_Rocks, truck.Time, m_Settings))
-			Notify("ASTEROID HIT!", Bad, 1.5f);
+		{
+			const bool fixBanked = life.AutoFix;
+			BreakScrubber(life);
+			Notify(fixBanked ? "ASTEROID HIT! FREE FIX SAVED THE SCRUBBER" : "ASTEROID HIT!", Bad, 1.5f);
+		}
 		StepLifeSupport(life, repairing || m_RemoteRepairing, m_Settings, deltaTime);
 		if (StepTicket(ticket, life, ticket.Active && awake ? mouseMove : Vec2{}, awake && Input::IsMouseDown(MouseButton::Left), m_Settings, deltaTime))
 		{
@@ -438,9 +462,40 @@ void DriverSystem::Display(World& world, const TruckState& truck, const LifeSupp
 
 	if (m_CabLight != NullEntity)
 		world.Get<PointLightComponent>(m_CabLight).Intensity = m_CabLightIntensity * life.Power;
+	if (MaterialComponent* light = m_ScrubberLight != NullEntity ? world.TryGet<MaterialComponent>(m_ScrubberLight) : nullptr)
+	{
+		const char* look = life.ScrubberBroken ? "Materials/CockpitRed.material" : "Materials/CockpitGreen.material";
+		if (light->Material != look)
+			light->Material = look;
+	}
 
 	if (driver)
 		world.Get<TransformComponent>(m_Driver).Position = CabToWorld(truck, driver->Position);
+
+	// Spares stand on the rack; the one in hand rides at the walker's hip, and used ones are stowed under the floor.
+	const bool inHand = driver && driver->Carrying;
+	const int onRack = std::max(life.Canisters - (inHand ? 1 : 0), 0);
+	for (int i = 0; i < static_cast<int>(m_Canisters.size()); ++i)
+	{
+		const CabPart& canister = m_Canisters[i];
+		if (!world.IsValid(canister.Entity))
+			continue;
+		Vec3 at = canister.Position;
+		Quat rotation = canister.Rotation;
+		if (i == onRack && inHand && driver->InCab)
+		{
+			const Quat facing = Quat::FromEuler({ 0, driver->Yaw, 0 });
+			at = driver->Position + facing.Rotate({ 0.35f, m_Settings.EyeHeight - 0.9f, -0.6f });
+			rotation = facing * canister.Rotation;
+		}
+		else if (i >= onRack)
+		{
+			at.Y -= 10;
+		}
+		TransformComponent& canisterTransform = world.Get<TransformComponent>(canister.Entity);
+		canisterTransform.Position = CabToWorld(truck, at);
+		canisterTransform.Rotation = (truckRotation * rotation).ToEuler();
+	}
 
 	DrawHud(world, truck, life, ticket, driver);
 }
@@ -467,8 +522,9 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 		}
 		else if (seated)
 		{
+			// Seated, you look where you want the truck to go; it comes about to face it.
 			cameraTransformIt.Position = CabToWorld(truck, m_SeatEye);
-			cameraTransformIt.Rotation = { truck.Pitch, truck.Yaw, m_Bank };
+			cameraTransformIt.Rotation = { truck.Look.Y, truck.Look.X, m_Bank };
 		}
 		else
 		{
@@ -516,6 +572,7 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 	};
 	if (life.CalmHands > 0)
 		left.push_back(Line(Format("CALM HANDS %.0fS", std::ceil(life.CalmHands)), Good));
+	left.push_back(Line(Format("LIOH SPARES %d", life.Canisters), life.Canisters > 0 ? White : Bad));
 	if (life.AutoFix)
 		left.push_back(Line("FREE FIX BANKED", Good));
 	if (truck.Boost > 0)
@@ -553,10 +610,28 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 		else if (driver)
 		{
 			if (CanReach(*driver, m_Wheel, m_Settings))
-				prompts.push_back(Line("[E] TAKE THE WHEEL", White));
+				prompts.push_back(driver->Carrying ? Line("HANDS FULL: RACK THE CANISTER TO TAKE THE WHEEL", Warn) : Line("[E] TAKE THE WHEEL", White));
+			else if (CanReach(*driver, m_CanisterRack, m_Settings))
+				prompts.push_back(driver->Carrying ? Line("[E] PUT THE CANISTER BACK", White)
+					: life.Canisters > 0 ? Line(Format("[E] GRAB A SCRUBBER CANISTER  (%d LEFT)", life.Canisters), life.ScrubberBroken ? Warn : White) : Line("RACK EMPTY: NO SPARE CANISTERS", Bad));
 			else if (CanReach(*driver, m_Scrubber, m_Settings))
-				prompts.push_back(Line(life.ScrubberBroken ? Format("HOLD [E] TO REPAIR THE SCRUBBER  %.0f%%", life.RepairProgress / m_Settings.ScrubberRepairTime * 100) : "AIR SCRUBBER: WORKING",
-					life.ScrubberBroken ? Warn : Good));
+			{
+				if (!life.ScrubberBroken)
+					prompts.push_back(Line("AIR SCRUBBER: WORKING", Good));
+				else if (driver->Carrying)
+					prompts.push_back(Line(Format("HOLD [E] TO SLOT THE CANISTER  %.0f%%", life.RepairProgress / m_Settings.ScrubberRepairTime * 100), Warn));
+				else
+					prompts.push_back(Line(life.Canisters > 0 ? "SCRUBBER DOWN: FETCH A CANISTER FROM THE YELLOW RACK" : "NO CANISTERS LEFT: ONLY A FREE FIX CAN SAVE IT", Bad));
+			}
+			else if (driver->Carrying)
+			{
+				prompts.push_back(life.ScrubberBroken ? Line("CANISTER IN HAND: SLOT IT INTO THE SCRUBBER (RED LIGHT, BACK RIGHT)", Warn)
+					: Line("CANISTER IN HAND: THE SCRUBBER IS FINE, PUT IT BACK ON THE RACK", Dim));
+			}
+			else if (life.ScrubberBroken)
+			{
+				prompts.push_back(Line(life.Canisters > 0 ? "SCRUBBER DOWN: GRAB A CANISTER FROM THE YELLOW RACK, SLOT IT IN" : "SCRUBBER DOWN AND NO CANISTERS LEFT", Bad));
+			}
 		}
 		if (!truck.AtWheel && !ticket.Active)
 		{
@@ -577,9 +652,22 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 	field("distance", Line((km >= 1e6f ? Format("%.1f MILLION KM", km / 1e6f) : Format("%.0f KM", km)) + Format("   ETA %d:%02d", eta / 60, eta % 60), White));
 	field("course", Line(Format("OFF COURSE %.0f DEG    SPEED %.2fC", offCourse, truck.Speed * m_Settings.KmPerUnit / 299792.458f), courseColor, std::min(offCourse / 90, 1.0f)));
 
+	// Steering sight: a ring where the windshield faces (the heading), a dot where you look, a line between them.
+	// Pinned to the screen's edge when you look far enough away that the heading leaves the view.
+	if (seated && m_Settings.NoseTurnRate > 0)
+	{
+		Vec2 nose;
+		if (!ToScreen(*cameraTransform, fieldOfView, aspect, truck.Position + truck.Travel * 1000.0f, nose))
+			nose = nose * (1 / std::max({ std::abs(nose.X), std::abs(nose.Y), 1e-6f }));
+		field("sight", Format("{\"x\":%.3f,\"y\":%.3f}", nose.X, nose.Y));
+	}
+
 	// Points at the colony from the screen's edge while it is out of view.
+	// On foot with the scrubber down, it points at the rack, then at the scrubber once a canister is in hand.
 	Vec2 screen;
-	if (seated && !ToScreen(*cameraTransform, fieldOfView, aspect, m_Colony, screen))
+	const bool fetching = driver && !seated && driver->InCab && life.ScrubberBroken && (driver->Carrying || life.Canisters > 0);
+	const Vec3 target = fetching ? CabToWorld(truck, driver->Carrying ? m_Scrubber : m_CanisterRack) : m_Colony;
+	if ((seated || fetching) && !ToScreen(*cameraTransform, fieldOfView, aspect, target, screen))
 	{
 		const float length = std::sqrt(screen.X * screen.X + screen.Y * screen.Y);
 		const Vec2 direction = length > 1e-6f ? screen * (1 / length) : Vec2{ 0, -1 };

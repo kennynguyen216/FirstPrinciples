@@ -10,6 +10,9 @@ struct TruckState
 	FP::Vec3 Destination;
 	float Yaw = 0;
 	float Pitch = 0;
+	// Where the driver looks (yaw, pitch degrees). The nose swings slowly to face it.
+	FP::Vec2 Look;
+	FP::Vec2 TurnVelocity;
 	FP::Vec3 Travel{ 0, 0, -1 };
 	float Speed = 0;
 	float Boost = 0;

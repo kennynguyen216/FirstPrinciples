@@ -1562,6 +1562,42 @@ component Mesh
 component Material
   Material "Materials/CockpitHazard.material"
 
+entity e1705450-bef9-4e76-8f40-6affb29ad9fa
+component Name
+  Name "CabCanisterRack"
+component Transform
+  Position 3.7 -4999.45 -0.5
+  Rotation 0 0 0
+  Scale 0.7 1.1 1.7
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/CockpitHazard.material"
+
+entity 2aae934c-da74-4f66-8ea2-da4773ad38e6
+component Name
+  Name "Canister1"
+component Transform
+  Position 3.7 -4998.55 -0.95
+  Rotation 0 0 0
+  Scale 0.4 0.7 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Jelly.material"
+
+entity 8ffc01b9-2a87-42a4-bb7a-9d94fff69a72
+component Name
+  Name "Canister2"
+component Transform
+  Position 3.7 -4998.55 -0.05
+  Rotation 0 0 0
+  Scale 0.4 0.7 0.4
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/Jelly.material"
+
 entity e4147990-8493-484b-b3da-1e732718d9ec
 component Name
   Name "Driver"

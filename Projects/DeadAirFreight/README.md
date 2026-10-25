@@ -45,8 +45,9 @@ kill a Mite and put the oxygen it ate back in the tanks, and a shot that hits a 
 it. Holding the repair beam on a tank patches one hole every 1.5 seconds.
 
 Driver: the Driver's game from `game/driver-player`, unchanged, in `Source/Driver`. E sits at the
-wheel or stands up, the mouse flies the truck, T buys a scratch ticket, and holding E at the scrubber
-repairs it. Space weather (NOAA solar wind and Kp) and asteroid flybys (NASA NeoWs) are fetched live
+wheel or stands up, the mouse flies the truck, T buys a scratch ticket. An asteroid hit breaks the scrubber: grab
+a LiOH canister from the rack (E), carry it across the cab and hold E at the scrubber to slot it in.
+Spares are limited (`SpareCanisters`), and you can't take the wheel with your hands full. Space weather (NOAA solar wind and Kp) and asteroid flybys (NASA NeoWs) are fetched live
 at GO, falling back to the bundle in `Content/SpaceWeather` when offline. Its settings are in
 `Content/Settings/Driver.settings`, its HUD is `Content/UI/DriverHud.html` drawn flat over that
 player's own camera (it needs the Ultralight SDK, from `Scripts/GetUltralight`), and
