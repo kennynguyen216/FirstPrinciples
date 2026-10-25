@@ -1,8 +1,9 @@
 #pragma once
 
+#include "Editor/AssetThumbnails.h"
 #include "Editor/EditorIcons.h"
 
-#include <QHash>
+#include <QCache>
 #include <QIcon>
 #include <QWidget>
 
@@ -19,14 +20,13 @@ class QTreeWidgetItem;
 namespace FP::Editor
 {
 	// Browses the project's assets: everything in Content plus the C++ scripts in Source/Scripts.
-	// Folders on the left, the selected folder's files on the right with thumbnails for images
-	// and color swatches for materials. Refreshes by itself when files change on disk.
+	// Folders on the left, asset thumbnails on the right. Refreshes when files change on disk.
 	class ContentBrowser : public QWidget
 	{
 		Q_OBJECT
 
 	public:
-		explicit ContentBrowser(QWidget* parent = nullptr);
+		explicit ContentBrowser(GPUDevice& device, QWidget* parent = nullptr);
 
 		QString GetCurrentFolder() const { return m_CurrentFolder; }
 
@@ -84,6 +84,8 @@ namespace FP::Editor
 		void WatchFolders();
 		QIcon IconFor(const QString& path);
 		QIcon TileIcon(EditorIcon icon, const QColor& color) const;
+		QIcon ThumbnailIcon(const QImage& image, const QColor& color) const;
+		void RenderNextThumbnail();
 		bool IsHidden(const QString& name) const;
 
 		QTreeWidget* m_Folders = nullptr;
@@ -102,7 +104,10 @@ namespace FP::Editor
 		QString m_ScriptsRoot;
 		QString m_CurrentFolder;
 
-		// Thumbnails keyed by path and modified time so edits show up.
-		QHash<QString, QIcon> m_IconCache;
+		// Keep a bounded cache and render one asset per timer tick.
+		QCache<QString, QIcon> m_IconCache{ 256 };
+		AssetThumbnails m_Thumbnails;
+		QStringList m_PendingThumbnails;
+		QTimer* m_ThumbnailTimer = nullptr;
 	};
 }

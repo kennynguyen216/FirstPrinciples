@@ -40,8 +40,10 @@ struct FrameData
     int4 LightCount;
     float4 LightPosition[16];
     float4 LightColor[16];
-    float4x4 ShadowMatrix;
-    float4 ShadowParams;
+    float4 LightDirection[16];
+    float4 LightCone[16];
+    float4x4 ShadowMatrix[8];
+    float4 ShadowParams[3];
 };
 
 struct MaterialData
@@ -74,10 +76,10 @@ float3 ApplyNormalMap(thread const float3& normal, thread const float4& tangent,
     float3 t = fast::normalize(tangent.xyz - (n * dot(n, tangent.xyz)));
     float3 b = cross(n, t) * tangent.w;
     float3 local = (sampled * 2.0) - float3(1.0);
-    float3 _124 = local;
-    float2 _126 = _124.xy * strength;
-    local.x = _126.x;
-    local.y = _126.y;
+    float3 _135 = local;
+    float2 _137 = _135.xy * strength;
+    local.x = _137.x;
+    local.y = _137.y;
     return fast::normalize(((t * local.x) + (b * local.y)) + (n * local.z));
 }
 
@@ -108,65 +110,160 @@ void GetLight(thread const int& i, thread const float3& worldPosition, thread fl
     float ratio = _distance / fast::max(color.w, 9.9999997473787516355514526367188e-05);
     float window = fast::clamp(1.0 - (((ratio * ratio) * ratio) * ratio), 0.0, 1.0);
     radiance = ((color.xyz * window) * window) / float3((_distance * _distance) + 1.0);
+    if (position.w > 1.5)
+    {
+        float cosine = dot(-toLight, fast::normalize(Frame.LightDirection[i].xyz));
+        float2 cone = Frame.LightCone[i].xy;
+        radiance *= smoothstep(cone.y, fast::max(cone.x, cone.y + 9.9999997473787516355514526367188e-05), cosine);
+    }
 }
 
 static inline __attribute__((always_inline))
-float SunVisibility(thread const float3& worldPosition, thread const float3& normal, constant FrameData& Frame, texture2d<float> ShadowMap, sampler ShadowMapSmplr)
+float CompareShadow(thread const int& slot, thread const float3& coordinate, texture2d<float> ShadowMap0, sampler ShadowMap0Smplr, texture2d<float> ShadowMap1, sampler ShadowMap1Smplr, texture2d<float> ShadowMap2, sampler ShadowMap2Smplr, texture2d<float> ShadowMap3, sampler ShadowMap3Smplr, texture2d<float> ShadowMap4, sampler ShadowMap4Smplr, texture2d<float> ShadowMap5, sampler ShadowMap5Smplr, texture2d<float> ShadowMap6, sampler ShadowMap6Smplr, texture2d<float> ShadowMap7, sampler ShadowMap7Smplr)
 {
-    if (Frame.ShadowParams.x <= 0.0)
+    switch (slot)
+    {
+        case 0:
+        {
+            return spvDepthCast(ShadowMap0).sample_compare(ShadowMap0Smplr, coordinate.xy, coordinate.z);
+        }
+        case 1:
+        {
+            return spvDepthCast(ShadowMap1).sample_compare(ShadowMap1Smplr, coordinate.xy, coordinate.z);
+        }
+        case 2:
+        {
+            return spvDepthCast(ShadowMap2).sample_compare(ShadowMap2Smplr, coordinate.xy, coordinate.z);
+        }
+        case 3:
+        {
+            return spvDepthCast(ShadowMap3).sample_compare(ShadowMap3Smplr, coordinate.xy, coordinate.z);
+        }
+        case 4:
+        {
+            return spvDepthCast(ShadowMap4).sample_compare(ShadowMap4Smplr, coordinate.xy, coordinate.z);
+        }
+        case 5:
+        {
+            return spvDepthCast(ShadowMap5).sample_compare(ShadowMap5Smplr, coordinate.xy, coordinate.z);
+        }
+        case 6:
+        {
+            return spvDepthCast(ShadowMap6).sample_compare(ShadowMap6Smplr, coordinate.xy, coordinate.z);
+        }
+        default:
+        {
+            return spvDepthCast(ShadowMap7).sample_compare(ShadowMap7Smplr, coordinate.xy, coordinate.z);
+        }
+    }
+}
+
+static inline __attribute__((always_inline))
+float ShadowVisibility(thread const int& type, thread const float3& worldPosition, thread const float3& normal, constant FrameData& Frame, texture2d<float> ShadowMap0, sampler ShadowMap0Smplr, texture2d<float> ShadowMap1, sampler ShadowMap1Smplr, texture2d<float> ShadowMap2, sampler ShadowMap2Smplr, texture2d<float> ShadowMap3, sampler ShadowMap3Smplr, texture2d<float> ShadowMap4, sampler ShadowMap4Smplr, texture2d<float> ShadowMap5, sampler ShadowMap5Smplr, texture2d<float> ShadowMap6, sampler ShadowMap6Smplr, texture2d<float> ShadowMap7, sampler ShadowMap7Smplr)
+{
+    float4 params = Frame.ShadowParams[type];
+    if (params.x <= 0.0)
     {
         return 1.0;
     }
-    float3 p = worldPosition + (normal * Frame.ShadowParams.z);
-    float3 s = (Frame.ShadowMatrix * float4(p, 1.0)).xyz;
-    bool _368 = s.x <= 0.0;
-    bool _375;
-    if (!_368)
+    int slot = type;
+    if (type == 2)
     {
-        _375 = s.x >= 1.0;
+        float3 delta = worldPosition - Frame.LightPosition[int(params.w)].xyz;
+        float3 a = abs(delta);
+        bool _482 = a.x >= a.y;
+        bool _490;
+        if (_482)
+        {
+            _490 = a.x >= a.z;
+        }
+        else
+        {
+            _490 = _482;
+        }
+        if (_490)
+        {
+            slot = (delta.x >= 0.0) ? 2 : 3;
+        }
+        else
+        {
+            if (a.y >= a.z)
+            {
+                slot = (delta.y >= 0.0) ? 4 : 5;
+            }
+            else
+            {
+                slot = (delta.z >= 0.0) ? 6 : 7;
+            }
+        }
     }
-    else
-    {
-        _375 = _368;
-    }
-    bool _382;
-    if (!_375)
-    {
-        _382 = s.y <= 0.0;
-    }
-    else
-    {
-        _382 = _375;
-    }
-    bool _389;
-    if (!_382)
-    {
-        _389 = s.y >= 1.0;
-    }
-    else
-    {
-        _389 = _382;
-    }
-    bool _396;
-    if (!_389)
-    {
-        _396 = s.z >= 1.0;
-    }
-    else
-    {
-        _396 = _389;
-    }
-    if (_396)
+    float4 projected = Frame.ShadowMatrix[slot] * float4(worldPosition + (normal * params.z), 1.0);
+    if (projected.w <= 0.0)
     {
         return 1.0;
     }
-    float t = Frame.ShadowParams.y;
-    float3 _421 = float3(s.xy + float2(-t, -t), s.z);
-    float3 _436 = float3(s.xy + float2(t, -t), s.z);
-    float3 _452 = float3(s.xy + float2(-t, t), s.z);
-    float3 _466 = float3(s.xy + float2(t), s.z);
-    float lit = ((spvDepthCast(ShadowMap).sample_compare(ShadowMapSmplr, _421.xy, _421.z) + spvDepthCast(ShadowMap).sample_compare(ShadowMapSmplr, _436.xy, _436.z)) + spvDepthCast(ShadowMap).sample_compare(ShadowMapSmplr, _452.xy, _452.z)) + spvDepthCast(ShadowMap).sample_compare(ShadowMapSmplr, _466.xy, _466.z);
-    return mix(1.0, lit * 0.25, Frame.ShadowParams.x);
+    float3 s = projected.xyz / float3(projected.w);
+    bool _550 = s.x <= 0.0;
+    bool _557;
+    if (!_550)
+    {
+        _557 = s.x >= 1.0;
+    }
+    else
+    {
+        _557 = _550;
+    }
+    bool _564;
+    if (!_557)
+    {
+        _564 = s.y <= 0.0;
+    }
+    else
+    {
+        _564 = _557;
+    }
+    bool _571;
+    if (!_564)
+    {
+        _571 = s.y >= 1.0;
+    }
+    else
+    {
+        _571 = _564;
+    }
+    bool _578;
+    if (!_571)
+    {
+        _578 = s.z <= 0.0;
+    }
+    else
+    {
+        _578 = _571;
+    }
+    bool _585;
+    if (!_578)
+    {
+        _585 = s.z >= 1.0;
+    }
+    else
+    {
+        _585 = _578;
+    }
+    if (_585)
+    {
+        return 1.0;
+    }
+    float t = params.y;
+    int param = slot;
+    float3 param_1 = float3(s.xy + float2(-t, -t), s.z);
+    int param_2 = slot;
+    float3 param_3 = float3(s.xy + float2(t, -t), s.z);
+    int param_4 = slot;
+    float3 param_5 = float3(s.xy + float2(-t, t), s.z);
+    int param_6 = slot;
+    float3 param_7 = float3(s.xy + float2(t), s.z);
+    float lit = ((CompareShadow(param, param_1, ShadowMap0, ShadowMap0Smplr, ShadowMap1, ShadowMap1Smplr, ShadowMap2, ShadowMap2Smplr, ShadowMap3, ShadowMap3Smplr, ShadowMap4, ShadowMap4Smplr, ShadowMap5, ShadowMap5Smplr, ShadowMap6, ShadowMap6Smplr, ShadowMap7, ShadowMap7Smplr) + CompareShadow(param_2, param_3, ShadowMap0, ShadowMap0Smplr, ShadowMap1, ShadowMap1Smplr, ShadowMap2, ShadowMap2Smplr, ShadowMap3, ShadowMap3Smplr, ShadowMap4, ShadowMap4Smplr, ShadowMap5, ShadowMap5Smplr, ShadowMap6, ShadowMap6Smplr, ShadowMap7, ShadowMap7Smplr)) + CompareShadow(param_4, param_5, ShadowMap0, ShadowMap0Smplr, ShadowMap1, ShadowMap1Smplr, ShadowMap2, ShadowMap2Smplr, ShadowMap3, ShadowMap3Smplr, ShadowMap4, ShadowMap4Smplr, ShadowMap5, ShadowMap5Smplr, ShadowMap6, ShadowMap6Smplr, ShadowMap7, ShadowMap7Smplr)) + CompareShadow(param_6, param_7, ShadowMap0, ShadowMap0Smplr, ShadowMap1, ShadowMap1Smplr, ShadowMap2, ShadowMap2Smplr, ShadowMap3, ShadowMap3Smplr, ShadowMap4, ShadowMap4Smplr, ShadowMap5, ShadowMap5Smplr, ShadowMap6, ShadowMap6Smplr, ShadowMap7, ShadowMap7Smplr);
+    return mix(1.0, lit * 0.25, params.x);
 }
 
 static inline __attribute__((always_inline))
@@ -202,7 +299,7 @@ float3 EnvironmentBRDF(thread const float3& f0, thread const float& roughness, t
     return (f0 * ab.x) + float3(ab.y);
 }
 
-fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Material [[buffer(0)]], constant FrameData& Frame [[buffer(1)]], texture2d<float> BaseColorMap [[texture(0)]], texture2d<float> NormalMap [[texture(1)]], texture2d<float> AmbientOcclusionMap [[texture(2)]], texture2d<float> MetallicMap [[texture(3)]], texture2d<float> RoughnessMap [[texture(4)]], texture2d<float> SpecularMap [[texture(5)]], texture2d<float> EmissiveMap [[texture(6)]], texture2d<float> SubsurfaceMap [[texture(7)]], texture2d<float> ShadowMap [[texture(8)]], sampler BaseColorMapSmplr [[sampler(0)]], sampler NormalMapSmplr [[sampler(1)]], sampler AmbientOcclusionMapSmplr [[sampler(2)]], sampler MetallicMapSmplr [[sampler(3)]], sampler RoughnessMapSmplr [[sampler(4)]], sampler SpecularMapSmplr [[sampler(5)]], sampler EmissiveMapSmplr [[sampler(6)]], sampler SubsurfaceMapSmplr [[sampler(7)]], sampler ShadowMapSmplr [[sampler(8)]])
+fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Material [[buffer(0)]], constant FrameData& Frame [[buffer(1)]], texture2d<float> BaseColorMap [[texture(0)]], texture2d<float> NormalMap [[texture(1)]], texture2d<float> AmbientOcclusionMap [[texture(2)]], texture2d<float> MetallicMap [[texture(3)]], texture2d<float> RoughnessMap [[texture(4)]], texture2d<float> SpecularMap [[texture(5)]], texture2d<float> EmissiveMap [[texture(6)]], texture2d<float> SubsurfaceMap [[texture(7)]], texture2d<float> ShadowMap0 [[texture(8)]], texture2d<float> ShadowMap1 [[texture(9)]], texture2d<float> ShadowMap2 [[texture(10)]], texture2d<float> ShadowMap3 [[texture(11)]], texture2d<float> ShadowMap4 [[texture(12)]], texture2d<float> ShadowMap5 [[texture(13)]], texture2d<float> ShadowMap6 [[texture(14)]], texture2d<float> ShadowMap7 [[texture(15)]], sampler BaseColorMapSmplr [[sampler(0)]], sampler NormalMapSmplr [[sampler(1)]], sampler AmbientOcclusionMapSmplr [[sampler(2)]], sampler MetallicMapSmplr [[sampler(3)]], sampler RoughnessMapSmplr [[sampler(4)]], sampler SpecularMapSmplr [[sampler(5)]], sampler EmissiveMapSmplr [[sampler(6)]], sampler SubsurfaceMapSmplr [[sampler(7)]], sampler ShadowMap0Smplr [[sampler(8)]], sampler ShadowMap1Smplr [[sampler(9)]], sampler ShadowMap2Smplr [[sampler(10)]], sampler ShadowMap3Smplr [[sampler(11)]], sampler ShadowMap4Smplr [[sampler(12)]], sampler ShadowMap5Smplr [[sampler(13)]], sampler ShadowMap6Smplr [[sampler(14)]], sampler ShadowMap7Smplr [[sampler(15)]])
 {
     main0_out out = {};
     float4 base = (BaseColorMap.sample(BaseColorMapSmplr, in.InUV) * Material.BaseColor) * in.InTint;
@@ -241,25 +338,39 @@ fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Materi
         GetLight(param_5, param_6, param_7, param_8, Frame);
         float3 l = param_7;
         float3 radiance = param_8;
-        if (i == int(Frame.ShadowParams.w))
+        for (int type = 0; type < 3; type++)
         {
-            float3 param_9 = in.InWorldPosition;
-            float3 param_10 = faceNormal;
-            radiance *= SunVisibility(param_9, param_10, Frame, ShadowMap, ShadowMapSmplr);
+            bool _835 = Frame.ShadowParams[type].x > 0.0;
+            bool _844;
+            if (_835)
+            {
+                _844 = i == int(Frame.ShadowParams[type].w);
+            }
+            else
+            {
+                _844 = _835;
+            }
+            if (_844)
+            {
+                int param_9 = type;
+                float3 param_10 = in.InWorldPosition;
+                float3 param_11 = faceNormal;
+                radiance *= ShadowVisibility(param_9, param_10, param_11, Frame, ShadowMap0, ShadowMap0Smplr, ShadowMap1, ShadowMap1Smplr, ShadowMap2, ShadowMap2Smplr, ShadowMap3, ShadowMap3Smplr, ShadowMap4, ShadowMap4Smplr, ShadowMap5, ShadowMap5Smplr, ShadowMap6, ShadowMap6Smplr, ShadowMap7, ShadowMap7Smplr);
+            }
         }
         float3 h = fast::normalize(v + l);
         float nDotL = fast::max(dot(n, l), 0.0);
         float nDotH = fast::max(dot(n, h), 0.0);
-        float param_11 = fast::max(dot(h, v), 0.0);
-        float3 param_12 = f0;
-        float3 f = FresnelSchlick(param_11, param_12);
+        float param_12 = fast::max(dot(h, v), 0.0);
+        float3 param_13 = f0;
+        float3 f = FresnelSchlick(param_12, param_13);
         float3 diffuse = (float3(1.0) - f) * diffuseColor;
-        float param_13 = nDotH;
-        float param_14 = roughness;
-        float param_15 = nDotV;
-        float param_16 = nDotL;
-        float param_17 = roughness;
-        float3 spec = (f * (DistributionGGX(param_13, param_14) * VisibilitySmith(param_15, param_16, param_17))) * 3.1415927410125732421875;
+        float param_14 = nDotH;
+        float param_15 = roughness;
+        float param_16 = nDotV;
+        float param_17 = nDotL;
+        float param_18 = roughness;
+        float3 spec = (f * (DistributionGGX(param_14, param_15) * VisibilitySmith(param_16, param_17, param_18))) * 3.1415927410125732421875;
         color += (((diffuse + spec) * radiance) * nDotL);
         if (subsurface > 0.0)
         {
@@ -268,10 +379,10 @@ fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Materi
             color += ((((Material.Subsurface.xyz * diffuseColor) * radiance) * subsurface) * (fast::max(wrapped - nDotL, 0.0) + through));
         }
     }
-    float3 param_18 = f0;
-    float param_19 = roughness;
-    float param_20 = nDotV;
-    color += ((Frame.Ambient.xyz * (diffuseColor + EnvironmentBRDF(param_18, param_19, param_20))) * occlusion);
+    float3 param_19 = f0;
+    float param_20 = roughness;
+    float param_21 = nDotV;
+    color += ((Frame.Ambient.xyz * (diffuseColor + EnvironmentBRDF(param_19, param_20, param_21))) * occlusion);
     color += (EmissiveMap.sample(EmissiveMapSmplr, in.InUV).xyz * Material.Emissive.xyz);
     out.OutColor = float4(color, base.w);
     return out;

@@ -45,6 +45,10 @@ namespace FP
 
 		Mat4 GetViewProjection() const { return Projection * View; }
 
+		// Widen the displayed view around the same camera without changing its depth range.
+		// Useful for observing visibility decisions from a separate, narrower culling view.
+		RenderView Expanded(float factor) const;
+
 		// Pixel coordinates from the top left of the target.
 		Ray ScreenToRay(Vec2 pixel) const;
 		Vec2 WorldToScreen(Vec3 world) const;

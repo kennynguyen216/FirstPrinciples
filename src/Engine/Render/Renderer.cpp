@@ -76,12 +76,13 @@ namespace FP
 	}
 
 	Renderer::Renderer(GPUDevice& device, SDL_GPUTextureFormat targetFormat)
-		: m_Device(device), m_TargetFormat(targetFormat), m_Textures(device), m_Meshes(device)
+		: m_Device(device), m_TargetFormat(targetFormat), m_Textures(device), m_Meshes(device), m_Culling(device)
 	{
 		m_QuadVertices = device.CreateBuffer(SDL_GPU_BUFFERUSAGE_VERTEX, QuadVertices, sizeof(QuadVertices));
 		m_QuadIndices = device.CreateBuffer(SDL_GPU_BUFFERUSAGE_INDEX, QuadIndices, sizeof(QuadIndices));
 		m_BoneUpload.Resize(MaxSkinBones);
 		CreatePipelines();
+		m_OcclusionPipeline = CreateShadowPipeline(Surface::Mesh, true);
 	}
 
 	Renderer::~Renderer()
@@ -96,7 +97,7 @@ namespace FP
 					SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
 			}
 		}
-		for (SDL_GPUGraphicsPipeline* pipeline : { m_PresentPipeline, m_UIPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1], m_ParticlePipelines[0], m_ParticlePipelines[1] })
+		for (SDL_GPUGraphicsPipeline* pipeline : { m_OcclusionPipeline, m_PresentPipeline, m_UIPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1], m_ParticlePipelines[0], m_ParticlePipelines[1] })
 		{
 			if (pipeline)
 				SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
@@ -194,7 +195,7 @@ namespace FP
 		{
 			const int column = static_cast<int>(surface);
 			m_ScenePipelines[static_cast<int>(ShaderKind::Unlit)][column] = CreateMeshPipeline("Unlit.frag", 1, 1, surface, false);
-			m_ScenePipelines[static_cast<int>(ShaderKind::Lit)][column] = CreateMeshPipeline("Lit.frag", 9, 2, surface, false);
+			m_ScenePipelines[static_cast<int>(ShaderKind::Lit)][column] = CreateMeshPipeline("Lit.frag", 16, 2, surface, false);
 			m_ScenePipelines[static_cast<int>(ShaderKind::Glass)][column] = CreateMeshPipeline("Glass.frag", 4, 2, surface, true);
 			m_WirePipelines[column] = CreateMeshPipeline("Unlit.frag", 1, 1, surface, false, true);
 		}
@@ -457,16 +458,19 @@ namespace FP
 		m_Frame.Ambient = { ambient, 0 };
 
 		int32 count = 0;
-		m_ShadowCaster = NullEntity;
-		m_ShadowLight = -1;
+		for (int32 type = 0; type < 3; ++type)
+		{
+			m_ShadowCasters[type] = NullEntity;
+			m_ShadowLights[type] = -1;
+		}
 		for (auto [entity, transform, light] : world.View<TransformComponent, DirectionalLightComponent>().each())
 		{
 			if (count == MaxLights)
 				break;
-			if (m_ShadowLight < 0 && light.CastShadows && light.ShadowStrength > 0)
+			if (m_ShadowLights[0] < 0 && light.CastShadows && light.ShadowStrength > 0)
 			{
-				m_ShadowCaster = entity;
-				m_ShadowLight = count;
+				m_ShadowCasters[0] = entity;
+				m_ShadowLights[0] = count;
 			}
 			m_Frame.LightPosition[count] = { world.GetWorldRotation(entity).Rotate({ 0, 0, -1 }), 0 };
 			m_Frame.LightColor[count] = { ToLinear(light.Color).XYZ() * light.Intensity, 0 };
@@ -476,8 +480,30 @@ namespace FP
 		{
 			if (count == MaxLights)
 				break;
+			if (m_ShadowLights[2] < 0 && light.CastShadows && light.ShadowStrength > 0)
+			{
+				m_ShadowCasters[2] = entity;
+				m_ShadowLights[2] = count;
+			}
 			m_Frame.LightPosition[count] = { world.GetWorldPosition(entity), 1 };
 			m_Frame.LightColor[count] = { ToLinear(light.Color).XYZ() * light.Intensity, light.Range };
+			++count;
+		}
+		for (auto [entity, transform, light] : world.View<TransformComponent, SpotLightComponent>().each())
+		{
+			if (count == MaxLights)
+				break;
+			if (m_ShadowLights[1] < 0 && light.CastShadows && light.ShadowStrength > 0)
+			{
+				m_ShadowCasters[1] = entity;
+				m_ShadowLights[1] = count;
+			}
+			m_Frame.LightPosition[count] = { world.GetWorldPosition(entity), 2 };
+			m_Frame.LightColor[count] = { ToLinear(light.Color).XYZ() * light.Intensity, light.Range };
+			m_Frame.LightDirection[count] = { world.GetWorldRotation(entity).Rotate({ 0, 0, -1 }), 0 };
+			const float inner = std::fmin(std::fmax(light.InnerAngle, 0.0f), 88.0f);
+			const float outer = std::fmin(std::fmax(light.OuterAngle, inner + 0.01f), 89.0f);
+			m_Frame.LightCone[count] = { std::cos(inner * DegToRad), std::cos(outer * DegToRad), 0, 0 };
 			++count;
 		}
 		m_Frame.LightCount[0] = count;
@@ -565,11 +591,11 @@ namespace FP
 		GPUTexture* white = m_Device.GetWhiteTexture();
 		SDL_GPUSampler* sampler = m_Device.GetDefaultSampler();
 
-		SDL_GPUTextureSamplerBinding bindings[9] = {};
+		SDL_GPUTextureSamplerBinding bindings[16] = {};
 		uint32 count = 0;
 		auto bind = [&](GPUTexture* texture, SDL_GPUSampler* s = nullptr) { bindings[count++] = { texture->GetHandle(), s ? s : sampler }; };
 
-		bind(wireframe ? white : Texture(baseMap, true, white));
+		bind(wireframe || (m_MeshletSettings.Colorize && draw.IndirectFirst >= 0) ? white : Texture(baseMap, true, white));
 		if (draw.Kind == ShaderKind::Lit)
 		{
 			bind(Texture(data.NormalMap, false, m_Device.GetFlatNormalTexture()));
@@ -579,7 +605,8 @@ namespace FP
 			bind(Texture(data.SpecularMap, false, white));
 			bind(Texture(data.EmissiveMap, true, white));
 			bind(Texture(data.SubsurfaceMap, false, white));
-			bind(m_ShadowMap.Get(), m_Device.GetShadowSampler());
+			for (const auto& map : m_ShadowMaps)
+				bind(map.Get(), m_Device.GetShadowSampler());
 		}
 		else if (draw.Kind == ShaderKind::Glass)
 		{
@@ -588,7 +615,24 @@ namespace FP
 			bind(m_SceneCopy.Get(), m_Device.GetClampSampler());
 		}
 		SDL_BindGPUFragmentSamplers(pass, 0, bindings, count);
-		SDL_DrawGPUIndexedPrimitives(pass, sprite ? 6 : draw.IndexCount, 1, sprite ? 0 : draw.FirstIndex, 0, 0);
+		if (draw.IndirectFirst >= 0)
+		{
+			if (m_MeshletSettings.Colorize)
+			{
+				material = MaterialUniforms();
+				material.Params2.Y = 0;
+				SDL_PushGPUFragmentUniformData(cmd, 0, &material, sizeof(material));
+				for (uint32 i = 0; i < draw.MeshletCount; ++i)
+				{
+					uint32 hash = (draw.FirstIndex + i + 1) * 2654435761u ^ (static_cast<uint32>(draw.Value) * 2246822519u);
+					object.Tint = { 0.2f + 0.8f * (hash & 255) / 255.0f, 0.2f + 0.8f * ((hash >> 8) & 255) / 255.0f, 0.2f + 0.8f * ((hash >> 16) & 255) / 255.0f, 1 };
+					SDL_PushGPUVertexUniformData(cmd, 0, &object, sizeof(object));
+					SDL_DrawGPUIndexedPrimitivesIndirect(pass, m_Culling.Commands(), (draw.IndirectFirst + i) * sizeof(SDL_GPUIndexedIndirectDrawCommand), 1);
+				}
+			}
+			else SDL_DrawGPUIndexedPrimitivesIndirect(pass, m_Culling.Commands(), draw.IndirectFirst * sizeof(SDL_GPUIndexedIndirectDrawCommand), draw.MeshletCount);
+		}
+		else SDL_DrawGPUIndexedPrimitives(pass, sprite ? 6 : draw.IndexCount, 1, sprite ? 0 : draw.FirstIndex, 0, 0);
 	}
 
 	void Renderer::PushBones(SDL_GPUCommandBuffer* cmd, const Array<Mat4>* skin)
@@ -600,7 +644,7 @@ namespace FP
 		SDL_PushGPUVertexUniformData(cmd, 1, m_BoneUpload.Data(), static_cast<uint32>(MaxSkinBones * sizeof(Mat4)));
 	}
 
-	SDL_GPUGraphicsPipeline* Renderer::CreateShadowPipeline(Surface surface)
+	SDL_GPUGraphicsPipeline* Renderer::CreateShadowPipeline(Surface surface, bool occlusion)
 	{
 		SDL_GPUDevice* gpu = m_Device.GetHandle();
 		const bool skinned = surface == Surface::SkinnedMesh;
@@ -629,10 +673,11 @@ namespace FP
 			info.vertex_input_state.num_vertex_attributes = skinned ? 6 : 4;
 			info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
 			// Both faces cast so open meshes like planes still shadow. The slope bias keeps
-			// lit surfaces from shadowing themselves.
-			info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+			// lit surfaces from shadowing themselves. The camera occlusion prepass instead
+			// matches scene back-face culling and uses unbiased depth.
+			info.rasterizer_state.cull_mode = occlusion ? SDL_GPU_CULLMODE_BACK : SDL_GPU_CULLMODE_NONE;
 			info.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
-			info.rasterizer_state.enable_depth_bias = true;
+			info.rasterizer_state.enable_depth_bias = !occlusion;
 			info.rasterizer_state.depth_bias_constant_factor = 2;
 			info.rasterizer_state.depth_bias_slope_factor = 2;
 			info.depth_stencil_state.enable_depth_test = true;
@@ -640,10 +685,10 @@ namespace FP
 			info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
 			info.target_info.num_color_targets = 0;
 			info.target_info.has_depth_stencil_target = true;
-			info.target_info.depth_stencil_format = m_Device.GetShadowFormat();
+			info.target_info.depth_stencil_format = occlusion ? m_Device.GetDepthFormat() : m_Device.GetShadowFormat();
 			pipeline = SDL_CreateGPUGraphicsPipeline(gpu, &info);
 			if (!pipeline)
-				FP_LOG_WARN("Shadow pipeline failed, so there will be no shadows: %s", SDL_GetError());
+				FP_LOG_WARN("%s depth pipeline failed: %s", occlusion ? "Occlusion" : "Shadow", SDL_GetError());
 		}
 		if (vert)
 			SDL_ReleaseGPUShader(gpu, vert);
@@ -654,87 +699,114 @@ namespace FP
 
 	void Renderer::RenderShadows(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view)
 	{
-		m_Frame.ShadowParams = {};
-		const DirectionalLightComponent* light = world.IsValid(m_ShadowCaster) ? world.TryGet<DirectionalLightComponent>(m_ShadowCaster) : nullptr;
-		// 2D scenes with only sprites have nothing to cast, so they skip the pass.
+		for (Vec4& params : m_Frame.ShadowParams)
+			params = {};
 		entt::registry& registry = world.GetRegistry();
 		const bool hasCasters = !registry.view<MeshComponent>().empty() || !registry.view<SkeletalMeshComponent>().empty();
-		const bool enabled = light && hasCasters && m_Mode == ViewMode::Lit && m_ShadowPipelines[0] && m_ShadowPipelines[1];
-
-		// Lit always samples the map, so keep a tiny cleared one around when shadows are off.
-		const uint32 size = enabled ? static_cast<uint32>(light->ShadowResolution < 64 ? 64 : light->ShadowResolution > 4096 ? 4096 : light->ShadowResolution) : 16;
-		if (!m_ShadowMap || m_ShadowMap->GetWidth() != size)
-		{
-			m_ShadowMap = m_Device.CreateRenderTarget(m_Device.GetShadowFormat(), size, size, true, true);
-			m_ShadowMapCleared = false;
-		}
-		if (!m_ShadowMap || (!enabled && m_ShadowMapCleared))
-			return;
-
-		SDL_GPUDepthStencilTargetInfo depth = {};
-		depth.texture = m_ShadowMap->GetHandle();
-		depth.clear_depth = 1;
-		depth.load_op = SDL_GPU_LOADOP_CLEAR;
-		depth.store_op = SDL_GPU_STOREOP_STORE;
-		depth.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
-		depth.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
-		SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, nullptr, 0, &depth);
-		m_ShadowMapCleared = true;
-		if (!enabled)
-		{
-			SDL_EndGPURenderPass(pass);
-			return;
-		}
-
-		const ShadowView shadow = FitShadowView(view, world.GetWorldRotation(m_ShadowCaster), light->ShadowDistance, static_cast<int32>(size));
-		const float texel = shadow.Radius * 2 / static_cast<float>(size);
-		m_Frame.ShadowMatrix = shadow.ToTexture;
-		m_Frame.ShadowParams = { light->ShadowStrength > 1 ? 1 : light->ShadowStrength, 1.0f / static_cast<float>(size), texel * 1.5f, static_cast<float>(m_ShadowLight) };
-
-		// Every section that is not glass casts. Meshes outside the box are skipped.
-		auto cast = [&](Entity entity, const GPUMesh* mesh, int32 pipeline, const Array<Mat4>* skin, float reach) {
-			const Mat4 model = world.GetWorldMatrix(entity);
-			float largest = 0;
-			for (int c = 0; c < 3; ++c)
-				largest = std::fmax(largest, Vec3(model.At(c, 0), model.At(c, 1), model.At(c, 2)).Length());
-			const Vec3 center = model.TransformPoint((mesh->BoundsMin + mesh->BoundsMax) * 0.5f);
-			if (!shadow.Touches(center, (mesh->BoundsMax - mesh->BoundsMin).Length() * 0.5f * largest * reach))
-				return;
-
-			ObjectUniforms object;
-			object.ViewProjection = shadow.ViewProjection;
-			object.Model = model;
-			SDL_BindGPUGraphicsPipeline(pass, m_ShadowPipelines[pipeline]);
-			SDL_PushGPUVertexUniformData(cmd, 0, &object, sizeof(object));
-			if (pipeline == 1)
-				PushBones(cmd, skin);
-			const SDL_GPUBufferBinding vertices[2] = { { mesh->Vertices->GetHandle(), 0 }, { mesh->Skin ? mesh->Skin->GetHandle() : nullptr, 0 } };
-			SDL_BindGPUVertexBuffers(pass, 0, vertices, pipeline == 1 ? 2 : 1);
-			const SDL_GPUBufferBinding indices = { mesh->Indices->GetHandle(), 0 };
-			SDL_BindGPUIndexBuffer(pass, &indices, SDL_GPU_INDEXELEMENTSIZE_32BIT);
-
-			const MaterialComponent* materials = world.TryGet<MaterialComponent>(entity);
-			for (int32 i = 0; i < mesh->Sections.Num(); ++i)
+		const bool canRender = hasCasters && m_Mode == ViewMode::Lit && m_ShadowPipelines[0] && m_ShadowPipelines[1];
+		auto renderMap = [&](int32 slot, int32 type, bool enabled, int32 requestedSize, const ShadowView& shadow,
+			float worldTexel, float strength, Vec3 lightPosition, float range) {
+			const uint32 size = enabled ? static_cast<uint32>(std::clamp(requestedSize, 64, type == 0 ? 4096 : 2048)) : 16;
+			if (!m_ShadowMaps[slot] || m_ShadowMaps[slot]->GetWidth() != size)
 			{
-				const Material* material = materials ? MaterialLibrary::Get().Load(materials->GetForSection(i)) : nullptr;
-				if (material && material->GetData().Shader == "Glass")
-					continue;
-				SDL_DrawGPUIndexedPrimitives(pass, mesh->Sections[i].IndexCount, 1, mesh->Sections[i].FirstIndex, 0, 0);
+				m_ShadowMaps[slot] = m_Device.CreateRenderTarget(m_Device.GetShadowFormat(), size, size, true, true);
+				m_ShadowMapCleared[slot] = false;
 			}
+			if (!m_ShadowMaps[slot] || (!enabled && m_ShadowMapCleared[slot]))
+				return;
+			SDL_GPUDepthStencilTargetInfo depth = {};
+			depth.texture = m_ShadowMaps[slot]->GetHandle();
+			depth.clear_depth = 1;
+			depth.load_op = SDL_GPU_LOADOP_CLEAR;
+			depth.store_op = SDL_GPU_STOREOP_STORE;
+			depth.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
+			depth.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+			SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, nullptr, 0, &depth);
+			if (!pass)
+				return;
+			m_ShadowMapCleared[slot] = true;
+			if (!enabled)
+			{
+				SDL_EndGPURenderPass(pass);
+				return;
+			}
+			m_Frame.ShadowMatrix[slot] = shadow.ToTexture;
+			m_Frame.ShadowParams[type] = { std::clamp(strength, 0.0f, 1.0f),
+				1.0f / static_cast<float>(size), worldTexel * 1.5f, static_cast<float>(m_ShadowLights[type]) };
+
+			// Draw opaque sections. A range check skips distant meshes for local lights.
+			auto cast = [&](Entity entity, const GPUMesh* mesh, int32 pipeline, const Array<Mat4>* skin, float reach) {
+				const Mat4 model = world.GetWorldMatrix(entity);
+				float largest = 0;
+				for (int c = 0; c < 3; ++c)
+					largest = std::fmax(largest, Vec3(model.At(c, 0), model.At(c, 1), model.At(c, 2)).Length());
+				const Vec3 center = model.TransformPoint((mesh->BoundsMin + mesh->BoundsMax) * 0.5f);
+				const float radius = (mesh->BoundsMax - mesh->BoundsMin).Length() * 0.5f * largest * reach;
+				if (type == 0 ? !shadow.Touches(center, radius) : (center - lightPosition).Length() > range + radius)
+					return;
+
+				ObjectUniforms object;
+				object.ViewProjection = shadow.ViewProjection;
+				object.Model = model;
+				SDL_BindGPUGraphicsPipeline(pass, m_ShadowPipelines[pipeline]);
+				SDL_PushGPUVertexUniformData(cmd, 0, &object, sizeof(object));
+				if (pipeline == 1)
+					PushBones(cmd, skin);
+				const SDL_GPUBufferBinding vertices[2] = { { mesh->Vertices->GetHandle(), 0 }, { mesh->Skin ? mesh->Skin->GetHandle() : nullptr, 0 } };
+				SDL_BindGPUVertexBuffers(pass, 0, vertices, pipeline == 1 ? 2 : 1);
+				const SDL_GPUBufferBinding indices = { mesh->Indices->GetHandle(), 0 };
+				SDL_BindGPUIndexBuffer(pass, &indices, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+
+				const MaterialComponent* materials = world.TryGet<MaterialComponent>(entity);
+				for (int32 i = 0; i < mesh->Sections.Num(); ++i)
+				{
+					const Material* material = materials ? MaterialLibrary::Get().Load(materials->GetForSection(i)) : nullptr;
+					if (material && material->GetData().Shader == "Glass")
+						continue;
+					SDL_DrawGPUIndexedPrimitives(pass, mesh->Sections[i].IndexCount, 1, mesh->Sections[i].FirstIndex, 0, 0);
+				}
+			};
+			for (auto [entity, transform, meshComponent] : world.View<TransformComponent, MeshComponent>().each())
+			{
+				if (const GPUMesh* mesh = m_Meshes.Get(meshComponent.Mesh))
+					cast(entity, mesh, 0, nullptr, 1);
+			}
+			for (auto [entity, transform, skeletal] : world.View<TransformComponent, SkeletalMeshComponent>().each())
+			{
+				// Animation can reach past the bind pose bounds, so cull them loosely.
+				const SkeletalPoseComponent* pose = world.TryGet<SkeletalPoseComponent>(entity);
+				if (const GPUMesh* mesh = m_Meshes.GetSkinned(skeletal.Mesh))
+					cast(entity, mesh, 1, pose ? &pose->Skin : nullptr, 1.5f);
+			}
+			SDL_EndGPURenderPass(pass);
 		};
-		for (auto [entity, transform, meshComponent] : world.View<TransformComponent, MeshComponent>().each())
+
+		const auto* directional = world.IsValid(m_ShadowCasters[0]) ? world.TryGet<DirectionalLightComponent>(m_ShadowCasters[0]) : nullptr;
+		const bool sunEnabled = canRender && directional;
+		const int32 sunSize = sunEnabled ? std::clamp(directional->ShadowResolution, 64, 4096) : 16;
+		const ShadowView sun = sunEnabled ? FitShadowView(view, world.GetWorldRotation(m_ShadowCasters[0]), directional->ShadowDistance, sunSize) : ShadowView{};
+		renderMap(0, 0, sunEnabled, sunSize, sun, sunEnabled ? sun.Radius * 2 / sunSize : 0,
+			sunEnabled ? directional->ShadowStrength : 0, {}, 0);
+
+		const auto* spot = world.IsValid(m_ShadowCasters[1]) ? world.TryGet<SpotLightComponent>(m_ShadowCasters[1]) : nullptr;
+		const bool spotEnabled = canRender && spot && spot->Range > 0;
+		const Vec3 spotPosition = spotEnabled ? world.GetWorldPosition(m_ShadowCasters[1]) : Vec3{};
+		const float spotAngle = spotEnabled ? std::clamp(spot->OuterAngle, 1.0f, 89.0f) : 35.0f;
+		const ShadowView spotView = spotEnabled ? PerspectiveShadowView(spotPosition, world.GetWorldRotation(m_ShadowCasters[1]), spotAngle, spot->Range) : ShadowView{};
+		const int32 spotSize = spotEnabled ? std::clamp(spot->ShadowResolution, 64, 2048) : 16;
+		renderMap(1, 1, spotEnabled, spotSize, spotView, spotEnabled ? 2 * spot->Range * std::tan(spotAngle * DegToRad) / spotSize : 0,
+			spotEnabled ? spot->ShadowStrength : 0, spotPosition, spotEnabled ? spot->Range : 0);
+
+		const auto* point = world.IsValid(m_ShadowCasters[2]) ? world.TryGet<PointLightComponent>(m_ShadowCasters[2]) : nullptr;
+		const bool pointEnabled = canRender && point && point->Range > 0;
+		const Vec3 pointPosition = pointEnabled ? world.GetWorldPosition(m_ShadowCasters[2]) : Vec3{};
+		const int32 pointSize = pointEnabled ? std::clamp(point->ShadowResolution, 64, 2048) : 16;
+		for (int32 face = 0; face < 6; ++face)
 		{
-			if (const GPUMesh* mesh = m_Meshes.Get(meshComponent.Mesh))
-				cast(entity, mesh, 0, nullptr, 1);
+			const ShadowView faceView = pointEnabled ? PerspectiveShadowView(pointPosition, PointShadowFaceRotation(face), 46.0f, point->Range) : ShadowView{};
+			renderMap(2 + face, 2, pointEnabled, pointSize, faceView, pointEnabled ? 2 * point->Range * std::tan(46.0f * DegToRad) / pointSize : 0,
+				pointEnabled ? point->ShadowStrength : 0, pointPosition, pointEnabled ? point->Range : 0);
 		}
-		for (auto [entity, transform, skeletal] : world.View<TransformComponent, SkeletalMeshComponent>().each())
-		{
-			// Animation can reach past the bind pose bounds, so cull them loosely.
-			const SkeletalPoseComponent* pose = world.TryGet<SkeletalPoseComponent>(entity);
-			if (const GPUMesh* mesh = m_Meshes.GetSkinned(skeletal.Mesh))
-				cast(entity, mesh, 1, pose ? &pose->Skin : nullptr, 1.5f);
-		}
-		SDL_EndGPURenderPass(pass);
 	}
 
 	Array<GPUTexture*> Renderer::PrepareUI(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view, uint32 width, uint32 height)
@@ -791,8 +863,76 @@ namespace FP
 		return textures;
 	}
 
+	void Renderer::PrepareMeshlets(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view, Array<Draw>& draws)
+	{
+		m_ActiveMeshlets = 0;
+		if (!m_MeshletSettings.Enabled || !HasMeshletCulling()) return;
+		if (!m_HasCullingView || !m_MeshletSettings.FreezeCamera)
+		{
+			m_CullingView = view;
+			m_HasCullingView = true;
+		}
+		const uint32 width = m_SceneColor->GetWidth(), height = m_SceneColor->GetHeight();
+		if (!m_CullDepth || m_CullDepth->GetWidth() != width || m_CullDepth->GetHeight() != height)
+			m_CullDepth = m_Device.CreateRenderTarget(m_Device.GetDepthFormat(), width, height, true, true);
+		if (!m_CullDepth) return;
+		MeshletSettings settings = m_MeshletSettings;
+		settings.Occlusion &= m_Mode != ViewMode::Wireframe;
+		const Mat4 clip = m_CullingView.GetViewProjection();
+		Array<MeshletCullItem> items;
+		for (Draw& draw : draws)
+		{
+			// Animated bounds need deformation-aware bounds; transparent surfaces keep their ordered path.
+			if (draw.Type != Surface::Mesh || draw.Kind == ShaderKind::Glass) continue;
+			if (draw.Mat && draw.Mat->GetData().Shader == "Glass") continue;
+			const int32 first = items.Num();
+			const Mat4 localToClip = clip * world.GetWorldMatrix(draw.Value);
+			for (const auto& meshlet : draw.Mesh->Meshlets)
+			{
+				if (meshlet.FirstIndex < draw.FirstIndex || meshlet.FirstIndex >= draw.FirstIndex + draw.IndexCount) continue;
+				items.Add({ localToClip, Vec4(meshlet.BoundsMin, 0), Vec4(meshlet.BoundsMax, 0), meshlet.FirstIndex, meshlet.IndexCount, {} });
+			}
+			if (items.Num() > first) { draw.IndirectFirst = first; draw.MeshletCount = static_cast<uint32>(items.Num() - first); }
+		}
+		if (items.IsEmpty()) return;
+		// Current-frame depth avoids temporal false occlusion when objects or cameras move.
+		SDL_GPUDepthStencilTargetInfo depth{};
+		depth.texture = m_CullDepth->GetHandle(); depth.clear_depth = 1;
+		depth.load_op = SDL_GPU_LOADOP_CLEAR; depth.store_op = SDL_GPU_STOREOP_STORE;
+		depth.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE; depth.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+		auto* pass = SDL_BeginGPURenderPass(cmd, nullptr, 0, &depth);
+		if (settings.Occlusion)
+		{
+			SDL_BindGPUGraphicsPipeline(pass, m_OcclusionPipeline);
+			for (const Draw& draw : draws)
+			{
+				if (draw.IndirectFirst < 0) continue;
+				// Cutout textures cannot safely occlude without reproducing their alpha test.
+				const MaterialData defaults;
+				const auto& data = draw.Mat ? draw.Mat->GetData() : defaults;
+				if (data.BaseColor.A < data.AlphaCutoff || (!data.BaseColorMap.IsEmpty() && data.AlphaCutoff > 0)) continue;
+				ObjectUniforms object;
+				object.ViewProjection = clip; object.Model = world.GetWorldMatrix(draw.Value);
+				object.NormalMatrix = object.Model.Inverse().Transposed();
+				SDL_PushGPUVertexUniformData(cmd, 0, &object, sizeof(object));
+				SDL_GPUBufferBinding vertices{ draw.Mesh->Vertices->GetHandle(), 0 }, indices{ draw.Mesh->Indices->GetHandle(), 0 };
+				SDL_BindGPUVertexBuffers(pass, 0, &vertices, 1);
+				SDL_BindGPUIndexBuffer(pass, &indices, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+				SDL_DrawGPUIndexedPrimitives(pass, draw.IndexCount, 1, draw.FirstIndex, 0, 0);
+			}
+		}
+		SDL_EndGPURenderPass(pass);
+		if (m_Culling.Dispatch(cmd, m_CullDepth->GetHandle(), width, height, items, settings))
+		{
+			m_ActiveMeshlets = static_cast<uint32>(items.Num());
+			if (settings.Colorize)
+				for (Draw& draw : draws) if (draw.IndirectFirst >= 0) draw.Kind = ShaderKind::Unlit;
+		}
+		else for (Draw& draw : draws) { draw.IndirectFirst = -1; draw.MeshletCount = 0; }
+	}
+
 	void Renderer::Render(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* target, uint32 width, uint32 height,
-		World& world, const RenderView& view, const DebugLines* lines)
+		World& world, const RenderView& view, const DebugLines* lines, const RenderView* cullingView)
 	{
 		if (!IsValid() || width == 0 || height == 0)
 			return;
@@ -862,6 +1002,7 @@ namespace FP
 			return a.Depth > b.Depth;
 		});
 
+		PrepareMeshlets(cmd, world, cullingView ? *cullingView : view, draws);
 		const Mat4 viewProjection = view.GetViewProjection();
 		SDL_PushGPUFragmentUniformData(cmd, 1, &m_Frame, sizeof(m_Frame));
 

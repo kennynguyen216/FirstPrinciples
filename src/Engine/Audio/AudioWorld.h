@@ -48,6 +48,7 @@ namespace FP
 		virtual AudioDevice* GetDevice() const;
 		virtual void BeginPlay();
 		virtual void EndPlay();
+		virtual void SetPaused(bool paused);
 		virtual void Update();
 		virtual AudioResult Preload(const String& clip);
 		virtual AudioPlayResult Play(Entity source);
@@ -122,6 +123,8 @@ namespace FP
 		std::thread::id m_Thread = std::this_thread::get_id();
 		uint64 m_Context = 0;
 		bool m_Playing = false;
+		bool m_Paused = false;
+		std::vector<VoiceHandle> m_PausedForWorld;
 		std::vector<Source> m_Sources;
 		std::vector<Voice> m_Voices;
 		TransformComponent m_Listener;

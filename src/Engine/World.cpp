@@ -8,6 +8,8 @@
 #include "Engine/Paths.h"
 #include "Engine/SceneSerializer.h"
 
+#include <chrono>
+
 namespace FP
 {
 	namespace
@@ -321,6 +323,7 @@ namespace FP
 	{
 		if (&candidate == this) return;
 		const bool wasPlaying = m_Playing;
+		const bool wasPaused = m_Paused;
 		if (wasPlaying) EndPlay();
 		if (m_Audio) { m_Audio->ResetScene(); m_Audio->DisconnectRegistry(); }
 		if (candidate.m_Audio) { candidate.m_Audio->ResetScene(); candidate.m_Audio->DisconnectRegistry(); }
@@ -332,7 +335,11 @@ namespace FP
 		m_PendingDestroy.Clear();
 		if (m_Audio) m_Audio->ConnectRegistry();
 		if (candidate.m_Audio) candidate.m_Audio->ConnectRegistry();
-		if (wasPlaying) BeginPlay();
+		if (wasPlaying)
+		{
+			BeginPlay();
+			if (wasPaused) SetPaused(true);
+		}
 	}
 
 	void World::ClearSystems()
@@ -343,6 +350,7 @@ namespace FP
 				system->OnStop(*this);
 		}
 		m_Systems.Clear();
+		m_SystemTimings.Clear();
 	}
 
 	void World::BeginPlay()
@@ -350,7 +358,12 @@ namespace FP
 		if (m_Playing)
 			return;
 		m_Playing = true;
+		m_Paused = false;
 		m_Time = 0;
+		m_SystemTimings.Clear();
+		m_LastUpdateMilliseconds = 0;
+		m_AverageUpdateMilliseconds = 0;
+		m_ProfileFrame = 0;
 		// Scripts that want a pointer ask for one in OnStart.
 		Input::SetCursorMode(CursorMode::Locked);
 		GetAudio().BeginPlay();
@@ -368,16 +381,50 @@ namespace FP
 			system->OnStop(*this);
 		if (m_Audio) m_Audio->EndPlay();
 		m_Playing = false;
+		m_Paused = false;
 		FlushDestroyed();
+	}
+
+	void World::SetPaused(bool paused)
+	{
+		if (!m_Playing || m_Paused == paused)
+			return;
+		m_Paused = paused;
+		if (m_Audio) m_Audio->SetPaused(paused);
 	}
 
 	void World::Update(float deltaTime)
 	{
+		if (m_Playing && m_Paused)
+			return;
+		RunFrame(deltaTime);
+	}
+
+	void World::Step(float deltaTime)
+	{
+		if (m_Playing && m_Paused)
+			RunFrame(deltaTime);
+	}
+
+	void World::RunFrame(float deltaTime)
+	{
+		using Clock = std::chrono::steady_clock;
+		const auto frameStart = Clock::now();
 		if (m_Playing)
 		{
 			m_Time += deltaTime;
 			for (int32 i = 0; i < m_Systems.Num(); ++i)
+			{
+				if (i >= m_SystemTimings.Num())
+					m_SystemTimings.Add({ m_Systems[i]->GetName() });
+				const auto start = Clock::now();
 				m_Systems[i]->Update(*this, deltaTime);
+				const double elapsed = std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+				SystemTiming& timing = m_SystemTimings[i];
+				timing.LastMilliseconds = elapsed;
+				timing.AverageMilliseconds = timing.Samples ? timing.AverageMilliseconds * 0.9 + elapsed * 0.1 : elapsed;
+				++timing.Samples;
+			}
 		}
 		FlushDestroyed();
 		if (!m_PendingScene.IsEmpty())
@@ -388,6 +435,12 @@ namespace FP
 				FP_LOG("Loaded scene %s", path.CStr());
 		}
 		if (m_Playing && m_Audio) m_Audio->Update();
+		if (m_Playing)
+		{
+			m_LastUpdateMilliseconds = std::chrono::duration<double, std::milli>(Clock::now() - frameStart).count();
+			m_AverageUpdateMilliseconds = m_ProfileFrame ? m_AverageUpdateMilliseconds * 0.9 + m_LastUpdateMilliseconds * 0.1 : m_LastUpdateMilliseconds;
+			++m_ProfileFrame;
+		}
 	}
 
 	void World::FlushDestroyed()
