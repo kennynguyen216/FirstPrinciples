@@ -115,6 +115,7 @@ namespace FP::Editor
 	void ViewportWidget::SetPlaying(bool playing)
 	{
 		m_Playing = playing;
+		m_Paused = false;
 		m_Dragging = false;
 		m_Flying = false;
 		m_FlyKeys = 0;
@@ -126,10 +127,22 @@ namespace FP::Editor
 		UpdateCursor();
 	}
 
+	void ViewportWidget::SetPaused(bool paused)
+	{
+		if (!m_Playing || m_Paused == paused)
+			return;
+		m_Paused = paused;
+		m_CursorFreed = false;
+		Input::Reset();
+		if (!paused)
+			setFocus();
+		UpdateCursor();
+	}
+
 	void ViewportWidget::UpdateCursor()
 	{
 		const CursorMode mode = Input::GetCursorMode();
-		const bool active = m_Playing && hasFocus() && isActiveWindow() && !m_CursorFreed;
+		const bool active = m_Playing && !m_Paused && hasFocus() && isActiveWindow() && !m_CursorFreed;
 		const bool hide = active && mode != CursorMode::Visible;
 		const bool lock = active && mode == CursorMode::Locked;
 
@@ -674,6 +687,7 @@ namespace FP::Editor
 		m_LastMouse = event->position();
 		if (m_Playing)
 		{
+			if (m_Paused) return;
 			// The click that takes the mouse back is not a game click.
 			if (m_CursorFreed && Input::GetCursorMode() != CursorMode::Visible)
 			{
@@ -749,6 +763,7 @@ namespace FP::Editor
 	{
 		if (m_Playing)
 		{
+			if (m_Paused) return;
 			if (event->button() == Qt::LeftButton) Input::SetMouseButton(MouseButton::Left, false);
 			if (event->button() == Qt::RightButton) Input::SetMouseButton(MouseButton::Right, false);
 			if (event->button() == Qt::MiddleButton) Input::SetMouseButton(MouseButton::Middle, false);
@@ -772,6 +787,7 @@ namespace FP::Editor
 		const QPointF position = event->position();
 		if (m_Playing)
 		{
+			if (m_Paused) return;
 			// UpdateCursor keeps a locked mouse at the center.
 			if (!m_CursorLocked)
 				Input::SetMousePosition(ToPixels(position));
@@ -860,6 +876,7 @@ namespace FP::Editor
 	{
 		if (m_Playing)
 		{
+			if (m_Paused) return;
 			// One notch is 120, the same as one SDL wheel step.
 			Input::AddScroll(Vec2(static_cast<float>(event->angleDelta().x()), static_cast<float>(event->angleDelta().y())) / 120.0f);
 			return;
@@ -888,6 +905,7 @@ namespace FP::Editor
 	{
 		if (m_Playing)
 		{
+			if (m_Paused) return;
 			// Escape frees the mouse so the editor can be used. The game still sees the key.
 			if (event->key() == Qt::Key_Escape)
 			{
@@ -931,6 +949,7 @@ namespace FP::Editor
 	{
 		if (m_Playing)
 		{
+			if (m_Paused) return;
 			if (!event->isAutoRepeat())
 				Input::SetKey(ToScancode(event->key()), false);
 			return;

@@ -109,7 +109,9 @@ Game code lives in your project's `Source` folder. The editor and the runtime bo
    `FP::Input::IsKeyDown(SDL_SCANCODE_SPACE)`.
 
 5. **Scenes** live in the project's `Content/Scenes`. Build them in the editor and press Play to run your systems.
-   Stop restores the scene. `Runtime` plays `Game::StartScene` or a scene passed on the command line.
+   Pause holds the current game state and audio. Step advances one 1/60-second game frame while
+   remaining paused. Resume continues play. Stop restores the scene.
+   `Runtime` plays `Game::StartScene` or a scene passed on the command line.
 
 Textures are `.png`, `.jpg`, `.tga` or `.bmp` files under `Content/`. Use the `...` button next to a texture
 field to pick one.
@@ -730,9 +732,10 @@ The editor follows Unreal Engine 5's layout and dark theme, using this engine's 
 - **Hierarchy** lists every entity nested under its parent with its type, plus a search box. The scene row at the top holds scene scripts.
 - Drag a panel by its title to move it, or drop it on another panel to share a spot as tabs. Pull a tab
   out to separate it again. **Window** reopens closed panels and **Reset Layout** puts everything back.
-- **Content Browser** and **Output Log** share the bottom. The status bar has buttons for both and a
-  console box: type `help` for the commands (play, stop, save, undo, redo, gc, 2d, 3d, viewmode,
-  select, create).
+- **Content Browser**, **Output Log** and **Profiler** share the bottom. The profiler shows each
+  system's last and smoothed average CPU update time, plus the total game update time. Rendering and
+  editor UI time are not included. The status bar opens each panel and has a console box: type
+  `help` for commands including play, pause, resume, step and stop.
 
 ### Content browser
 
@@ -905,6 +908,9 @@ FP::JobSystem::ParallelFor(enemyCount, 32, [&](int32 i) { UpdateEnemy(i); });
 | Delete | Delete or Backspace |
 | Undo / redo | Ctrl+Z / Ctrl+Shift+Z |
 | Play | Ctrl+P |
+| Pause / resume | Ctrl+Shift+P or the toolbar button. The game camera stays visible |
+| Step one frame | F10 while paused |
+| System profiler | Profiler button in the status bar or Window > Profiler |
 | New script / reload scripts | Scripts menu / Ctrl+R |
 | Save | Ctrl+S |
 

@@ -53,10 +53,11 @@ int main(int argc, char** argv)
 		FP::Editor::EditorWindow window(*device, audio);
 		window.show();
 
-		// Smoke test flags. --scene path opens a scene relative to Content, --2d or --3d picks the view,
-		// --viewmode lit, unlit or wireframe picks the shading,
-		// --select Name picks an entity, --play starts play mode and --screenshot out.png grabs the
-		// window after a second and quits.
+		// Smoke test flags. --scene path opens a scene relative to Content.
+		// --2d or --3d picks the view and --viewmode picks the shading.
+		// --select Name picks an entity.
+		// --play starts the game. --pause holds it and --step advances one frame.
+		// --profiler opens the timing panel. --screenshot out.png saves the window and quits.
 		const QStringList args = QApplication::arguments();
 		const int sceneIndex = static_cast<int>(args.indexOf("--scene"));
 		if (sceneIndex >= 0 && sceneIndex + 1 < args.size())
@@ -91,6 +92,12 @@ int main(int argc, char** argv)
 			window.Select(window.GetWorld().FindEntityByName(args[selectIndex + 1].toUtf8().constData()));
 		if (args.contains("--play"))
 			window.Play();
+		if (args.contains("--pause"))
+			window.SetPaused(true);
+		if (args.contains("--step"))
+			window.StepFrame();
+		if (args.contains("--profiler"))
+			window.ShowProfiler();
 		if (args.contains("--audio-debugger"))
 			window.ShowAudioDebugger();
 		// --new-script Name writes a script from the template, then builds like --build-scripts.

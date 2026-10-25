@@ -93,6 +93,49 @@ FP_TEST(World_SystemsRunOnlyWhilePlaying)
 	world->EndPlay();
 }
 
+FP_TEST(World_PauseHoldsSystemsAndGameTime)
+{
+	StrongObjectPtr<World> world(NewObject<World>());
+	CounterSystem* counter = world->AddSystem<CounterSystem>();
+	world->SetPaused(true);
+	FP_EXPECT(!world->IsPaused());
+	world->BeginPlay();
+	world->Update(0.25f);
+	FP_EXPECT(counter->Updates == 1);
+	FP_EXPECT(world->GetTime() == 0.25);
+	FP_EXPECT(world->GetProfileFrame() == 1);
+	FP_EXPECT(world->GetSystemTimings().Num() == 1);
+	FP_EXPECT(world->GetSystemTimings()[0].Name == "Counter");
+	FP_EXPECT(world->GetSystemTimings()[0].Samples == 1);
+	world->Step(0.25f);
+	FP_EXPECT(counter->Updates == 1);
+
+	world->SetPaused(true);
+	world->Update(0.5f);
+	FP_EXPECT(world->IsPlaying() && world->IsPaused());
+	FP_EXPECT(counter->Updates == 1);
+	FP_EXPECT(world->GetTime() == 0.25);
+	FP_EXPECT(world->GetProfileFrame() == 1);
+	world->Step(0.25f);
+	FP_EXPECT(world->IsPaused());
+	FP_EXPECT(counter->Updates == 2);
+	FP_EXPECT(world->GetTime() == 0.5);
+	FP_EXPECT(world->GetProfileFrame() == 2);
+	FP_EXPECT(world->GetSystemTimings()[0].Samples == 2);
+	FP_EXPECT(world->GetLastUpdateMilliseconds() >= world->GetSystemTimings()[0].LastMilliseconds);
+
+	world->SetPaused(false);
+	world->Update(0.25f);
+	FP_EXPECT(counter->Updates == 3);
+	FP_EXPECT(world->GetTime() == 0.75);
+	world->SetPaused(true);
+	world->EndPlay();
+	FP_EXPECT(!world->IsPaused());
+	world->BeginPlay();
+	FP_EXPECT(!world->IsPaused() && world->GetTime() == 0);
+	world->EndPlay();
+}
+
 FP_TEST(Scene_RoundTrip)
 {
 	RegisterTestComponents();

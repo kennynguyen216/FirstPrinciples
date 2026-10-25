@@ -79,10 +79,21 @@ namespace FP::Editor::EditorIcons
 				fill();
 				p.drawPolygon(QPolygonF({ { 3.5, 2 }, { 14, 8 }, { 3.5, 14 } }));
 				break;
+			case EditorIcon::Pause:
+				fill();
+				p.drawRoundedRect(QRectF(3, 2.5, 3.5, 11), 0.5, 0.5);
+				p.drawRoundedRect(QRectF(9.5, 2.5, 3.5, 11), 0.5, 0.5);
+				break;
 			case EditorIcon::Step:
 				fill();
 				p.drawRect(QRectF(2, 3, 2, 10));
 				p.drawPolygon(QPolygonF({ { 6, 3 }, { 14, 8 }, { 6, 13 } }));
+				break;
+			case EditorIcon::Profiler:
+				fill();
+				p.drawRect(QRectF(2, 9, 2.5, 5));
+				p.drawRect(QRectF(6, 5.5, 2.5, 8.5));
+				p.drawRect(QRectF(10, 2, 2.5, 12));
 				break;
 			case EditorIcon::Stop:
 				fill();
