@@ -175,8 +175,9 @@ namespace FP
 		float GravityScale = 1;
 	};
 
-	// Plays a character controller from the keyboard and mouse with no script: WASD walks, Shift
-	// runs, Space jumps and the mouse turns it. A child camera named Camera tilts with the mouse.
+	// Plays a character controller with no script, from the Move, Look, Run and Jump input
+	// actions, so the keyboard and mouse or a gamepad both work. A child camera named Camera
+	// tilts as it looks up and down.
 	struct PlayerInputComponent
 	{
 		float WalkSpeed = 5;
