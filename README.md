@@ -25,6 +25,10 @@ go in `Projects/Sample/Build` and everything builds into `Projects/Sample/Binari
 for an optimised build, and a project folder to build another one, like `Scripts/Build.sh debug Projects/MyGame`.
 For Xcode run `Scripts/GenerateXcode.sh` instead.
 
+If an incremental build reports missing symbols after a merge or branch switch, run
+`Scripts/Build.sh debug Projects/Sample --clean`. This removes cached output for the selected
+configuration before rebuilding. Source files and content are kept.
+
 ### Windows
 
 1. Install Visual Studio 2022 or 2026 (the IDE or Build Tools) with the "Desktop development with C++" workload.
