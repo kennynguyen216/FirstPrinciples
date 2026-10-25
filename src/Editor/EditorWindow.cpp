@@ -354,6 +354,7 @@ namespace FP::Editor
 			meshes->addAction(name, this, [this, name]() { CreateEntity(name); });
 		}
 		entity->addAction("Create &Point Light", this, [this]() { CreateEntity("Point Light"); });
+		entity->addAction("Create &Spot Light", this, [this]() { CreateEntity("Spot Light"); });
 		entity->addAction("Create &Character", this, [this]() { CreateEntity("Character"); });
 		entity->addAction("Create Particle E&mitter", this, [this]() { CreateEntity("Particle Emitter"); });
 		entity->addAction("Create &Directional Light", this, [this]() { CreateEntity("Directional Light"); });
@@ -1348,6 +1349,12 @@ namespace FP::Editor
 			entity = m_World->CreateEntity(name);
 			m_World->Get<TransformComponent>(entity).Position.Z = 1.5f; // above the sprites so it lights their faces
 			m_World->Add<PointLightComponent>(entity);
+		}
+		else if (kind == "Spot Light")
+		{
+			entity = m_World->CreateEntity(name);
+			m_World->Get<TransformComponent>(entity).Rotation = { -40, 0, 0 };
+			m_World->Add<SpotLightComponent>(entity);
 		}
 		else if (kind == "Directional Light")
 		{

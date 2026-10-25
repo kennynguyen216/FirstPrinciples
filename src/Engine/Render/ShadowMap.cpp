@@ -43,4 +43,44 @@ namespace FP
 		out.ToTexture = bias * out.ViewProjection;
 		return out;
 	}
+
+	ShadowView PerspectiveShadowView(Vec3 position, const Quat& rotation, float halfAngle, float range)
+	{
+		ShadowView out;
+		out.Center = position;
+		out.Radius = range;
+		out.LightRotation = rotation;
+		const float farClip = std::fmax(range, 0.1f);
+		const float nearClip = std::fmin(0.05f, farClip * 0.1f);
+		out.ViewProjection = Mat4::Perspective(std::fmin(std::fmax(halfAngle, 1.0f), 90.0f) * 2.0f, 1.0f, nearClip, farClip)
+			* Mat4::TRS(position, rotation, { 1, 1, 1 }).Inverse();
+		Mat4 bias;
+		bias.At(0, 0) = 0.5f;
+		bias.At(1, 1) = -0.5f;
+		bias.At(3, 0) = 0.5f;
+		bias.At(3, 1) = 0.5f;
+		out.ToTexture = bias * out.ViewProjection;
+		return out;
+	}
+
+	Quat PointShadowFaceRotation(int32 face)
+	{
+		// Keep this face order in sync with Lit.frag.
+		static constexpr Vec3 forward[6] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 1, 0 }, { 0, -1, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
+		const Vec3 direction = forward[face];
+		const Vec3 referenceUp = (face == 2 || face == 3) ? Vec3{ 0, 0, 1 } : Vec3{ 0, 1, 0 };
+		const Vec3 right = Vec3::Cross(direction, referenceUp).Normalized();
+		const Vec3 up = Vec3::Cross(right, direction);
+		Mat4 basis;
+		basis.At(0, 0) = right.X;
+		basis.At(0, 1) = right.Y;
+		basis.At(0, 2) = right.Z;
+		basis.At(1, 0) = up.X;
+		basis.At(1, 1) = up.Y;
+		basis.At(1, 2) = up.Z;
+		basis.At(2, 0) = -direction.X;
+		basis.At(2, 1) = -direction.Y;
+		basis.At(2, 2) = -direction.Z;
+		return Quat::FromMatrix(basis);
+	}
 }

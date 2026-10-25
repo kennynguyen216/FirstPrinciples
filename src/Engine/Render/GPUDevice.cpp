@@ -52,7 +52,7 @@ namespace FP
 		if (!SDL_GPUTextureSupportsFormat(handle, SDL_GPU_TEXTUREFORMAT_D32_FLOAT, SDL_GPU_TEXTURETYPE_2D, SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET))
 			device->m_DepthFormat = SDL_GPU_TEXTUREFORMAT_D24_UNORM;
 
-		// Shadow maps only need 16 bits since their depth is linear, and it halves their bandwidth.
+		// Prefer 16 bit depth to reduce shadow bandwidth.
 		const SDL_GPUTextureUsageFlags shadowUsage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
 		if (!SDL_GPUTextureSupportsFormat(handle, SDL_GPU_TEXTUREFORMAT_D16_UNORM, SDL_GPU_TEXTURETYPE_2D, shadowUsage))
 			device->m_ShadowFormat = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;

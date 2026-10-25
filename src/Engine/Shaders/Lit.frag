@@ -13,7 +13,14 @@ layout(set = 2, binding = 4) uniform sampler2D RoughnessMap;
 layout(set = 2, binding = 5) uniform sampler2D SpecularMap;
 layout(set = 2, binding = 6) uniform sampler2D EmissiveMap;
 layout(set = 2, binding = 7) uniform sampler2D SubsurfaceMap;
-layout(set = 2, binding = 8) uniform sampler2DShadow ShadowMap;
+layout(set = 2, binding = 8) uniform sampler2DShadow ShadowMap0;
+layout(set = 2, binding = 9) uniform sampler2DShadow ShadowMap1;
+layout(set = 2, binding = 10) uniform sampler2DShadow ShadowMap2;
+layout(set = 2, binding = 11) uniform sampler2DShadow ShadowMap3;
+layout(set = 2, binding = 12) uniform sampler2DShadow ShadowMap4;
+layout(set = 2, binding = 13) uniform sampler2DShadow ShadowMap5;
+layout(set = 2, binding = 14) uniform sampler2DShadow ShadowMap6;
+layout(set = 2, binding = 15) uniform sampler2DShadow ShadowMap7;
 
 layout(location = 0) in vec3 InWorldPosition;
 layout(location = 1) in vec2 InUV;
@@ -23,23 +30,51 @@ layout(location = 4) in vec4 InTint;
 
 layout(location = 0) out vec4 OutColor;
 
-// 1 where the sun reaches the point, down to 1 - strength where something blocks it.
-float SunVisibility(vec3 worldPosition, vec3 normal)
+float CompareShadow(int slot, vec3 coordinate)
 {
-	if (Frame.ShadowParams.x <= 0.0)
+	switch (slot)
+	{
+	case 0: return texture(ShadowMap0, coordinate);
+	case 1: return texture(ShadowMap1, coordinate);
+	case 2: return texture(ShadowMap2, coordinate);
+	case 3: return texture(ShadowMap3, coordinate);
+	case 4: return texture(ShadowMap4, coordinate);
+	case 5: return texture(ShadowMap5, coordinate);
+	case 6: return texture(ShadowMap6, coordinate);
+	default: return texture(ShadowMap7, coordinate);
+	}
+}
+
+// Returns the fraction of this light that reaches the surface.
+float ShadowVisibility(int type, vec3 worldPosition, vec3 normal)
+{
+	vec4 params = Frame.ShadowParams[type];
+	if (params.x <= 0.0)
 		return 1.0;
-	// Pushing the point out along its normal keeps surfaces from shadowing themselves.
-	vec3 p = worldPosition + normal * Frame.ShadowParams.z;
-	vec3 s = (Frame.ShadowMatrix * vec4(p, 1.0)).xyz;
-	if (s.x <= 0.0 || s.x >= 1.0 || s.y <= 0.0 || s.y >= 1.0 || s.z >= 1.0)
+	int slot = type;
+	if (type == 2)
+	{
+		vec3 delta = worldPosition - Frame.LightPosition[int(params.w)].xyz;
+		vec3 a = abs(delta);
+		if (a.x >= a.y && a.x >= a.z)
+			slot = delta.x >= 0.0 ? 2 : 3;
+		else if (a.y >= a.z)
+			slot = delta.y >= 0.0 ? 4 : 5;
+		else
+			slot = delta.z >= 0.0 ? 6 : 7;
+	}
+	vec4 projected = Frame.ShadowMatrix[slot] * vec4(worldPosition + normal * params.z, 1.0);
+	if (projected.w <= 0.0)
 		return 1.0;
-	// Four filtered taps a texel apart. Each already blends 2x2 texels, so edges soften over about 4.
-	float t = Frame.ShadowParams.y;
-	float lit = texture(ShadowMap, vec3(s.xy + vec2(-t, -t), s.z))
-		+ texture(ShadowMap, vec3(s.xy + vec2(t, -t), s.z))
-		+ texture(ShadowMap, vec3(s.xy + vec2(-t, t), s.z))
-		+ texture(ShadowMap, vec3(s.xy + vec2(t, t), s.z));
-	return mix(1.0, lit * 0.25, Frame.ShadowParams.x);
+	vec3 s = projected.xyz / projected.w;
+	if (s.x <= 0.0 || s.x >= 1.0 || s.y <= 0.0 || s.y >= 1.0 || s.z <= 0.0 || s.z >= 1.0)
+		return 1.0;
+	float t = params.y;
+	float lit = CompareShadow(slot, vec3(s.xy + vec2(-t, -t), s.z))
+		+ CompareShadow(slot, vec3(s.xy + vec2(t, -t), s.z))
+		+ CompareShadow(slot, vec3(s.xy + vec2(-t, t), s.z))
+		+ CompareShadow(slot, vec3(s.xy + vec2(t, t), s.z));
+	return mix(1.0, lit * 0.25, params.x);
 }
 
 void main()
@@ -75,8 +110,9 @@ void main()
 		vec3 l;
 		vec3 radiance;
 		GetLight(i, InWorldPosition, l, radiance);
-		if (i == int(Frame.ShadowParams.w))
-			radiance *= SunVisibility(InWorldPosition, faceNormal);
+		for (int type = 0; type < 3; ++type)
+			if (Frame.ShadowParams[type].x > 0.0 && i == int(Frame.ShadowParams[type].w))
+				radiance *= ShadowVisibility(type, InWorldPosition, faceNormal);
 
 		vec3 h = normalize(v + l);
 		float nDotL = max(dot(n, l), 0.0);

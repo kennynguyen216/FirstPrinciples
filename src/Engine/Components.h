@@ -201,6 +201,22 @@ namespace FP
 		::FP::Color Color{ 1, 1, 1, 1 }; // qualified so the member can share the type name
 		float Intensity = 1;
 		float Range = 6;
+		bool CastShadows = true;
+		int32 ShadowResolution = 512;
+		float ShadowStrength = 1;
+	};
+
+	// Cone of light along the transform's forward (-Z) axis.
+	struct SpotLightComponent
+	{
+		::FP::Color Color{ 1, 1, 1, 1 };
+		float Intensity = 1;
+		float Range = 10;
+		float InnerAngle = 25; // degrees from the cone axis
+		float OuterAngle = 35;
+		bool CastShadows = true;
+		int32 ShadowResolution = 1024;
+		float ShadowStrength = 1;
 	};
 
 	// Light from far away, shining along the transform's forward (-Z) axis.
