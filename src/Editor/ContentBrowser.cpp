@@ -202,7 +202,11 @@ namespace FP::Editor
 		m_ThumbnailTimer = new QTimer(this);
 		m_ThumbnailTimer->setInterval(16);
 		connect(m_ThumbnailTimer, &QTimer::timeout, this, &ContentBrowser::RenderNextThumbnail);
-		connect(m_Watcher, &QFileSystemWatcher::fileChanged, m_RefreshTimer, qOverload<>(&QTimer::start));
+		connect(m_Watcher, &QFileSystemWatcher::fileChanged, this, [this](const QString& path) {
+			const QString relative = QDir(m_ContentRoot).relativeFilePath(path);
+			Paths::GetAssets().Invalidate(relative.toUtf8().constData());
+			m_RefreshTimer->start();
+		});
 
 		m_CurrentFolder = m_ContentRoot;
 		Refresh();
@@ -577,7 +581,7 @@ namespace FP::Editor
 
 	void ContentBrowser::Refresh()
 	{
-		Paths::GetAssets().Refresh();
+		Paths::GetAssets().Refresh(AssetRefreshMode::ChangedFiles);
 		m_IconCache.clear();
 		m_Thumbnails.Clear();
 		if (!QFileInfo(m_CurrentFolder).isDir())

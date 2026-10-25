@@ -73,7 +73,7 @@ int main()
 	{
 		AssetDatabase assets;
 		if (!assets.Open(String(root.generic_string()), true)) return 1;
-		Measure("asset_refresh_64_mib_129_assets", 3, [&] { Sink += assets.Refresh(); });
+		Measure("asset_refresh_64_mib_129_assets", 3, [&] { Sink += assets.Refresh(AssetRefreshMode::ChangedFiles); });
 		const String reference = assets.Reference("large.bin");
 		Measure("asset_id_lookup", 100000, [&] { Sink += assets.Fingerprint(reference) != 0; });
 	}

@@ -420,3 +420,58 @@ FP_TEST(Assets_MovesCannotFollowSymlinksOutsideContent)
 	FP_EXPECT(fs::exists(outside.Root / "nested/file.bin"));
 	FP_EXPECT(!fs::exists(fixture.Root / "Imported"));
 }
+
+FP_TEST(Assets_IncrementalRefreshSkipsUnchangedSourceBytes)
+{
+	AssetsFixture fixture;
+	fixture.Write("source.bin", std::string(1024 * 1024, 'x'));
+	fixture.Write("main.material", "BaseColorMap source.bin\n");
+	FP_EXPECT(fixture.Database.Open(fixture.Path(), true));
+	FP_EXPECT(fixture.Database.GetLastScanStats().FilesHashed == 2);
+	const uint64 fingerprint = fixture.Database.Fingerprint("main.material");
+	FP_EXPECT(fixture.Database.Refresh(AssetRefreshMode::ChangedFiles));
+	FP_EXPECT(fixture.Database.GetLastScanStats().FilesHashed == 0);
+	FP_EXPECT(fixture.Database.GetLastScanStats().BytesHashed == 0);
+	FP_EXPECT(fixture.Database.Fingerprint("main.material") == fingerprint);
+	fixture.Write("source.bin", "new content");
+	FP_EXPECT(fixture.Database.Refresh(AssetRefreshMode::ChangedFiles));
+	FP_EXPECT(fixture.Database.GetLastScanStats().FilesHashed == 1);
+	FP_EXPECT(fixture.Database.Fingerprint("main.material") != fingerprint);
+	fs::remove(fixture.Root / "source.bin");
+	FP_EXPECT(!fixture.Database.Refresh(AssetRefreshMode::ChangedFiles));
+}
+
+FP_TEST(Assets_NotificationsAndVerificationCatchPreservedTimestamps)
+{
+	AssetsFixture fixture;
+	fixture.Write("source.bin", "old");
+	FP_EXPECT(fixture.Database.Open(fixture.Path(), true));
+	const auto stamp = fs::last_write_time(fixture.Root / "source.bin");
+	const uint64 before = fixture.Database.Fingerprint("source.bin");
+	fixture.Write("source.bin", "new");
+	fs::last_write_time(fixture.Root / "source.bin", stamp);
+	fixture.Database.Invalidate("source.bin");
+	FP_EXPECT(fixture.Database.Refresh(AssetRefreshMode::ChangedFiles));
+	FP_EXPECT(fixture.Database.GetLastScanStats().FilesHashed == 1);
+	FP_EXPECT(fixture.Database.Fingerprint("source.bin") != before);
+	const uint64 changed = fixture.Database.Fingerprint("source.bin");
+	fixture.Write("source.bin", "end");
+	fs::last_write_time(fixture.Root / "source.bin", stamp);
+	FP_EXPECT(fixture.Database.Refresh());
+	FP_EXPECT(fixture.Database.Fingerprint("source.bin") != changed);
+}
+
+FP_TEST(Assets_IncrementalRefreshStillValidatesMetadataAndDependencies)
+{
+	AssetsFixture fixture;
+	fixture.Write("image.png", "image");
+	FP_EXPECT(fixture.Database.Open(fixture.Path(), true));
+	AssetImportSettings settings{ false, AssetColorSpace::Linear };
+	FP_EXPECT(fixture.Database.SetImportSettings("image.png", settings));
+	FP_EXPECT(fixture.Database.Refresh(AssetRefreshMode::ChangedFiles));
+	const auto* asset = fixture.Database.Find("image.png");
+	FP_EXPECT(asset && asset->Settings == settings);
+	fixture.Write("image.png.fpmeta", "version 99\n");
+	FP_EXPECT(!fixture.Database.Refresh(AssetRefreshMode::ChangedFiles));
+	FP_EXPECT(fixture.Database.Find("image.png") == nullptr);
+}
