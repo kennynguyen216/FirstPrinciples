@@ -2,6 +2,7 @@
 #include "Engine/Scripting/ScriptSystem.h"
 #include "Engine/FieldSerializer.h"
 #include "Engine/Material.h"
+#include "Engine/Paths.h"
 
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_loadso.h>
@@ -34,6 +35,14 @@ namespace FP
 	String ScriptRuntime::GetDefaultModulePath()
 	{
 		const char* base = SDL_GetBasePath();
+#if FP_PLATFORM_MACOS
+		if (Paths::IsPackaged() && base)
+		{
+			const auto path = std::filesystem::path(base).parent_path().parent_path() / "MacOS" / ModuleFile;
+			const auto text = path.u8string();
+			return reinterpret_cast<const char*>(text.c_str());
+		}
+#endif
 		return String(base ? base : "") + ModuleFile;
 	}
 
@@ -52,25 +61,29 @@ namespace FP
 			return false;
 		}
 
-		// Load a copy so the build can overwrite the original while this one is in use.
-		const fs::path cacheDir = source.parent_path() / "ScriptCache";
-		fs::create_directories(cacheDir, ec);
-		if (m_LoadCount == 0)
+		m_LoadedCopy.Clear();
+		if (!Paths::IsPackaged())
 		{
-			// Leftovers from earlier runs. Files still locked by another editor are skipped.
-			for (const fs::directory_entry& entry : fs::directory_iterator(cacheDir, ec))
-				fs::remove(entry.path(), ec);
+			// Load a copy so the build can overwrite the original while this one is in use.
+			const fs::path cacheDir = source.parent_path() / "ScriptCache";
+			fs::create_directories(cacheDir, ec);
+			if (m_LoadCount == 0)
+			{
+				// Leftovers from earlier runs. Files still locked by another editor are skipped.
+				for (const fs::directory_entry& entry : fs::directory_iterator(cacheDir, ec))
+					fs::remove(entry.path(), ec);
+			}
+			const fs::path copy = cacheDir / (source.stem().string() + "_" + std::to_string(++m_LoadCount) + source.extension().string());
+			fs::copy_file(source, copy, fs::copy_options::overwrite_existing, ec);
+			if (ec)
+			{
+				FP_LOG_ERROR("Could not copy script module: %s", ec.message().c_str());
+				return false;
+			}
+			m_LoadedCopy = copy.string().c_str();
 		}
-		const fs::path copy = cacheDir / (source.stem().string() + "_" + std::to_string(++m_LoadCount) + source.extension().string());
-		fs::copy_file(source, copy, fs::copy_options::overwrite_existing, ec);
-		if (ec)
-		{
-			FP_LOG_ERROR("Could not copy script module: %s", ec.message().c_str());
-			return false;
-		}
-		m_LoadedCopy = copy.string().c_str();
 
-		m_Module = SDL_LoadObject(m_LoadedCopy.CStr());
+		m_Module = SDL_LoadObject(m_LoadedCopy.IsEmpty() ? path.CStr() : m_LoadedCopy.CStr());
 		if (!m_Module)
 		{
 			FP_LOG_ERROR("Could not load script module: %s", SDL_GetError());
@@ -123,7 +136,9 @@ namespace FP
 		m_Shutdown = nullptr;
 
 		std::error_code ec;
-		std::filesystem::remove(m_LoadedCopy.CStr(), ec);
+		if (!m_LoadedCopy.IsEmpty())
+			std::filesystem::remove(m_LoadedCopy.CStr(), ec);
+		m_LoadedCopy.Clear();
 	}
 
 	bool ScriptRuntime::Reload()

@@ -22,6 +22,11 @@
 #include "Engine/Scripting/ScriptRuntime.h"
 #include "Engine/Scripting/ScriptSystem.h"
 #include "Game.h"
+#include "Core/Misc/Pak.h"
+#include "Core/Misc/Guid.h"
+
+#include <filesystem>
+#include <cstdio>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -32,6 +37,64 @@ using namespace FP;
 
 namespace
 {
+	// Each process gets a private content directory so concurrent games do not overwrite assets.
+	struct PackagedContent
+	{
+		std::filesystem::path Directory;
+
+		~PackagedContent()
+		{
+			if (!Directory.empty())
+			{
+				std::error_code ec;
+				std::filesystem::remove_all(Directory, ec);
+			}
+		}
+
+		bool Open()
+		{
+			namespace fs = std::filesystem;
+			const char* base = SDL_GetBasePath();
+			if (!base)
+				return true;
+			fs::path resources = fs::path(reinterpret_cast<const char8_t*>(base));
+#if FP_PLATFORM_MACOS
+			if (resources.filename().empty())
+				resources = resources.parent_path();
+			if (resources.filename() == "MacOS" && resources.parent_path().filename() == "Contents")
+				resources = resources.parent_path() / "Resources";
+#endif
+			std::error_code ec;
+			const bool packaged = fs::exists(resources / "Package.json", ec)
+				|| fs::exists(resources / "Game.fpproject", ec)
+				|| fs::exists(resources / "Content.pak", ec);
+			if (!packaged)
+				return true;
+			const auto descriptor = resources / "Game.fpproject";
+			const auto descriptorText = descriptor.u8string();
+			if (!Paths::OpenProject(reinterpret_cast<const char*>(descriptorText.c_str())))
+				return false;
+			char* pref = SDL_GetPrefPath("FirstPrinciples", Paths::GetProject().Name.CStr());
+			if (!pref)
+				return false;
+			const fs::path saved = fs::path(reinterpret_cast<const char8_t*>(pref));
+			SDL_free(pref);
+			Directory = saved / "Cooked" / Guid::New().ToString().CStr();
+			fs::create_directories(Directory, ec);
+			std::string error;
+			if (ec || !Pak::Extract(resources / "Content.pak", Directory, error))
+			{
+				std::fprintf(stderr, "Could not open cooked content: %s %s\n", error.c_str(), ec.message().c_str());
+				return false;
+			}
+			const auto cookedText = Directory.u8string();
+			const auto savedText = saved.u8string();
+			Paths::UsePackagedContent(reinterpret_cast<const char*>(cookedText.c_str()), reinterpret_cast<const char*>(savedText.c_str()));
+			fs::create_directories(saved / "Saved/Logs", ec);
+			return !ec;
+		}
+	};
+
 	// The game picks how the mouse behaves. It is only held while the window has focus.
 	void ApplyCursorMode(SDL_Window* window)
 	{
@@ -75,7 +138,10 @@ namespace
 
 int main(int argc, char** argv)
 {
-	Log::OpenFile((Paths::GetProjectDir() + "/Saved/Logs/Runtime.log").CStr());
+	PackagedContent package;
+	if (!package.Open())
+		return 1;
+	Log::OpenFile((Paths::GetSavedDir() + "/Logs/Runtime.log").CStr());
 
 	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
 	{
@@ -153,7 +219,11 @@ int main(int argc, char** argv)
 	Input::LoadActionsFile(Paths::Content("Input.actions").CStr());
 	const String scenePath = Paths::Content(scene);
 	if (!SceneSerializer::LoadFromFile(*world.Get(), scenePath.CStr()))
+	{
+		if (Paths::IsPackaged())
+			return 1;
 		FP_LOG_WARN("Starting with an empty world");
+	}
 
 	// Networking first so remote entities are in place before the game's systems look at them.
 	if (host || joinAddress)
@@ -181,8 +251,10 @@ int main(int argc, char** argv)
 		}
 	}
 
-	// Scripts are optional. The game still runs its built in systems without them.
-	ScriptRuntime::Get().LoadModule(ScriptRuntime::GetDefaultModulePath());
+	// Development runs can use built in systems while scripts are unavailable.
+	const bool scriptsLoaded = ScriptRuntime::Get().LoadModule(ScriptRuntime::GetDefaultModulePath());
+	if (Paths::IsPackaged() && !scriptsLoaded)
+		return 1;
 	world->AddSystem<ScriptSystem>();
 	world->AddSystem<PlayerInputSystem>();
 	world->AddSystem<PhysicsSystem>();
