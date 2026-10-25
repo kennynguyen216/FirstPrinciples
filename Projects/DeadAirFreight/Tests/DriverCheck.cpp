@@ -87,6 +87,26 @@ static void CheckFlight()
 		StepTruck(truck, controls, calm, 1, settings, dt);
 	CHECK(truck.Pitch == settings.MaxPitch)
 
+	// Looking 45 degrees off barely moves the nose at first, then it comes about to face the look.
+	settings.NoseTurnRate = 10;
+	settings.NoseTurnAccel = 6;
+	truck = {};
+	truck.AtWheel = true;
+	controls.Aim = { -45, 0 };
+	StepTruck(truck, controls, calm, 1, settings, dt);
+	CHECK(truck.Yaw > 0 && truck.Yaw < 0.1f)
+	for (int i = 0; i < 60 * 60; ++i)
+		StepTruck(truck, {}, calm, 1, settings, dt);
+	CHECK(std::abs(truck.Yaw - 45) < 0.5f && truck.Look.X == 45)
+	// A jerk shoves the look, not the ship: the nose only follows later.
+	truck.TurnVelocity = {};
+	truck.JerkRate = { 600, 0 };
+	const float yawBefore = truck.Yaw, lookBefore = truck.Look.X;
+	StepTruck(truck, {}, calm, 1, settings, dt);
+	CHECK(truck.Look.X - lookBefore > 5 && std::abs(truck.Yaw - yawBefore) < 0.01f)
+	truck.JerkRate = {};
+	settings.NoseTurnRate = 0;
+
 	settings.CalmJerkInterval = settings.StormJerkInterval = 1;
 	settings.JerkStrength = 90;
 	settings.JerkDecay = 5;
@@ -160,7 +180,7 @@ static std::string ReadFile(const char* path)
 static DriverSettings LoadRealSettings()
 {
 	DriverSettings settings;
-	std::stringstream lines(ReadFile("Projects/mk_ultra/Content/Settings/Driver.settings"));
+	std::stringstream lines(ReadFile("Projects/DeadAirFreight/Content/Settings/Driver.settings"));
 	std::string line;
 	int found = 0;
 	while (std::getline(lines, line))
@@ -262,9 +282,10 @@ static void CheckLifeSupport(const DriverSettings& settings)
 		StepLifeSupport(life, false, settings, dt);
 	CHECK(!IsBlackedOut(life) && life.Co2 <= settings.Co2AfterBlackout + 0.05f)
 
+	CHECK(life.Canisters == static_cast<int>(settings.SpareCanisters) && life.Canisters > 0)
 	for (int i = 0; i < static_cast<int>(settings.ScrubberRepairTime * 60) + 5; ++i)
 		StepLifeSupport(life, true, settings, dt);
-	CHECK(!life.ScrubberBroken)
+	CHECK(!life.ScrubberBroken && life.Canisters == static_cast<int>(settings.SpareCanisters) - 1)
 	for (int i = 0; i < static_cast<int>(settings.Co2FallTime * 60) + 5; ++i)
 		StepLifeSupport(life, false, settings, dt);
 	CHECK(life.Co2 == 0)

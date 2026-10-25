@@ -22,6 +22,7 @@ LifeSupport StartLifeSupport(const DriverSettings& settings)
 	LifeSupport life;
 	life.CabReserve = GetBreathingRate(settings) * settings.CabReserveTime;
 	life.Cargo = settings.StartingCargo;
+	life.Canisters = static_cast<int>(settings.SpareCanisters);
 	const float colonyRate = settings.OxygenPerPersonPerDay * settings.ColonyCrew / 86400 * GetTimeCompression(settings);
 	life.ColonyTimeLeft = colonyRate > 0 ? settings.ColonyReserveKg / colonyRate : 0;
 	return life;
@@ -44,7 +45,10 @@ void StepLifeSupport(LifeSupport& life, bool repairing, const DriverSettings& se
 	{
 		life.RepairProgress += deltaTime;
 		if (life.RepairProgress >= settings.ScrubberRepairTime)
+		{
 			life.ScrubberBroken = false;
+			life.Canisters = std::max(life.Canisters - 1, 0);
+		}
 	}
 	if (!life.ScrubberBroken || !repairing)
 		life.RepairProgress = 0;
