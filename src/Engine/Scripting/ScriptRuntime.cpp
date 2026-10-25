@@ -102,6 +102,7 @@ namespace FP
 		m_Context.GarbageCollector = &GarbageCollector::Get();
 		m_Context.ComponentRegistry = &ComponentRegistry::Get();
 		m_Context.MaterialLibrary = &MaterialLibrary::Get();
+		m_Context.Paths = Paths::GetSharedState();
 		m_ModuleTypes = init(&m_Context);
 
 		FP_LOG("Loaded %d scripts from %s", m_ModuleTypes ? m_ModuleTypes->Num() : 0, ModuleFile);

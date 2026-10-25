@@ -5,6 +5,7 @@
 #include "Engine/Physics/Physics.h"
 #include "Engine/Material.h"
 #include "Engine/Json.h"
+#include "Engine/SaveData.h"
 #include "Engine/UI/UIDocument.h"
 #include "Engine/SceneSerializer.h"
 #include "Engine/Scripting/ScriptComponent.h"

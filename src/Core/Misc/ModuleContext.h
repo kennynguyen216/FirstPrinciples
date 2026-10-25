@@ -17,6 +17,7 @@ namespace FP
 		void* GarbageCollector = nullptr;
 		void* ComponentRegistry = nullptr;
 		void* MaterialLibrary = nullptr;
+		void* Paths = nullptr;
 	};
 
 	// Null in the host. Set once inside a loaded module before any of its code runs.
