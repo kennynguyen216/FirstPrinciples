@@ -1063,7 +1063,22 @@ namespace FP::Editor
 	{
 		SDL_Event event;
 		while (SDL_PollEvent(&event))
+		{
 			m_Audio.ProcessEvent(event);
+			// Qt brings the keyboard and mouse. Gamepads come through SDL.
+			switch (event.type)
+			{
+				case SDL_EVENT_GAMEPAD_ADDED:
+				case SDL_EVENT_GAMEPAD_REMOVED:
+				case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+				case SDL_EVENT_GAMEPAD_BUTTON_UP:
+				case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+					Input::ProcessEvent(event);
+					break;
+				default:
+					break;
+			}
+		}
 		m_Audio.Update();
 		m_AudioStatus->setText(m_Audio.IsReady() ? "Audio ready" : "Audio unavailable");
 		m_AudioStatus->setToolTip(ToQString(m_Audio.GetStatusText()));
@@ -1077,6 +1092,7 @@ namespace FP::Editor
 		// Emitters run while editing too, so effects can be tuned without playing.
 		if (!m_World->IsPlaying())
 			Particles::Simulate(*m_World.Get(), deltaTime, true);
+		Input::SetDeltaTime(deltaTime);
 		m_World->Update(deltaTime);
 		Input::EndFrame();
 
@@ -1440,6 +1456,8 @@ namespace FP::Editor
 		CommitHistory();
 		// Snapshot the scene so Stop can put everything back.
 		m_PlaySnapshot = SceneSerializer::SaveToString(*m_World.Get());
+		// Picks up edits to the controls since the last play.
+		Input::LoadActionsFile(Paths::Content("Input.actions").CStr());
 		// Play starts from no particles, so bursts fire again.
 		Particles::Clear(*m_World.Get());
 		m_World->AddSystem<ScriptSystem>();

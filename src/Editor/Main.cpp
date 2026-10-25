@@ -23,7 +23,9 @@ int main(int argc, char** argv)
 
 	// SDL_GPU needs the video subsystem even though the editor draws offscreen.
 	// Qt goes first so it owns the native application object.
-	if (!SDL_Init(SDL_INIT_VIDEO))
+	// SDL has no window of its own in the editor, so pads must report while Qt has focus.
+	SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
+	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
 	{
 		FP_LOG_ERROR("SDL_Init failed: %s", SDL_GetError());
 		return 1;
