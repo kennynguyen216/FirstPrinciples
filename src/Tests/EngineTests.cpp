@@ -123,6 +123,31 @@ FP_TEST(Scene_RoundTrip)
 	FP_EXPECT(SceneSerializer::SaveToString(*loaded.Get()) == text);
 }
 
+FP_TEST(Scene_ShadowLightsRoundTrip)
+{
+	RegisterTestComponents();
+	StrongObjectPtr<World> world(NewObject<World>());
+	const Entity point = world->CreateEntity("Point");
+	PointLightComponent& pointLight = world->Add<PointLightComponent>(point);
+	pointLight.ShadowResolution = 256;
+	pointLight.ShadowStrength = 0.7f;
+	const Entity spot = world->CreateEntity("Spot");
+	SpotLightComponent& spotLight = world->Add<SpotLightComponent>(spot);
+	spotLight.Range = 12;
+	spotLight.InnerAngle = 15;
+	spotLight.OuterAngle = 30;
+	spotLight.ShadowResolution = 512;
+	const String text = SceneSerializer::SaveToString(*world.Get());
+
+	StrongObjectPtr<World> loaded(NewObject<World>());
+	FP_EXPECT(SceneSerializer::LoadFromString(*loaded.Get(), text.View()));
+	const auto& loadedPoint = loaded->Get<PointLightComponent>(loaded->FindEntityByName("Point"));
+	const auto& loadedSpot = loaded->Get<SpotLightComponent>(loaded->FindEntityByName("Spot"));
+	FP_EXPECT(loadedPoint.CastShadows && loadedPoint.ShadowResolution == 256 && loadedPoint.ShadowStrength == 0.7f);
+	FP_EXPECT(loadedSpot.CastShadows && loadedSpot.Range == 12 && loadedSpot.InnerAngle == 15);
+	FP_EXPECT(loadedSpot.OuterAngle == 30 && loadedSpot.ShadowResolution == 512);
+}
+
 FP_TEST(Scene_CopiesOneEntity)
 {
 	RegisterTestComponents();
