@@ -3154,3 +3154,20 @@ component PointLight
   CastShadows true
   ShadowResolution 512
   ShadowStrength 1
+
+entity 1597b9fd-5707-4794-85e9-da57b0cb9432
+component Name
+  Name "Music"
+component Transform
+  Position 0 0 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component AudioSource
+  Clip "asset://8c0d6dab-0de9-4174-87a0-33198210d1b3"
+  Enabled true
+  Volume 1
+  Pitch 1
+  Loop true
+  PlayOnStart true
+  Bus "Music"
+  Spatial false
