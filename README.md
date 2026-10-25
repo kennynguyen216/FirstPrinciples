@@ -104,8 +104,9 @@ Game code lives in your project's `Source` folder. The editor and the runtime bo
    }
    ```
 
-4. **Input** works the same in the editor and the runtime. Use `FP::Input::IsKeyDown(SDL_SCANCODE_SPACE)`
-   or `FP::Input::GetMoveAxis()`.
+4. **Input** works the same in the editor and the runtime. Ask for actions like
+   `FP::Input::WasActionPressed("Jump")` so keys and gamepads both work, or read keys directly with
+   `FP::Input::IsKeyDown(SDL_SCANCODE_SPACE)`.
 
 5. **Scenes** live in the project's `Content/Scenes`. Build them in the editor and press Play to run your systems.
    Stop restores the scene. `Runtime` plays `Game::StartScene` or a scene passed on the command line.
@@ -269,6 +270,8 @@ that `FP_SCRIPT` registers. There is nothing to list by hand.
 | Cameras | `SetActiveCamera(entity or name)` (this entity by default), `GetActiveCamera()`, `IsActiveCamera()` |
 | Physics events | `OnCollisionEnter(other, collision)`, `OnCollisionExit(other)`, `OnTriggerEnter(other)`, `OnTriggerExit(other)` |
 | Math | `Clamp`, `Lerp`, `InverseLerp`, `MoveTowards`, `Damp`, `Random::Range`, `Random::Chance`, `Random::Direction` |
+| Input actions | `Input::IsActionDown("Fire")`, `Input::WasActionPressed("Jump")`, `Input::GetActionValue("Fire")`, `Input::GetActionAxis("Move")` |
+| Gamepads | `Input::IsGamepadButtonDown(GamepadButton::South)`, `Input::GetGamepadAxis(GamepadAxis::RightTrigger)`, `Input::GetGamepadStick(right)`, `Input::Rumble(low, high, seconds)` |
 | Input and logs | `Input::IsKeyDown(SDL_SCANCODE_SPACE)`, `Input::GetMoveAxis()`, `Input::GetMouseDelta()`, `Input::SetCursorMode(mode)`, `FP_LOG("...")` |
 
 **Mouse and cameras**
@@ -280,6 +283,38 @@ the viewport takes it back.
 
 The game sees through the first camera with `Primary` on. `SetActiveCamera` cuts to another one
 by turning `Primary` off everywhere else.
+
+**Input actions and gamepads**
+
+Games ask for actions like Jump or Move instead of keys, so the keyboard, mouse and any gamepad
+all play. `Content/Input.actions` binds them, one input per line, and new projects get a copy of
+the defaults:
+
+```
+Jump   Key:Space
+Jump   Button:South          # A on Xbox, Cross on PlayStation
+Move   Key:W        +Y       # keys point a 2D action, right and up positive
+Move   Stick:Left
+Look   Mouse:Delta
+Look   Stick:Right  800      # a scale makes a stick turn at a steady speed
+Fire   Axis:RightTrigger
+```
+
+Devices are `Key` (SDL key names with `_` for spaces), `Mouse` (`Left`, `Right`, `Middle`, `Delta`),
+`Button` and `Axis` for gamepads (named by position, like `South`, `LeftShoulder`, `DpadUp` or
+`RightTrigger`) and `Stick` (`Left` or `Right`). The defaults bind Move, Look, Jump, Run, Fire, Aim,
+Interact and Pause. The editor reloads the file each time Play starts.
+
+```cpp
+if (Input::WasActionPressed("Jump"))
+    Jump(6);
+const Vec2 move = Input::GetActionAxis("Move"); // keys and the left stick
+if (Input::IsActionDown("Fire"))
+    Input::Rumble(0.3f, 0.6f, 0.1f);
+```
+
+Every connected pad counts, so whichever one is picked up plays. Sticks have a round dead zone so
+they read zero at rest.
 
 `SpawnScene` copies every entity in a scene file with new ids, so any scene works as a prefab and
 can be spawned many times. Timers stop when the script stops or reloads.
@@ -345,15 +380,16 @@ up to `MaxSlope`, rides moving platforms and pushes crates. Rays and triggers fi
 body.
 
 **Entity > Create Character** (or Character in Place Entities) adds a pill with a follow camera
-that plays with no code in any project. Its **PlayerInput** component walks it with WASD, runs with
-Shift, jumps with Space and turns it with the mouse. Remove PlayerInput to drive it from a script:
+that plays with no code in any project. Its **PlayerInput** component plays it from the Move, Look,
+Run and Jump actions: WASD or the left stick walks, Shift runs, Space or South jumps and the mouse
+or right stick turns it. Remove PlayerInput to drive it from a script:
 
 ```cpp
 void OnUpdate(float) override
 {
-    const Vec2 axis = Input::GetMoveAxis();
+    const Vec2 axis = Input::GetActionAxis("Move");
     Move(Vec3(axis.X, 0, -axis.Y) * 5); // meters per second, call it every frame
-    if (Input::WasKeyPressed(SDL_SCANCODE_SPACE))
+    if (Input::WasActionPressed("Jump"))
         Jump(6);                        // only works on the ground
 }
 ```
