@@ -182,6 +182,9 @@ The inspector identifies streamed files. Keep these files available during playb
 stop and choose **Reload Clip**. Very slow storage can cause audible gaps, counted in the audio status overruns.
 Audio output uses SDL3 and MP3 decoding uses the bundled `dr_mp3` header; no external converter is required. Missing output hardware
 leaves the editor and game usable, with an audio status message and a retry control.
+When output recovers, active loops and pending PlayOnStart loops restart from the beginning.
+Explicit pauses, stops and disabled sources stay in effect; old one-shot effects are not replayed.
+Preloaded resident clips play from memory; choose **Reload Clip** to validate and use file changes.
 
 For positional sound, enable **Spatial** on a mono source and add an **AudioListener** to the player
 or another entity. The listener follows that entity's position and rotation. Without an explicit

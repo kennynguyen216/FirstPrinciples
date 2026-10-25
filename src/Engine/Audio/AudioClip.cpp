@@ -100,19 +100,22 @@ namespace FP
 		// shortcut: decoding is synchronous; add async loading if preloading cannot prevent measured stalls.
 		m_Impl->CheckThread();
 		const std::string requested(path.View());
-		if (!reload) if (const auto failure = m_Impl->Failures.find(requested); failure != m_Impl->Failures.end()) return {failure->second, {}};
+		if (!reload)
+		{
+			if (const auto alias = m_Impl->Aliases.find(requested); alias != m_Impl->Aliases.end())
+				if (auto found = m_Impl->Clips.find(alias->second); found != m_Impl->Clips.end())
+				{
+					found->second.Used = ++m_Impl->Serial;
+					return {{}, found->second.Clip};
+				}
+			if (const auto failure = m_Impl->Failures.find(requested); failure != m_Impl->Failures.end()) return {failure->second, {}};
+		}
 		auto fail = [&](AudioClipResult result)
 		{
 			const auto alias = m_Impl->Aliases.find(requested);
 			const bool hasGood = alias != m_Impl->Aliases.end() && m_Impl->Clips.contains(alias->second);
-			if (hasGood && !reload)
-			{
-				auto& entry = m_Impl->Clips.at(alias->second);
-				entry.Used = ++m_Impl->Serial;
-				return AudioClipResult{{}, entry.Clip};
-			}
 			if (!m_Impl->Failures.contains(requested)) FP_LOG_WARN("Audio '%s': %s", path.CStr(), result.Result.Message.CStr());
-			if (!hasGood) m_Impl->Failures[requested] = result.Result;
+			if (!hasGood && result.Result.Code != AudioError::BudgetExceeded) m_Impl->Failures[requested] = result.Result;
 			return result;
 		};
 		try
@@ -143,7 +146,12 @@ namespace FP
 			}
 			const std::string key(Utf8(absolute).View());
 			auto found = m_Impl->Clips.find(key);
-			if (!reload && found != m_Impl->Clips.end()) { found->second.Used = ++m_Impl->Serial; return {{}, found->second.Clip}; }
+			if (!reload && found != m_Impl->Clips.end())
+			{
+				m_Impl->Aliases[requested] = key;
+				found->second.Used = ++m_Impl->Serial;
+				return {{}, found->second.Clip};
+			}
 			auto decoded = Decode(absolute, m_Impl->Transient);
 			if (!decoded) return fail(std::move(decoded));
 			const uint64 required = decoded.Clip->Samples.size() * sizeof(float);

@@ -127,6 +127,11 @@ namespace FP
 		return name ? name->Name : String("Entity");
 	}
 
+	uint64 World::GetCreationIndex(Entity entity) const
+	{
+		return m_Registry.get<CreationOrderComponent>(entity).Index;
+	}
+
 	Array<Entity> World::GetEntities() const
 	{
 		struct Item

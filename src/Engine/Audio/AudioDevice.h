@@ -25,6 +25,7 @@ namespace FP
 		AudioResult Initialize();
 		void Shutdown();
 		bool IsReady() const;
+		uint64 GetOutputGeneration() const;
 		AudioClipCache& GetClipCache();
 		AudioPlayResult Play(uint64 context, const std::shared_ptr<const AudioClip>& clip,
 			const AudioPlaybackParams& params, VoiceHandle replace = {}, bool startPaused = false);

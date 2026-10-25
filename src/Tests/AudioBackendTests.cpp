@@ -159,6 +159,39 @@ FP_TEST(Audio_CachePinsBudgetReloadAndFailureBoundary)
 	FP_EXPECT(!transient.Load("missing.wav"));
 }
 
+FP_TEST(Audio_CacheRetriesAfterPinnedMemoryIsReleased)
+{
+	Fixtures fixtures;
+	fixtures.Write("a.wav", Wav()); fixtures.Write("b.wav", Wav());
+	AudioClipCache cache(Utf8(fixtures.Root), 64);
+	auto pinned = cache.Load("a.wav");
+	FP_EXPECT(pinned);
+	FP_EXPECT(cache.Load("b.wav").Result.Code == AudioError::BudgetExceeded);
+	pinned.Clip.reset();
+	FP_EXPECT(cache.Load("b.wav"));
+	FP_EXPECT(cache.ResidentBytes() == 64);
+}
+
+FP_TEST(Audio_CacheAliasesSurviveOfflineFilesAndRevalidateAfterEviction)
+{
+	Fixtures fixtures;
+	fixtures.Write("Audio/a.wav", Wav()); fixtures.Write("b.wav", Wav());
+	AudioClipCache cache(Utf8(fixtures.Root), 64);
+	auto first = cache.Load("Audio/a.wav");
+	FP_EXPECT(first);
+	FP_EXPECT(cache.Load("Audio/./a.wav").Clip == first.Clip);
+	std::filesystem::rename(fixtures.Root / "Audio", fixtures.Root / "Offline");
+	FP_EXPECT(cache.Load("Audio/a.wav").Clip == first.Clip);
+	FP_EXPECT(cache.Load("Audio/./a.wav").Clip == first.Clip);
+	FP_EXPECT(!cache.Load("Audio/./a.wav", true));
+	FP_EXPECT(cache.Load("Audio/./a.wav").Clip == first.Clip);
+	FP_EXPECT(!cache.Load("audio/a.wav"));
+	FP_EXPECT(!cache.Load("../Offline/a.wav"));
+	first.Clip.reset();
+	FP_EXPECT(cache.Load("b.wav"));
+	FP_EXPECT(!cache.Load("Audio/./a.wav"));
+}
+
 FP_TEST(Audio_DummyDeviceAdmissionPauseAndShutdown)
 {
 	// Dummy output establishes lifecycle behavior without sending test tones to speakers.
