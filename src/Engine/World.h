@@ -29,6 +29,15 @@ namespace FP
 		virtual void OnStop(World&) {}
 	};
 
+	// CPU time spent in a system's Update call during the latest game frame.
+	struct SystemTiming
+	{
+		String Name;
+		double LastMilliseconds = 0;
+		double AverageMilliseconds = 0;
+		uint64 Samples = 0;
+	};
+
 	// Holds the entities of one scene. Storage and queries are EnTT and this adds names, ids,
 	// systems and play state on top.
 	class World : public Object
@@ -168,6 +177,14 @@ namespace FP
 		void BeginPlay();
 		void EndPlay();
 		bool IsPlaying() const { return m_Playing; }
+		void SetPaused(bool paused);
+		bool IsPaused() const { return m_Paused; }
+		// Advances one game update while paused, without resuming continuous play or audio.
+		void Step(float deltaTime);
+		const Array<SystemTiming>& GetSystemTimings() const { return m_SystemTimings; }
+		double GetLastUpdateMilliseconds() const { return m_LastUpdateMilliseconds; }
+		double GetAverageUpdateMilliseconds() const { return m_AverageUpdateMilliseconds; }
+		uint64 GetProfileFrame() const { return m_ProfileFrame; }
 
 		// Runs systems when playing, then flushes deferred destroys and any requested scene load.
 		void Update(float deltaTime);
@@ -181,6 +198,7 @@ namespace FP
 		void OnDestroy() override;
 
 	private:
+		void RunFrame(float deltaTime);
 		void FlushDestroyed();
 		void SetLocalFromWorld(Entity entity, const Mat4& world);
 
@@ -190,6 +208,11 @@ namespace FP
 		uint64 m_NextCreationIndex = 0;
 		double m_Time = 0;
 		bool m_Playing = false;
+		bool m_Paused = false;
+		Array<SystemTiming> m_SystemTimings;
+		double m_LastUpdateMilliseconds = 0;
+		double m_AverageUpdateMilliseconds = 0;
+		uint64 m_ProfileFrame = 0;
 		std::unique_ptr<AudioWorld> m_Audio;
 		std::unique_ptr<Physics> m_Physics;
 		String m_PendingScene;
