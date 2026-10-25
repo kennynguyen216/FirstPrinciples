@@ -805,7 +805,7 @@ namespace FP::Editor
 				}
 				if (MaterialLibrary::Get().Create(ToString(relative)))
 				{
-					m_World->Get<MaterialComponent>(m_Entity).Material = ToString(relative);
+					m_World->Get<MaterialComponent>(m_Entity).Material = Paths::AssetReference(ToString(relative));
 					emit Modified();
 					RebuildLater();
 				}
@@ -1180,6 +1180,7 @@ namespace FP::Editor
 					if (void* c = data())
 					{
 						String& value = fieldCopy.Get<String>(c);
+						if (fieldCopy.AssetFilter) Paths::GetAssets().Refresh();
 						const String next = fieldCopy.AssetFilter ? Paths::AssetReference(ToString(text)) : ToString(text);
 						if (value != next.View())
 						{

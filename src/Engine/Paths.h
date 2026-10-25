@@ -32,6 +32,7 @@ namespace FP::Paths
 
 	AssetDatabase& GetAssets();
 	String AssetPath(std::string_view reference);
+	// Use an ID when an authored reference must survive moves
 	String AssetReference(std::string_view path);
 
 	// Writable per user folder for this project's saves. Empty if it cannot be opened.

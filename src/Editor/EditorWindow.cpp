@@ -1,4 +1,5 @@
 #include "Editor/EditorWindow.h"
+#include "Engine/Assets/AssetDatabase.h"
 #include "Editor/MeshletDebugWidget.h"
 #include "Editor/AudioImport.h"
 #include "Engine/Audio/AudioDevice.h"
@@ -732,6 +733,8 @@ namespace FP::Editor
 			FP_LOG_WARN("Only assets inside Content can be dropped");
 			return;
 		}
+		Paths::GetAssets().Refresh();
+		const String reference = Paths::AssetReference(ToString(relative));
 		const QString kind = ContentBrowser::AssetKind(path);
 		const String name = ToString(QFileInfo(path).completeBaseName());
 
@@ -740,7 +743,7 @@ namespace FP::Editor
 		{
 			changed = m_World->CreateEntity(name);
 			m_World->Get<TransformComponent>(changed).Position = point;
-			m_World->Add<SpriteComponent>(changed).Texture = ToString(relative);
+			m_World->Add<SpriteComponent>(changed).Texture = reference;
 		}
 		else if (kind == "Mesh")
 		{
@@ -750,12 +753,12 @@ namespace FP::Editor
 			const SkeletalModel* model = IsGltfPath(ToString(relative).View()) ? SkeletalModelLibrary::Get().Load(ToString(relative)) : nullptr;
 			if (model && model->IsSkinned())
 			{
-				m_World->Add<SkeletalMeshComponent>(changed).Mesh = ToString(relative);
+				m_World->Add<SkeletalMeshComponent>(changed).Mesh = reference;
 				m_World->Add<AnimatorComponent>(changed).Clip = model->Clips.IsEmpty() ? String() : model->Clips[0].Name;
 			}
 			else
 			{
-				m_World->Add<MeshComponent>(changed).Mesh = ToString(relative);
+				m_World->Add<MeshComponent>(changed).Mesh = reference;
 			}
 		}
 		else if (kind == "Page")
@@ -775,7 +778,7 @@ namespace FP::Editor
 				FP_LOG_WARN("Drop a page onto an entity, or add a camera to put it on");
 				return;
 			}
-			m_World->Add<UIComponent>(changed).Page = ToString(relative);
+			m_World->Add<UIComponent>(changed).Page = reference;
 			FP_LOG("Added UI page %s to %s. It shows while playing.", ToString(relative).CStr(), m_World->GetEntityName(changed).CStr());
 		}
 		else if (kind == "Material")
@@ -786,7 +789,7 @@ namespace FP::Editor
 				return;
 			}
 			changed = target;
-			m_World->Add<MaterialComponent>(changed).Material = ToString(relative);
+			m_World->Add<MaterialComponent>(changed).Material = reference;
 		}
 		else if (kind == "Scene")
 		{
@@ -1711,7 +1714,7 @@ namespace FP::Editor
 			if (AudioSourceComponent* audio = m_World->TryGet<AudioSourceComponent>(m_Selected))
 			{
 				m_Inspector->StopPreview();
-				audio->Clip = relative;
+				audio->Clip = Paths::AssetReference(relative);
 				MarkDirty();
 				m_Inspector->SetTarget(m_World.Get(), m_Selected);
 			}

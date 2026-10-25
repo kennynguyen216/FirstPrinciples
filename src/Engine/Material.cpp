@@ -147,6 +147,7 @@ namespace FP
 			return nullptr;
 		Paths::GetAssets().Refresh();
 		const String key = Paths::AssetReference(path);
+		material = MakeRef<Material>(key);
 		m_Failed.Remove(key);
 		m_Materials.Add(key, material);
 		return material.Get();

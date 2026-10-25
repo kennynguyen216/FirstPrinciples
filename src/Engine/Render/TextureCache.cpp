@@ -62,8 +62,10 @@ namespace FP
 		return texture.Get();
 	}
 
-	int32 TextureCache::Preload(const Array<Request>& requests)
+	int32 TextureCache::Preload(const Array<Request>& input)
 	{
+		Array<Request> requests = input;
+		for (Request& request : requests) request.Path = Paths::AssetReference(request.Path);
 		// Decode each file once even when it is used as both color and data.
 		Array<String> toDecode;
 		for (const Request& request : requests)

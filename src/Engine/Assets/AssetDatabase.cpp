@@ -55,6 +55,25 @@ namespace FP
 			return true;
 		}
 
+		bool ReadGlbJson(const fs::path& path, String& text)
+		{
+			std::ifstream file(path, std::ios::binary);
+			uint8 header[20] = {};
+			if (!file.read(reinterpret_cast<char*>(header), sizeof(header))) return false;
+			auto word = [&](int offset) {
+				const uint8* p = header + offset;
+				return uint32(p[0]) | (uint32(p[1]) << 8) | (uint32(p[2]) << 16) | (uint32(p[3]) << 24);
+			};
+			std::error_code ec;
+			const auto size = fs::file_size(path, ec);
+			const uint32 length = word(12);
+			if (ec || word(0) != 0x46546c67 || word(4) != 2 || word(8) != size || word(16) != 0x4e4f534a || length > size - 20 || length > 32 * 1024 * 1024) return false;
+			std::string bytes(length, '\0');
+			if (!file.read(bytes.data(), length)) return false;
+			text = bytes;
+			return true;
+		}
+
 		bool AtomicWrite(const fs::path& path, std::string_view text)
 		{
 			fs::path temporary = path;
@@ -106,7 +125,8 @@ namespace FP
 
 		bool NativeReferences(std::string_view path)
 		{
-			return path.ends_with(".scene") || path.ends_with(".material");
+			const String lower = String(path).ToLower();
+			return lower.EndsWith(".scene") || lower.EndsWith(".material");
 		}
 	}
 
@@ -355,6 +375,7 @@ namespace FP
 		if (!m_Writable || !found || !IsTexture(found->Path)) return false;
 		AssetRecord asset = *found;
 		asset.Settings = settings;
+		if (settings.ColorSpace != AssetColorSpace::Auto && settings.ColorSpace != AssetColorSpace::SRGB && settings.ColorSpace != AssetColorSpace::Linear) return false;
 		if (!SaveMetadata(asset)) return false;
 		Refresh();
 		return true;
@@ -374,7 +395,9 @@ namespace FP
 		const auto root = fs::weakly_canonical(Native(m_Root), ec);
 		const auto parent = fs::weakly_canonical(newPath.parent_path(), ec);
 		const auto relativeParent = parent.lexically_relative(root);
-		if (ec || relativeParent.empty() || *relativeParent.begin() == ".." || fs::is_symlink(oldPath, ec) || (!directory && !Find(from)))
+		std::error_code sourceError;
+		const auto relativeSource = fs::weakly_canonical(oldPath, sourceError).lexically_relative(root);
+		if (ec || sourceError || relativeSource.empty() || *relativeSource.begin() == ".." || relativeParent.empty() || *relativeParent.begin() == ".." || fs::is_symlink(oldPath, ec) || (!directory && !Find(from)))
 		{
 			error = "Move must stay inside Content and preserve valid metadata";
 			return false;
@@ -464,7 +487,8 @@ namespace FP
 		const bool native = extension == ".scene" || extension == ".material";
 		if (!native && extension != ".gltf" && extension != ".glb" && extension != ".obj" && extension != ".mtl" && extension != ".html" && extension != ".htm" && extension != ".css" && extension != ".js") return;
 		String text;
-		if (!ReadText(Native(m_Root) / Native(asset.Path), text))
+		const fs::path fullPath = Native(m_Root) / Native(asset.Path);
+		if (!(extension == ".glb" ? ReadGlbJson(fullPath, text) : ReadText(fullPath, text)))
 		{
 			m_Issues.Add({ asset.Path, "Cannot read dependency document" });
 			return;
@@ -474,7 +498,20 @@ namespace FP
 			if (!IsReference(reference))
 			{
 				if (relative)
-					reference = Text(Native(asset.Path).parent_path() / Native(reference));
+				{
+					String decoded;
+					auto hex = [](char c) { return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1; };
+					for (int32 i = 0; i < reference.Length(); ++i)
+					{
+						if (reference[i] == '%' && i + 2 < reference.Length() && hex(reference[i + 1]) >= 0 && hex(reference[i + 2]) >= 0)
+						{
+							decoded += static_cast<char>(hex(reference[i + 1]) * 16 + hex(reference[i + 2]));
+							i += 2;
+						}
+						else decoded += reference[i];
+					}
+					reference = decoded.StartsWith("/") ? decoded.Substring(1) : Text(Native(asset.Path).parent_path() / Native(decoded));
+				}
 				reference = Normalize(reference);
 				if (reference.IsEmpty()) { m_Issues.Add({ asset.Path, "Dependency escapes Content" }); return; }
 			}
@@ -515,16 +552,6 @@ namespace FP
 		}
 		else if (extension == ".gltf" || extension == ".glb")
 		{
-			if (extension == ".glb")
-			{
-				auto word = [&](int offset) {
-					const auto* p = reinterpret_cast<const uint8*>(text.CStr()) + offset;
-					return uint32(p[0]) | (uint32(p[1]) << 8) | (uint32(p[2]) << 16) | (uint32(p[3]) << 24);
-				};
-				if (text.Length() < 20 || word(0) != 0x46546c67 || word(4) != 2 || word(16) != 0x4e4f534a || word(12) > uint32(text.Length() - 20))
-				{ m_Issues.Add({ asset.Path, "Invalid GLB header" }); return; }
-				text = text.Substring(20, static_cast<int32>(word(12)));
-			}
 			const Json json = Json::Parse(text);
 			if (!json.IsObject()) { m_Issues.Add({ asset.Path, "Invalid glTF JSON" }); return; }
 			for (const char* collection : { "buffers", "images" })

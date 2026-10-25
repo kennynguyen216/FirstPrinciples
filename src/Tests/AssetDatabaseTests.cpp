@@ -7,13 +7,31 @@
 #include "Engine/Material.h"
 #include "Engine/Render/TextureCache.h"
 #include "Engine/Render/MeshLibrary.h"
+#include "Engine/UI/UISystem.h"
+#include "Engine/Scripting/Script.h"
 #include <SDL3/SDL.h>
 #include "Core/Misc/File.h"
 
 #include <filesystem>
 #include <fstream>
+#include <chrono>
+#include <thread>
 
 using namespace FP;
+
+namespace
+{
+	class AssetFieldScript : public Script
+	{
+	public:
+		String Image;
+	};
+}
+
+FP_SCRIPT_FIELDS(AssetFieldScript)
+{
+	fields.Field("Image", &AssetFieldScript::Image).AssetPath("Images (*.png)");
+}
 
 namespace
 {
@@ -156,10 +174,10 @@ FP_TEST(Assets_DependenciesInvalidateTransitively)
 FP_TEST(Assets_TracksModelAndWebDependencies)
 {
 	AssetsFixture fixture;
-	fixture.Write("Models/mesh.gltf", "{\"buffers\":[{\"uri\":\"mesh.bin\"}],\"images\":[{\"uri\":\"../image.png\"},{\"uri\":\"data:image/png;base64,AAAA\"}]}");
+	fixture.Write("Models/mesh.gltf", "{\"buffers\":[{\"uri\":\"mesh.bin\"}],\"images\":[{\"uri\":\"../im%61ge.png\"},{\"uri\":\"data:image/png;base64,AAAA\"}]}");
 	fixture.Write("Models/mesh.bin", "buffer");
 	fixture.Write("image.png", "image");
-	fixture.Write("UI/main.html", "<link href=\"style.css?v=2\"><script src=\"script.js\"></script><a href=\"https://example.com\">link</a>");
+	fixture.Write("UI/main.html", "<link href=\"style.css?v=2\"><script src=\"script.js\"></script><img src=\"/image.png\"><a href=\"https://example.com\">link</a>");
 	fixture.Write("UI/style.css", "body { background: url('../image.png') }");
 	fixture.Write("UI/script.js", "import './helper.js'");
 	fixture.Write("UI/helper.js", "");
@@ -167,7 +185,7 @@ FP_TEST(Assets_TracksModelAndWebDependencies)
 	const auto* model = fixture.Database.Find("Models/mesh.gltf");
 	FP_EXPECT(model && model->Dependencies.Num() == 2);
 	const auto* page = fixture.Database.Find("UI/main.html");
-	FP_EXPECT(page && page->Dependencies.Num() == 2);
+	FP_EXPECT(page && page->Dependencies.Num() == 3);
 	const uint64 before = fixture.Database.Fingerprint("UI/main.html");
 	fixture.Write("UI/helper.js", "changed");
 	FP_EXPECT(fixture.Database.Refresh());
@@ -265,6 +283,7 @@ FP_TEST(Assets_GPUReimportRefreshesTexturesAndMeshes)
 		FP_EXPECT(Paths::GetAssets().Refresh());
 		TextureCache textures(*device);
 		MeshLibrary meshes(*device);
+		FP_EXPECT(textures.Preload({ { "pixel.tga", true }, { Paths::AssetReference("pixel.tga"), true } }) == 1);
 		GPUTexture* texture = textures.Get("pixel.tga", true);
 		FP_EXPECT(texture && texture->GetWidth() == 1);
 		const GPUMesh* mesh = meshes.Get("mesh.obj");
@@ -287,4 +306,117 @@ FP_TEST(Assets_GPUReimportRefreshesTexturesAndMeshes)
 	}
 	delete device;
 	SDL_QuitSubSystem(SDL_INIT_VIDEO);
+}
+
+FP_TEST(Assets_GLBBuffersCanExceedTheDocumentLimit)
+{
+	AssetsFixture fixture;
+	fixture.Write("mesh.bin", "data");
+	std::string json = "{\"buffers\":[{\"uri\":\"mesh.bin\"}]}";
+	while (json.size() % 4) json += ' ';
+	const uint32 total = 40 * 1024 * 1024;
+	std::ofstream file(fixture.Root / "mesh.glb", std::ios::binary);
+	auto word = [&](uint32 value) {
+		for (int i = 0; i < 4; ++i) file.put(static_cast<char>((value >> (i * 8)) & 255));
+	};
+	word(0x46546c67); word(2); word(total);
+	word(static_cast<uint32>(json.size())); word(0x4e4f534a);
+	file.write(json.data(), static_cast<std::streamsize>(json.size()));
+	word(total - 28 - static_cast<uint32>(json.size())); word(0x004e4942);
+	file.seekp(total - 1);
+	file.put('\0');
+	file.close();
+	FP_EXPECT(fixture.Database.Open(fixture.Path(), true));
+	const auto* asset = fixture.Database.Find("mesh.glb");
+	FP_EXPECT(asset && asset->Dependencies.Contains("mesh.bin"));
+}
+
+FP_TEST(Assets_DependencyCyclesTerminateAndStillInvalidate)
+{
+	AssetsFixture fixture;
+	fixture.Write("one.js", "import './two.js'");
+	fixture.Write("two.js", "import './one.js'");
+	FP_EXPECT(fixture.Database.Open(fixture.Path(), true));
+	const uint64 before = fixture.Database.Fingerprint("one.js");
+	fixture.Write("two.js", "import './one.js'\n// changed");
+	FP_EXPECT(fixture.Database.Refresh());
+	FP_EXPECT(fixture.Database.Fingerprint("one.js") != before);
+}
+
+FP_TEST(Assets_UIPagesResolveIdsAndReimportExternalResources)
+{
+	if (!UIRuntime::Get().IsAvailable()) return;
+	ProjectFixture fixture;
+	fixture.Files.Write("Content/UI/page.html", "<html><head><script src=\"../Shared/logic.js\"></script></head><body>Assets</body></html>");
+	fixture.Files.Write("Content/Shared/logic.js", "document.title = 'before'");
+	FP_EXPECT(Paths::GetAssets().Refresh());
+	World world;
+	const Entity entity = world.CreateEntity("Page");
+	world.Add<UIComponent>(entity).Page = Paths::AssetReference("UI/page.html");
+	world.AddSystem<UISystem>();
+	world.BeginPlay();
+	world.Update(0.016f);
+	UIDocumentInstance* document = UISystem::For(world, entity);
+	auto pump = [&](const char* title) {
+		const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+		while (std::chrono::steady_clock::now() < deadline)
+		{
+			world.Update(0.016f);
+			if (document->IsReady() && document->RunScript("document.title") == title) return true;
+			std::this_thread::sleep_for(std::chrono::milliseconds(5));
+		}
+		return false;
+	};
+	FP_EXPECT(pump("before"));
+	fixture.Files.Write("Content/Shared/logic.js", "document.title = 'after'");
+	FP_EXPECT(Paths::GetAssets().Refresh());
+	world.Update(0.6f);
+	FP_EXPECT(pump("after"));
+	world.EndPlay();
+}
+
+FP_TEST(Assets_ScriptAssetFieldsParticipateInValidationAndMoves)
+{
+	AssetsFixture fixture;
+	fixture.Write("image.png", "image");
+	fixture.Write("main.scene", "component Scripts\n  script AssetFieldScript\n    Image image.png\n");
+	FP_EXPECT(fixture.Database.Open(fixture.Path(), true));
+	FP_EXPECT(fixture.Database.Dependents("image.png").Contains("main.scene"));
+	String error;
+	FP_EXPECT(fixture.Database.Move("image.png", "moved.png", error));
+	FP_EXPECT(fixture.Read("main.scene").Contains("asset://"));
+	FP_EXPECT(fixture.Database.GetIssues().IsEmpty());
+}
+
+FP_TEST(Assets_NewMaterialsKeepTheirIdentityWhenPathsAreReused)
+{
+	ProjectFixture fixture;
+	Material* material = MaterialLibrary::Get().Create("original.material");
+	FP_EXPECT(material != nullptr);
+	if (!material) return;
+	String error;
+	FP_EXPECT(Paths::GetAssets().Move("original.material", "moved.material", error));
+	fixture.Files.Write("Content/original.material", "Roughness 0.1\n");
+	FP_EXPECT(Paths::GetAssets().Refresh());
+	material->GetData().Roughness = 0.7f;
+	material->MarkDirty();
+	FP_EXPECT(material->Save());
+	Material moved("moved.material");
+	FP_EXPECT(moved.Load() && moved.GetData().Roughness == 0.7f);
+	FP_EXPECT(fixture.Files.Read("Content/original.material") == "Roughness 0.1\n");
+}
+
+FP_TEST(Assets_MovesCannotFollowSymlinksOutsideContent)
+{
+	AssetsFixture fixture;
+	AssetsFixture outside;
+	outside.Write("nested/file.bin", "outside");
+	std::error_code ec;
+	fs::create_directory_symlink(outside.Root, fixture.Root / "Link", ec);
+	if (ec) return;
+	FP_EXPECT(!fixture.Database.Open(fixture.Path(), true));
+	String error;
+	FP_EXPECT(!fixture.Database.Move("Link/nested", "Imported", error));
+	FP_EXPECT(fs::exists(outside.Root / "nested/file.bin"));
+	FP_EXPECT(!fs::exists(fixture.Root / "Imported"));
 }

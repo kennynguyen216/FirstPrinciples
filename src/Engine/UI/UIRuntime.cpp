@@ -201,6 +201,7 @@ namespace FP
 		ultralight::RefPtr<ultralight::View> View;
 		ultralight::js::API Api{ "__fp" };
 		String Page;
+		String LoadedPath;
 		bool Ready = false;
 		uint64 Version = 0;
 		float Scale = 1;
@@ -327,7 +328,14 @@ namespace FP
 		m_Impl->Page = String(path);
 		m_Impl->Ready = false;
 		if (m_Impl->View && !path.empty())
-			m_Impl->View->LoadURL(ToUL("file:///" + std::string(Paths::AssetPath(path).View())));
+		{
+			const String resolved = Paths::AssetPath(path);
+			if (resolved == m_Impl->LoadedPath)
+				m_Impl->View->Reload();
+			else
+				m_Impl->View->LoadURL(ToUL("file:///" + std::string(resolved.View())));
+			m_Impl->LoadedPath = resolved;
+		}
 	}
 
 	bool UIDocumentInstance::IsReady() const { return m_Impl->Ready; }
