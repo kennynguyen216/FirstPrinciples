@@ -3,6 +3,7 @@
 #include "Engine/Render/DebugLines.h"
 #include "Engine/Render/GPUDevice.h"
 #include "Engine/Render/MeshData.h"
+#include "Engine/Render/MeshletCulling.h"
 #include "Engine/Render/MeshLibrary.h"
 #include "Engine/Render/RenderView.h"
 #include "Engine/Render/ShadowMap.h"
@@ -44,15 +45,17 @@ namespace FP
 		int32 LightCount[4] = {};
 		Vec4 LightPosition[MaxLights];
 		Vec4 LightColor[MaxLights];
-		Mat4 ShadowMatrix; // world to shadow map UV and depth
-		Vec4 ShadowParams; // x strength (0 is off), y one texel in UV, z normal offset in world units, w light index
+		Vec4 LightDirection[MaxLights]; // spot axis
+		Vec4 LightCone[MaxLights]; // x cos(inner), y cos(outer)
+		Mat4 ShadowMatrix[8]; // directional, spot, then six point faces
+		Vec4 ShadowParams[3]; // x strength, y texel in UV, z normal offset, w light index
 	};
 
 	// Editors pick colors in sRGB. Shaders work in linear.
 	Vec4 ToLinear(const Color& color);
 
-	// Draws a World with SDL_GPU into an HDR scene buffer. The first shadowed directional light
-	// renders a small depth map of the meshes near the camera first. Opaque meshes go first with depth,
+	// Draws a World with SDL_GPU into an HDR scene buffer. The first shadowed light of each type
+	// renders depth maps before the scene. Opaque meshes go first with depth,
 	// then sprites blend on top by layer, then glass refracts a copy of the scene, and a present
 	// pass tonemaps into the target.
 	class Renderer
@@ -66,9 +69,10 @@ namespace FP
 
 		bool IsValid() const;
 
-		// Records the frame into cmd. The caller submits it.
+		// Records the frame into cmd. The caller submits it. An optional cullingView lets
+		// an editor observe the results from a wider or independent viewpoint.
 		void Render(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* target, uint32 width, uint32 height,
-			World& world, const RenderView& view, const DebugLines* lines = nullptr);
+			World& world, const RenderView& view, const DebugLines* lines = nullptr, const RenderView* cullingView = nullptr);
 
 		// Loads every texture the world's sprites and materials use, decoding them in parallel.
 		// Call after loading a scene so the first frame does not stall on image decoding.
@@ -77,6 +81,11 @@ namespace FP
 		TextureCache& GetTextures() { return m_Textures; }
 		MeshLibrary& GetMeshes() { return m_Meshes; }
 		GPUDevice& GetDevice() { return m_Device; }
+		MeshletSettings& GetMeshletSettings() { return m_MeshletSettings; }
+		const MeshletStats& GetMeshletStats() { return m_Culling.ReadStats(); }
+		bool HasMeshletCulling() const { return m_Culling.IsValid() && m_OcclusionPipeline; }
+		uint32 GetActiveMeshlets() const { return m_ActiveMeshlets; }
+		const RenderView* GetFrozenMeshletView() const { return m_MeshletSettings.FreezeCamera && m_HasCullingView ? &m_CullingView : nullptr; }
 
 	private:
 		enum class ShaderKind : uint8
@@ -107,6 +116,8 @@ namespace FP
 			uint32 FirstIndex;
 			uint32 IndexCount;
 			const Array<Mat4>* Skin; // bone matrices for skinned meshes, null for the bind pose
+			int32 IndirectFirst = -1;
+			uint32 MeshletCount = 0;
 		};
 
 		void CreatePipelines();
@@ -117,7 +128,8 @@ namespace FP
 		void BuildFrameUniforms(World& world, const RenderView& view, uint32 width, uint32 height);
 		void DrawObject(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, World& world, const Draw& draw, const Mat4& viewProjection);
 		void PushBones(SDL_GPUCommandBuffer* cmd, const Array<Mat4>* skin);
-		SDL_GPUGraphicsPipeline* CreateShadowPipeline(Surface surface);
+		SDL_GPUGraphicsPipeline* CreateShadowPipeline(Surface surface, bool occlusion = false);
+		void PrepareMeshlets(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view, Array<Draw>& draws);
 		void RenderShadows(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view);
 		void CreateParticlePipelines();
 		// Builds camera facing quads for every live particle and uploads them before the scene pass.
@@ -132,6 +144,13 @@ namespace FP
 		TextureCache m_Textures;
 		MeshLibrary m_Meshes;
 		FrameUniforms m_Frame;
+		MeshletCulling m_Culling;
+		MeshletSettings m_MeshletSettings;
+		RenderView m_CullingView;
+		bool m_HasCullingView = false;
+		uint32 m_ActiveMeshlets = 0;
+		SDL_GPUGraphicsPipeline* m_OcclusionPipeline = nullptr;
+		RefPtr<GPUTexture> m_CullDepth;
 
 		// Indexed by ShaderKind then Surface.
 		SDL_GPUGraphicsPipeline* m_ScenePipelines[3][3] = {};
@@ -176,9 +195,9 @@ namespace FP
 
 		// Depth only pipelines for Mesh and SkinnedMesh. Missing ones just mean no shadows.
 		SDL_GPUGraphicsPipeline* m_ShadowPipelines[2] = {};
-		RefPtr<GPUTexture> m_ShadowMap;
-		bool m_ShadowMapCleared = false;
-		Entity m_ShadowCaster = NullEntity; // the light casting shadows this frame
-		int32 m_ShadowLight = -1;           // its index in FrameUniforms
+		RefPtr<GPUTexture> m_ShadowMaps[8];
+		bool m_ShadowMapCleared[8] = {};
+		Entity m_ShadowCasters[3] = { NullEntity, NullEntity, NullEntity };
+		int32 m_ShadowLights[3] = { -1, -1, -1 };
 	};
 }

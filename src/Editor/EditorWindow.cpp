@@ -1,4 +1,5 @@
 #include "Editor/EditorWindow.h"
+#include "Editor/MeshletDebugWidget.h"
 #include "Editor/AudioImport.h"
 #include "Engine/Audio/AudioDevice.h"
 #include "Engine/Audio/AudioWorld.h"
@@ -246,12 +247,32 @@ namespace FP::Editor
 		QDockWidget* consoleDock = DockTab::Create(this, "Output Log", EditorIcon::OutputLog, m_Console);
 		m_ConsoleDock = consoleDock;
 
-		// The content browser shares the bottom area with the log.
-		m_ContentBrowser = new ContentBrowser();
+		// The content browser, log and profiler share the bottom area.
+		m_ContentBrowser = new ContentBrowser(m_Viewport->GetRenderer()->GetDevice());
 		QDockWidget* contentDock = DockTab::Create(this, "Content Browser", EditorIcon::ContentBrowser, m_ContentBrowser);
 		m_ContentDock = contentDock;
 		addDockWidget(Qt::BottomDockWidgetArea, contentDock);
 		tabifyDockWidget(contentDock, consoleDock);
+		QWidget* profilerBody = new QWidget();
+		QVBoxLayout* profilerLayout = new QVBoxLayout(profilerBody);
+		m_ProfilerSummary = new QLabel("Press Play to profile game updates");
+		m_ProfilerSummary->setToolTip("CPU wall time for World::Update. Rendering and the editor UI are not included.");
+		profilerLayout->addWidget(m_ProfilerSummary);
+		m_ProfilerTable = new QTableWidget(0, 3);
+		m_ProfilerTable->setHorizontalHeaderLabels({ "System", "Last ms", "Avg ms" });
+		m_ProfilerTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+		m_ProfilerTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+		m_ProfilerTable->setAlternatingRowColors(true);
+		m_ProfilerTable->verticalHeader()->hide();
+		m_ProfilerTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+		m_ProfilerTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+		m_ProfilerTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+		profilerLayout->addWidget(m_ProfilerTable);
+		m_ProfilerDock = DockTab::Create(this, "Profiler", EditorIcon::Profiler, profilerBody);
+		tabifyDockWidget(contentDock, m_ProfilerDock);
+		connect(m_ProfilerDock, &QDockWidget::visibilityChanged, this, [this](bool visible) {
+			if (visible) RefreshProfiler();
+		});
 		contentDock->raise();
 		// Sized last because adding docks redistributes the space.
 		resizeDocks({ placeDock, detailsDock }, { 250, 340 }, Qt::Horizontal);
@@ -354,6 +375,7 @@ namespace FP::Editor
 			meshes->addAction(name, this, [this, name]() { CreateEntity(name); });
 		}
 		entity->addAction("Create &Point Light", this, [this]() { CreateEntity("Point Light"); });
+		entity->addAction("Create &Spot Light", this, [this]() { CreateEntity("Spot Light"); });
 		entity->addAction("Create &Character", this, [this]() { CreateEntity("Character"); });
 		entity->addAction("Create Particle E&mitter", this, [this]() { CreateEntity("Particle Emitter"); });
 		entity->addAction("Create &Directional Light", this, [this]() { CreateEntity("Directional Light"); });
@@ -374,6 +396,7 @@ namespace FP::Editor
 			window->addAction(toggle);
 		}
 		window->addSeparator();
+		window->addAction("Nanite / Meshlet Debugger", this, [this]() { ShowMeshletDebugger(*m_Viewport, this); });
 		window->addAction("Audio Debugger", this, &EditorWindow::ShowAudioDebugger);
 		window->addAction("&Reset Layout", this, &EditorWindow::ResetLayout);
 		// Remembered once the window has its real size so the reset matches what opened.
@@ -382,6 +405,59 @@ namespace FP::Editor
 		m_ScriptBuilder = new ScriptBuilder(this);
 		connect(m_ScriptBuilder, &ScriptBuilder::Finished, this, &EditorWindow::OnScriptsBuilt);
 		connect(m_ScriptBuilder, &ScriptBuilder::ProjectBuilt, this, &EditorWindow::OnProjectBuilt);
+		connect(m_ScriptBuilder, &ScriptBuilder::Packaged, this, [this](bool success, const QString& output) {
+			if (success)
+				QMessageBox::information(this, "Package Game", "Packaged game saved to " + output);
+			else
+				QMessageBox::warning(this, "Package Game", "Packaging failed. The Output Log has the errors.");
+		});
+		QMenu* package = new QMenu("Package Game", file);
+		file->insertMenu(file->actions().last(), package);
+		for (const QString& platform : { QString("macOS"), QString("Windows") })
+		{
+			QAction* action = package->addAction(platform + " (Release)...", this, [this, platform]() {
+				if (m_ScriptBuilder->IsBuilding())
+				{
+					QMessageBox::information(this, "Package Game", "Wait for the current build to finish first.");
+					return;
+				}
+				if (!ConfirmDiscard())
+					return;
+				for (int i = 0; i < m_CentralTabs->count(); ++i)
+				{
+					CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->widget(i));
+					if (!editor || !editor->IsDirty())
+						continue;
+					const auto answer = QMessageBox::question(this, "Unsaved script", "Save changes to " + QFileInfo(editor->GetPath()).fileName() + " before packaging?",
+						QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+					if (answer == QMessageBox::Cancel || (answer == QMessageBox::Save && !editor->Save()))
+						return;
+				}
+				MaterialLibrary::Get().SaveDirty();
+				const QString parent = QFileDialog::getExistingDirectory(this, "Choose Package Destination", ToQString(Paths::GetProjectDir()) + "/Saved");
+				if (parent.isEmpty())
+					return;
+				const QString name = ToQString(Paths::GetProject().Name);
+				const QString output = parent + "/" + name + (platform == "macOS" ? ".app" : "-Windows");
+				if (QFileInfo::exists(output))
+				{
+					QMessageBox::warning(this, "Package Game", output + " already exists. Move it or choose a different destination.");
+					return;
+				}
+				m_ScriptBuilder->Package(output);
+			});
+#if defined(__APPLE__)
+			const bool supported = platform == "macOS";
+#elif defined(_WIN32)
+			const bool supported = platform == "Windows";
+#else
+			const bool supported = false;
+#endif
+			action->setEnabled(supported);
+			action->setToolTip(supported ? "Builds the runtime and scripts and cooks saved content into a .pak file" : "Build this target from an editor running on that operating system");
+		}
+		package->setToolTipsVisible(true);
+
 		QMenu* scripts = menuBar()->addMenu("&Scripts");
 		scripts->addAction("&New Script...", this, [this]() {
 			const QString name = QInputDialog::getText(this, "New Script", "Class name:");
@@ -427,6 +503,16 @@ namespace FP::Editor
 		m_PlayAction = toolbar->addAction(EditorIcons::Get(EditorIcon::Play), "Play", this, &EditorWindow::Play);
 		m_PlayAction->setShortcut(QKeySequence("Ctrl+P"));
 		m_PlayAction->setToolTip("Play (Ctrl+P)");
+		m_PauseAction = toolbar->addAction(EditorIcons::Get(EditorIcon::Pause), "Pause", this, [this]() {
+			SetPaused(!m_World->IsPaused());
+		});
+		m_PauseAction->setShortcut(QKeySequence("Ctrl+Shift+P"));
+		m_PauseAction->setEnabled(false);
+		m_PauseAction->setToolTip("Pause (Ctrl+Shift+P)");
+		m_StepAction = toolbar->addAction(EditorIcons::Get(EditorIcon::Step), "Step", this, &EditorWindow::StepFrame);
+		m_StepAction->setShortcut(QKeySequence("F10"));
+		m_StepAction->setEnabled(false);
+		m_StepAction->setToolTip("Advance one game frame while paused (F10)");
 		m_StopAction = toolbar->addAction(EditorIcons::Get(EditorIcon::Stop, QColor(0xe0, 0x50, 0x50)), "Stop", this, &EditorWindow::Stop);
 		m_StopAction->setEnabled(false);
 		m_StopAction->setToolTip("Stop");
@@ -526,6 +612,7 @@ namespace FP::Editor
 		};
 		addButton(EditorIcon::ContentBrowser, "Content Browser", m_ContentDock);
 		addButton(EditorIcon::OutputLog, "Output Log", m_ConsoleDock);
+		addButton(EditorIcon::Profiler, "Profiler", m_ProfilerDock);
 
 		QLabel* cmd = new QLabel();
 		cmd->setPixmap(EditorIcons::Get(EditorIcon::Console).pixmap(16, 16));
@@ -567,9 +654,15 @@ namespace FP::Editor
 		const QString name = line.section(' ', 0, 0).toLower();
 		const QString argument = line.section(' ', 1).trimmed();
 		if (name == "help")
-			FP_LOG("Commands: play, stop, save, undo, redo, gc, 2d, 3d, viewmode lit|unlit|wireframe, select <name>, create <kind>");
+			FP_LOG("Commands: play, pause, resume, step, stop, save, undo, redo, gc, 2d, 3d, viewmode lit|unlit|wireframe, select <name>, create <kind>");
 		else if (name == "play")
 			Play();
+		else if (name == "pause")
+			SetPaused(true);
+		else if (name == "resume")
+			SetPaused(false);
+		else if (name == "step")
+			StepFrame();
 		else if (name == "stop")
 			Stop();
 		else if (name == "save")
@@ -1110,12 +1203,53 @@ namespace FP::Editor
 			// Picks up viewport drags without rebuilding every frame.
 			m_Inspector->RefreshValues();
 		}
+		if (m_Frame % 12 == 0)
+			RefreshProfiler();
 
 		// No point drawing the scene while a script tab covers it.
 		if (m_CentralTabs->currentWidget() == m_Viewport)
 			m_Viewport->RenderFrame();
 		if (++m_Frame % 120 == 0)
 			GarbageCollector::Get().Collect();
+	}
+
+	void EditorWindow::RefreshProfiler()
+	{
+		if (!m_ProfilerDock->isVisible())
+			return;
+		if (!m_World->IsPlaying())
+		{
+			m_ProfilerSummary->setText("Press Play to profile game updates");
+			m_ProfilerTable->setRowCount(0);
+			return;
+		}
+		m_ProfilerSummary->setText(QString("Game update CPU: %1 ms last | %2 ms avg | frame %3%4")
+			.arg(m_World->GetLastUpdateMilliseconds(), 0, 'f', 3)
+			.arg(m_World->GetAverageUpdateMilliseconds(), 0, 'f', 3)
+			.arg(static_cast<qulonglong>(m_World->GetProfileFrame()))
+			.arg(m_World->IsPaused() ? " [Paused]" : ""));
+		const auto& timings = m_World->GetSystemTimings();
+		m_ProfilerTable->setRowCount(timings.Num());
+		auto put = [this](int row, int column, const QString& value) {
+			if (QTableWidgetItem* item = m_ProfilerTable->item(row, column))
+			{
+				if (item->text() != value) item->setText(value);
+			}
+			else m_ProfilerTable->setItem(row, column, new QTableWidgetItem(value));
+		};
+		for (int row = 0; row < timings.Num(); ++row)
+		{
+			put(row, 0, ToQString(timings[row].Name));
+			put(row, 1, QString::number(timings[row].LastMilliseconds, 'f', 3));
+			put(row, 2, QString::number(timings[row].AverageMilliseconds, 'f', 3));
+		}
+	}
+
+	void EditorWindow::ShowProfiler()
+	{
+		m_ProfilerDock->show();
+		m_ProfilerDock->raise();
+		RefreshProfiler();
 	}
 
 	void EditorWindow::Select(Entity entity)
@@ -1233,7 +1367,8 @@ namespace FP::Editor
 	void EditorWindow::UpdateTitle()
 	{
 		const QString name = m_ScenePath.isEmpty() ? "Untitled" : QFileInfo(m_ScenePath).fileName();
-		setWindowTitle(QString("%1%2 - %3 - FirstPrinciples%4").arg(name, m_Dirty ? "*" : "", ToQString(Paths::GetProject().Name), m_World->IsPlaying() ? " [Playing]" : ""));
+		setWindowTitle(QString("%1%2 - %3 - FirstPrinciples%4").arg(name, m_Dirty ? "*" : "", ToQString(Paths::GetProject().Name),
+			m_World->IsPaused() ? " [Paused]" : m_World->IsPlaying() ? " [Playing]" : ""));
 		// The viewport tab is the open scene, like UE's level tab.
 		m_CentralTabs->setTabText(m_CentralTabs->indexOf(m_Viewport), QFileInfo(name).completeBaseName() + (m_Dirty ? "*" : ""));
 	}
@@ -1365,6 +1500,12 @@ namespace FP::Editor
 			m_World->Get<TransformComponent>(entity).Position.Z = 1.5f; // above the sprites so it lights their faces
 			m_World->Add<PointLightComponent>(entity);
 		}
+		else if (kind == "Spot Light")
+		{
+			entity = m_World->CreateEntity(name);
+			m_World->Get<TransformComponent>(entity).Rotation = { -40, 0, 0 };
+			m_World->Add<SpotLightComponent>(entity);
+		}
 		else if (kind == "Directional Light")
 		{
 			entity = m_World->CreateEntity(name);
@@ -1470,11 +1611,39 @@ namespace FP::Editor
 		m_World->BeginPlay();
 		m_Viewport->SetPlaying(true);
 		m_PlayAction->setEnabled(false);
+		m_PauseAction->setEnabled(true);
+		m_StepAction->setEnabled(false);
 		m_StopAction->setEnabled(true);
 		m_ImportAudioAction->setEnabled(false);
 		m_Inspector->RefreshValues();
 		UpdateTitle();
+		RefreshProfiler();
 		FP_LOG("Play. Esc frees the mouse and a click on the viewport takes it back");
+	}
+
+	void EditorWindow::SetPaused(bool paused)
+	{
+		if (!m_World->IsPlaying() || m_World->IsPaused() == paused)
+			return;
+		m_World->SetPaused(paused);
+		m_Viewport->SetPaused(paused);
+		m_PauseAction->setIcon(EditorIcons::Get(paused ? EditorIcon::Play : EditorIcon::Pause));
+		m_PauseAction->setText(paused ? "Resume" : "Pause");
+		m_PauseAction->setToolTip(paused ? "Resume (Ctrl+Shift+P)" : "Pause (Ctrl+Shift+P)");
+		m_StepAction->setEnabled(paused);
+		UpdateTitle();
+		RefreshProfiler();
+		FP_LOG(paused ? "Pause" : "Resume");
+	}
+
+	void EditorWindow::StepFrame()
+	{
+		if (!m_World->IsPlaying() || !m_World->IsPaused())
+			return;
+		Input::SetDeltaTime(1.0f / 60.0f);
+		m_World->Step(1.0f / 60.0f);
+		RefreshProfiler();
+		FP_LOG("Step frame");
 	}
 
 	void EditorWindow::Stop()
@@ -1494,9 +1663,15 @@ namespace FP::Editor
 		Select(m_World->FindEntityByGuid(selected));
 		m_Inspector->SetTarget(m_World.Get(), m_Selected);
 		m_PlayAction->setEnabled(true);
+		m_PauseAction->setEnabled(false);
+		m_PauseAction->setIcon(EditorIcons::Get(EditorIcon::Pause));
+		m_PauseAction->setText("Pause");
+		m_PauseAction->setToolTip("Pause (Ctrl+Shift+P)");
+		m_StepAction->setEnabled(false);
 		m_StopAction->setEnabled(false);
 		m_ImportAudioAction->setEnabled(true);
 		UpdateTitle();
+		RefreshProfiler();
 		FP_LOG("Stop");
 	}
 

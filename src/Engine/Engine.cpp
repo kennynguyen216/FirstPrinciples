@@ -226,7 +226,20 @@ namespace FP::Engine
 		registry.Register<PointLightComponent>("PointLight")
 			.Field("Color", &PointLightComponent::Color)
 			.Field("Intensity", &PointLightComponent::Intensity)
-			.Field("Range", &PointLightComponent::Range);
+			.Field("Range", &PointLightComponent::Range)
+			.Field("CastShadows", &PointLightComponent::CastShadows)
+			.Field("ShadowResolution", &PointLightComponent::ShadowResolution).Range(64, 2048)
+			.Field("ShadowStrength", &PointLightComponent::ShadowStrength).Range(0, 1);
+
+		registry.Register<SpotLightComponent>("SpotLight")
+			.Field("Color", &SpotLightComponent::Color)
+			.Field("Intensity", &SpotLightComponent::Intensity)
+			.Field("Range", &SpotLightComponent::Range)
+			.Field("InnerAngle", &SpotLightComponent::InnerAngle).Range(0, 88)
+			.Field("OuterAngle", &SpotLightComponent::OuterAngle).Range(1, 89)
+			.Field("CastShadows", &SpotLightComponent::CastShadows)
+			.Field("ShadowResolution", &SpotLightComponent::ShadowResolution).Range(64, 2048)
+			.Field("ShadowStrength", &SpotLightComponent::ShadowStrength).Range(0, 1);
 
 		registry.Register<DirectionalLightComponent>("DirectionalLight")
 			.Field("Color", &DirectionalLightComponent::Color)

@@ -60,6 +60,12 @@ void GetLight(int i, vec3 worldPosition, out vec3 toLight, out vec3 radiance)
 	float ratio = distance / max(color.w, 1e-4);
 	float window = clamp(1.0 - ratio * ratio * ratio * ratio, 0.0, 1.0);
 	radiance = color.rgb * window * window / (distance * distance + 1.0);
+	if (position.w > 1.5)
+	{
+		float cosine = dot(-toLight, normalize(Frame.LightDirection[i].xyz));
+		vec2 cone = Frame.LightCone[i].xy;
+		radiance *= smoothstep(cone.y, max(cone.x, cone.y + 1e-4), cosine);
+	}
 }
 
 // Specular highlight for one light, used by glass which has no diffuse.

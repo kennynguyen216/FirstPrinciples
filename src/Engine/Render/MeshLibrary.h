@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Engine/Render/GPUDevice.h"
-#include "Engine/Render/MeshData.h"
+#include "Engine/Render/Meshlets.h"
 
 namespace FP
 {
@@ -12,6 +12,7 @@ namespace FP
 		RefPtr<GPUBuffer> Vertices;
 		RefPtr<GPUBuffer> Indices;
 		uint32 IndexCount = 0;
+		Array<Meshlet> Meshlets;
 		Array<MeshSection> Sections; // drawn one at a time, each with its own material
 		RefPtr<GPUBuffer> Skin; // SkinVertex per vertex, only on skeletal meshes
 		Vec3 BoundsMin;
@@ -25,8 +26,8 @@ namespace FP
 	public:
 		explicit MeshLibrary(GPUDevice& device) : m_Device(device) {}
 
-		// Null when the name is empty or the file fails to load (logged once).
-		GPUMesh* Get(const String& nameOrPath);
+		// Null when the name is empty or the file fails to load. Reload bypasses cached data.
+		GPUMesh* Get(const String& nameOrPath, bool reload = false);
 
 		// A glTF with its skin weights. Null when it fails to load or has no skin.
 		GPUMesh* GetSkinned(const String& path);

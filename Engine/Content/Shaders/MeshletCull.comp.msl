@@ -1,0 +1,186 @@
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+struct Item
+{
+    float4x4 ClipFromLocal;
+    float4 Min;
+    float4 Max;
+    uint First;
+    uint Count;
+    uint Pad0;
+    uint Pad1;
+};
+
+struct Params
+{
+    uint Width;
+    uint Height;
+    uint Count;
+    uint Flags;
+};
+
+struct TileData
+{
+    float Values[1];
+};
+
+struct Item_1
+{
+    float4x4 ClipFromLocal;
+    float4 Min;
+    float4 Max;
+    uint First;
+    uint Count;
+    uint Pad0;
+    uint Pad1;
+};
+
+struct ItemData
+{
+    Item_1 Values[1];
+};
+
+struct Command
+{
+    uint Count;
+    uint Instances;
+    uint First;
+    int VertexOffset;
+    uint FirstInstance;
+};
+
+struct CommandData
+{
+    Command Values[1];
+};
+
+struct Command_1
+{
+    uint Count;
+    uint Instances;
+    uint First;
+    int VertexOffset;
+    uint FirstInstance;
+};
+
+struct ReasonData
+{
+    uint Values[1];
+};
+
+constant uint3 gl_WorkGroupSize [[maybe_unused]] = uint3(64u, 1u, 1u);
+
+static inline __attribute__((always_inline))
+uint visibility(thread const Item& item, constant Params& U, device TileData& Tiles)
+{
+    uint outside = 63u;
+    bool nearPlane = false;
+    float3 lo = float3(1000000015047466219876688855040.0);
+    float3 hi = float3(-1000000015047466219876688855040.0);
+    for (uint i = 0u; i < 8u; i++)
+    {
+        float3 p = select(item.Min.xyz, item.Max.xyz, bool3((i & 1u) != 0u, (i & 2u) != 0u, (i & 4u) != 0u));
+        float4 c = item.ClipFromLocal * float4(p, 1.0);
+        bool _82 = any(isnan(c));
+        bool _89;
+        if (!_82)
+        {
+            _89 = any(isinf(c));
+        }
+        else
+        {
+            _89 = _82;
+        }
+        if (_89)
+        {
+            return 0u;
+        }
+        uint mask = ((((uint(c.x < (-c.w)) | ((c.x > c.w) ? 2u : 0u)) | ((c.y < (-c.w)) ? 4u : 0u)) | ((c.y > c.w) ? 8u : 0u)) | ((c.z < 0.0) ? 16u : 0u)) | ((c.z > c.w) ? 32u : 0u);
+        outside &= mask;
+        bool _151;
+        if (!nearPlane)
+        {
+            _151 = c.w <= 9.9999999747524270787835121154785e-07;
+        }
+        else
+        {
+            _151 = nearPlane;
+        }
+        bool _158;
+        if (!_151)
+        {
+            _158 = c.z <= 0.0;
+        }
+        else
+        {
+            _158 = _151;
+        }
+        nearPlane = _158;
+        if (c.w > 9.9999999747524270787835121154785e-07)
+        {
+            lo = fast::min(lo, c.xyz / float3(c.w));
+            hi = fast::max(hi, c.xyz / float3(c.w));
+        }
+    }
+    if (((U.Flags & 1u) != 0u) && (outside != 0u))
+    {
+        return 1u;
+    }
+    if ((((U.Flags & 2u) == 0u) || nearPlane) || (outside != 0u))
+    {
+        return 0u;
+    }
+    float2 a = float2((lo.x * 0.5) + 0.5, 0.5 - (hi.y * 0.5)) * float2(float(U.Width), float(U.Height));
+    float2 b = float2((hi.x * 0.5) + 0.5, 0.5 - (lo.y * 0.5)) * float2(float(U.Width), float(U.Height));
+    a = fast::clamp(a, float2(0.0), float2(float(U.Width), float(U.Height)));
+    b = fast::clamp(b, float2(0.0), float2(float(U.Width), float(U.Height)));
+    int2 size = int2(int((U.Width + 7u) / 8u), int((U.Height + 7u) / 8u));
+    int2 first = clamp(int2(floor((a - float2(1.0)) / float2(8.0))), int2(0), size - int2(1));
+    int2 last = clamp(int2(floor((b + float2(1.0)) / float2(8.0))), int2(0), size - int2(1));
+    if ((((last.x - first.x) + 1) * ((last.y - first.y) + 1)) > 1024)
+    {
+        return 0u;
+    }
+    for (int y = first.y; y <= last.y; y++)
+    {
+        for (int x = first.x; x <= last.x; x++)
+        {
+            if (lo.z <= (Tiles.Values[(y * size.x) + x] + 9.9999997473787516355514526367188e-05))
+            {
+                return 0u;
+            }
+        }
+    }
+    return 2u;
+}
+
+kernel void main0(constant Params& U [[buffer(0)]], device ItemData& Items [[buffer(1)]], device TileData& Tiles [[buffer(2)]], device CommandData& Commands [[buffer(3)]], device ReasonData& Reasons [[buffer(4)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+{
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= U.Count)
+    {
+        return;
+    }
+    Item item;
+    item.ClipFromLocal = Items.Values[i].ClipFromLocal;
+    item.Min = Items.Values[i].Min;
+    item.Max = Items.Values[i].Max;
+    item.First = Items.Values[i].First;
+    item.Count = Items.Values[i].Count;
+    item.Pad0 = Items.Values[i].Pad0;
+    item.Pad1 = Items.Values[i].Pad1;
+    Item param = item;
+    uint reason = visibility(param, U, Tiles);
+    Command_1 _437 = Command_1{ item.Count, uint(reason == 0u), item.First, 0, 0u };
+    Commands.Values[i].Count = _437.Count;
+    Commands.Values[i].Instances = _437.Instances;
+    Commands.Values[i].First = _437.First;
+    Commands.Values[i].VertexOffset = _437.VertexOffset;
+    Commands.Values[i].FirstInstance = _437.FirstInstance;
+    Reasons.Values[i] = reason;
+}

@@ -47,10 +47,12 @@ layout(set = 3, binding = 1) uniform FrameData
 	vec4 Ambient;        // rgb already multiplied by intensity
 	vec4 ScreenSize;     // xy pixels, zw one over pixels
 	ivec4 LightCount;
-	vec4 LightPosition[MAX_LIGHTS]; // xyz position, or direction the light travels. w is 0 directional, 1 point
+	vec4 LightPosition[MAX_LIGHTS]; // xyz position, or travel direction. w: 0 directional, 1 point, 2 spot
 	vec4 LightColor[MAX_LIGHTS];    // rgb already multiplied by intensity, w range
-	mat4 ShadowMatrix;              // world to shadow map uv in xy and depth in z
-	vec4 ShadowParams;              // x strength (0 is off), y one texel in uv, z normal offset, w light index
+	vec4 LightDirection[MAX_LIGHTS]; // spot cone axis
+	vec4 LightCone[MAX_LIGHTS];      // x cos(inner), y cos(outer)
+	mat4 ShadowMatrix[8];            // directional, spot, six point faces
+	vec4 ShadowParams[3];            // directional, spot, point: strength, texel, offset, light index
 } Frame;
 
 #endif

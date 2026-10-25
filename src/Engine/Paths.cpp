@@ -1,8 +1,10 @@
 #include "Engine/Paths.h"
 #include "Engine/Project.h"
 #include "Core/Log.h"
+#include "Core/Misc/ModuleContext.h"
 
 #include <SDL3/SDL_filesystem.h>
+#include <SDL3/SDL_stdinc.h>
 
 #include <filesystem>
 
@@ -50,16 +52,28 @@ namespace FP::Paths
 		{
 			Project Current;
 			String ContentDir;
+			String EngineDir;
+			String SavedDir;
+			bool Packaged = false;
 		};
 
 		void SetCurrent(State& state, const Project& project)
 		{
 			state.Current = project;
 			state.ContentDir = project.GetContentDir();
+			state.SavedDir = project.Dir + "/Saved";
+			state.EngineDir.Clear();
+			state.Packaged = false;
 		}
 
 		State& GetState()
 		{
+			// Scripts use the host's extracted content and current project.
+			if (const ModuleContext* context = GetModuleContext())
+			{
+				if (context->Paths)
+					return *static_cast<State*>(context->Paths);
+			}
 			static State state = []() {
 				State found;
 				Project project;
@@ -92,6 +106,21 @@ namespace FP::Paths
 		return true;
 	}
 
+	void UsePackagedContent(const String& directory, const String& savedDirectory)
+	{
+		State& state = GetState();
+		state.ContentDir = directory + "/Content";
+		state.EngineDir = directory + "/Engine";
+		state.Current.Dir = directory;
+		state.SavedDir = savedDirectory + "/Saved";
+		state.Packaged = true;
+	}
+
+	bool IsPackaged()
+	{
+		return GetState().Packaged;
+	}
+
 	const Project& GetProject()
 	{
 		return GetState().Current;
@@ -102,9 +131,24 @@ namespace FP::Paths
 		return GetState().Current.Dir;
 	}
 
+	const String& GetSavedDir()
+	{
+		return GetState().SavedDir;
+	}
+
 	const String& GetContentDir()
 	{
 		return GetState().ContentDir;
+	}
+
+	String GetSaveDir()
+	{
+		char* path = SDL_GetPrefPath("FirstPrinciples", GetProject().Name.CStr());
+		if (!path)
+			return {};
+		const String dir = String(path) + "Saves";
+		SDL_free(path);
+		return dir;
 	}
 
 	String Content(std::string_view relative)
@@ -114,6 +158,8 @@ namespace FP::Paths
 
 	const String& GetEngineDir()
 	{
+		if (GetState().Packaged)
+			return GetState().EngineDir;
 		static const String dir = WalkUp([](const fs::path& dir) {
 			std::error_code ec;
 			return fs::is_directory(dir / "Engine/Content", ec);
@@ -124,5 +170,10 @@ namespace FP::Paths
 	String EngineContent(std::string_view relative)
 	{
 		return GetEngineDir() + "/Content/" + relative;
+	}
+
+	void* GetSharedState()
+	{
+		return &GetState();
 	}
 }
