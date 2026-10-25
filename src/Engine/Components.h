@@ -239,6 +239,16 @@ namespace FP
 		float Intensity = 0.15f;
 	};
 
+	// A panorama supplies the sky, diffuse lighting and reflections.
+	struct SkyboxComponent
+	{
+		String Texture;
+		float Intensity = 1;
+		float Rotation = 0; // degrees around Y
+		bool Visible = true;
+		bool Enabled = true;
+	};
+
 	// An HTML page from Content drawn over the screen, written with HTML, CSS and JavaScript.
 	// On a camera it draws over that camera's view, like a Unity canvas. On any other entity it
 	// draws over every view. The page talks to the entity's scripts through the engine object.

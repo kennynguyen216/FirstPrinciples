@@ -1,5 +1,6 @@
 #include "Engine/Render/Renderer.h"
 #include "Engine/Material.h"
+#include "Engine/Paths.h"
 #include "Engine/Animation/SkeletalModel.h"
 #include "Engine/UI/UISystem.h"
 #include "Engine/Particles/ParticleSystem.h"
@@ -7,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 
 namespace FP
 {
@@ -81,6 +83,8 @@ namespace FP
 		m_QuadVertices = device.CreateBuffer(SDL_GPU_BUFFERUSAGE_VERTEX, QuadVertices, sizeof(QuadVertices));
 		m_QuadIndices = device.CreateBuffer(SDL_GPU_BUFFERUSAGE_INDEX, QuadIndices, sizeof(QuadIndices));
 		m_BoneUpload.Resize(MaxSkinBones);
+		const Vec4 empty;
+		m_EmptyEnvironment = device.CreateBuffer(SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ, &empty, sizeof(empty));
 		CreatePipelines();
 		m_OcclusionPipeline = CreateShadowPipeline(Surface::Mesh, true);
 	}
@@ -97,7 +101,7 @@ namespace FP
 					SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
 			}
 		}
-		for (SDL_GPUGraphicsPipeline* pipeline : { m_OcclusionPipeline, m_PresentPipeline, m_UIPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1], m_ParticlePipelines[0], m_ParticlePipelines[1] })
+		for (SDL_GPUGraphicsPipeline* pipeline : { m_OcclusionPipeline, m_PresentPipeline, m_SkyboxPipeline, m_UIPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1], m_ParticlePipelines[0], m_ParticlePipelines[1] })
 		{
 			if (pipeline)
 				SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
@@ -114,7 +118,7 @@ namespace FP
 					return false;
 			}
 		}
-		return m_PresentPipeline && m_LinePipeline;
+		return m_PresentPipeline && m_SkyboxPipeline && m_LinePipeline && m_EmptyEnvironment;
 	}
 
 	SDL_GPUGraphicsPipeline* Renderer::GetPipeline(const Draw& draw) const
@@ -129,7 +133,7 @@ namespace FP
 		SDL_GPUDevice* gpu = m_Device.GetHandle();
 		const bool skinned = surface == Surface::SkinnedMesh;
 		SDL_GPUShader* vert = skinned ? m_Device.LoadShader("SkinnedMesh.vert", 0, 2) : m_Device.LoadShader("Mesh.vert", 0, 1);
-		SDL_GPUShader* frag = m_Device.LoadShader(fragment, numSamplers, numUniforms);
+		SDL_GPUShader* frag = m_Device.LoadShader(fragment, numSamplers, numUniforms, std::string_view(fragment) == "Unlit.frag" ? 0 : 1);
 		SDL_GPUGraphicsPipeline* pipeline = nullptr;
 		if (vert && frag)
 		{
@@ -242,6 +246,27 @@ namespace FP
 				SDL_ReleaseGPUShader(gpu, uiFrag);
 			}
 		}
+
+		SDL_GPUShader* skyFrag = m_Device.LoadShader("Skybox.frag", 0, 1, 1);
+		if (presentVert && skyFrag)
+		{
+			SDL_GPUColorTargetDescription skyTarget = {};
+			skyTarget.format = SceneFormat;
+			SDL_GPUGraphicsPipelineCreateInfo info = {};
+			info.vertex_shader = presentVert;
+			info.fragment_shader = skyFrag;
+			info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+			info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+			info.target_info.color_target_descriptions = &skyTarget;
+			info.target_info.num_color_targets = 1;
+			info.target_info.has_depth_stencil_target = true;
+			info.target_info.depth_stencil_format = m_Device.GetDepthFormat();
+			m_SkyboxPipeline = SDL_CreateGPUGraphicsPipeline(gpu, &info);
+			if (!m_SkyboxPipeline)
+				FP_LOG_ERROR("Skybox pipeline failed: %s", SDL_GetError());
+		}
+		if (skyFrag)
+			SDL_ReleaseGPUShader(gpu, skyFrag);
 
 		SDL_GPUShader* lineVert = m_Device.LoadShader("Line.vert", 0, 1);
 		SDL_GPUShader* lineFrag = m_Device.LoadShader("Line.frag", 0, 0);
@@ -443,6 +468,67 @@ namespace FP
 		m_Device.UploadToBuffer(cmd, *m_LineVertices, lines.GetVertices().Data(), bytes);
 	}
 
+	void Renderer::PrepareEnvironment(World& world)
+	{
+		if (world.View<SkyboxComponent>().empty())
+			return;
+		const SkyboxComponent* sky = nullptr;
+		for (Entity entity : world.GetEntities())
+		{
+			const SkyboxComponent* candidate = world.TryGet<SkyboxComponent>(entity);
+			if (candidate && candidate->Enabled)
+			{
+				sky = candidate;
+				break;
+			}
+		}
+		if (!sky || sky->Texture.IsEmpty())
+			return;
+
+		const String path = Paths::Content(sky->Texture);
+		std::error_code ec;
+		const auto modified = std::filesystem::last_write_time(path.CStr(), ec);
+		const int64 stamp = ec ? 0 : modified.time_since_epoch().count();
+		if (path != m_EnvironmentPath || stamp != m_EnvironmentModified)
+		{
+			m_EnvironmentPath = path;
+			m_EnvironmentModified = stamp;
+			m_EnvironmentBuffer.Reset();
+			if (m_Environment.Load(path.CStr()))
+				m_EnvironmentBuffer = m_Device.CreateBuffer(SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ, m_Environment.Pixels.Data(),
+					static_cast<uint32>(m_Environment.Pixels.Num()) * sizeof(Vec4));
+			else
+				FP_LOG_WARN("Could not load skybox %s. Use a 2:1 panorama up to 8192 pixels wide.", path.CStr());
+		}
+		if (!m_EnvironmentBuffer)
+			return;
+		m_Frame.EnvironmentParams = { std::max(sky->Intensity, 0.0f), sky->Rotation * DegToRad, sky->Visible ? 1.0f : 0.0f, 0 };
+		m_Frame.EnvironmentSize = { static_cast<float>(m_Environment.Width), static_cast<float>(m_Environment.Height), static_cast<float>(m_Environment.Levels), 0 };
+		for (int32 i = 0; i < 9; ++i)
+			m_Frame.EnvironmentDiffuse[i] = m_Environment.Diffuse[i];
+	}
+
+	void Renderer::DrawSkybox(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, const RenderView& view)
+	{
+		if (m_Frame.EnvironmentSize.Z == 0 || m_Frame.EnvironmentParams.Z == 0)
+			return;
+		struct SkyboxUniforms
+		{
+			Mat4 InverseViewProjection;
+			Vec4 CameraPosition;
+			Vec4 CameraForward;
+			Vec4 Params;
+			Vec4 Size;
+		};
+		const SkyboxUniforms uniforms{ view.GetViewProjection().Inverse(), m_Frame.CameraPosition, m_Frame.CameraForward,
+			m_Frame.EnvironmentParams, m_Frame.EnvironmentSize };
+		SDL_BindGPUGraphicsPipeline(pass, m_SkyboxPipeline);
+		SDL_PushGPUFragmentUniformData(cmd, 0, &uniforms, sizeof(uniforms));
+		SDL_GPUBuffer* buffer = m_EnvironmentBuffer->GetHandle();
+		SDL_BindGPUFragmentStorageBuffers(pass, 0, &buffer, 1);
+		SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+	}
+
 	void Renderer::BuildFrameUniforms(World& world, const RenderView& view, uint32 width, uint32 height)
 	{
 		m_Frame = FrameUniforms();
@@ -613,6 +699,11 @@ namespace FP
 			bind(Texture(data.NormalMap, false, m_Device.GetFlatNormalTexture()));
 			bind(Texture(data.RoughnessMap, false, white));
 			bind(m_SceneCopy.Get(), m_Device.GetClampSampler());
+		}
+		if (draw.Kind != ShaderKind::Unlit)
+		{
+			SDL_GPUBuffer* environment = m_EnvironmentBuffer ? m_EnvironmentBuffer->GetHandle() : m_EmptyEnvironment->GetHandle();
+			SDL_BindGPUFragmentStorageBuffers(pass, 0, &environment, 1);
 		}
 		SDL_BindGPUFragmentSamplers(pass, 0, bindings, count);
 		if (draw.IndirectFirst >= 0)
@@ -939,6 +1030,7 @@ namespace FP
 		m_Mode = view.Mode;
 		EnsureTargets(width, height);
 		BuildFrameUniforms(world, view, width, height);
+		PrepareEnvironment(world);
 		RenderShadows(cmd, world, view);
 
 		const bool hasLines = lines && !lines->GetVertices().IsEmpty();
@@ -1043,6 +1135,7 @@ namespace FP
 			++firstGlass;
 
 		SDL_GPURenderPass* pass = beginScenePass(true);
+		DrawSkybox(cmd, pass, view);
 		drawRange(pass, 0, firstGlass);
 		// Particles go before glass so glass refracts them.
 		DrawParticles(cmd, pass, viewProjection);

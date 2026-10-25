@@ -2,6 +2,9 @@
 #extension GL_GOOGLE_include_directive : require
 #include "Common.glsl"
 #include "Lighting.glsl"
+#define FP_ENVIRONMENT_BINDING 16
+#define FP_ENVIRONMENT_LIGHTING
+#include "Environment.glsl"
 
 // Base PBR shader. Metallic and roughness workflow with specular, emissive and subsurface.
 
@@ -133,6 +136,12 @@ void main()
 	}
 
 	color += Frame.Ambient.rgb * (diffuseColor + EnvironmentBRDF(f0, roughness, nDotV)) * occlusion;
+	if (Frame.EnvironmentSize.z > 0.0)
+	{
+		vec3 diffuse = EnvironmentDiffuse(n) * diffuseColor * (1.0 - f0);
+		vec3 specularLight = EnvironmentReflection(n, v, roughness) * EnvironmentBRDF(f0, roughness, nDotV);
+		color += (diffuse + specularLight) * occlusion;
+	}
 	color += texture(EmissiveMap, InUV).rgb * Material.Emissive.rgb;
 	OutColor = vec4(color, base.a);
 }

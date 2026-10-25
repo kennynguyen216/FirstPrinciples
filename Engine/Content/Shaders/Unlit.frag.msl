@@ -27,6 +27,9 @@ struct FrameData
     float4 LightCone[16];
     float4x4 ShadowMatrix[8];
     float4 ShadowParams[3];
+    float4 EnvironmentParams;
+    float4 EnvironmentSize;
+    float4 EnvironmentDiffuse[9];
 };
 
 struct main0_out
