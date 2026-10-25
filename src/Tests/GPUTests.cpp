@@ -1,4 +1,5 @@
 #include "Tests/TestFramework.h"
+#include "Tests/TestProject.h"
 #include "Engine/Render/GPUDevice.h"
 #include "Engine/Render/Renderer.h"
 #include "Engine/Engine.h"
@@ -155,7 +156,8 @@ FP_TEST(GPU_MeshReloadPicksUpEditsAndRetriesFailures)
 	}
 
 	namespace fs = std::filesystem;
-	const fs::path file = fs::temp_directory_path() / (std::string("FPMeshReload_") + Guid::New().ToString().CStr() + ".obj");
+	Test::ScopedProject project;
+	const fs::path file = fs::path(Paths::GetContentDir().CStr()) / "Reload.obj";
 	const String relative(fs::relative(file, Paths::GetContentDir().CStr()).generic_string().c_str());
 	const String fullPath(file.generic_string().c_str());
 	{

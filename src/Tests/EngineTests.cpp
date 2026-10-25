@@ -1,4 +1,5 @@
 #include "Tests/TestFramework.h"
+#include "Tests/TestProject.h"
 #include "Engine/Engine.h"
 #include "Engine/SceneSerializer.h"
 #include "Engine/SaveData.h"
@@ -223,6 +224,7 @@ FP_TEST(Scene_CopiesOneEntity)
 
 FP_TEST(Scene_SavesMaterialSlots)
 {
+	Test::ScopedProject project;
 	RegisterTestComponents();
 	StrongObjectPtr<World> world(NewObject<World>());
 	const Entity e = world->CreateEntity("Lamp");

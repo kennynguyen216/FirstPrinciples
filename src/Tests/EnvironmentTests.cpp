@@ -1,4 +1,5 @@
 #include "Tests/TestFramework.h"
+#include "Tests/TestProject.h"
 #include "Engine/Engine.h"
 #include "Engine/Paths.h"
 #include "Engine/Render/EnvironmentMap.h"
@@ -100,7 +101,8 @@ FP_TEST(Environment_GPUControlsBackgroundAndLighting)
 	}
 	Engine::RegisterEngineComponents();
 	namespace fs = std::filesystem;
-	const fs::path path = fs::temp_directory_path() / (std::string("FPEnvironment_") + Guid::New().ToString().CStr() + ".hdr");
+	Test::ScopedProject project;
+	const fs::path path = fs::path(Paths::GetContentDir().CStr()) / "Environment.hdr";
 	String image = "#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 4 +X 8\n";
 	const char pixel[4] = { 64, static_cast<char>(128), static_cast<char>(192), static_cast<char>(129) };
 	for (int32 i = 0; i < 32; ++i)

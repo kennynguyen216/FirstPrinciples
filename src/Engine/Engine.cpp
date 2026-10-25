@@ -1,4 +1,5 @@
 #include "Engine/Engine.h"
+#include "Engine/Paths.h"
 #include "Engine/FieldSerializer.h"
 #include "Engine/Net/NetworkComponent.h"
 #include "Engine/Render/MeshData.h"
@@ -33,14 +34,14 @@ namespace FP::Engine
 		{
 			const MaterialComponent& material = *static_cast<const MaterialComponent*>(component);
 			out += "  Material ";
-			FieldSerializer::AppendQuoted(out, material.Material);
+			FieldSerializer::AppendQuoted(out, Paths::AssetReference(material.Material));
 			out += '\n';
 			for (int32 i = 0; i < material.Slots.Num(); ++i)
 			{
 				if (material.Slots[i].IsEmpty())
 					continue;
 				out.Appendf("  Slot %d ", i);
-				FieldSerializer::AppendQuoted(out, material.Slots[i]);
+				FieldSerializer::AppendQuoted(out, Paths::AssetReference(material.Slots[i]));
 				out += '\n';
 			}
 		}
@@ -50,12 +51,12 @@ namespace FP::Engine
 			MaterialComponent& material = *static_cast<MaterialComponent*>(component);
 			int64 index = 0;
 			if (tokens[0] == "Material" && tokens.Num() > 1)
-				material.Material = tokens[1];
+				material.Material = Paths::AssetReference(tokens[1]);
 			else if (tokens[0] == "Slot" && tokens.Num() > 2 && tokens[1].ToInt(index) && index >= 0 && index < MaxMaterialSlots)
 			{
 				if (material.Slots.Num() <= index)
 					material.Slots.Resize(static_cast<int32>(index) + 1);
-				material.Slots[static_cast<int32>(index)] = tokens[2];
+				material.Slots[static_cast<int32>(index)] = Paths::AssetReference(tokens[2]);
 			}
 			else
 				FP_LOG_WARN("Material component has no field %s", tokens[0].CStr());

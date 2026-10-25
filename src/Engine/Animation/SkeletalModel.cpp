@@ -1,5 +1,6 @@
 #include "Engine/Animation/SkeletalModel.h"
 #include "Engine/Paths.h"
+#include "Engine/Assets/AssetDatabase.h"
 
 #include <cgltf.h>
 
@@ -326,7 +327,7 @@ namespace FP
 
 	bool IsGltfPath(std::string_view path)
 	{
-		const String lower = String(path).ToLower();
+		const String lower = Paths::AssetPath(path).ToLower();
 		return lower.EndsWith(".gltf") || lower.EndsWith(".glb");
 	}
 
@@ -336,10 +337,24 @@ namespace FP
 		return library;
 	}
 
-	const SkeletalModel* SkeletalModelLibrary::Load(const String& path)
+	const SkeletalModel* SkeletalModelLibrary::Load(const String& reference)
 	{
+		const String path = Paths::AssetReference(reference);
 		if (path.IsEmpty())
 			return nullptr;
+		const uint64 revision = Paths::GetAssets().Fingerprint(path);
+		if (!m_Revisions.Contains(path) || m_Revisions.FindRef(path) != revision)
+		{
+			m_Revisions.Add(path, revision);
+			m_Failed.Remove(path);
+			if (auto* cached = m_Models.Find(path))
+			{
+				SkeletalModel updated;
+				if (LoadGltf(Paths::Content(path).CStr(), updated))
+					**cached = std::move(updated);
+				return cached->get();
+			}
+		}
 		if (std::shared_ptr<SkeletalModel>* cached = m_Models.Find(path))
 			return cached->get();
 		if (m_Failed.Contains(path))
@@ -361,6 +376,7 @@ namespace FP
 	void SkeletalModelLibrary::Clear()
 	{
 		m_Models.Clear();
+		m_Revisions.Clear();
 		m_Failed.Clear();
 	}
 }
