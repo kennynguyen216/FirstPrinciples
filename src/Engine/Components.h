@@ -165,6 +165,17 @@ namespace FP
 		float GravityScale = 1;
 	};
 
+	// Plays a character controller from the keyboard and mouse with no script: WASD walks, Shift
+	// runs, Space jumps and the mouse turns it. A child camera named Camera tilts with the mouse.
+	struct PlayerInputComponent
+	{
+		float WalkSpeed = 5;
+		float RunSpeed = 9;   // while Shift is held
+		float JumpSpeed = 6;
+		float LookSpeed = 0.15f; // degrees per pixel of mouse movement
+		String Camera = "Player Camera";
+	};
+
 	// Light at the transform's position. In 2D, Position.Z is the height above the sprites.
 	struct PointLightComponent
 	{

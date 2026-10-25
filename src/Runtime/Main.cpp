@@ -11,6 +11,7 @@
 #include "Engine/Net/NetworkSystem.h"
 #include "Engine/Animation/AnimationSystem.h"
 #include "Engine/Physics/PhysicsSystem.h"
+#include "Engine/Physics/PlayerInputSystem.h"
 #include "Engine/UI/UISystem.h"
 #include "Engine/Audio/AudioDevice.h"
 #include "Engine/Project.h"
@@ -166,6 +167,7 @@ int main(int argc, char** argv)
 	// Scripts are optional. The game still runs its built in systems without them.
 	ScriptRuntime::Get().LoadModule(ScriptRuntime::GetDefaultModulePath());
 	world->AddSystem<ScriptSystem>();
+	world->AddSystem<PlayerInputSystem>();
 	world->AddSystem<PhysicsSystem>();
 	world->AddSystem<AnimationSystem>();
 	world->AddSystem<UISystem>();

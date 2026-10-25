@@ -164,6 +164,13 @@ namespace FP::Engine
 			.Field("AirControl", &CharacterControllerComponent::AirControl).Range(0, 1).Tooltip("How much Move steers in the air")
 			.Field("GravityScale", &CharacterControllerComponent::GravityScale);
 
+		registry.Register<PlayerInputComponent>("PlayerInput")
+			.Field("WalkSpeed", &PlayerInputComponent::WalkSpeed).Range(0, 20)
+			.Field("RunSpeed", &PlayerInputComponent::RunSpeed).Range(0, 30).Tooltip("While Shift is held")
+			.Field("JumpSpeed", &PlayerInputComponent::JumpSpeed).Range(0, 20)
+			.Field("LookSpeed", &PlayerInputComponent::LookSpeed).Range(0, 1).Tooltip("Degrees per pixel of mouse movement, 0 turns mouse look off")
+			.Field("Camera", &PlayerInputComponent::Camera).Tooltip("The child camera that tilts up and down");
+
 		static const Array<const char*> motionTypes{ "Dynamic", "Kinematic", "Static" };
 		registry.Register<RigidBodyComponent>("RigidBody")
 			.Field("Motion", &RigidBodyComponent::Motion).Choices(motionTypes)

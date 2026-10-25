@@ -364,3 +364,37 @@ FP_TEST(Physics_CharactersTouchTriggersAndPushCrates)
 	FP_EXPECT(physics.GetCharacterCount() == 0);
 	FP_EXPECT(Saw(events, PhysicsEvent::Kind::CollisionExit, player, floor));
 }
+
+#include "Engine/Physics/PlayerInputSystem.h"
+#include "Engine/Input.h"
+
+FP_TEST(Physics_PlayerInputWalksAndLooks)
+{
+	Engine::RegisterEngineComponents();
+	StrongObjectPtr<World> world(NewObject<World>());
+	MakeFloor(*world.Get());
+	const Entity player = world->CreateEntity("Player");
+	world->Get<TransformComponent>(player).Position = { 0, 1, 0 };
+	world->Add<CharacterControllerComponent>(player);
+	world->Add<PlayerInputComponent>(player);
+	const Entity camera = world->CreateEntity("Player Camera");
+	world->SetParent(camera, player);
+	world->AddSystem<PlayerInputSystem>();
+	world->AddSystem<PhysicsSystem>();
+	world->BeginPlay();
+	Run(*world.Get(), 0.5f);
+
+	// W walks forward, which is -Z before any turning.
+	Input::SetKey(SDL_SCANCODE_W, true);
+	Run(*world.Get(), 1.0f);
+	Input::SetKey(SDL_SCANCODE_W, false);
+	FP_EXPECT(world->Get<TransformComponent>(player).Position.Z < -3);
+
+	// The mouse turns the player and tilts its camera.
+	Input::AddMouseDelta({ 100, 50 });
+	world->Update(PhysicsWorld::FixedStep);
+	Input::EndFrame();
+	FP_EXPECT(world->Get<TransformComponent>(player).Rotation.Y < -10);
+	FP_EXPECT(world->Get<TransformComponent>(camera).Rotation.X < -5);
+	world->EndPlay();
+}

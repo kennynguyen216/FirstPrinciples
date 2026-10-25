@@ -24,6 +24,7 @@
 #include "Engine/Scripting/ScriptSystem.h"
 #include "Engine/Animation/AnimationSystem.h"
 #include "Engine/Physics/PhysicsSystem.h"
+#include "Engine/Physics/PlayerInputSystem.h"
 #include "Engine/UI/UISystem.h"
 #include "Engine/Animation/SkeletalModel.h"
 #include "Game.h"
@@ -1407,6 +1408,7 @@ namespace FP::Editor
 		// Snapshot the scene so Stop can put everything back.
 		m_PlaySnapshot = SceneSerializer::SaveToString(*m_World.Get());
 		m_World->AddSystem<ScriptSystem>();
+		m_World->AddSystem<PlayerInputSystem>();
 		m_World->AddSystem<PhysicsSystem>();
 		m_World->AddSystem<AnimationSystem>();
 		m_World->AddSystem<UISystem>();
