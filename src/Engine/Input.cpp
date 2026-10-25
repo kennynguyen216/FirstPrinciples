@@ -1,4 +1,5 @@
 #include "Engine/Input.h"
+#include "Engine/SaveData.h"
 #include "Core/Misc/ModuleContext.h"
 #include "Core/Log.h"
 
@@ -10,6 +11,8 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <cstdio>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -33,6 +36,7 @@ namespace FP::Input
 			Vec2 Direction{ 1, 0 }; // where one press points, from +X, -X, +Y or -Y
 			float Scale = 1;
 			bool Scaled = false; // a scale was given
+			bool operator==(const Binding&) const = default;
 		};
 
 		struct ActionData
@@ -63,6 +67,15 @@ namespace FP::Input
 			std::vector<SDL_Gamepad*> Pads;
 
 			std::vector<ActionData> Actions;
+			std::vector<ActionData> ProjectActions;
+			RebindStatus Rebind = RebindStatus::Idle;
+			std::string RebindAction;
+			size_t RebindIndex = 0;
+			bool RebindAxes = false;
+			bool AxisArmed[static_cast<int>(GamepadAxis::Count)] = {};
+			bool Consuming = false;
+			Binding Consumed;
+			std::string LastRebound;
 			bool ActionsLoaded = false; // the defaults load on first use otherwise
 			float DeltaTime = 1.0f / 60.0f;
 		};
@@ -83,6 +96,9 @@ namespace FP::Input
 			static State state;
 			return ResolveShared(&ModuleContext::Input, state);
 		}
+
+		bool ActionsSuppressed() { return GetState().Rebind == RebindStatus::Listening || GetState().Consuming; }
+		void Capture(Binding::Source source, int32 code, bool negative = false);
 
 		bool InRange(Key key) { return key > SDL_SCANCODE_UNKNOWN && key < SDL_SCANCODE_COUNT; }
 	}
@@ -310,12 +326,14 @@ Pause     Button:Start
 
 	bool IsActionDown(std::string_view name)
 	{
+		if (ActionsSuppressed()) return false;
 		const ActionData* action = FindAction(name);
 		return action && DownOf(*action);
 	}
 
 	bool WasActionPressed(std::string_view name)
 	{
+		if (ActionsSuppressed()) return false;
 		const ActionData* action = FindAction(name);
 		if (!action)
 			return false;
@@ -330,6 +348,7 @@ Pause     Button:Start
 
 	bool WasActionReleased(std::string_view name)
 	{
+		if (ActionsSuppressed()) return false;
 		const ActionData* action = FindAction(name);
 		if (!action)
 			return false;
@@ -343,6 +362,7 @@ Pause     Button:Start
 
 	float GetActionValue(std::string_view name)
 	{
+		if (ActionsSuppressed()) return 0;
 		const ActionData* action = FindAction(name);
 		if (!action)
 			return 0;
@@ -357,13 +377,13 @@ Pause     Button:Start
 
 	Vec2 GetActionAxis(std::string_view name)
 	{
+		if (ActionsSuppressed()) return {};
 		const ActionData* action = FindAction(name);
 		return action ? AxisOf(*action) : Vec2();
 	}
 
-	bool LoadActions(std::string_view text, std::vector<std::string>* errors)
+	static bool ParseActions(std::string_view text, std::vector<ActionData>& actions, std::vector<std::string>* errors)
 	{
-		std::vector<ActionData> actions;
 		bool ok = true;
 		size_t start = 0;
 		int32 lineNumber = 0;
@@ -396,21 +416,28 @@ Pause     Button:Start
 
 			Binding binding;
 			const size_t colon = words.size() > 1 ? words[1].find(':') : std::string_view::npos;
-			bool good = colon != std::string_view::npos && ParseBinding(words[1].substr(0, colon), words[1].substr(colon + 1), binding);
+			bool directionGiven = false;
+			bool good = words.size() <= 4 && colon != std::string_view::npos && ParseBinding(words[1].substr(0, colon), words[1].substr(colon + 1), binding);
 			for (size_t i = 2; good && i < words.size(); ++i)
 			{
 				const std::string_view word = words[i];
+				if (word == "+X" || word == "-X" || word == "+Y" || word == "-Y")
+				{
+					if (directionGiven) { good = false; break; }
+					directionGiven = true;
+				}
 				if (word == "+X") binding.Direction = { 1, 0 };
 				else if (word == "-X") binding.Direction = { -1, 0 };
 				else if (word == "+Y") binding.Direction = { 0, 1 };
 				else if (word == "-Y") binding.Direction = { 0, -1 };
 				else
 				{
+					if (binding.Scaled) { good = false; break; }
 					char* stop = nullptr;
 					const std::string number(word);
 					binding.Scale = std::strtof(number.c_str(), &stop);
 					binding.Scaled = true;
-					good = stop && *stop == 0;
+					good = stop && *stop == 0 && std::isfinite(binding.Scale);
 				}
 			}
 			if (!good)
@@ -429,9 +456,47 @@ Pause     Button:Start
 			}
 			found->Bindings.push_back(binding);
 		}
+		return ok;
+	}
+
+	bool ValidateActions(std::string_view text, std::vector<std::string>* errors)
+	{
+		std::vector<ActionData> actions;
+		return ParseActions(text, actions, errors);
+	}
+
+	bool LoadActions(std::string_view text, std::vector<std::string>* errors)
+	{
+		std::vector<ActionData> actions;
+		const bool ok = ParseActions(text, actions, errors);
+		GetState().ProjectActions = actions;
 		GetState().Actions = std::move(actions);
 		GetState().ActionsLoaded = true;
+		GetState().Rebind = RebindStatus::Idle;
+		GetState().Consuming = false;
 		return ok;
+	}
+
+	std::vector<std::string> GetBindingInputs(std::string_view device)
+	{
+		std::vector<std::string> names;
+		if (SameName(device, "Key"))
+		{
+			for (int code = 1; code < SDL_SCANCODE_COUNT; ++code)
+			{
+				std::string name = SDL_GetScancodeName(static_cast<Key>(code));
+				if (name.empty() || name.find('#') != std::string::npos) continue;
+				std::replace(name.begin(), name.end(), ' ', '_');
+				if (SDL_GetScancodeFromName(SDL_GetScancodeName(static_cast<Key>(code))) == code)
+					names.push_back(std::move(name));
+			}
+			std::sort(names.begin(), names.end());
+		}
+		else if (SameName(device, "Mouse")) names = { "Left", "Right", "Middle", "Delta" };
+		else if (SameName(device, "Button")) names.assign(std::begin(ButtonNames), std::end(ButtonNames));
+		else if (SameName(device, "Axis")) names.assign(std::begin(AxisNames), std::end(AxisNames));
+		else if (SameName(device, "Stick")) names = { "Left", "Right" };
+		return names;
 	}
 
 	bool LoadActionsFile(const char* path)
@@ -468,6 +533,232 @@ Pause     Button:Start
 		return names;
 	}
 
+	namespace
+	{
+		ActionData* FindIn(std::vector<ActionData>& actions, std::string_view name)
+		{
+			for (ActionData& action : actions)
+				if (SameName(action.Name, name)) return &action;
+			return nullptr;
+		}
+
+		bool ValidActionName(std::string_view name)
+		{
+			if (name.empty()) return false;
+			for (unsigned char c : name)
+				if (std::isspace(c) || c == '#' || c == 0) return false;
+			return true;
+		}
+
+		std::string BindingText(const Binding& binding)
+		{
+			using Source = Binding::Source;
+			std::string text;
+			if (binding.From == Source::Key)
+			{
+				text = "Key:" + std::string(SDL_GetScancodeName(static_cast<Key>(binding.Code)));
+				std::replace(text.begin(), text.end(), ' ', '_');
+			}
+			else if (binding.From == Source::Mouse) text = std::string("Mouse:") + (binding.Code == 0 ? "Left" : binding.Code == 1 ? "Right" : "Middle");
+			else if (binding.From == Source::MouseDelta) text = "Mouse:Delta";
+			else if (binding.From == Source::Button) text = std::string("Button:") + ButtonNames[binding.Code];
+			else if (binding.From == Source::Axis) text = std::string("Axis:") + AxisNames[binding.Code];
+			else text = binding.Code ? "Stick:Right" : "Stick:Left";
+			if (binding.Direction.X < 0) text += " -X";
+			else if (binding.Direction.Y > 0) text += " +Y";
+			else if (binding.Direction.Y < 0) text += " -Y";
+			if (binding.Scaled)
+			{
+				char scale[32];
+				std::snprintf(scale, sizeof(scale), " %.9g", binding.Scale);
+				text += scale;
+			}
+			return text;
+		}
+
+		bool ReadBindings(std::string_view name, const std::vector<std::string>& bindings, ActionData& out)
+		{
+			if (!ValidActionName(name)) return false;
+			std::string text;
+			for (const std::string& binding : bindings)
+			{
+				if (binding.find_first_of("\r\n") != std::string::npos || binding.find('\0') != std::string::npos) return false;
+				text += std::string(name) + " " + binding + "\n";
+			}
+			std::vector<ActionData> parsed;
+			if (!ParseActions(text, parsed, nullptr)) return false;
+			if (!bindings.empty() && (parsed.size() != 1 || parsed[0].Bindings.size() != bindings.size())) return false;
+			out = bindings.empty() ? ActionData{ std::string(name), {}, false } : std::move(parsed[0]);
+			return true;
+		}
+
+		void Capture(Binding::Source source, int32 code, bool negative)
+		{
+			State& state = GetState();
+			if (state.Rebind != RebindStatus::Listening) return;
+			if (source == Binding::Source::Key)
+			{
+				const std::string name = SDL_GetScancodeName(static_cast<Key>(code));
+				if (name.empty() || name.find('#') != std::string::npos) return;
+			}
+			state.Consuming = true;
+			state.Consumed = Binding();
+			state.Consumed.From = source;
+			state.Consumed.Code = code;
+			if (source == Binding::Source::Key && code == SDL_SCANCODE_ESCAPE)
+			{
+				state.Rebind = RebindStatus::Cancelled;
+				return;
+			}
+			ActionData* action = FindIn(state.Actions, state.RebindAction);
+			if (!action || state.RebindIndex >= action->Bindings.size())
+			{
+				state.Rebind = RebindStatus::Cancelled;
+				return;
+			}
+			Binding& binding = action->Bindings[state.RebindIndex];
+			binding.From = source;
+			binding.Code = code;
+			if (negative)
+			{
+				binding.Scale *= -1;
+				binding.Scaled = true;
+			}
+			state.LastRebound = BindingText(binding);
+			state.Rebind = RebindStatus::Complete;
+			action->WasDown = false;
+		}
+	}
+
+	std::vector<std::string> GetActionBindings(std::string_view name)
+	{
+		std::vector<std::string> bindings;
+		if (const ActionData* action = FindAction(name))
+			for (const Binding& binding : action->Bindings) bindings.push_back(BindingText(binding));
+		return bindings;
+	}
+
+	bool SetActionBindings(std::string_view name, const std::vector<std::string>& bindings)
+	{
+		ActionData replacement;
+		if (!ReadBindings(name, bindings, replacement)) return false;
+		FindAction({});
+		if (ActionData* action = FindIn(GetState().Actions, name))
+		{
+			replacement.Name = action->Name;
+			*action = std::move(replacement);
+		}
+		else GetState().Actions.push_back(std::move(replacement));
+		if (SameName(GetState().RebindAction, name)) CancelActionRebind();
+		return true;
+	}
+
+	bool RebindAction(std::string_view name, size_t index, std::string_view binding)
+	{
+		std::vector<std::string> bindings = GetActionBindings(name);
+		if (index >= bindings.size()) return false;
+		bindings[index] = binding;
+		return SetActionBindings(name, bindings);
+	}
+
+	bool ResetActionBindings(std::string_view name)
+	{
+		FindAction({});
+		State& state = GetState();
+		ActionData* action = FindIn(state.Actions, name);
+		if (!action) return false;
+		if (const ActionData* original = FindIn(state.ProjectActions, name))
+		{
+			*action = *original;
+			action->WasDown = false;
+		}
+		else state.Actions.erase(std::remove_if(state.Actions.begin(), state.Actions.end(), [&](const ActionData& item) { return SameName(item.Name, name); }), state.Actions.end());
+		if (SameName(state.RebindAction, name)) CancelActionRebind();
+		return true;
+	}
+
+	void ResetAllActionBindings()
+	{
+		FindAction({});
+		GetState().Actions = GetState().ProjectActions;
+		CancelActionRebind();
+	}
+
+	bool SaveActionBindings(std::string_view slot)
+	{
+		FindAction({});
+		SaveData settings;
+		settings.SetInt("version", 1);
+		std::string names;
+		for (const ActionData& action : GetState().Actions)
+		{
+			const ActionData* original = FindIn(GetState().ProjectActions, action.Name);
+			if (original && original->Bindings == action.Bindings) continue;
+			names += action.Name + "\n";
+			std::string bindings;
+			for (const Binding& binding : action.Bindings) bindings += BindingText(binding) + "\n";
+			settings.SetString("binding." + action.Name, bindings);
+		}
+		settings.SetString("names", names);
+		return settings.Save(slot);
+	}
+
+	bool LoadActionBindings(std::string_view slot)
+	{
+		SaveData settings;
+		if (!settings.Load(slot) || settings.GetInt("version") != 1 || !settings.Has("names")) return false;
+		const String names = settings.GetString("names", "\n");
+		std::istringstream list(std::string(names.View()));
+		std::vector<ActionData> overrides;
+		std::string name;
+		while (std::getline(list, name))
+		{
+			if (!ValidActionName(name) || FindIn(overrides, name) || !settings.Has("binding." + name)) return false;
+			const String text = settings.GetString("binding." + name, "\n");
+			std::istringstream lines(std::string(text.View()));
+			std::vector<std::string> bindings;
+			std::string binding;
+			while (std::getline(lines, binding)) bindings.push_back(binding);
+			ActionData action;
+			if (!ReadBindings(name, bindings, action)) return false;
+			overrides.push_back(std::move(action));
+		}
+		FindAction({});
+		std::vector<ActionData> actions = GetState().ProjectActions;
+		for (ActionData& replacement : overrides)
+		{
+			if (ActionData* action = FindIn(actions, replacement.Name)) *action = std::move(replacement);
+			else actions.push_back(std::move(replacement));
+		}
+		GetState().Actions = std::move(actions);
+		CancelActionRebind();
+		return true;
+	}
+
+	bool BeginActionRebind(std::string_view name, size_t index, bool allowAxes)
+	{
+		const ActionData* action = FindAction(name);
+		if (!action || index >= action->Bindings.size()) return false;
+		State& state = GetState();
+		state.RebindAction = action->Name;
+		state.RebindIndex = index;
+		state.RebindAxes = allowAxes;
+		state.Rebind = RebindStatus::Listening;
+		state.LastRebound.clear();
+		state.Consuming = false;
+		for (int32 i = 0; i < static_cast<int32>(GamepadAxis::Count); ++i)
+			state.AxisArmed[i] = std::fabs(state.PadAxis[i]) < 0.25f;
+		return true;
+	}
+
+	void CancelActionRebind()
+	{
+		if (GetState().Rebind == RebindStatus::Listening) GetState().Rebind = RebindStatus::Cancelled;
+	}
+
+	RebindStatus GetActionRebindStatus() { return GetState().Rebind; }
+	std::string GetLastReboundInput() { return GetState().LastRebound; }
+
 	void SetDeltaTime(float seconds) { GetState().DeltaTime = seconds; }
 
 	void SetGamepadButton(GamepadButton button, bool down)
@@ -479,12 +770,18 @@ Pause     Button:Start
 			return;
 		GetState().PadDown[index] = down;
 		(down ? GetState().PadPressed : GetState().PadReleased)[index] = true;
+		if (down) Capture(Binding::Source::Button, index);
 	}
 
 	void SetGamepadAxis(GamepadAxis axis, float value)
 	{
-		if (axis < GamepadAxis::Count)
-			GetState().PadAxis[static_cast<int>(axis)] = std::clamp(value, -1.0f, 1.0f);
+		if (axis >= GamepadAxis::Count || !std::isfinite(value)) return;
+		State& state = GetState();
+		const int index = static_cast<int>(axis);
+		state.PadAxis[index] = std::clamp(value, -1.0f, 1.0f);
+		if (std::fabs(value) < 0.25f) state.AxisArmed[index] = true;
+		if (state.RebindAxes && state.AxisArmed[index] && std::fabs(value) > 0.75f)
+			Capture(Binding::Source::Axis, index, value < 0);
 	}
 
 	void SetKey(Key key, bool down)
@@ -493,13 +790,17 @@ Pause     Button:Start
 			return;
 		GetState().Down[key] = down;
 		(down ? GetState().Pressed : GetState().Released)[key] = true;
+		if (down) Capture(Binding::Source::Key, key);
 	}
 
 	void SetMouseButton(MouseButton button, bool down)
 	{
 		const int index = static_cast<int>(button);
 		if (down && !GetState().MouseDown[index])
+		{
 			GetState().MousePressed[index] = true;
+			Capture(Binding::Source::Mouse, index);
+		}
 		GetState().MouseDown[index] = down;
 	}
 
@@ -578,7 +879,7 @@ Pause     Button:Start
 	void EndFrame()
 	{
 		for (ActionData& action : GetState().Actions)
-			action.WasDown = DownOf(action);
+			action.WasDown = !ActionsSuppressed() && DownOf(action);
 		std::memset(GetState().Pressed, 0, sizeof(GetState().Pressed));
 		std::memset(GetState().Released, 0, sizeof(GetState().Released));
 		std::memset(GetState().MousePressed, 0, sizeof(GetState().MousePressed));
@@ -587,6 +888,9 @@ Pause     Button:Start
 		GetState().Scroll = {};
 		GetState().MouseDelta = {};
 		GetState().Typed.clear();
+		State& state = GetState();
+		if (state.Consuming && Evaluate(state.Consumed).LengthSquared() < 0.0625f)
+			state.Consuming = false;
 	}
 
 	void Reset()
@@ -596,10 +900,14 @@ Pause     Button:Start
 		const CursorMode cursor = state.Cursor;
 		std::vector<SDL_Gamepad*> pads = std::move(state.Pads);
 		std::vector<ActionData> actions = std::move(state.Actions);
+		std::vector<ActionData> projectActions = std::move(state.ProjectActions);
+		const RebindStatus rebind = state.Rebind == RebindStatus::Listening ? RebindStatus::Cancelled : RebindStatus::Idle;
 		const float deltaTime = state.DeltaTime;
 		const bool loaded = state.ActionsLoaded;
 		state = State();
 		state.Actions = std::move(actions);
+		state.ProjectActions = std::move(projectActions);
+		state.Rebind = rebind;
 		state.ActionsLoaded = loaded;
 		state.DeltaTime = deltaTime;
 		state.MousePosition = mouse;

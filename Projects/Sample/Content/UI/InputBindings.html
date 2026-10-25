@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="InputBindings.css">
+</head>
+<body>
+	<main>
+		<div class="eyebrow">INPUT SETTINGS</div>
+		<h1>Make the controls yours</h1>
+		<p>Pick an action and reassign its controls. Press Escape to cancel a capture.</p>
+		<div class="toolbar">
+			<label>Action <select id="action"></select></label>
+			<label><input id="axes" type="checkbox"> Capture gamepad axes</label>
+			<button id="add">Add binding</button>
+			<button id="reset">Reset action</button>
+		</div>
+		<div id="bindings"></div>
+		<div class="status" data-bind="controlsStatus">Loading bindings...</div>
+		<div class="toolbar">
+			<button id="save" class="primary">Save controls</button>
+			<button id="load">Load saved</button>
+			<button id="resetAll">Reset all</button>
+			<span class="counter">Jump presses <b data-bind="jumpCount">0</b></span>
+		</div>
+		<p class="hint">Or type a binding such as Key:G, Button:South or Axis:RightTrigger and press Apply.
+		Saved controls belong to this player and leave the project's Input.actions unchanged.</p>
+	</main>
+	<script src="InputBindings.js"></script>
+</body>
+</html>

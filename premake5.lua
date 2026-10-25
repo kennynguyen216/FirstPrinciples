@@ -370,3 +370,15 @@ project "Tests"
 	files { "src/Tools/HeaderTool/HeaderParser.h", "src/Tools/HeaderTool/HeaderParser.cpp" }
 	UseEngine(false)
 	dependson { "GameScripts" }
+
+project "EditorTests"
+	kind "ConsoleApp"
+	dependson { "Editor" }
+	files {
+		"src/EditorTests/**.cpp",
+		"src/Editor/CodeEditor.h", "src/Editor/CodeEditor.cpp",
+		"src/Editor/InputActionsEditor.h", "src/Editor/InputActionsEditor.cpp",
+	}
+	UseEngine(false)
+	UseQt()
+	AddMocRules("src/Editor")

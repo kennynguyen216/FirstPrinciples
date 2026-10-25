@@ -409,6 +409,58 @@ by turning `Primary` off everywhere else.
 
 **Input actions and gamepads**
 
+Choose **Edit > Input Actions...** or double click `Input.actions` in the Content Browser to edit
+bindings in a tab. Each row has an action name, device, input, optional direction and scale.
+Use **Add Binding** and **Remove Selected** to change the rows. The input picker offers the names
+accepted by each device. Leave a scale blank to keep its default behavior, especially for sticks.
+
+The **Source** view edits the same document and preserves comments. Undo and redo work in both
+views. Save with Ctrl+S, the tab's **Save** button or **Save All**. Invalid lines are listed below
+the bindings and cannot be saved. Click an error to jump to its source. Unsaved edits are checked
+when closing a tab, quitting or packaging. Changes apply the next time Play starts and when the
+runtime next opens the project. Opening the editor from the Edit menu recreates a missing
+`Input.actions` with the defaults.
+
+Gameplay scripts can also change bindings immediately through `Input`:
+
+```cpp
+const auto names = Input::GetActionNames();
+const auto bindings = Input::GetActionBindings("Jump");
+Input::RebindAction("Jump", 0, "Key:G");
+Input::SetActionBindings("Jump", { "Key:G", "Button:South" });
+Input::SetActionBindings("Jump", {}); // leave the action unbound
+Input::ResetActionBindings("Jump");
+Input::ResetAllActionBindings();
+```
+
+Replacement strings use the same device, direction and scale syntax as `Input.actions`.
+Invalid replacements leave the current bindings alone. Reset restores the bindings from the most
+recent `LoadActions` or `LoadActionsFile`, so project defaults stay separate from player preferences.
+
+For a menu that asks the player to press a new control, call
+`Input::BeginActionRebind("Jump", 0)`, then check `Input::GetActionRebindStatus()` for `Listening`,
+`Complete` or `Cancelled`. `GetLastReboundInput()` returns the completed binding string.
+Capture accepts fresh keyboard, mouse button and gamepad button presses. Escape or
+`CancelActionRebind()` cancels, and losing focus cancels too. Held controls are ignored.
+Named actions are suppressed during capture and until the captured control is released.
+
+Pass `true` as the third argument to capture individual gamepad axes too. An axis must first
+return near its center and then move past 75 percent. Capturing preserves the binding's direction
+and scale, with negative axis movement inverted to match the chosen direction. Mouse motion is
+ignored during capture. Use `SetActionBindings` for whole sticks or mouse delta bindings.
+
+Use `Input::SaveActionBindings()` to save player overrides and `Input::LoadActionBindings()` at
+play start to restore them. Both accept an optional SaveData slot name for profiles. These files
+live in the project's user save folder and leave `Content/Input.actions` unchanged. Only changed
+actions are saved, so new project actions remain available. Failed loads leave current bindings
+alone. Saving after a reset keeps the reset for the next launch.
+
+Open `Scenes/InputBindings.scene` and press Play for a working menu, backed by the
+`InputRebindMenu` script and `UI/InputBindings.html`. It lists bindings, captures replacements,
+accepts typed bindings and saves or restores controls through the existing `engine.send` bridge.
+The Jump counter lets you try the new binding after releasing its capture press. The menu uses
+the same optional Ultralight SDK as other game UI pages.
+
 Games ask for actions like Jump or Move instead of keys, so the keyboard, mouse and any gamepad
 all play. `Content/Input.actions` binds them, one input per line, and new projects get a copy of
 the defaults:
@@ -785,6 +837,9 @@ The editor follows Unreal Engine 5's layout and dark theme, using this engine's 
   editor UI time are not included. The status bar opens each panel and has a console box: type
   `help` for commands including play, pause, resume, step and stop.
 
+The Hierarchy tab is active when the editor opens. Selecting an entity or asset brings Details
+forward so its properties can be edited.
+
 ### Content browser
 
 The **Content Browser** tab next to the **Output Log** at the bottom of the editor shows everything in
@@ -1094,6 +1149,7 @@ The committed Vulkan SPIR-V uses SDL's normal descriptor sets. See
 | PackageTool | Cooks content and stages a Release game for distribution |
 | GameScripts | Hot reloadable C++ scripts (`Source/Scripts`) |
 | Tests | Unit tests. Run `Projects/Sample/Binaries/Debug/Tests [filter]` |
+| EditorTests | Input actions editor tests. Run `Projects/Sample/Binaries/Debug/EditorTests` |
 
 ## Third party
 
