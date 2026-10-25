@@ -79,7 +79,7 @@ namespace FP::Engine
 		registry.Register<NameComponent>("Name")
 			.Field("Name", &NameComponent::Name);
 
-		static const Array<const char*> audioBuses{ "SFX", "Music", "UI" };
+		static const Array<const char*> audioBuses{ "SFX", "Music", "UI", "Voice" };
 		registry.Register<AudioSourceComponent>("AudioSource")
 			.Field("Clip", &AudioSourceComponent::Clip).AssetPath("Audio (*.wav)")
 			.Field("Enabled", &AudioSourceComponent::Enabled)
@@ -89,11 +89,19 @@ namespace FP::Engine
 			.Field("PlayOnStart", &AudioSourceComponent::PlayOnStart)
 			.Field("Bus", &AudioSourceComponent::Bus).Choices(audioBuses)
 			.Field("Spatial", &AudioSourceComponent::Spatial)
+			.Field("Occlusion", &AudioSourceComponent::Occlusion).Tooltip("Spatial sounds are quieter and muffled behind solid colliders; requires PhysicsSystem during Play")
 			.Field("MinDistance", &AudioSourceComponent::MinDistance).Range(0.001f, 1e9f)
 			.Field("MaxDistance", &AudioSourceComponent::MaxDistance).Range(0.001f, 1e9f)
 			.Field("Priority", &AudioSourceComponent::Priority).Range(0, 255).Tooltip("Higher priority voices keep playing when too many sounds play at once");
 		registry.Register<AudioListenerComponent>("AudioListener")
 			.Field("Enabled", &AudioListenerComponent::Enabled);
+
+		registry.Register<VoiceChatComponent>("VoiceChat")
+			.Field("Enabled", &VoiceChatComponent::Enabled).Tooltip("Player needs Network OnePerPeer; enable microphone explicitly, then hold V to talk")
+			.Field("Volume", &VoiceChatComponent::Volume).Range(0, 1)
+			.Field("MinDistance", &VoiceChatComponent::MinDistance).Range(0.001f, 1e9f)
+			.Field("MaxDistance", &VoiceChatComponent::MaxDistance).Range(0.001f, 1e9f)
+			.Field("Occlusion", &VoiceChatComponent::Occlusion).Tooltip("Muffles voices behind solid colliders; requires PhysicsSystem during Play");
 
 		registry.Register<TransformComponent>("Transform")
 			.Field("Position", &TransformComponent::Position)
@@ -180,6 +188,22 @@ namespace FP::Engine
 			.Field("Height", &ColliderComponent::Height).Tooltip("Capsule height from end to end, along Y")
 			.Field("Offset", &ColliderComponent::Offset)
 			.Field("Trigger", &ColliderComponent::Trigger).Tooltip("Reports overlaps to scripts instead of blocking");
+
+		registry.Register<CharacterControllerComponent>("CharacterController")
+			.Field("Radius", &CharacterControllerComponent::Radius).Range(0.05f, 10)
+			.Field("Height", &CharacterControllerComponent::Height).Range(0.1f, 20).Tooltip("End to end, standing along Y")
+			.Field("StepHeight", &CharacterControllerComponent::StepHeight).Range(0, 2).Tooltip("Steps up to this tall are climbed")
+			.Field("MaxSlope", &CharacterControllerComponent::MaxSlope).Range(0, 89).Tooltip("Steepest walkable ground in degrees")
+			.Field("Mass", &CharacterControllerComponent::Mass).Range(1, 1000).Tooltip("Kilograms, for pushing things")
+			.Field("AirControl", &CharacterControllerComponent::AirControl).Range(0, 1).Tooltip("How much Move steers in the air")
+			.Field("GravityScale", &CharacterControllerComponent::GravityScale);
+
+		registry.Register<PlayerInputComponent>("PlayerInput")
+			.Field("WalkSpeed", &PlayerInputComponent::WalkSpeed).Range(0, 20)
+			.Field("RunSpeed", &PlayerInputComponent::RunSpeed).Range(0, 30).Tooltip("While Shift is held")
+			.Field("JumpSpeed", &PlayerInputComponent::JumpSpeed).Range(0, 20)
+			.Field("LookSpeed", &PlayerInputComponent::LookSpeed).Range(0, 1).Tooltip("Degrees per pixel of mouse movement, 0 turns mouse look off")
+			.Field("Camera", &PlayerInputComponent::Camera).Tooltip("The child camera that tilts up and down");
 
 		static const Array<const char*> motionTypes{ "Dynamic", "Kinematic", "Static" };
 		registry.Register<RigidBodyComponent>("RigidBody")

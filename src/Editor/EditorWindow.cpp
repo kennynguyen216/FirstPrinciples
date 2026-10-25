@@ -2,6 +2,7 @@
 #include "Editor/AudioImport.h"
 #include "Engine/Audio/AudioDevice.h"
 #include "Engine/Audio/AudioWorld.h"
+#include "Engine/Audio/VoiceChat.h"
 #include "Editor/CodeEditor.h"
 #include "Editor/ContentBrowser.h"
 #include "Editor/DockTab.h"
@@ -16,6 +17,7 @@
 #include "Engine/ComponentRegistry.h"
 #include "Engine/Input.h"
 #include "Engine/Material.h"
+#include "Engine/Net/NetworkSystem.h"
 #include "Engine/Render/MeshData.h"
 #include "Engine/Paths.h"
 #include "Engine/Project.h"
@@ -24,6 +26,7 @@
 #include "Engine/Scripting/ScriptSystem.h"
 #include "Engine/Animation/AnimationSystem.h"
 #include "Engine/Physics/PhysicsSystem.h"
+#include "Engine/Physics/PlayerInputSystem.h"
 #include "Engine/UI/UISystem.h"
 #include "Engine/Particles/ParticleSystem.h"
 #include "Engine/Animation/SkeletalModel.h"
@@ -31,6 +34,8 @@
 
 #include <SDL3/SDL_timer.h>
 #include <SDL3/SDL_events.h>
+
+#include <type_traits>
 
 #include <QApplication>
 #include <QClipboard>
@@ -54,11 +59,13 @@
 #include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QProcess>
 #include <QStatusBar>
+#include <QSignalBlocker>
 #include <QTabBar>
 #include <QTabWidget>
 #include <QTimer>
@@ -124,7 +131,11 @@ namespace FP::Editor
 		connect(m_Viewport, &ViewportWidget::EntityDropped, this, [this](const QString& kind, Vec3 point) {
 			const Entity entity = CreateEntity(kind);
 			if (entity != NullEntity)
-				m_World->Get<TransformComponent>(entity).Position = point;
+			{
+				// Characters stand on the drop point rather than sinking halfway into it.
+				const float lift = kind == "Character" ? 1.0f : 0.0f;
+				m_World->Get<TransformComponent>(entity).Position = point + Vec3(0, lift, 0);
+			}
 		});
 
 		// Drives the world and the viewport at about 60 fps.
@@ -338,6 +349,7 @@ namespace FP::Editor
 			meshes->addAction(name, this, [this, name]() { CreateEntity(name); });
 		}
 		entity->addAction("Create &Point Light", this, [this]() { CreateEntity("Point Light"); });
+		entity->addAction("Create &Character", this, [this]() { CreateEntity("Character"); });
 		entity->addAction("Create Particle E&mitter", this, [this]() { CreateEntity("Particle Emitter"); });
 		entity->addAction("Create &Directional Light", this, [this]() { CreateEntity("Directional Light"); });
 		// Text fields take these keys first, so they still copy, paste and erase text there.
@@ -526,7 +538,7 @@ namespace FP::Editor
 		hint->setStyleSheet("color: #7a7a7a; padding-right: 8px;");
 		statusBar()->addPermanentWidget(hint);
 		QPushButton* audioSettings = new QPushButton("Audio...");
-		audioSettings->setToolTip("Output diagnostics and Master, SFX, Music and UI gains");
+		audioSettings->setToolTip("Output diagnostics, audio mixer and proximity voice chat");
 		connect(audioSettings, &QPushButton::clicked, this, &EditorWindow::ShowAudioSettings);
 		statusBar()->addPermanentWidget(audioSettings);
 		m_AudioStatus = new QLabel();
@@ -1296,6 +1308,25 @@ namespace FP::Editor
 			entity = m_World->CreateEntity(name);
 			m_World->Add<SpriteComponent>(entity);
 		}
+		else if (kind == "Character")
+		{
+			// A pill that plays straight away: it walks, jumps and looks around, and the game sees
+			// it through a camera that follows behind.
+			entity = m_World->CreateEntity(name);
+			m_World->Get<TransformComponent>(entity).Position.Y = 1;
+			m_World->Add<MeshComponent>(entity).Mesh = "Capsule";
+			m_World->Add<CharacterControllerComponent>(entity);
+			const String cameraName = m_World->Add<PlayerInputComponent>(entity).Camera;
+
+			const Entity camera = m_World->CreateEntity(cameraName);
+			TransformComponent& view = m_World->Get<TransformComponent>(camera);
+			view.Position = { 0, 1.5f, 5 };
+			view.Rotation = { -12, 0, 0 };
+			CameraComponent& lens = m_World->Add<CameraComponent>(camera);
+			lens.Perspective = true;
+			m_World->SetParent(camera, entity, false);
+			m_World->SetActiveCamera(camera);
+		}
 		else if (kind == "Particle Emitter")
 		{
 			entity = m_World->CreateEntity(name);
@@ -1406,6 +1437,7 @@ namespace FP::Editor
 		// Play starts from no particles, so bursts fire again.
 		Particles::Clear(*m_World.Get());
 		m_World->AddSystem<ScriptSystem>();
+		m_World->AddSystem<PlayerInputSystem>();
 		m_World->AddSystem<PhysicsSystem>();
 		m_World->AddSystem<AnimationSystem>();
 		m_World->AddSystem<UISystem>();
@@ -1488,7 +1520,7 @@ namespace FP::Editor
 	void EditorWindow::ShowAudioSettings()
 	{
 		QDialog dialog(this);
-		dialog.setWindowTitle("Audio output and mixer");
+		dialog.setWindowTitle("Audio output, mixer and voice chat");
 		QVBoxLayout* layout = new QVBoxLayout(&dialog);
 		QLabel* diagnostics = new QLabel(ToQString(m_Audio.GetStatusText()));
 		diagnostics->setWordWrap(true);
@@ -1496,29 +1528,100 @@ namespace FP::Editor
 		layout->addWidget(diagnostics);
 		QFormLayout* form = new QFormLayout();
 		layout->addLayout(form);
-		const char* names[] = { "Master", "SFX", "Music", "UI" };
-		for (int i = 0; i < 4; ++i)
+		const char* names[] = { "Master", "SFX", "Music", "UI", "Voice" };
+		constexpr AudioBus buses[] = { AudioBus::SFX, AudioBus::Music, AudioBus::UI, AudioBus::Voice };
+		static_assert(std::size(names) == std::extent_v<decltype(m_AudioGains)> && std::size(names) == std::extent_v<decltype(m_AudioMutes)>);
+		for (int i = 0; i < static_cast<int>(std::size(names)); ++i)
 		{
 			QDoubleSpinBox* gain = new QDoubleSpinBox();
 			gain->setRange(0, 1);
 			gain->setSingleStep(0.05);
 			gain->setValue(m_AudioGains[i]);
 			gain->setAccessibleName(QString("%1 volume").arg(names[i]));
-			connect(gain, &QDoubleSpinBox::valueChanged, &dialog, [this, i](double value) {
+			connect(gain, &QDoubleSpinBox::valueChanged, &dialog, [this, i, buses](double value) {
 				m_AudioGains[i] = static_cast<float>(value);
 				if (i == 0) m_Audio.SetMasterGain(m_AudioGains[i]);
-				else m_Audio.SetBusGain(static_cast<AudioBus>(i - 1), m_AudioGains[i]);
+				else m_Audio.SetBusGain(buses[i - 1], m_AudioGains[i]);
 			});
 			form->addRow(QString("%1 volume").arg(names[i]), gain);
 			QCheckBox* mute = new QCheckBox(QString("Mute %1").arg(names[i]));
 			mute->setChecked(m_AudioMutes[i]);
-			connect(mute, &QCheckBox::toggled, &dialog, [this, i](bool checked) {
+			connect(mute, &QCheckBox::toggled, &dialog, [this, i, buses](bool checked) {
 				m_AudioMutes[i] = checked;
 				if (i == 0) m_Audio.SetMasterMuted(checked);
-				else m_Audio.SetBusMuted(static_cast<AudioBus>(i - 1), checked);
+				else m_Audio.SetBusMuted(buses[i - 1], checked);
 			});
 			form->addRow(mute);
 		}
+		QLabel* voiceHint = new QLabel("Proximity voice: enable your microphone, then hold V in the focused game viewport to talk. Use headphones to avoid feedback. VoiceChat on the network player sets speaking distance and volume.");
+		voiceHint->setWordWrap(true);
+		layout->addWidget(voiceHint);
+		QCheckBox* microphone = new QCheckBox("Enable microphone for this network session");
+		microphone->setToolTip("Off by default. Hold push-to-talk V to transmit; opening this dialog does not enable microphone capture.");
+		layout->addWidget(microphone);
+		QLabel* voiceStatus = new QLabel();
+		voiceStatus->setWordWrap(true);
+		voiceStatus->setTextInteractionFlags(Qt::TextSelectableByMouse);
+		voiceStatus->setAccessibleName("Voice chat status");
+		layout->addWidget(voiceStatus);
+		QListWidget* peers = new QListWidget();
+		peers->setAccessibleName("Voice chat peer mute controls");
+		peers->setSelectionMode(QAbstractItemView::NoSelection);
+		peers->setMaximumHeight(130);
+		layout->addWidget(peers);
+		auto networkSystem = [this]() -> NetworkSystem* {
+			for (const auto& system : m_World->GetSystems())
+				if (NetworkSystem* network = dynamic_cast<NetworkSystem*>(system.Get()))
+					return network;
+			return nullptr;
+		};
+		connect(microphone, &QCheckBox::toggled, &dialog, [networkSystem](bool enabled) {
+			if (NetworkSystem* network = networkSystem(); network && network->GetSession().IsRunning())
+				network->GetVoiceChat().SetEnabled(enabled);
+		});
+		connect(peers, &QListWidget::itemChanged, &dialog, [networkSystem](QListWidgetItem* item) {
+			if (NetworkSystem* network = networkSystem(); network && network->GetSession().IsRunning())
+			{
+				const uint64 peer = item->data(Qt::UserRole).toULongLong();
+				if (network->GetSession().GetPeers().Contains(peer))
+					network->GetVoiceChat().SetPeerMuted(peer, item->checkState() == Qt::Checked);
+			}
+		});
+		auto refresh = [this, diagnostics, microphone, voiceStatus, peers, networkSystem]() {
+			diagnostics->setText(ToQString(m_Audio.GetStatusText()));
+			NetworkSystem* network = networkSystem();
+			const bool running = network && network->GetSession().IsRunning();
+			QSignalBlocker microphoneBlock(microphone), peersBlock(peers);
+			microphone->setEnabled(running);
+			microphone->setChecked(running && network->GetVoiceChat().IsEnabled());
+			if (!running)
+			{
+				voiceStatus->setText("Start a network session to use voice; runtime --host/--join --voice. Microphone is off.");
+				peers->clear();
+				return;
+			}
+			voiceStatus->setText(ToQString(network->GetVoiceChat().GetStatusText()));
+			const auto connected = network->GetSession().GetPeers();
+			bool changed = peers->count() != connected.Num();
+			for (int i = 0; !changed && i < connected.Num(); ++i)
+				changed = peers->item(i)->data(Qt::UserRole).toULongLong() != connected[i];
+			if (changed)
+			{
+				peers->clear();
+				for (uint64 peer : connected)
+				{
+					QListWidgetItem* item = new QListWidgetItem(QString("Mute peer %1").arg(peer), peers);
+					item->setData(Qt::UserRole, QVariant::fromValue<qulonglong>(peer));
+					item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+				}
+			}
+			for (int i = 0; i < connected.Num(); ++i)
+				peers->item(i)->setCheckState(network->GetVoiceChat().IsPeerMuted(connected[i]) ? Qt::Checked : Qt::Unchecked);
+		};
+		refresh();
+		QTimer statusTimer(&dialog);
+		connect(&statusTimer, &QTimer::timeout, &dialog, refresh);
+		statusTimer.start(250);
 		QPushButton* close = new QPushButton("Close");
 		connect(close, &QPushButton::clicked, &dialog, &QDialog::accept);
 		layout->addWidget(close);

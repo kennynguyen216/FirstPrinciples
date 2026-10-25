@@ -140,6 +140,14 @@ namespace FP
 			return GetPhysics().Raycast(view.Position, view.GetForward(), maxDistance, hit, m_Entity);
 		}
 
+		// ---- Characters ------------------------------------------------------------
+
+		// For an entity with a CharacterController. Move walks at velocity in meters per second,
+		// ignoring Y, and needs calling every frame. Jump does nothing off the ground.
+		void Move(Vec3 velocity) const { GetPhysics().MoveCharacter(m_Entity, velocity); }
+		bool Jump(float speed) const { return GetPhysics().JumpCharacter(m_Entity, speed); }
+		bool IsGrounded() const { return GetPhysics().IsGrounded(m_Entity); }
+
 		// Every entity with a body touching the sphere, triggers included.
 		Array<Entity> OverlapSphere(Vec3 center, float radius) const { return GetPhysics().OverlapSphere(center, radius); }
 
@@ -388,7 +396,7 @@ namespace FP
 	}
 
 	// Bump when the script interface changes so stale modules are refused instead of crashing.
-	constexpr uint32 ScriptInterfaceVersion = 9;
+	constexpr uint32 ScriptInterfaceVersion = 10;
 
 	// Fingerprint of everything a script module shares with the host by layout. A module built
 	// against different engine headers or a different configuration gives a different value.
@@ -400,7 +408,7 @@ namespace FP
 			ScriptInterfaceVersion, FP_BUILD_DEBUG, sizeof(void*), sizeof(World), sizeof(String), sizeof(Array<int32>),
 			sizeof(TransformComponent), sizeof(ScriptType), sizeof(FieldInfo), sizeof(ScriptFunction), sizeof(ModuleContext), sizeof(Script), sizeof(RaycastHit), sizeof(Collision), sizeof(Json),
 			sizeof(AudioWorld), sizeof(AudioResult), sizeof(AudioPlayResult), sizeof(VoiceHandle), sizeof(OneShotParams),
-			sizeof(AudioSourceComponent), sizeof(AudioListenerComponent),
+			sizeof(AudioSourceComponent), sizeof(AudioListenerComponent), sizeof(VoiceChatComponent), sizeof(AudioPlaybackParams),
 			sizeof(AnimState), sizeof(AnimTransition), sizeof(AnimCondition), sizeof(AnimatorComponent), sizeof(SkeletalMeshComponent),
 		};
 		return HashBytes(parts, sizeof(parts));

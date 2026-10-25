@@ -151,9 +151,40 @@ Open `Projects/Sample/Content/Scenes/AudioDemo.scene` and press Play. Move the l
 Space for overlapping clicks. Demo WAVs are original generated sounds; regenerate and check them
 with `python Scripts/GenerateAudioFixtures.py`. Run `Projects/Sample/Binaries/Debug/Tests Audio` for audio tests.
 
-The first version uses resident WAVs and simple stereo panning. Compressed/streamed music, HRTF,
-occlusion, Doppler and effects are deferred. Dense mixes can hard-clip, and an immediate Stop can
-click.
+Spatial sources have **Occlusion** enabled by default. A solid physics collider between source
+and listener reduces volume and low-pass filters the sound. Triggers and the source/listener's
+own colliders are skipped. Add `PhysicsSystem` when setting up a world yourself; the editor and
+runtime already do this. Occlusion checks run at most 20 times per second per voice. The first
+version uses one solid hit with fixed muffling, rather than thickness or material simulation.
+
+For proximity voice, add **VoiceChat** and **Network** (`OnePerPeer` enabled) to the player and an
+**AudioListener** to its local listening position. Remote player listeners are ignored. Voice
+uses the player's world position, distance settings and the same collider occlusion as WAVs.
+The microphone starts only after explicit opt-in; hold **V** while the game view has focus to
+transmit. Use headsets: speaker echo cancellation is not implemented.
+
+The sample `Scenes/ProximityVoice.scene` has two sounds, a networked player and a wall to walk
+around. On Windows, run a host and a joiner from the repository root (use the host's LAN address
+instead of `127.0.0.1` when playing on another computer):
+
+```powershell
+Projects/Sample/Binaries/Debug/Runtime.exe Scenes/ProximityVoice.scene --host 7777 --voice --password example
+Projects/Sample/Binaries/Debug/Runtime.exe Scenes/ProximityVoice.scene --join 127.0.0.1:7777 --voice --password example
+```
+
+Without `--voice`, the microphone stays off and a player with VoiceChat can still listen.
+The editor's **Audio...** mixer has a separate Voice volume and mute, plus microphone opt-in and
+per-peer mute controls when a network system is active. The editor does not create a network
+session automatically; the runtime flags above are the first multiplayer test path.
+
+Speech is 48 kHz mono Opus in 20 ms packets over the existing encrypted UDP session. Incoming
+speech has a bounded jitter buffer, packet-loss concealment and bounded streaming playback.
+Packets are tied to their peer's player, with size and rate limits. Proximity filtering uses
+peer-replicated positions; a trusted server/relay is needed to enforce who may receive speech.
+The existing session has no relay for peers behind strict NATs.
+
+Compressed music streaming, HRTF, reflections and Doppler remain deferred. Dense mixes can
+hard-clip, and an immediate Stop can click.
 
 ### C++ scripts
 
@@ -232,6 +263,7 @@ that `FP_SCRIPT` registers. There is nothing to list by hand.
 | World space | `GetWorldPosition()`, `SetWorldPosition(position)`, `GetWorldRotation()` |
 | Timers | `After(seconds, fn)`, `Every(seconds, fn)`, `CancelTimer(id)`, `CancelAllTimers()` |
 | Physics | `AddForce(force)`, `AddImpulse(impulse)`, `AddForceAtPoint`, `AddImpulseAtPoint`, `GetVelocity()`, `SetVelocity(velocity)`, `GetMass()`, `GetPhysics()` for the rest |
+| Characters | `Move(velocity)` every frame, `Jump(speed)`, `IsGrounded()` |
 | Particles | `EmitParticles(count)` bursts from this entity's emitter, or another's |
 | Physics queries | `Raycast(origin, direction, distance, hit)`, `SphereCast(origin, radius, direction, distance, hit)`, `RaycastFromCamera(distance, hit)`, `OverlapSphere(center, radius)`, `AddExplosion(center, radius, impulse)` |
 | Cameras | `SetActiveCamera(entity or name)` (this entity by default), `GetActiveCamera()`, `IsActiveCamera()` |
@@ -304,6 +336,32 @@ void OnTriggerEnter(Entity other) override { ++Score; }
 `Content/Scenes/Physics.scene` drops balls down a ramp, through a goal that counts them, and into a
 pyramid of crates. Space kicks every ball. C switches to a first person camera where the mouse
 looks, WASD flies, left click pushes, F picks things up and right click blows them up.
+
+**Characters**
+
+A **CharacterController** makes a walking capsule for players and enemies, used instead of a
+collider and rigid body. It slides along walls, climbs steps up to `StepHeight`, walks up slopes
+up to `MaxSlope`, rides moving platforms and pushes crates. Rays and triggers find it like any
+body.
+
+**Entity > Create Character** (or Character in Place Entities) adds a pill with a follow camera
+that plays with no code in any project. Its **PlayerInput** component walks it with WASD, runs with
+Shift, jumps with Space and turns it with the mouse. Remove PlayerInput to drive it from a script:
+
+```cpp
+void OnUpdate(float) override
+{
+    const Vec2 axis = Input::GetMoveAxis();
+    Move(Vec3(axis.X, 0, -axis.Y) * 5); // meters per second, call it every frame
+    if (Input::WasKeyPressed(SDL_SCANCODE_SPACE))
+        Jump(6);                        // only works on the ground
+}
+```
+
+`AirControl` sets how much `Move` steers mid jump. `SetVelocity` and `AddImpulse` knock a
+character about, and explosions push it too. `Content/Scenes/Character.scene` has a third person
+player with stairs, a walkable and a too steep ramp, a lift, crates and a zone
+that counts the player walking in.
 
 ### Particles
 

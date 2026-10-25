@@ -1,20 +1,17 @@
 #include "Engine/Audio/AudioWorld.h"
 #include "Engine/Audio/AudioDevice.h"
 #include "Engine/Audio/AudioClip.h"
+#include "Engine/Physics/Physics.h"
+#include "Engine/Net/NetworkComponent.h"
+#include "HAL/PlatformMisc.h"
 
 #include <algorithm>
-#include <atomic>
 #include <cmath>
 
 namespace FP
 {
 	namespace
 	{
-		uint64 NextContext()
-		{
-			static std::atomic<uint64> next{ 0 };
-			return ++next;
-		}
 		bool Finite(Vec3 value)
 		{
 			return std::isfinite(value.X) && std::isfinite(value.Y) && std::isfinite(value.Z);
@@ -27,7 +24,7 @@ namespace FP
 		{
 			return std::isfinite(p.Volume) && p.Volume >= 0 && p.Volume <= 1 && std::isfinite(p.Pitch)
 				&& p.Pitch >= 0.25f && p.Pitch <= 4 && p.Priority >= 0 && p.Priority <= 255
-				&& (p.Bus == AudioBus::SFX || p.Bus == AudioBus::Music || p.Bus == AudioBus::UI);
+				&& (p.Bus == AudioBus::SFX || p.Bus == AudioBus::Music || p.Bus == AudioBus::UI || p.Bus == AudioBus::Voice);
 		}
 		bool SourceParams(const AudioSourceComponent& source, AudioPlaybackParams& p)
 		{
@@ -38,6 +35,7 @@ namespace FP
 			if (source.Bus == "SFX") p.Bus = AudioBus::SFX;
 			else if (source.Bus == "Music") p.Bus = AudioBus::Music;
 			else if (source.Bus == "UI") p.Bus = AudioBus::UI;
+			else if (source.Bus == "Voice") p.Bus = AudioBus::Voice;
 			else return false;
 			return ValidParams(p) && ValidDistances(source.MinDistance, source.MaxDistance);
 		}
@@ -112,7 +110,7 @@ namespace FP
 		if (m_Playing) return;
 		ResetScene();
 		m_Playing = true;
-		m_Context = NextContext();
+		m_Context = AllocateAudioContext();
 		if (GetDevice()) m_Device->GetClipCache().ClearFailures();
 		for (auto [entity, source] : m_World.View<AudioSourceComponent>().each())
 			if (source.Enabled && !source.Clip.IsEmpty()) Preload(source.Clip);
@@ -132,7 +130,7 @@ namespace FP
 		if (GetDevice() && m_Context) m_Device->StopContext(m_Context);
 		m_Voices.clear();
 		for (Source& source : m_Sources) source.Voice = {};
-		m_Context = m_Playing ? NextContext() : 0;
+		m_Context = m_Playing ? AllocateAudioContext() : 0;
 	}
 
 	void AudioWorld::ResetScene()
@@ -172,6 +170,7 @@ namespace FP
 			return Failure(AudioError::InvalidSettings, "Spatial playback requires a mono WAV; export a mono version");
 		Voice voice{ {}, entity, true, source->Spatial, {}, source->MinDistance, source->MaxDistance, params };
 		voice.Channels = loaded.Clip->Channels;
+		voice.Occlusion = source->Occlusion;
 		SelectListener();
 		ApplySpatial(voice);
 		const VoiceHandle previous = tracked.Voice;
@@ -201,11 +200,35 @@ namespace FP
 		if (p.Spatial && loaded.Clip->Channels != 1)
 			return Failure(AudioError::InvalidSettings, "Spatial playback requires a mono WAV; export a mono version");
 		Voice voice{ {}, p.Owner, false, p.Spatial, p.Position, p.MinDistance, p.MaxDistance, params };
+		voice.Occlusion = p.Occlusion;
 		SelectListener();
 		ApplySpatial(voice);
 		auto result = m_Device->Play(m_Context, loaded.Clip, voice.Params);
 		if (result) { voice.Handle = result.Voice; m_Voices.push_back(voice); }
 		return result;
+	}
+
+	AudioPlaybackParams AudioWorld::GetSpatialParameters(const OneShotParams& p)
+	{
+		FP_ASSERT(std::this_thread::get_id() == m_Thread, "AudioWorld is main-thread only");
+		AudioPlaybackParams params;
+		params.Volume = p.Volume; params.Pitch = p.Pitch; params.Bus = p.Bus; params.Priority = p.Priority;
+		auto silent = []() { AudioPlaybackParams result; result.LeftGain = result.RightGain = 0; return result; };
+		if (!ValidParams(params) || !ValidDistances(p.MinDistance, p.MaxDistance) || !Finite(p.Position)
+			|| (p.Owner != NullEntity && !m_World.IsValid(p.Owner))) return silent();
+		if (!p.Spatial) return params;
+		SelectListener();
+		Vec3 position = p.Position;
+		if (p.Owner != NullEntity)
+		{
+			const auto* transform = m_World.TryGet<TransformComponent>(p.Owner);
+			if (!transform || !Finite(transform->Position) || !Finite(transform->Rotation)) return silent();
+			position = m_World.GetWorldPosition(p.Owner);
+		}
+		const auto gains = CalculateAudioSpatialGains(position, m_Listener, p.MinDistance, p.MaxDistance);
+		params.LeftGain = gains.Left; params.RightGain = gains.Right;
+		if (p.Occlusion) ApplyOcclusion(params, position, p.Owner);
+		return params;
 	}
 
 	bool AudioWorld::Owns(VoiceHandle voice) const
@@ -235,6 +258,7 @@ namespace FP
 		std::vector<Entity> candidates;
 		const auto entities = m_World.GetEntities();
 		auto validTransform = [this](Entity entity) {
+			if (const auto* network = m_World.TryGet<NetworkComponent>(entity); network && network->Remote) return false;
 			const auto* t = m_World.TryGet<TransformComponent>(entity);
 			return t && Finite(t->Position) && Finite(t->Rotation);
 		};
@@ -255,7 +279,12 @@ namespace FP
 	void AudioWorld::ApplySpatial(Voice& voice)
 	{
 		voice.Params.LeftGain = voice.Params.RightGain = 1;
-		if (!voice.Spatial) return;
+		voice.Params.LowPassHz = 0;
+		if (!voice.Spatial)
+		{
+			voice.NextOcclusionCheck = 0; voice.OcclusionGain = 1; voice.LowPassHz = 0;
+			return;
+		}
 		Vec3 position = voice.Position;
 		if (voice.Owner != NullEntity)
 		{
@@ -269,11 +298,54 @@ namespace FP
 		}
 		const auto gains = CalculateAudioSpatialGains(position, m_Listener, voice.MinDistance, voice.MaxDistance);
 		voice.Params.LeftGain = gains.Left; voice.Params.RightGain = gains.Right;
+		if (voice.Occlusion)
+		{
+			const double now = PlatformMisc::GetTimeSeconds();
+			if (now >= voice.NextOcclusionCheck)
+			{
+				AudioPlaybackParams occlusion;
+				if (gains.Left > 0 || gains.Right > 0) ApplyOcclusion(occlusion, position, voice.Owner);
+				voice.OcclusionGain = occlusion.LeftGain;
+				voice.LowPassHz = occlusion.LowPassHz;
+				voice.NextOcclusionCheck = now + 0.05;
+			}
+			voice.Params.LeftGain *= voice.OcclusionGain; voice.Params.RightGain *= voice.OcclusionGain;
+			voice.Params.LowPassHz = voice.LowPassHz;
+		}
+		else
+		{
+			voice.NextOcclusionCheck = 0; voice.OcclusionGain = 1; voice.LowPassHz = 0;
+		}
 		if (m_ListenerEntity == NullEntity && !m_WarnedNoListener)
 		{
 			FP_LOG_WARN("Spatial audio has no listener or primary camera; using the origin");
 			m_WarnedNoListener = true;
 		}
+	}
+
+	void AudioWorld::ApplyOcclusion(AudioPlaybackParams& params, Vec3 source, Entity owner)
+	{
+		if ((params.LeftGain == 0 && params.RightGain == 0) || !Finite(source) || !Finite(m_Listener.Position)) return;
+		if (m_World.View<ColliderComponent>().empty()) return;
+		const double x = double(source.X) - m_Listener.Position.X;
+		const double y = double(source.Y) - m_Listener.Position.Y;
+		const double z = double(source.Z) - m_Listener.Position.Z;
+		const double distance = std::sqrt(x * x + y * y + z * z);
+		if (distance < 0.001 || distance > std::numeric_limits<float>::max()) return;
+		auto colliderOwner = [this](Entity entity) {
+			for (int32 depth = 0; m_World.IsValid(entity) && depth < 1000; ++depth)
+			{
+				if (const auto* collider = m_World.TryGet<ColliderComponent>(entity); collider && !collider->Trigger) return entity;
+				entity = m_World.GetParent(entity);
+			}
+			return Entity(NullEntity);
+		};
+		RaycastHit hit;
+		if (!m_World.GetPhysics().Raycast(m_Listener.Position,
+			{ float(x / distance), float(y / distance), float(z / distance) }, float(distance), hit, colliderOwner(m_ListenerEntity), colliderOwner(owner))) return;
+		// shortcut: one solid hit applies a fixed muffling target; add material/thickness transmission when needed.
+		params.LeftGain *= 0.25f; params.RightGain *= 0.25f;
+		params.LowPassHz = 1200;
 	}
 
 	void AudioWorld::Update()
@@ -322,6 +394,7 @@ namespace FP
 				voice.SettingsValid = true;
 				voice.Params = params;
 				voice.Spatial = source->Spatial;
+				voice.Occlusion = source->Occlusion;
 				voice.MinDistance = source->MinDistance; voice.MaxDistance = source->MaxDistance;
 			}
 			ApplySpatial(voice);
