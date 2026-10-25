@@ -202,7 +202,7 @@ void OnFootSystem::Update(World& world, float deltaTime)
 	if (state->Phase == MatchPhase::Countdown && local != NullEntity && !world.Has<OnFootComponent>(local))
 	{
 		const CrewMemberComponent& member = world.Get<CrewMemberComponent>(local);
-		if (member.Slot >= 0 && member.Role == CrewRole::Defender)
+		if (DefenderEnabled && member.Slot >= 0 && member.Role == CrewRole::Defender)
 			world.Add<OnFootComponent>(local).Crew = member.Crew;
 	}
 
@@ -211,7 +211,7 @@ void OnFootSystem::Update(World& world, float deltaTime)
 		return;
 	OnFootComponent& onFoot = world.Get<OnFootComponent>(walker);
 	const OnFootConfigComponent config = GetConfig(world);
-	if (onFoot.Beam == NullEntity)
+	if (DefenderEnabled && onFoot.Beam == NullEntity)
 	{
 		onFoot.Beam = MakeMarker(world, "Laser Beam");
 		onFoot.Crosshair = MakeMarker(world, "Crosshair");
@@ -239,7 +239,7 @@ void OnFootSystem::Update(World& world, float deltaTime)
 			body.Position += move.Normalized() * (config.MoveSpeed * deltaTime);
 		KeepClear(world, onFoot, config.BodyRadius, body, from);
 
-		if (Input::WasKeyPressed(SDL_SCANCODE_Q))
+		if (DefenderEnabled && Input::WasKeyPressed(SDL_SCANCODE_Q))
 		{
 			onFoot.Mode = onFoot.Mode == LaserMode::Vaporize ? LaserMode::Repair : LaserMode::Vaporize;
 			FP_LOG("Laser: %s mode", onFoot.Mode == LaserMode::Vaporize ? "vaporize" : "repair");
@@ -256,6 +256,8 @@ void OnFootSystem::Update(World& world, float deltaTime)
 		cameraTransform.Position = eye.Position;
 		cameraTransform.Rotation = eye.Rotation;
 	}
+	if (!DefenderEnabled)
+		return;
 	TransformComponent& crosshair = world.Get<TransformComponent>(onFoot.Crosshair);
 	crosshair.Position = eye.Position + eye.GetForward() * CrosshairDistance;
 	crosshair.Rotation = eye.Rotation;

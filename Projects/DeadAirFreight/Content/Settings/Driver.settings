@@ -15,7 +15,8 @@ CruiseSpeed 40
 ThrustAccel 12
 MouseSensitivity 0.15
 MaxPitch 80
-TurnTime90 1.5
+TurnTime90 2.5
+MaxSteerRate 45 # degrees per second the nose can swing, however hard the mouse moves
 
 CalmSolarWind 400
 StormSolarWind 700
@@ -42,6 +43,8 @@ InteractRange 2
 CabWallMargin 0.4
 
 ScrubberRepairTime 4
+CalmFaultInterval 60 # seconds between solar surges that fry the scrubber, calm to storm Kp
+StormFaultInterval 20
 Co2RiseTime 40
 Co2FallTime 10
 BlackoutTime 5

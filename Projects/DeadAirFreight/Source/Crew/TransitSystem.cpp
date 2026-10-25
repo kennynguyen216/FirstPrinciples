@@ -154,7 +154,7 @@ void TransitSystem::Update(World& world, float)
 	const Doorway bayDoor = DoorwayOf(world.Get<TransformComponent>(bayHatch));
 	const Doorway cabSpaceDoor{ m_CabHatch, {} };
 
-	const bool near = !world.Has<OnFootComponent>(body) && cab->InCab && !cab->Seated && FlatDistance(cab->Position, m_CabHatch) <= m_Reach;
+	const bool near = DefenderEnabled && !world.Has<OnFootComponent>(body) && cab->InCab && !cab->Seated && FlatDistance(cab->Position, m_CabHatch) <= m_Reach;
 	if (near && !m_NearHatch)
 		FP_LOG("Transit: press R to vent the cargo bay");
 	m_NearHatch = near;

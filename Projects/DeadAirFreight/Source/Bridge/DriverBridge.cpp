@@ -65,8 +65,8 @@ void DriverLauncherSystem::Update(World& world, float)
 	// Either crewmate can fly or defend. The Driver's seat starts in the cab, the Defender's in the bay.
 	const Entity cabBody = FindByName(world, CabBodyName);
 	if (DriverState* cab = cabBody == NullEntity ? nullptr : world.TryGet<DriverState>(cabBody))
-		cab->InCab = member.Role == CrewRole::Driver;
-	FP_LOG("Driver bridge: Crew %s's cab is running, you start in the %s", GetCrewName(member.Crew), member.Role == CrewRole::Driver ? "cab" : "cargo bay");
+		cab->InCab = !DefenderEnabled || member.Role == CrewRole::Driver;
+	FP_LOG("Driver bridge: Crew %s's cab is running, you start in the %s", GetCrewName(member.Crew), !DefenderEnabled || member.Role == CrewRole::Driver ? "cab" : "cargo bay");
 }
 
 void CargoBridgeInSystem::Update(World& world, float)

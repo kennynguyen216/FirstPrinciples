@@ -5,6 +5,8 @@
 inline constexpr FP::int32 CrewCount = 2;
 inline constexpr FP::int32 SlotsPerCrew = 2;
 inline constexpr FP::int32 MaxSlots = CrewCount * SlotsPerCrew;
+// Off while the Driver is tested alone: no Mites, no airlock, no laser, and everyone starts in the cab.
+inline constexpr bool DefenderEnabled = false;
 
 // Tuning for one match, edited on the scene's Match entity. Real world constants (consumption
 // rates, flare classes, radiation doses) do not go here. They live on the Real Data entity and in

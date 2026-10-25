@@ -201,6 +201,7 @@ void DriverSystem::OnStart(World& world)
 		hud.Input = false; // the mouse flies the truck
 	}
 	m_PeakWindFought = 0;
+	m_NextFault = m_Settings.StormFaultInterval;
 	m_Messages.clear();
 	m_Results.clear();
 	m_Finished = false;
@@ -279,8 +280,29 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 		const float bank = std::clamp((truck.Yaw - yawBefore) / deltaTime * m_Settings.BankPerTurn, -m_Settings.BankMax, m_Settings.BankMax);
 		m_Bank += (bank - m_Bank) * std::min(1.0f, m_Settings.BankSmoothing * deltaTime);
 	}
+	// A hit or a solar surge browns out the power and knocks out the scrubber, so someone has to
+	// leave the wheel to fix it while the truck drifts.
+	auto fault = [&](const char* what) {
+		life.PowerFlicker = m_Settings.PowerFlickerTime;
+		if (life.ScrubberBroken)
+			return;
+		const bool banked = life.AutoFix;
+		BreakScrubber(life);
+		Notify(banked ? "FREE FIX SAVED THE SCRUBBER" : what, banked ? Good : Bad, 2.5f);
+	};
 	if (CollideWithRocks(truck, m_Rocks, truck.Time, m_Settings))
+	{
 		Notify("ASTEROID HIT!", Bad, 1.5f);
+		fault("THE HIT KNOCKED OUT THE SCRUBBER");
+	}
+	// Surges come as often as the real Kp says, the same storm that jerks the truck.
+	m_NextFault -= deltaTime;
+	if (m_NextFault <= 0)
+	{
+		const float storm = MapClamped(m_KpNow, m_Settings.CalmKp, m_Settings.StormKp, 0, 1);
+		m_NextFault = (m_Settings.CalmFaultInterval + (m_Settings.StormFaultInterval - m_Settings.CalmFaultInterval) * storm) * (0.5f + NextRandom(truck.Random));
+		fault("SOLAR SURGE FRIED THE SCRUBBER");
+	}
 
 	const bool scrubberWasBroken = life.ScrubberBroken;
 	StepLifeSupport(life, repairing, m_Settings, deltaTime);

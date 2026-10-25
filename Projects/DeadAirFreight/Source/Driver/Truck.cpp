@@ -79,7 +79,11 @@ void StepTruck(TruckState& truck, const TruckControls& controls, const SpaceWeat
 {
 	truck.Time += deltaTime;
 	truck.WheelEmptyTime = truck.AtWheel ? 0 : truck.WheelEmptyTime + deltaTime;
-	const TruckControls input = truck.AtWheel ? controls : TruckControls{};
+	TruckControls input = truck.AtWheel ? controls : TruckControls{};
+	// A heavy truck: the nose swings no faster than MaxSteerRate, so drift takes real time to undo.
+	const float maxAim = settings.MaxSteerRate * deltaTime;
+	if (input.Aim.Length() > maxAim)
+		input.Aim = input.Aim.Normalized() * maxAim;
 
 	const Vec2 push = StepDisturbance(truck, weather, settings, deltaTime) * (GetDriftAmount(truck, settings) * disturbanceScale);
 	truck.Yaw += -input.Aim.X + push.X * deltaTime;

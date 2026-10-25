@@ -134,9 +134,12 @@ namespace Game
 		world.AddSystem<ColonyClockSystem>();
 		world.AddSystem<LifeSupportSystem>();
 		world.AddSystem<CargoTankSystem>();
-		world.AddSystem<SiphonSpawnerSystem>();
-		world.AddSystem<SiphonSystem>();
-		world.AddSystem<AirlockSystem>();
+		if (DefenderEnabled)
+		{
+			world.AddSystem<SiphonSpawnerSystem>();
+			world.AddSystem<SiphonSystem>();
+			world.AddSystem<AirlockSystem>();
+		}
 		world.AddSystem<OnFootSystem>();
 		// Starts the Driver's own systems at GO for a seated Driver, and the hatch between cab and bay.
 		world.AddSystem<DriverLauncherSystem>();

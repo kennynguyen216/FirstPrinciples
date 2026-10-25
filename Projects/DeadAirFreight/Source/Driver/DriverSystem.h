@@ -70,6 +70,7 @@ private:
 	float m_WindNow = 0;
 	float m_KpNow = 0;
 	float m_PeakWindFought = 0;
+	float m_NextFault = 0;
 	std::vector<Message> m_Messages;
 	bool m_Finished = false;
 	std::vector<std::string> m_Results;
