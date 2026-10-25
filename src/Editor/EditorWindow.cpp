@@ -247,7 +247,7 @@ namespace FP::Editor
 		m_ConsoleDock = consoleDock;
 
 		// The content browser, log and profiler share the bottom area.
-		m_ContentBrowser = new ContentBrowser();
+		m_ContentBrowser = new ContentBrowser(m_Viewport->GetRenderer()->GetDevice());
 		QDockWidget* contentDock = DockTab::Create(this, "Content Browser", EditorIcon::ContentBrowser, m_ContentBrowser);
 		m_ContentDock = contentDock;
 		addDockWidget(Qt::BottomDockWidgetArea, contentDock);
