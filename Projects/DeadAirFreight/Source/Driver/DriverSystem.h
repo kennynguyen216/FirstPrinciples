@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Asteroids.h"
+#include "BlackHoles.h"
 #include "Cab.h"
 #include "LifeSupport.h"
 #include "SpaceWeather.h"
@@ -82,6 +83,7 @@ private:
 	FP::Vec3 m_Colony;
 	std::vector<Rock> m_Rocks;
 	std::vector<FP::Entity> m_RockEntities;
+	std::vector<BlackHole> m_BlackHoles;
 
 	FP::Entity m_Truck = FP::NullEntity;
 	FP::Entity m_Driver = FP::NullEntity;

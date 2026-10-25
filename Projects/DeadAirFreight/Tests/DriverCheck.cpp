@@ -1,4 +1,5 @@
 #include "Asteroids.h"
+#include "BlackHoles.h"
 #include "Cab.h"
 #include "LifeSupport.h"
 #include "SpaceWeather.h"
@@ -258,6 +259,37 @@ static void CheckAsteroidBounce(const DriverSettings& settings)
 	CHECK(!CollideWithRocks(truck, { rock }, 0, settings))
 }
 
+static void CheckBlackHoles(const DriverSettings& settings)
+{
+	BlackHole hole;
+	hole.Position = { 0, 0, -100 };
+	hole.CoreRadius = settings.BlackHoleCoreRadius;
+	hole.RingRadius = settings.BlackHoleRingRadius;
+	std::vector<BlackHole> holes{ hole };
+	TruckState truck;
+	truck.Position = hole.Position + Vec3{ (hole.CoreRadius + settings.TruckRadius + hole.RingRadius) / 2, 0, 0 };
+	truck.Travel = { 0, 0, -1 };
+	bool slung = false;
+	for (int i = 0; i < 60 * (settings.SlingshotTime * 2 + 1); ++i)
+	{
+		const BlackHoleEvent event = StepBlackHoles(truck, holes, settings, 1.0f / 60);
+		CHECK(event != BlackHoleEvent::Swallowed)
+		CHECK(!(slung && event == BlackHoleEvent::Slingshot))
+		slung = slung || event == BlackHoleEvent::Slingshot;
+	}
+	CHECK(slung && truck.Boost == settings.BoostTime && holes[0].Spent)
+	// The pull bends the look toward the hole (yaw toward -X) with the slow helm, the travel without it.
+	CHECK(settings.NoseTurnRate > 0 ? truck.Look.X > 0 : truck.Travel.X < 0)
+	truck.Position = hole.Position + Vec3{ hole.RingRadius + 1, 0, 0 };
+	StepBlackHoles(truck, holes, settings, 1.0f / 60);
+	CHECK(holes[0].Charge == 0)
+
+	truck.Position = hole.Position;
+	truck.Speed = 40;
+	CHECK(StepBlackHoles(truck, holes, settings, 1.0f / 60) == BlackHoleEvent::Swallowed)
+	CHECK((truck.Position - hole.Position).Length() >= hole.CoreRadius + settings.TruckRadius - 1e-3f)
+}
+
 static void CheckLifeSupport(const DriverSettings& settings)
 {
 	const float dt = 1.0f / 60;
@@ -334,6 +366,7 @@ int main()
 	const DriverSettings settings = LoadRealSettings();
 	CheckSpaceWeather(settings);
 	CheckAsteroidBounce(settings);
+	CheckBlackHoles(settings);
 	CheckLifeSupport(settings);
 	CheckTickets(settings);
 	std::printf("DriverCheck passed\n");

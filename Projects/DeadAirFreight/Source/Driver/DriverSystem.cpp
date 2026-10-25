@@ -119,6 +119,22 @@ void DriverSystem::OnStart(World& world)
 		m_RockEntities.push_back(entity);
 	}
 
+	// Placeholders: a black core inside a see-through ring that marks where the slingshot charges.
+	m_BlackHoles = BuildBlackHoles(m_Package, m_Route, m_Settings);
+	auto addSphere = [&](Vec3 position, float radius, const char* material) {
+		const Entity entity = world.CreateEntity("BlackHole");
+		TransformComponent& transform = world.Get<TransformComponent>(entity);
+		transform.Position = position;
+		transform.Scale = Vec3{ 1, 1, 1 } * (radius * 2);
+		world.Add<MeshComponent>(entity).Mesh = "Sphere";
+		world.Add<MaterialComponent>(entity).Material = material;
+	};
+	for (const BlackHole& hole : m_BlackHoles)
+	{
+		addSphere(hole.Position, hole.CoreRadius, "Materials/BlackHole.material");
+		addSphere(hole.Position, hole.RingRadius, "Materials/BlackHoleRing.material");
+	}
+
 	m_Driver = FindOrNull(world, "Driver");
 	const Entity floor = FindOrNull(world, "CabFloor");
 	const Entity wheel = FindOrNull(world, "Wheel");
@@ -319,6 +335,18 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 			const bool fixBanked = life.AutoFix;
 			BreakScrubber(life);
 			Notify(fixBanked ? "ASTEROID HIT! FREE FIX SAVED THE SCRUBBER" : "ASTEROID HIT!", Bad, 1.5f);
+		}
+		switch (StepBlackHoles(truck, m_BlackHoles, m_Settings, deltaTime))
+		{
+		case BlackHoleEvent::Slingshot:
+			Notify("SLINGSHOT! HYPERDRIVE OVERLOAD", Good, 3);
+			break;
+		case BlackHoleEvent::Swallowed:
+			BreakScrubber(life);
+			Notify("TOO DEEP! THE BLACK HOLE SPAT YOU OUT", Bad, 2);
+			break;
+		case BlackHoleEvent::None:
+			break;
 		}
 		StepLifeSupport(life, repairing || m_RemoteRepairing, m_Settings, deltaTime);
 		if (StepTicket(ticket, life, ticket.Active && awake ? mouseMove : Vec2{}, awake && Input::IsMouseDown(MouseButton::Left), m_Settings, deltaTime))
@@ -577,6 +605,11 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 		left.push_back(Line("FREE FIX BANKED", Good));
 	if (truck.Boost > 0)
 		left.push_back(Line(Format("HYPERDRIVE %.0fS", std::ceil(truck.Boost)), flash ? Good : White));
+	for (const BlackHole& hole : m_BlackHoles)
+	{
+		if (!hole.Spent && hole.Charge > 0)
+			left.push_back(Line(Format("SLINGSHOT  %3.0f%%", hole.Charge / std::max(m_Settings.SlingshotTime, 1e-3f) * 100), Warn, hole.Charge / std::max(m_Settings.SlingshotTime, 1e-3f)));
+	}
 	field("left", list(left));
 
 	const int clock = static_cast<int>(std::ceil(life.ColonyTimeLeft));
