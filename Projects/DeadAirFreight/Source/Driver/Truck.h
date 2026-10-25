@@ -15,6 +15,8 @@ struct TruckState
 	FP::Vec2 TurnVelocity;
 	FP::Vec3 Travel{ 0, 0, -1 };
 	float Speed = 0;
+	// A rock hit shoves the ship along this, on top of where it travels, dying away.
+	FP::Vec3 Knockback;
 	float Boost = 0;
 	FP::Vec2 JerkRate;
 	float NextJerk = 0;
@@ -38,6 +40,11 @@ struct SpaceWeatherNow
 };
 
 FP::Vec3 GetNose(const TruckState& truck);
+
+FP::Vec2 ToYawPitch(FP::Vec3 direction);
+
+// Sends the truck off along a direction. With the slow helm travel follows the nose, so the nose and look turn to it too.
+void SetTravel(TruckState& truck, FP::Vec3 direction, const DriverSettings& settings);
 
 FP::Vec3 RotateTowards(FP::Vec3 v, FP::Vec3 target, float maxDegrees);
 

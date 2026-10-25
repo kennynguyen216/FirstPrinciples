@@ -51,12 +51,13 @@ bool CollideWithRocks(TruckState& truck, const std::vector<Rock>& rocks, float m
 			continue;
 		const Vec3 normal = away.LengthSquared() > 1e-6f ? away.Normalized() : -truck.Travel;
 		truck.Position += normal * (reach - away.Length());
-		const float into = Vec3::Dot(truck.Travel, normal);
-		if (into < 0)
-			truck.Travel = (truck.Travel - normal * (2 * into)).Normalized();
+		// Only moving into the rock is a hit. Pushed out while already heading away (a drifting rock
+		// catching up) is just a nudge, so one collision is one hit.
+		if (Vec3::Dot(truck.Travel * truck.Speed + truck.Knockback, normal) >= 0)
+			continue;
+		// Knocked straight back, still facing the same way, so the view doesn't swing.
+		truck.Knockback = normal * (settings.BounceDistance * settings.BounceRecoil);
 		truck.Speed *= settings.BounceSpeedKeep;
-		const float kick = NextRandom(truck.Random) * 2 * Pi;
-		truck.JerkRate += Vec2{ std::cos(kick), std::sin(kick) } * settings.BounceJerk;
 		return true;
 	}
 	return false;

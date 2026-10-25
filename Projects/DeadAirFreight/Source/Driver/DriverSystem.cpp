@@ -313,6 +313,15 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 		m_Calm = !m_Calm;
 		Notify(m_Calm ? "TURBULENCE OFF" : "TURBULENCE ON", Warn, 1.5f);
 	}
+	// K rigs every scratcher to win the jackpot, for recording.
+	if (Input::WasKeyPressed(SDL_SCANCODE_K))
+	{
+		m_Rigged = !m_Rigged;
+		Notify(m_Rigged ? "SCRATCHERS RIGGED" : "SCRATCHERS FAIR", Warn, 1.5f);
+	}
+	// U trims the HUD to the readouts that matter, for recording.
+	if (Input::WasKeyPressed(SDL_SCANCODE_U))
+		m_Minimal = !m_Minimal;
 	// The trailer camera has the mouse and WASD while it flies.
 	const bool listening = !FreeCam::IsFlying();
 	const Vec2 mouseMove = listening ? Input::GetMouseDelta() : Vec2{};
@@ -350,7 +359,8 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 	// Tickets touch the truck's cargo and luck, so only the host sells them for now.
 	if (m_Net.Authority && seated && awake && Input::WasKeyPressed(SDL_SCANCODE_T) && !ticket.Active)
 	{
-		const Prize prize = RollPrize(NextRandom(truck.Random), GetPrizeOdds(m_Settings));
+		const Prize rolled = RollPrize(NextRandom(truck.Random), GetPrizeOdds(m_Settings));
+		const Prize prize = m_Rigged ? Prize::Jackpot : rolled;
 		if (!BuyTicket(ticket, life, prize, m_Settings))
 			Notify("NOT ENOUGH CARGO AIR FOR A TICKET", Bad, 2);
 	}
@@ -647,13 +657,16 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 	field("dark", Format("%.3f", IsBlackedOut(life) ? 1 : life.Co2 * m_Settings.Co2DarkenMax));
 
 	const Color co2Color = life.Co2 > 0.6f ? Bad : life.Co2 > 0.25f ? Warn : Good;
-	std::vector<std::string> left = {
-		Stat("CAB AIR", Format("%.2f KG", life.CabReserve), life.CabReserve > 0 ? White : Warn),
-		Stat("CARGO O2", Format("%.1f KG", life.Cargo), White),
-		Stat("CO2", Format("%.0f%%", life.Co2 * 100), co2Color, life.Co2),
-		Stat("POWER", Format("%.0f%%", life.Power * 100), life.Power < 1 ? Warn : White, life.Power),
-		Stat("LIOH SPARES", std::to_string(life.Canisters), life.Canisters > 0 ? White : Bad),
-	};
+	const std::string co2 = Stat("CO2", Format("%.0f%%", life.Co2 * 100), co2Color, life.Co2);
+	std::vector<std::string> left = { co2 };
+	if (!m_Minimal)
+		left = {
+			Stat("CAB AIR", Format("%.2f KG", life.CabReserve), life.CabReserve > 0 ? White : Warn),
+			Stat("CARGO O2", Format("%.1f KG", life.Cargo), White),
+			co2,
+			Stat("POWER", Format("%.0f%%", life.Power * 100), life.Power < 1 ? Warn : White, life.Power),
+			Stat("LIOH SPARES", std::to_string(life.Canisters), life.Canisters > 0 ? White : Bad),
+		};
 	if (life.CalmHands > 0)
 		left.push_back(Stat("CALM HANDS", Format("%.0fS", std::ceil(life.CalmHands)), Good));
 	if (life.AutoFix)
@@ -670,7 +683,7 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 
 	const int clock = static_cast<int>(std::ceil(life.ColonyTimeLeft));
 	field("clock", Stat("COLONY AIR", Format("%d:%02d", clock / 60, clock % 60), life.ColonyTimeLeft < 60 ? (flash ? Bad : White) : White));
-	field("right", list({
+	field("right", m_Minimal ? "[]" : list({
 		Stat("SOLAR WIND", Format("%.0f KM/S", m_WindNow), White),
 		Stat("STORM KP", Format("%.1f", m_KpNow), m_KpNow >= 5 ? Warn : White, std::clamp(m_KpNow / 9, 0.0f, 1.0f)),
 		Stat("FEED", m_Package.WeatherLabel, m_Package.WeatherLabel == "LIVE" ? Good : Warn),
@@ -685,7 +698,7 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 	field("blackout", IsBlackedOut(life) ? "true" : "false");
 
 	std::vector<std::string> prompts;
-	if (!m_Finished && !IsBlackedOut(life))
+	if (!m_Finished && !IsBlackedOut(life) && !m_Minimal)
 	{
 		if (ticket.Active)
 		{

@@ -100,13 +100,14 @@ RouteClusterStart 0.12
 RouteClusterEnd 0.9
 TruckRadius 6
 BounceSpeedKeep 0.3
-BounceJerk 150
+BounceDistance 60 # a rock hit knocks the ship back about this far, without turning it
+BounceRecoil 2 # how quickly the knockback dies away, per second
 
 BlackHoleCount 3
 BlackHoleCoreRadius 15
 BlackHoleRingRadius 60 # skim between the core and this to charge the slingshot
 BlackHoleRouteOffset 0.8 # how far off the route line, as a fraction of RingRadius
-FirstBlackHoleDistance 300 # the first hole sits this far along the route from the start
+FirstBlackHoleDistance 600 # the first hole sits this far along the route from the start
 BlackHolePull 30 # degrees per second the travel bends in at the core's edge
 SlingshotTime 0.7 # charge one pass needs to fire the hyperdrive, once per hole: seconds anywhere inside the ring
 

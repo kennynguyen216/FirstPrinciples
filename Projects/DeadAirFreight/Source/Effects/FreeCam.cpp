@@ -57,6 +57,47 @@ namespace
 		Entity Self = NullEntity; // this player's character while they are in the cab
 	} s_Cam;
 
+	// H hides the speed lines and black holes, for recording.
+	struct
+	{
+		bool On = false;
+		std::unordered_map<Entity, MeshComponent> Meshes; // taken off, to put back
+		std::unordered_map<Entity, BlackHoleComponent> Holes;
+	} s_Plate;
+
+	void StripScene(World& world)
+	{
+		// Every frame, since the game keeps making and dressing entities.
+		std::vector<Entity> strip;
+		for (auto [entity, mesh, name] : world.View<MeshComponent, NameComponent>().each())
+			if (std::string_view(name.Name.CStr()) == "Dust")
+				strip.push_back(entity);
+		for (Entity entity : strip)
+		{
+			s_Plate.Meshes[entity] = world.Get<MeshComponent>(entity);
+			world.Remove<MeshComponent>(entity);
+		}
+		std::vector<Entity> holes;
+		for (auto [entity, hole] : world.View<BlackHoleComponent>().each())
+			holes.push_back(entity);
+		for (Entity entity : holes)
+		{
+			s_Plate.Holes[entity] = world.Get<BlackHoleComponent>(entity);
+			world.Remove<BlackHoleComponent>(entity);
+		}
+	}
+
+	void RestoreScene(World& world)
+	{
+		for (auto& [entity, mesh] : s_Plate.Meshes)
+			if (world.IsValid(entity) && !world.Has<MeshComponent>(entity))
+				world.Add<MeshComponent>(entity, mesh);
+		for (auto& [entity, hole] : s_Plate.Holes)
+			if (world.IsValid(entity))
+				world.Add<BlackHoleComponent>(entity, hole);
+		s_Plate = decltype(s_Plate){};
+	}
+
 	void SetHud(World& world, bool show)
 	{
 		if (show)
@@ -241,9 +282,17 @@ void FreeCamSystem::OnStop(World&)
 	// The camera outlives a play session in the editor, and its entities belong to the old world.
 	// Not on start: the driver launcher adds the second system after the truck's model is kept.
 	s_Cam = decltype(s_Cam){};
+	s_Plate = decltype(s_Plate){};
 }
 
 void FreeCamSystem::Update(World& world, float deltaTime)
+{
+	UpdateCamera(world, deltaTime);
+	if (s_Plate.On)
+		StripScene(world);
+}
+
+void FreeCamSystem::UpdateCamera(World& world, float deltaTime)
 {
 	const MatchStateComponent* state = MatchQueries::GetState(world);
 	const Entity camera = world.GetActiveCamera();
@@ -259,6 +308,12 @@ void FreeCamSystem::Update(World& world, float deltaTime)
 	// The controls are read once a frame, by whichever of the two systems runs first.
 	const bool firstThisFrame = world.GetTime() != s_Cam.Stepped;
 	s_Cam.Stepped = world.GetTime();
+	if (firstThisFrame && Input::WasKeyPressed(SDL_SCANCODE_H))
+	{
+		s_Plate.On = !s_Plate.On;
+		if (!s_Plate.On)
+			RestoreScene(world);
+	}
 	if (firstThisFrame && Input::WasKeyPressed(SDL_SCANCODE_F))
 	{
 		s_Cam.On = !s_Cam.On;

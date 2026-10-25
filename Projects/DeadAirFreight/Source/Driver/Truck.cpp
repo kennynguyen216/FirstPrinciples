@@ -9,6 +9,23 @@ Vec3 GetNose(const TruckState& truck)
 	return Quat::FromEuler({ truck.Pitch, truck.Yaw, 0 }).Rotate({ 0, 0, -1 });
 }
 
+Vec2 ToYawPitch(Vec3 direction)
+{
+	return { std::atan2(-direction.X, -direction.Z) * RadToDeg, std::asin(std::clamp(direction.Y, -1.0f, 1.0f)) * RadToDeg };
+}
+
+void SetTravel(TruckState& truck, Vec3 direction, const DriverSettings& settings)
+{
+	truck.Travel = direction;
+	if (settings.NoseTurnRate <= 0)
+		return;
+	const Vec2 out = ToYawPitch(direction);
+	truck.Yaw = out.X;
+	truck.Pitch = out.Y;
+	truck.Look = out;
+	truck.TurnVelocity = {};
+}
+
 Vec3 RotateTowards(Vec3 v, Vec3 target, float maxDegrees)
 {
 	const float angle = std::acos(std::clamp(Vec3::Dot(v, target), -1.0f, 1.0f)) * RadToDeg;
@@ -120,5 +137,6 @@ void StepTruck(TruckState& truck, const TruckControls& controls, const SpaceWeat
 	const Vec3 nose = GetNose(truck);
 	const float turnRate = settings.TurnTime90 > 0 ? 90 / settings.TurnTime90 : 360;
 	truck.Travel = truck.Speed > 0.01f && settings.NoseTurnRate <= 0 ? RotateTowards(truck.Travel, nose, turnRate * deltaTime) : nose;
-	truck.Position += truck.Travel * (truck.Speed * deltaTime);
+	truck.Position += (truck.Travel * truck.Speed + truck.Knockback) * deltaTime;
+	truck.Knockback *= std::exp(-settings.BounceRecoil * deltaTime);
 }

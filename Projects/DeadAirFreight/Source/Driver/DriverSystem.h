@@ -109,6 +109,8 @@ private:
 
 	bool m_CursorFree = false;
 	bool m_Calm = false;
+	bool m_Rigged = false;
+	bool m_Minimal = false;
 	float m_WindNow = 0;
 	float m_KpNow = 0;
 	float m_PeakWindFought = 0;

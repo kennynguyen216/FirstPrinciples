@@ -254,9 +254,22 @@ static void CheckAsteroidBounce(const DriverSettings& settings)
 	truck.Travel = { 0, 0, -1 };
 	CHECK(CollideWithRocks(truck, { rock }, 0, settings))
 	CHECK(truck.Speed < 40 * settings.BounceSpeedKeep + 1e-3f)
-	CHECK(truck.Travel.Z > 0)
+	CHECK(truck.Travel.Z < 0) // still facing the rock: knocked back, not turned
+	CHECK(truck.Knockback.Z > 0)
 	CHECK((truck.Position - rock.Center).Length() >= rock.Radius + settings.TruckRadius - 1e-3f)
 	CHECK(!CollideWithRocks(truck, { rock }, 0, settings))
+	// Overlapping but already moving away: pushed out, not another hit.
+	truck.Position = { 0, 0, -4 };
+	CHECK(!CollideWithRocks(truck, { rock }, 0, settings))
+	// With the engine off the knockback alone carries the ship about BounceDistance back.
+	DriverSettings still = settings;
+	still.CruiseSpeed = 0;
+	truck.Speed = 0;
+	const float before = truck.Position.Z;
+	for (int i = 0; i < 600; ++i)
+		StepTruck(truck, {}, {}, 0, still, 1 / 60.0f);
+	CHECK(std::abs(truck.Position.Z - before - settings.BounceDistance) < settings.BounceDistance * 0.1f)
+	CHECK((truck.Position - rock.Center).Length() >= rock.Radius + settings.TruckRadius - 1e-3f)
 }
 
 static void CheckBlackHoles(const DriverSettings& settings)

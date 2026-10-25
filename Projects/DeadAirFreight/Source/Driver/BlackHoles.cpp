@@ -4,11 +4,6 @@
 
 using namespace FP;
 
-static Vec2 ToYawPitch(Vec3 direction)
-{
-	return { std::atan2(-direction.X, -direction.Z) * RadToDeg, std::asin(std::clamp(direction.Y, -1.0f, 1.0f)) * RadToDeg };
-}
-
 std::vector<BlackHole> BuildBlackHoles(const MatchPackage& package, const Route& route, const DriverSettings& settings)
 {
 	Vec3 right = Vec3::Cross(route.Direction, { 0, 1, 0 });
@@ -53,16 +48,7 @@ BlackHoleEvent StepBlackHoles(TruckState& truck, std::vector<BlackHole>& holes, 
 			// Too deep: spat back out of the core, slowed to a crawl, and the charge is lost.
 			const Vec3 normal = distance > 1e-4f ? toHole * (-1 / distance) : -truck.Travel;
 			truck.Position = hole.Position + normal * core;
-			truck.Travel = normal;
-			if (settings.NoseTurnRate > 0)
-			{
-				// The slow helm travels where the ship faces, so turn the ship (and the look) out of the core too.
-				const Vec2 out = ToYawPitch(normal);
-				truck.Yaw = out.X;
-				truck.Pitch = out.Y;
-				truck.Look = out;
-				truck.TurnVelocity = {};
-			}
+			SetTravel(truck, normal, settings);
 			truck.Speed *= settings.BounceSpeedKeep;
 			hole.Charge = 0;
 			event = BlackHoleEvent::Swallowed;

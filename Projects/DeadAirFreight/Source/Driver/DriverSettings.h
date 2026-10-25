@@ -15,7 +15,7 @@
 	X(ColonyRadius) X(DeliveryAltitude) X(KmPerUnit) \
 	X(MaxClusters) X(RocksPerCluster) X(ClusterSpread) X(MinRockDiameter) X(MaxRockDiameter) X(MinRockSize) X(MaxRockSize) \
 	X(MinFlybySpeed) X(MaxFlybySpeed) X(MinDrift) X(MaxDrift) X(MaxMissLunar) X(MaxRouteOffset) X(RouteClusterStart) X(RouteClusterEnd) \
-	X(TruckRadius) X(BounceSpeedKeep) X(BounceJerk) \
+	X(TruckRadius) X(BounceSpeedKeep) X(BounceDistance) X(BounceRecoil) \
 	X(BlackHoleCount) X(BlackHoleCoreRadius) X(BlackHoleRingRadius) X(BlackHoleRouteOffset) X(FirstBlackHoleDistance) X(BlackHolePull) X(SlingshotTime) \
 	X(ChaseDistance) X(ChaseHeight) X(SeatedEyeHeight) X(BankPerTurn) X(BankMax) X(BankSmoothing) X(DustCount) X(BoostDustCount) X(DustSpread) X(StreakLength) X(StreakSpeed) X(StreakWidth)
 

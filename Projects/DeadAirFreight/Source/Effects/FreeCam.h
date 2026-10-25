@@ -7,6 +7,7 @@
 // zooms. G hands control back to the player with the camera held where it is, and again to fly.
 // V picks what the held camera keeps still against: riding along with the player (the default,
 // which keeps up with the truck) or a fixed spot in space, which the truck flies past.
+// H, with or without the camera, hides the speed lines and black holes.
 //
 // From outside, the truck is its model, and the cab and the bay behind its hatch wait far away. The
 // windshield is a portal that still shows them at full size, so it is bigger on the inside. Fly into
@@ -21,6 +22,9 @@ public:
 	const char* GetName() const override { return "FreeCam"; }
 	void OnStop(FP::World& world) override;
 	void Update(FP::World& world, float deltaTime) override;
+
+private:
+	void UpdateCamera(FP::World& world, float deltaTime);
 };
 
 namespace FreeCam
