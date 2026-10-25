@@ -1,6 +1,7 @@
 #include "Tests/TestFramework.h"
 #include "Engine/Engine.h"
 #include "Engine/SceneSerializer.h"
+#include <cmath>
 
 using namespace FP;
 
@@ -126,4 +127,93 @@ FP_TEST(Hierarchy_SceneEntityIsMadeOnce)
 	StrongObjectPtr<World> loaded(NewObject<World>());
 	FP_EXPECT(SceneSerializer::LoadFromString(*loaded.Get(), SceneSerializer::SaveToString(*world.Get()).View()));
 	FP_EXPECT(loaded->GetSceneEntity() != NullEntity && loaded->GetEntityName(loaded->GetSceneEntity()) == "Scene");
+}
+
+FP_TEST(Hierarchy_CachedOrderTracksRegistryRemovalAndSceneReplacement)
+{
+	Engine::RegisterEngineComponents();
+	World world;
+	const Entity first = world.CreateEntity("First");
+	const Entity second = world.CreateEntity("Second");
+	FP_EXPECT(world.GetEntities()[0] == first && world.GetEntities()[1] == second);
+	world.GetRegistry().destroy(first);
+	FP_EXPECT(world.GetEntities().Num() == 1 && world.GetEntities()[0] == second);
+	const Entity third = world.CreateEntity("Third");
+	FP_EXPECT(world.GetEntities()[0] == second && world.GetEntities()[1] == third);
+	World replacement;
+	replacement.CreateEntity("Replacement");
+	replacement.CreateEntity("Other");
+	FP_EXPECT(replacement.GetEntities().Num() == 2);
+	world.ReplaceScene(replacement);
+	FP_EXPECT(world.GetEntityName(world.GetEntities()[0]) == "Replacement");
+	FP_EXPECT(replacement.GetEntityName(replacement.GetEntities()[0]) == "Second");
+	world.Clear();
+	FP_EXPECT(world.GetEntities().IsEmpty());
+	world.CreateEntity("After clear");
+	FP_EXPECT(world.GetEntities().Num() == 1);
+}
+
+FP_TEST(Hierarchy_ChildOrderSurvivesReparentingAndHandleReuse)
+{
+	Engine::RegisterEngineComponents();
+	World world;
+	const Entity root = world.CreateEntity("Root");
+	const Entity first = world.CreateEntity("First");
+	const Entity other = world.CreateEntity("Other");
+	const Entity second = world.CreateEntity("Second");
+	world.SetParent(second, root, false);
+	world.SetParent(first, root, false);
+	FP_EXPECT(world.GetChildren(root)[0] == first && world.GetChildren(root)[1] == second);
+	world.SetParent(first, other, false);
+	FP_EXPECT(world.GetChildren(root).Num() == 1 && world.GetChildren(other)[0] == first);
+	world.DestroyEntity(second);
+	const Entity third = world.CreateEntity("Third");
+	world.SetParent(third, root, false);
+	world.SetParent(first, root, false);
+	FP_EXPECT(world.GetChildren(root)[0] == first && world.GetChildren(root)[1] == third);
+}
+
+FP_TEST(Hierarchy_DeepTransformsPreserveCompositionAndDirectEdits)
+{
+	Engine::RegisterEngineComponents();
+	World world;
+	Entity parent = NullEntity;
+	Mat4 expected;
+	Quat rotation;
+	Entity root = NullEntity;
+	for (int i = 0; i < 256; ++i)
+	{
+		const Entity entity = world.CreateEntity("Node");
+		if (root == NullEntity) root = entity;
+		auto& transform = world.Get<TransformComponent>(entity);
+		transform.Position = { 0.03f, 0.02f, 0.01f };
+		transform.Rotation = { 0.3f, 0.5f, 0.1f };
+		world.SetParent(entity, parent, false);
+		expected = expected * transform.GetMatrix();
+		rotation = rotation * transform.GetRotation();
+		parent = entity;
+	}
+	const Mat4 actual = world.GetWorldMatrix(parent);
+	for (int col = 0; col < 4; ++col)
+		for (int row = 0; row < 4; ++row)
+			FP_EXPECT(std::fabs(actual.At(col, row) - expected.At(col, row)) < 0.001f);
+	FP_EXPECT(Near(world.GetWorldRotation(parent).Rotate({ 0, 0, -1 }), rotation.Rotate({ 0, 0, -1 })));
+	const Vec3 before = world.GetWorldPosition(parent);
+	world.Get<TransformComponent>(root).Position.X += 5;
+	FP_EXPECT(Near(world.GetWorldPosition(parent), before + Vec3(5, 0, 0)));
+}
+
+FP_TEST(Hierarchy_CyclicQueriesTerminateWithoutRecursion)
+{
+	Engine::RegisterEngineComponents();
+	World world;
+	const Entity first = world.CreateEntity("First");
+	const Entity second = world.CreateEntity("Second");
+	world.Add<ParentComponent>(first, ParentComponent{ world.Get<IdComponent>(second).Id, second });
+	world.Add<ParentComponent>(second, ParentComponent{ world.Get<IdComponent>(first).Id, first });
+	world.Get<TransformComponent>(first).Position.X = 3;
+	FP_EXPECT(world.GetWorldPosition(first).X == 3);
+	FP_EXPECT(std::isfinite(world.GetWorldRotation(first).W));
+	world.GetRegistry().remove<ParentComponent>(first);
+	world.GetRegistry().remove<ParentComponent>(second);
 }
