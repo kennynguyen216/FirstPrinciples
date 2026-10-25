@@ -398,7 +398,7 @@ namespace FP
 	}
 
 	// Bump when the script interface changes so stale modules are refused instead of crashing.
-	constexpr uint32 ScriptInterfaceVersion = 18;
+	constexpr uint32 ScriptInterfaceVersion = 19;
 
 	// Fingerprint of everything a script module shares with the host by layout. A module built
 	// against different engine headers or a different configuration gives a different value.

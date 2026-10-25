@@ -202,6 +202,7 @@ namespace FP::Editor
 		ScriptBuilder* m_ScriptBuilder = nullptr;
 		QTabWidget* m_CentralTabs = nullptr;
 		ContentBrowser* m_ContentBrowser = nullptr;
+		QDockWidget* m_DetailsDock = nullptr;
 		QDockWidget* m_ConsoleDock = nullptr;
 		QDockWidget* m_ContentDock = nullptr;
 		QDockWidget* m_ProfilerDock = nullptr;
