@@ -58,4 +58,3 @@ fragment main0_out main0(main0_in in [[stage_in]], constant FXAAData& FXAA [[buf
     out.OutColor = float4(select(b, a, bool3((lumaB < low) || (lumaB > high))), 1.0);
     return out;
 }
-

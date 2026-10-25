@@ -50,4 +50,3 @@ fragment main0_out main0(main0_in in [[stage_in]], constant BloomData& Bloom [[b
     out.OutColor = float4(color, 1.0);
     return out;
 }
-
