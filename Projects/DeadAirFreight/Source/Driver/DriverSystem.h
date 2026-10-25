@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Asteroids.h"
+#include "BlackHoles.h"
 #include "Cab.h"
 #include "LifeSupport.h"
 #include "SpaceWeather.h"
@@ -51,6 +52,7 @@ private:
 	FP::Vec3 m_Colony;
 	std::vector<Rock> m_Rocks;
 	std::vector<FP::Entity> m_RockEntities;
+	std::vector<BlackHole> m_BlackHoles;
 
 	FP::Entity m_Truck = FP::NullEntity;
 	FP::Entity m_Driver = FP::NullEntity;
@@ -71,8 +73,11 @@ private:
 	float m_KpNow = 0;
 	float m_PeakWindFought = 0;
 	float m_NextFault = 0;
+	int m_TicketsSinceJackpot = 0;
 	std::vector<Message> m_Messages;
 	bool m_Finished = false;
 	std::vector<std::string> m_Results;
 	FP::Entity m_HudCamera = FP::NullEntity;
+	double m_NextHudSend = 0;
+	std::string m_LastHud;
 };

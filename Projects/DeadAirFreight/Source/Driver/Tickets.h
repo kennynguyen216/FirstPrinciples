@@ -20,6 +20,9 @@ std::vector<float> GetPrizeOdds(const DriverSettings& settings);
 
 Prize RollPrize(float roll, const std::vector<float>& odds);
 
+// Pity: after JackpotPity - 1 tickets in a row without a jackpot, the next one is.
+Prize WithPity(Prize rolled, int ticketsSinceJackpot, const DriverSettings& settings);
+
 struct Ticket
 {
 	bool Active = false;

@@ -70,7 +70,9 @@
 		return '<div style="white-space:pre;' + size + "color:" + l.c + '">' + esc(l.t) + bar + "</div>";
 	}
 	function esc(text) { return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
-	function lines(id, list) { document.getElementById(id).innerHTML = (list || []).map(line).join(""); }
+	// Only touches what changed, so the rest of the page is not laid out again.
+	function html(element, text) { if (element._html !== text) element.innerHTML = element._html = text; }
+	function lines(id, list) { html(document.getElementById(id), (list || []).map(line).join("")); }
 	function show(id, on) { document.getElementById(id).style.display = on ? "block" : "none"; }
 
 	var cell = 0;
@@ -81,14 +83,19 @@
 		if (!t) return;
 		cell = window.innerHeight * 0.3 / t.cols;
 		var canvas = box.querySelector("canvas");
-		canvas.width = t.cols * cell;
-		canvas.height = t.rows * cell;
-		var context = canvas.getContext("2d");
-		context.clearRect(0, 0, canvas.width, canvas.height);
-		context.fillStyle = "#8c9199";
-		for (var i = 0; i < t.coating.length; ++i)
-			if (t.coating[i] === "1")
-				context.fillRect((i % t.cols) * cell, Math.floor(i / t.cols) * cell, cell + 1, cell + 1);
+		// Repainted only when the coating or the card's size changes, not every time the coin moves.
+		var card = t.cols + "x" + t.rows + "@" + cell + ":" + t.coating;
+		if (canvas._card !== card) {
+			canvas._card = card;
+			canvas.width = t.cols * cell;
+			canvas.height = t.rows * cell;
+			var context = canvas.getContext("2d");
+			context.clearRect(0, 0, canvas.width, canvas.height);
+			context.fillStyle = "#8c9199";
+			for (var i = 0; i < t.coating.length; ++i)
+				if (t.coating[i] === "1")
+					context.fillRect((i % t.cols) * cell, Math.floor(i / t.cols) * cell, cell + 1, cell + 1);
+		}
 		box.querySelector(".prize").textContent = t.prize;
 		var coin = box.querySelector(".coin");
 		coin.style.display = t.revealed ? "none" : "block";
@@ -100,15 +107,15 @@
 	engine.watch("hud", function (hud) {
 		document.getElementById("dark").style.opacity = hud.dark;
 		lines("left", hud.left);
-		document.getElementById("clock").innerHTML = line(hud.clock);
+		html(document.getElementById("clock"), line(hud.clock));
 		lines("right", hud.right);
 		lines("center", hud.center);
 		show("blackout", hud.blackout);
 		lines("prompts", hud.prompts);
 
-		document.getElementById("distance").innerHTML = line(hud.distance);
+		html(document.getElementById("distance"), line(hud.distance));
 		document.getElementById("progress").style.width = (hud.progress * 100) + "%";
-		document.getElementById("course").innerHTML = line({ t: hud.course.t, c: hud.course.c });
+		html(document.getElementById("course"), line({ t: hud.course.t, c: hud.course.c }));
 		var gauge = document.getElementById("gauge");
 		gauge.style.width = (hud.course.bar * 100) + "%";
 		gauge.style.background = hud.course.c;
@@ -125,7 +132,7 @@
 		drawTicket(hud.ticket);
 		show("results", !!hud.results);
 		if (hud.results)
-			document.querySelector("#results .lines").innerHTML = hud.results.map(line).join("");
+			html(document.querySelector("#results .lines"), hud.results.map(line).join(""));
 	});
 </script>
 </body>

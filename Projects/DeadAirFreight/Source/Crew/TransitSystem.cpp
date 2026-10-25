@@ -73,6 +73,16 @@ namespace
 		return std::sqrt(offset.X * offset.X + offset.Z * offset.Z);
 	}
 
+	// Re-adding a component every frame costs more than comparing it, so ghosts copy only changes.
+	template <typename T, typename Same>
+	void CopyIfChanged(World& world, Entity source, Entity ghost, Same same)
+	{
+		const T* from = world.TryGet<T>(source);
+		const T* to = world.TryGet<T>(ghost);
+		if (from && (!to || !same(*from, *to)))
+			world.Add<T>(ghost, T{ *from });
+	}
+
 	bool IsShown(World& world, Entity entity)
 	{
 		return world.Has<MeshComponent>(entity) || world.Has<PointLightComponent>(entity);
@@ -121,6 +131,9 @@ void TransitSystem::OnStart(World& world)
 	m_NearHatch = false;
 	m_Ghosts.clear();
 	m_CabParts.clear();
+	m_BayParts.clear();
+	m_BayScanIn = 0;
+	m_CabBody = FindByName(world, CabDriverName);
 	m_CabHatchEntity = FindByName(world, CabHatchName);
 	if (m_CabHatchEntity != NullEntity)
 		m_CabHatch = world.Get<TransformComponent>(m_CabHatchEntity).Position;
@@ -136,7 +149,7 @@ void TransitSystem::OnStart(World& world)
 		m_Reach = settings.InteractRange;
 }
 
-void TransitSystem::Update(World& world, float)
+void TransitSystem::Update(World& world, float deltaTime)
 {
 	const MatchStateComponent* state = GetState(world);
 	const Entity body = FindLocalMember(world);
@@ -144,8 +157,7 @@ void TransitSystem::Update(World& world, float)
 		return;
 	const CrewMemberComponent& member = world.Get<CrewMemberComponent>(body);
 	// The cab exists for this player once the Driver's systems are running.
-	const Entity cabBody = FindByName(world, CabDriverName);
-	DriverState* cab = cabBody == NullEntity ? nullptr : world.TryGet<DriverState>(cabBody);
+	DriverState* cab = world.IsValid(m_CabBody) ? world.TryGet<DriverState>(m_CabBody) : nullptr;
 	const Entity bayHatch = FindBayHatch(world, member.Crew);
 	Vec3 room;
 	InteriorComponent bay;
@@ -189,13 +201,13 @@ void TransitSystem::Update(World& world, float)
 		transform.Position = Through(from, to, placed.Position);
 		transform.Rotation = Through(from, to, placed.GetRotation()).ToEuler();
 		transform.Scale = placed.Scale;
-		// Copied every frame: tanks change material as they leak, lights dim with the cab's power.
-		if (const MeshComponent* mesh = world.TryGet<MeshComponent>(source))
-			world.Add<MeshComponent>(ghost.Entity, MeshComponent{ *mesh });
-		if (const MaterialComponent* material = world.TryGet<MaterialComponent>(source))
-			world.Add<MaterialComponent>(ghost.Entity, MaterialComponent{ *material });
-		if (const PointLightComponent* light = world.TryGet<PointLightComponent>(source))
-			world.Add<PointLightComponent>(ghost.Entity, PointLightComponent{ *light });
+		// Checked every frame: tanks change material as they leak, lights dim with the cab's power.
+		CopyIfChanged<MeshComponent>(world, source, ghost.Entity, [](const MeshComponent& a, const MeshComponent& b) { return a.Mesh == b.Mesh; });
+		CopyIfChanged<MaterialComponent>(world, source, ghost.Entity, [](const MaterialComponent& a, const MaterialComponent& b) { return a.Material == b.Material && a.Slots == b.Slots; });
+		CopyIfChanged<PointLightComponent>(world, source, ghost.Entity, [](const PointLightComponent& a, const PointLightComponent& b) {
+			return a.Color == b.Color && a.Intensity == b.Intensity && a.Range == b.Range && a.CastShadows == b.CastShadows
+				&& a.ShadowResolution == b.ShadowResolution && a.ShadowStrength == b.ShadowStrength;
+		});
 	};
 
 	for (Entity part : m_CabParts)
@@ -203,17 +215,29 @@ void TransitSystem::Update(World& world, float)
 		if (world.IsValid(part))
 			show(part, cabDoor, bayDoor);
 	}
-	// The bay is whatever is in it right now: walls, tanks, creatures, beams.
-	std::vector<Entity> bayParts;
-	for (auto [entity, transform] : world.View<TransformComponent>().each())
+	// The bay is whatever is in it: walls, tanks, creatures, beams. Finding that means looking at every
+	// entity in the world, so it is redone a few times a second rather than every frame.
+	// ponytail: a Mite or beam can take up to BayScanSeconds to show through the doorway; tag bay
+	// entities with a component if that lag shows.
+	constexpr float BayScanSeconds = 0.25f;
+	m_BayScanIn -= deltaTime;
+	if (m_BayScanIn <= 0)
 	{
-		const Vec3 at = transform.Position - room;
-		if (std::abs(at.X) <= bay.HalfWidth + 1 && std::abs(at.Z) <= bay.HalfLength + 1 && at.Y >= -1 && at.Y <= 8
-			&& IsShown(world, entity) && !world.Has<GhostComponent>(entity))
-			bayParts.push_back(entity);
+		m_BayScanIn = BayScanSeconds;
+		m_BayParts.clear();
+		for (auto [entity, transform] : world.View<TransformComponent>().each())
+		{
+			const Vec3 at = transform.Position - room;
+			if (std::abs(at.X) <= bay.HalfWidth + 1 && std::abs(at.Z) <= bay.HalfLength + 1 && at.Y >= -1 && at.Y <= 8
+				&& IsShown(world, entity) && !world.Has<GhostComponent>(entity))
+				m_BayParts.push_back(entity);
+		}
 	}
-	for (Entity part : bayParts)
-		show(part, bayDoor, cabDoor);
+	for (Entity part : m_BayParts)
+	{
+		if (world.IsValid(part) && IsShown(world, part))
+			show(part, bayDoor, cabDoor);
+	}
 
 	for (auto it = m_Ghosts.begin(); it != m_Ghosts.end();)
 	{

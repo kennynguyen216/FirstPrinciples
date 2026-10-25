@@ -117,6 +117,22 @@ void DriverSystem::OnStart(World& world)
 		m_RockEntities.push_back(entity);
 	}
 
+	// Placeholders: a black core inside a see-through ring that marks where the slingshot charges.
+	m_BlackHoles = BuildBlackHoles(m_Package, m_Route, m_Settings);
+	auto addSphere = [&](Vec3 position, float radius, const char* material) {
+		const Entity entity = world.CreateEntity("BlackHole");
+		TransformComponent& transform = world.Get<TransformComponent>(entity);
+		transform.Position = position;
+		transform.Scale = Vec3{ 1, 1, 1 } * (radius * 2);
+		world.Add<MeshComponent>(entity).Mesh = "Sphere";
+		world.Add<MaterialComponent>(entity).Material = material;
+	};
+	for (const BlackHole& hole : m_BlackHoles)
+	{
+		addSphere(hole.Position, hole.CoreRadius, "Materials/BlackHole.material");
+		addSphere(hole.Position, hole.RingRadius, "Materials/BlackHoleRing.material");
+	}
+
 	m_Driver = FindOrNull(world, "Driver");
 	const Entity floor = FindOrNull(world, "CabFloor");
 	const Entity wheel = FindOrNull(world, "Wheel");
@@ -188,6 +204,8 @@ void DriverSystem::OnStart(World& world)
 	m_Bank = 0;
 	m_BaseFieldOfView = 60;
 	m_HudCamera = NullEntity;
+	m_NextHudSend = 0;
+	m_LastHud.clear();
 	for (auto [entity, camera] : world.View<CameraComponent>().each())
 	{
 		m_BaseFieldOfView = camera.Primary ? camera.FieldOfView : m_BaseFieldOfView;
@@ -202,6 +220,7 @@ void DriverSystem::OnStart(World& world)
 	}
 	m_PeakWindFought = 0;
 	m_NextFault = m_Settings.StormFaultInterval;
+	m_TicketsSinceJackpot = 0;
 	m_Messages.clear();
 	m_Results.clear();
 	m_Finished = false;
@@ -257,8 +276,10 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 	const bool seated = driver ? driver->Seated : true;
 	if (seated && awake && Input::WasKeyPressed(SDL_SCANCODE_T) && !ticket.Active)
 	{
-		const Prize prize = RollPrize(NextRandom(truck.Random), GetPrizeOdds(m_Settings));
-		if (!BuyTicket(ticket, life, prize, m_Settings))
+		const Prize prize = WithPity(RollPrize(NextRandom(truck.Random), GetPrizeOdds(m_Settings)), m_TicketsSinceJackpot, m_Settings);
+		if (BuyTicket(ticket, life, prize, m_Settings))
+			m_TicketsSinceJackpot = prize == Prize::Jackpot ? 0 : m_TicketsSinceJackpot + 1;
+		else
 			Notify("NOT ENOUGH CARGO AIR FOR A TICKET", Bad, 2);
 	}
 	const bool scratching = ticket.Active && !ticket.Revealed;
@@ -294,6 +315,18 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 	{
 		Notify("ASTEROID HIT!", Bad, 1.5f);
 		fault("THE HIT KNOCKED OUT THE SCRUBBER");
+	}
+	switch (StepBlackHoles(truck, m_BlackHoles, m_Settings, deltaTime))
+	{
+	case BlackHoleEvent::Slingshot:
+		Notify("SLINGSHOT! HYPERDRIVE OVERLOAD", Good, 3);
+		break;
+	case BlackHoleEvent::Swallowed:
+		Notify("TOO DEEP! THE BLACK HOLE SPAT YOU OUT", Bad, 2);
+		fault("THE TIDES KNOCKED OUT THE SCRUBBER");
+		break;
+	case BlackHoleEvent::None:
+		break;
 	}
 	// Surges come as often as the real Kp says, the same storm that jerks the truck.
 	m_NextFault -= deltaTime;
@@ -481,6 +514,12 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 	UIDocumentInstance* page = m_HudCamera != NullEntity && world.IsValid(m_HudCamera) ? UISystem::For(world, m_HudCamera) : nullptr;
 	if (!page || !page->IsReady())
 		return;
+	// The page relays out everything it is sent, so it hears from us 20 times a second, and every
+	// frame only while a ticket is being scratched so the coin keeps up with the mouse.
+	const bool scratching = ticket.Active && !ticket.Revealed;
+	if (!scratching && world.GetTime() < m_NextHudSend)
+		return;
+	m_NextHudSend = world.GetTime() + 0.05;
 	const UIStateComponent* pageState = world.TryGet<UIStateComponent>(m_HudCamera);
 	const float aspect = pageState && pageState->Height > 0 ? static_cast<float>(pageState->Width) / static_cast<float>(pageState->Height) : 16.0f / 9;
 	const bool flash = std::fmod(truck.Time, 0.5f) < 0.25f;
@@ -512,6 +551,11 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 		left.push_back(Line("FREE FIX BANKED", Good));
 	if (truck.Boost > 0)
 		left.push_back(Line(Format("HYPERDRIVE %.0fS", std::ceil(truck.Boost)), flash ? Good : White));
+	for (const BlackHole& hole : m_BlackHoles)
+	{
+		if (!hole.Spent && hole.Charge > 0)
+			left.push_back(Line(Format("SLINGSHOT  %3.0f%%", hole.Charge / std::max(m_Settings.SlingshotTime, 1e-3f) * 100), Warn, hole.Charge / std::max(m_Settings.SlingshotTime, 1e-3f)));
+	}
 	field("left", list(left));
 
 	const int clock = static_cast<int>(std::ceil(life.ColonyTimeLeft));
@@ -596,5 +640,8 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 		field("results", list(results));
 	}
 	json += "}";
+	if (json == m_LastHud)
+		return;
 	page->SetJson("hud", json);
+	m_LastHud = std::move(json);
 }

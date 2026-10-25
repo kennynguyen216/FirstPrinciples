@@ -31,10 +31,12 @@ class CargoBridgeInSystem : public FP::System
 public:
 	explicit CargoBridgeInSystem(FP::int32 crew) : m_Crew(crew) {}
 	const char* GetName() const override { return "CargoBridgeIn"; }
+	void OnStart(FP::World& world) override;
 	void Update(FP::World& world, float deltaTime) override;
 
 private:
 	FP::int32 m_Crew;
+	FP::Entity m_Truck = FP::NullEntity;
 };
 
 // Runs just after the Driver's systems: their spending comes out of the tanks, and the end of the
@@ -49,6 +51,8 @@ public:
 
 private:
 	FP::int32 m_Crew;
+	FP::Entity m_Truck = FP::NullEntity;
+	FP::Entity m_Colony = FP::NullEntity;
 	float m_DeliveryAltitude = 0;
 	float m_ColonyRadius = 0;
 };

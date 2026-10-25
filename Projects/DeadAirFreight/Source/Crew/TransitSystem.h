@@ -31,7 +31,10 @@ private:
 	// The cab hatch in cab space, read from the scene before the cab starts riding the truck.
 	FP::Vec3 m_CabHatch;
 	FP::Entity m_CabHatchEntity = FP::NullEntity;
+	FP::Entity m_CabBody = FP::NullEntity;
 	std::vector<FP::Entity> m_CabParts;
+	std::vector<FP::Entity> m_BayParts;
+	float m_BayScanIn = 0;
 	std::unordered_map<FP::Entity, Ghost> m_Ghosts;
 	float m_Reach = 2;
 	bool m_NearHatch = false;

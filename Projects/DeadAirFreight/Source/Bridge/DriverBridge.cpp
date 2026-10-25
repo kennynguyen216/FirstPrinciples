@@ -69,18 +69,25 @@ void DriverLauncherSystem::Update(World& world, float)
 	FP_LOG("Driver bridge: Crew %s's cab is running, you start in the %s", GetCrewName(member.Crew), !DefenderEnabled || member.Role == CrewRole::Driver ? "cab" : "cargo bay");
 }
 
+void CargoBridgeInSystem::OnStart(World& world)
+{
+	m_Truck = FindByName(world, TruckName);
+}
+
 void CargoBridgeInSystem::Update(World& world, float)
 {
-	const Entity truck = FindByName(world, TruckName);
-	LifeSupport* life = truck == NullEntity ? nullptr : world.TryGet<LifeSupport>(truck);
+	const Entity truck = m_Truck;
+	LifeSupport* life = world.IsValid(truck) ? world.TryGet<LifeSupport>(truck) : nullptr;
 	if (!life)
 		return;
 	life->Cargo = Cargo::Sum(world, m_Crew).OxygenKg;
 	world.Add<CargoBridgeComponent>(truck).Before = life->Cargo;
 }
 
-void CargoBridgeOutSystem::OnStart(World&)
+void CargoBridgeOutSystem::OnStart(World& world)
 {
+	m_Truck = FindByName(world, TruckName);
+	m_Colony = FindByName(world, ColonyName);
 	DriverSettings settings;
 	if (LoadDriverSettings(Paths::Content("Settings/Driver.settings").CStr(), settings))
 	{
@@ -91,9 +98,9 @@ void CargoBridgeOutSystem::OnStart(World&)
 
 void CargoBridgeOutSystem::Update(World& world, float)
 {
-	const Entity truck = FindByName(world, TruckName);
-	LifeSupport* life = truck == NullEntity ? nullptr : world.TryGet<LifeSupport>(truck);
-	const CargoBridgeComponent* bridge = truck == NullEntity ? nullptr : world.TryGet<CargoBridgeComponent>(truck);
+	const Entity truck = m_Truck;
+	LifeSupport* life = world.IsValid(truck) ? world.TryGet<LifeSupport>(truck) : nullptr;
+	const CargoBridgeComponent* bridge = world.IsValid(truck) ? world.TryGet<CargoBridgeComponent>(truck) : nullptr;
 	if (!life || !bridge)
 		return;
 
@@ -110,8 +117,8 @@ void CargoBridgeOutSystem::Update(World& world, float)
 	MatchStateComponent* state = GetState(world);
 	if (!state || state->Phase != MatchPhase::Racing)
 		return;
-	const Entity colony = FindByName(world, ColonyName);
-	const bool delivered = colony != NullEntity &&
+	const Entity colony = m_Colony;
+	const bool delivered = world.IsValid(colony) &&
 		(truckTransform.Position - world.Get<TransformComponent>(colony).Position).Length() - m_ColonyRadius <= m_DeliveryAltitude;
 	if (!delivered && life->ColonyTimeLeft > 0 && life->Cargo > 0)
 		return;

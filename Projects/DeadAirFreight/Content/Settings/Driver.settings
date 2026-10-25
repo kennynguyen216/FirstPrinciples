@@ -58,6 +58,7 @@ PowerFlickerLevel 0.3
 TicketCostFraction 0.02
 CalmHandsTime 10
 JackpotTickets 3
+JackpotPity 8 # the 8th ticket in a row without a jackpot is one
 BoostTime 8
 BoostSpeedScale 2.5
 BoostAccel 80
@@ -65,8 +66,8 @@ BoostFov 35
 BoostShake 0.6
 BoostJerkInterval 0.7
 BoostJerkStrength 70
-PrizeDud 0.40
-PrizeCalmHands 0.25
+PrizeDud 0.55
+PrizeCalmHands 0.10
 PrizeFreeFix 0.20
 PrizeJackpot 0.15
 CalmHandsScale 0.2
@@ -99,6 +100,13 @@ RouteClusterEnd 0.9
 TruckRadius 6
 BounceSpeedKeep 0.3
 BounceJerk 150
+
+BlackHoleCount 3
+BlackHoleCoreRadius 15
+BlackHoleRingRadius 60 # skim between the core and this to charge the slingshot
+BlackHoleRouteOffset 0.8 # how far off the route line, as a fraction of RingRadius
+BlackHolePull 30 # degrees per second the travel bends in at the core's edge
+SlingshotTime 0.7 # charge one pass needs to fire the hyperdrive, once per hole: seconds at the core's edge, longer further out. 0.7 fires for passes through the inner half of the ring
 
 ChaseDistance 16
 ChaseHeight 4

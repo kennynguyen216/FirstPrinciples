@@ -10,12 +10,13 @@
 	X(SteadyTime) X(DriftRampTime) X(WalkSpeed) X(LookSensitivity) X(EyeHeight) X(InteractRange) X(CabWallMargin) \
 	X(ScrubberRepairTime) X(CalmFaultInterval) X(StormFaultInterval) X(Co2RiseTime) X(Co2FallTime) X(BlackoutTime) X(Co2AfterBlackout) X(Co2DarkenMax) X(Co2WobbleBoost) \
 	X(CabReserveTime) X(PowerFlickerTime) X(PowerFlickerLevel) \
-	X(TicketCostFraction) X(CalmHandsTime) X(JackpotTickets) X(BoostTime) X(BoostSpeedScale) X(BoostAccel) X(BoostFov) X(BoostShake) X(BoostJerkInterval) X(BoostJerkStrength) X(PrizeDud) X(PrizeCalmHands) X(PrizeFreeFix) X(PrizeJackpot) \
+	X(TicketCostFraction) X(CalmHandsTime) X(JackpotTickets) X(JackpotPity) X(BoostTime) X(BoostSpeedScale) X(BoostAccel) X(BoostFov) X(BoostShake) X(BoostJerkInterval) X(BoostJerkStrength) X(PrizeDud) X(PrizeCalmHands) X(PrizeFreeFix) X(PrizeJackpot) \
 	X(CalmHandsScale) X(TicketColumns) X(TicketRows) X(TicketRevealFraction) X(TicketShowTime) X(TicketCoinSpeed) X(TicketCoinRadius) \
 	X(ColonyRadius) X(DeliveryAltitude) X(KmPerUnit) \
 	X(MaxClusters) X(RocksPerCluster) X(ClusterSpread) X(MinRockDiameter) X(MaxRockDiameter) X(MinRockSize) X(MaxRockSize) \
 	X(MinFlybySpeed) X(MaxFlybySpeed) X(MinDrift) X(MaxDrift) X(MaxMissLunar) X(MaxRouteOffset) X(RouteClusterStart) X(RouteClusterEnd) \
 	X(TruckRadius) X(BounceSpeedKeep) X(BounceJerk) \
+	X(BlackHoleCount) X(BlackHoleCoreRadius) X(BlackHoleRingRadius) X(BlackHoleRouteOffset) X(BlackHolePull) X(SlingshotTime) \
 	X(ChaseDistance) X(ChaseHeight) X(SeatedEyeHeight) X(BankPerTurn) X(BankMax) X(BankSmoothing) X(DustCount) X(DustSpread) X(StreakLength) X(StreakSpeed)
 
 struct DriverSettings

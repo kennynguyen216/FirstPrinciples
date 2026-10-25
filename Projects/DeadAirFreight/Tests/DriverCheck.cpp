@@ -1,4 +1,5 @@
 #include "Asteroids.h"
+#include "BlackHoles.h"
 #include "Cab.h"
 #include "LifeSupport.h"
 #include "SpaceWeather.h"
@@ -160,7 +161,7 @@ static std::string ReadFile(const char* path)
 static DriverSettings LoadRealSettings()
 {
 	DriverSettings settings;
-	std::stringstream lines(ReadFile("Projects/mk_ultra/Content/Settings/Driver.settings"));
+	std::stringstream lines(ReadFile("Projects/DeadAirFreight/Content/Settings/Driver.settings"));
 	std::string line;
 	int found = 0;
 	while (std::getline(lines, line))
@@ -185,9 +186,9 @@ static void CheckSpaceWeather(const DriverSettings& settings)
 	CHECK(FormatDate(ParseUtc("2024-02-29T23:59:59")) == "2024-02-29")
 
 	MatchSources sources;
-	sources.SolarWind = ParseSolarWind(ReadFile("Projects/mk_ultra/Content/SpaceWeather/Fallback/SolarWind.json"));
-	sources.Kp = ParseKp(ReadFile("Projects/mk_ultra/Content/SpaceWeather/Fallback/Kp.json"));
-	sources.Flybys = ParseFlybys(ReadFile("Projects/mk_ultra/Content/SpaceWeather/Fallback/Flybys.json"));
+	sources.SolarWind = ParseSolarWind(ReadFile("Projects/DeadAirFreight/Content/SpaceWeather/Fallback/SolarWind.json"));
+	sources.Kp = ParseKp(ReadFile("Projects/DeadAirFreight/Content/SpaceWeather/Fallback/Kp.json"));
+	sources.Flybys = ParseFlybys(ReadFile("Projects/DeadAirFreight/Content/SpaceWeather/Fallback/Flybys.json"));
 	CHECK(sources.SolarWind.size() > 500 && sources.SolarWind.front().Value > 100 && sources.SolarWind.back().Value < 3000)
 	CHECK(!sources.Kp.empty() && sources.Kp.back().Value >= 0 && sources.Kp.back().Value <= 9)
 	CHECK(sources.Flybys.size() == 13 && !sources.Flybys.front().Name.empty() && sources.Flybys.front().DiameterMeters > 0)
@@ -238,6 +239,36 @@ static void CheckAsteroidBounce(const DriverSettings& settings)
 	CHECK(!CollideWithRocks(truck, { rock }, 0, settings))
 }
 
+static void CheckBlackHoles(const DriverSettings& settings)
+{
+	BlackHole hole;
+	hole.Position = { 0, 0, -100 };
+	hole.CoreRadius = settings.BlackHoleCoreRadius;
+	hole.RingRadius = settings.BlackHoleRingRadius;
+	std::vector<BlackHole> holes{ hole };
+	TruckState truck;
+	truck.Position = hole.Position + Vec3{ (hole.CoreRadius + settings.TruckRadius + hole.RingRadius) / 2, 0, 0 };
+	truck.Travel = { 0, 0, -1 };
+	bool slung = false;
+	for (int i = 0; i < 60 * (settings.SlingshotTime * 2 + 1); ++i)
+	{
+		const BlackHoleEvent event = StepBlackHoles(truck, holes, settings, 1.0f / 60);
+		CHECK(event != BlackHoleEvent::Swallowed)
+		CHECK(!(slung && event == BlackHoleEvent::Slingshot))
+		slung = slung || event == BlackHoleEvent::Slingshot;
+	}
+	CHECK(slung && truck.Boost == settings.BoostTime && holes[0].Spent)
+	CHECK(truck.Travel.X < 0)
+	truck.Position = hole.Position + Vec3{ hole.RingRadius + 1, 0, 0 };
+	StepBlackHoles(truck, holes, settings, 1.0f / 60);
+	CHECK(holes[0].Charge == 0)
+
+	truck.Position = hole.Position;
+	truck.Speed = 40;
+	CHECK(StepBlackHoles(truck, holes, settings, 1.0f / 60) == BlackHoleEvent::Swallowed)
+	CHECK((truck.Position - hole.Position).Length() >= hole.CoreRadius + settings.TruckRadius - 1e-3f)
+}
+
 static void CheckLifeSupport(const DriverSettings& settings)
 {
 	const float dt = 1.0f / 60;
@@ -279,7 +310,13 @@ static void CheckTickets(const DriverSettings& settings)
 	const std::vector<float> odds = GetPrizeOdds(settings);
 	CHECK(RollPrize(0, odds) == Prize::Dud)
 	CHECK(RollPrize(0.999f, odds) == Prize::Jackpot)
-	CHECK(settings.PrizeJackpot * settings.JackpotTickets < 1)
+	CHECK(WithPity(Prize::Dud, static_cast<int>(settings.JackpotPity) - 2, settings) == Prize::Dud)
+	CHECK(WithPity(Prize::Dud, static_cast<int>(settings.JackpotPity) - 1, settings) == Prize::Jackpot)
+	// Even with pity, tickets lose air on average: the jackpot rate is one over the expected
+	// tickets until one, which pity cuts off at JackpotPity.
+	const float jackpotOdds = settings.PrizeJackpot / (settings.PrizeDud + settings.PrizeCalmHands + settings.PrizeFreeFix + settings.PrizeJackpot);
+	const float ticketsPerJackpot = (1 - std::pow(1 - jackpotOdds, settings.JackpotPity)) / jackpotOdds;
+	CHECK(settings.JackpotTickets / ticketsPerJackpot < 1)
 
 	LifeSupport life = StartLifeSupport(settings);
 	Ticket ticket;
@@ -313,6 +350,7 @@ int main()
 	const DriverSettings settings = LoadRealSettings();
 	CheckSpaceWeather(settings);
 	CheckAsteroidBounce(settings);
+	CheckBlackHoles(settings);
 	CheckLifeSupport(settings);
 	CheckTickets(settings);
 	std::printf("DriverCheck passed\n");

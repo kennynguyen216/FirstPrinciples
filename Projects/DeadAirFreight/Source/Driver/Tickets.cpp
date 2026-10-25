@@ -35,6 +35,11 @@ Prize RollPrize(float roll, const std::vector<float>& odds)
 	return Prize::Dud;
 }
 
+Prize WithPity(Prize rolled, int ticketsSinceJackpot, const DriverSettings& settings)
+{
+	return settings.JackpotPity > 0 && ticketsSinceJackpot + 1 >= settings.JackpotPity ? Prize::Jackpot : rolled;
+}
+
 bool BuyTicket(Ticket& ticket, LifeSupport& life, Prize prize, const DriverSettings& settings)
 {
 	const float cost = GetTicketCost(settings);
