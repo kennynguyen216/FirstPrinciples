@@ -1,4 +1,5 @@
 #include "Editor/InspectorPanel.h"
+#include "Engine/Assets/AssetDatabase.h"
 #include "Engine/Audio/AudioDevice.h"
 #include "Engine/Audio/AudioWorld.h"
 #include "Engine/ComponentRegistry.h"
@@ -727,8 +728,41 @@ namespace FP::Editor
 		DetailsSection* group = new DetailsSection(QString("%1: %2").arg(kind, info.fileName()));
 		QVBoxLayout* layout = group->Body();
 		QFormLayout* form = MakeForm(layout);
-		form->addRow("Path", new QLabel(QDir(ToQString(Paths::GetProjectDir())).relativeFilePath(m_AssetPath)));
+		QLabel* pathLabel = new QLabel(QDir(ToQString(Paths::GetProjectDir())).relativeFilePath(m_AssetPath));
+		pathLabel->setWordWrap(true);
+		form->addRow("Path", pathLabel);
 		form->addRow("Size", new QLabel(QString("%1 KB").arg(QString::number(info.size() / 1024.0, 'f', 1))));
+		const String assetPath = ToString(relative);
+		if (const AssetRecord* asset = Paths::GetAssets().Find(assetPath))
+		{
+			QLabel* id = new QLabel(ToQString(asset->Id.ToString()));
+			id->setWordWrap(true);
+			id->setTextInteractionFlags(Qt::TextSelectableByMouse);
+			form->addRow("Asset ID", id);
+			const auto users = Paths::GetAssets().Dependents(assetPath);
+			QStringList names;
+			for (const auto& user : users) names.append(ToQString(user));
+			QLabel* dependents = new QLabel(QString::number(users.Num()));
+			dependents->setToolTip(names.join("\n"));
+			form->addRow("Used by", dependents);
+			if (kind == "Texture")
+			{
+				QCheckBox* mipmaps = new QCheckBox("Generate mipmaps");
+				mipmaps->setChecked(asset->Settings.GenerateMipmaps);
+				form->addRow("Import", mipmaps);
+				QComboBox* colorSpace = new QComboBox();
+				colorSpace->addItems({ "Auto", "sRGB", "Linear" });
+				colorSpace->setCurrentIndex(static_cast<int>(asset->Settings.ColorSpace));
+				form->addRow("Color space", colorSpace);
+				QPushButton* apply = new QPushButton("Apply and Reimport");
+				connect(apply, &QPushButton::clicked, this, [assetPath, mipmaps, colorSpace]() {
+					const AssetImportSettings settings{ mipmaps->isChecked(), static_cast<AssetColorSpace>(colorSpace->currentIndex()) };
+					if (!Paths::GetAssets().SetImportSettings(assetPath, settings))
+						FP_LOG_ERROR("Could not save import settings for %s", assetPath.CStr());
+				});
+				layout->addWidget(apply);
+			}
+		}
 
 		if (kind == "Texture")
 		{
@@ -780,7 +814,7 @@ namespace FP::Editor
 			return;
 		}
 
-		AddMaterialEditor(path, QString("Material Asset: %1").arg(ToQString(path)));
+		AddMaterialEditor(path, QString("Material Asset: %1").arg(ToQString(Paths::AssetPath(path))));
 	}
 
 	void InspectorPanel::AddMaterialSlots(QFormLayout* form)
@@ -1146,7 +1180,7 @@ namespace FP::Editor
 					if (void* c = data())
 					{
 						String& value = fieldCopy.Get<String>(c);
-						const String next = ToString(text);
+						const String next = fieldCopy.AssetFilter ? Paths::AssetReference(ToString(text)) : ToString(text);
 						if (value != next.View())
 						{
 							value = next;
@@ -1226,7 +1260,9 @@ namespace FP::Editor
 					if (void* c = data(); c && !IsEditing(edit))
 					{
 						QSignalBlocker block(edit);
-						edit->setText(ToQString(fieldCopy.Get<String>(c)));
+						const String& value = fieldCopy.Get<String>(c);
+						const String path = fieldCopy.AssetFilter ? Paths::AssetPath(value) : value;
+						edit->setText(ToQString(path.IsEmpty() ? value : path));
 					}
 				});
 				form->addRow(DisplayName(field.Name), row);

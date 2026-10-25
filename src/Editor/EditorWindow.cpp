@@ -296,14 +296,11 @@ namespace FP::Editor
 			if (!name.isEmpty())
 				NewScript(name.trimmed());
 		});
-		connect(m_ContentBrowser, &ContentBrowser::ReferencesChanged, this, [this]() {
-			// Rename rewrote paths on disk. Reload the open scene so it sees them, unless that would lose edits.
-			if (m_ScenePath.isEmpty() || m_World->IsPlaying())
-				return;
-			if (m_Dirty)
-				FP_LOG_WARN("Assets were renamed. Save and reopen the scene to pick up the new paths.");
-			else
-				OpenScene(m_ScenePath);
+		connect(m_ContentBrowser, &ContentBrowser::AssetMoved, this, [this](const QString& from, const QString& to) {
+			if (m_ScenePath == from || m_ScenePath.startsWith(from + "/"))
+				m_ScenePath = to + m_ScenePath.mid(from.size());
+			UpdateTitle();
+			m_Inspector->SetTarget(m_World.Get(), m_Selected);
 		});
 		connect(m_ContentBrowser, &ContentBrowser::AssetActivated, this, [this](const QString& path) {
 			const QString kind = ContentBrowser::AssetKind(path);
