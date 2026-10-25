@@ -253,7 +253,28 @@ Packets are tied to their peer's player, with size and rate limits. Proximity fi
 peer-replicated positions; a trusted server/relay is needed to enforce who may receive speech.
 The existing session has no relay for peers behind strict NATs.
 
-Open `Scenes/Acoustics3D.scene` in the editor and press Play, or run:
+Open `Scenes/Acoustics3D.scene` in the editor for the original room comparison.
+
+For a longer Doppler demonstration, open **`Scenes/DopplerFlyby.scene`**. The cyan emitter travels
+**500 meters at 45 m/s**, taking about **11 seconds each way** without teleporting at the ends.
+The listener starts 80 meters beside the route, with enough audio range to hear the full approach
+and departure. **P** toggles Doppler, **F** freezes motion while audio continues, and **R** restarts
+the pass. **WASD**, **Shift** and the mouse let you walk, run and look along the route.
+Assign a mono WAV/MP3 to **Long Doppler Emitter - assign mono MP3** to hear your own sound.
+This scene uses open air with no room effects or occlusion so the pitch shift is easy to compare.
+Regenerate its scene and distance markers with `python Scripts/GenerateDopplerFlyby.py` (Pillow required).
+
+For a ready-to-use MP3 test, open **`Scenes/AudioPlayground.scene`**. Import your file with
+**File > Import Audio...**, select **MP3 Music (M)** in the hierarchy, and replace its **AudioSource > Clip**.
+Press Play, click the viewport and press **M** to start/stop music. Stereo files are supported here;
+the included original 65-second MP3 demonstrates automatic streaming.
+Select **MP3 Doppler (5)** and assign a **mono** MP3 to test your own sound moving through space.
+Press **5** to start its sweep and **P** to compare Doppler on/off. **1–4**, **Space**, **T**, **R** and **B**
+keep the room, clap, dry/wet and overlap controls below. Open **Window > Audio Debugger** to inspect the result.
+The scene and bundled original sounds regenerate with `python Scripts/GenerateAudioPlayground.py`
+(FFmpeg and Pillow required only for regeneration).
+
+Run the original acoustics scene directly with:
 
 ```powershell
 Projects/Sample/Binaries/Debug/Runtime.exe Scenes/Acoustics3D.scene
@@ -408,6 +429,58 @@ The game sees through the first camera with `Primary` on. `SetActiveCamera` cuts
 by turning `Primary` off everywhere else.
 
 **Input actions and gamepads**
+
+Choose **Edit > Input Actions...** or double click `Input.actions` in the Content Browser to edit
+bindings in a tab. Each row has an action name, device, input, optional direction and scale.
+Use **Add Binding** and **Remove Selected** to change the rows. The input picker offers the names
+accepted by each device. Leave a scale blank to keep its default behavior, especially for sticks.
+
+The **Source** view edits the same document and preserves comments. Undo and redo work in both
+views. Save with Ctrl+S, the tab's **Save** button or **Save All**. Invalid lines are listed below
+the bindings and cannot be saved. Click an error to jump to its source. Unsaved edits are checked
+when closing a tab, quitting or packaging. Changes apply the next time Play starts and when the
+runtime next opens the project. Opening the editor from the Edit menu recreates a missing
+`Input.actions` with the defaults.
+
+Gameplay scripts can also change bindings immediately through `Input`:
+
+```cpp
+const auto names = Input::GetActionNames();
+const auto bindings = Input::GetActionBindings("Jump");
+Input::RebindAction("Jump", 0, "Key:G");
+Input::SetActionBindings("Jump", { "Key:G", "Button:South" });
+Input::SetActionBindings("Jump", {}); // leave the action unbound
+Input::ResetActionBindings("Jump");
+Input::ResetAllActionBindings();
+```
+
+Replacement strings use the same device, direction and scale syntax as `Input.actions`.
+Invalid replacements leave the current bindings alone. Reset restores the bindings from the most
+recent `LoadActions` or `LoadActionsFile`, so project defaults stay separate from player preferences.
+
+For a menu that asks the player to press a new control, call
+`Input::BeginActionRebind("Jump", 0)`, then check `Input::GetActionRebindStatus()` for `Listening`,
+`Complete` or `Cancelled`. `GetLastReboundInput()` returns the completed binding string.
+Capture accepts fresh keyboard, mouse button and gamepad button presses. Escape or
+`CancelActionRebind()` cancels, and losing focus cancels too. Held controls are ignored.
+Named actions are suppressed during capture and until the captured control is released.
+
+Pass `true` as the third argument to capture individual gamepad axes too. An axis must first
+return near its center and then move past 75 percent. Capturing preserves the binding's direction
+and scale, with negative axis movement inverted to match the chosen direction. Mouse motion is
+ignored during capture. Use `SetActionBindings` for whole sticks or mouse delta bindings.
+
+Use `Input::SaveActionBindings()` to save player overrides and `Input::LoadActionBindings()` at
+play start to restore them. Both accept an optional SaveData slot name for profiles. These files
+live in the project's user save folder and leave `Content/Input.actions` unchanged. Only changed
+actions are saved, so new project actions remain available. Failed loads leave current bindings
+alone. Saving after a reset keeps the reset for the next launch.
+
+Open `Scenes/InputBindings.scene` and press Play for a working menu, backed by the
+`InputRebindMenu` script and `UI/InputBindings.html`. It lists bindings, captures replacements,
+accepts typed bindings and saves or restores controls through the existing `engine.send` bridge.
+The Jump counter lets you try the new binding after releasing its capture press. The menu uses
+the same optional Ultralight SDK as other game UI pages.
 
 Games ask for actions like Jump or Move instead of keys, so the keyboard, mouse and any gamepad
 all play. `Content/Input.actions` binds them, one input per line, and new projects get a copy of
@@ -785,6 +858,9 @@ The editor follows Unreal Engine 5's layout and dark theme, using this engine's 
   editor UI time are not included. The status bar opens each panel and has a console box: type
   `help` for commands including play, pause, resume, step and stop.
 
+The Hierarchy tab is active when the editor opens. Selecting an entity or asset brings Details
+forward so its properties can be edited.
+
 ### Content browser
 
 The **Content Browser** tab next to the **Output Log** at the bottom of the editor shows everything in
@@ -991,6 +1067,24 @@ FP::JobSystem::ParallelFor(enemyCount, 32, [&](int32 i) { UpdateEnemy(i); });
 
 ### Editor controls
 
+Open **Settings > Engine Settings...** for color-blind assistance. Choose None, Protanopia,
+Deuteranopia, Tritanopia, Protanomaly, Deuteranomaly, Tritanomaly, Achromatopsia or Achromatomaly,
+then adjust **Strength** from 0 to 1. Changes preview live; **Save** keeps them in your per-user
+engine preferences across scenes, projects and editor/runtime restarts. **Cancel** restores the
+previous values. These preferences are independent of scene files and scene undo/redo.
+
+Use **Entity > Post Processing...** for scene FXAA and bloom. **BloomIntensity** controls glow
+(0-10), and **BloomThreshold** selects its minimum HDR brightness before exposure (default 1).
+Both effects default to off. Save the scene to keep them. If more than one entity has PostProcess,
+the earliest created entity supplies the settings. Bloom is bypassed in Unlit and Wireframe views.
+
+The color modes assist contrast rather than simulate a deficiency. The first six redistribute
+lost color contrast using [Machado's linear RGB model](https://www.inf.ufrgs.br/~oliveira/pubs_files/CVD_Simulation/CVD_Simulation.html);
+the achromatic modes use a heuristic hue-to-brightness mapping. Check with affected players and
+use shapes or patterns for critical cues. Game UI and editor gizmos retain their own colors and
+stay sharp above post-processing. Run `Tests EngineSettings` and `Tests PostProcess` for persistence,
+scene independence, GPU effects, all modes, resizing and scene replacement checks.
+
 | Action | Control |
 |---|---|
 | Fly | Hold the right button, then WASD to move, Q and E for down and up, Shift to go faster. The wheel sets the speed while flying |
@@ -1147,6 +1241,7 @@ The committed Vulkan SPIR-V uses SDL's normal descriptor sets. See
 | PackageTool | Validates assets, cooks content and stages a Release game for distribution |
 | GameScripts | Hot reloadable C++ scripts (`Source/Scripts`) |
 | Tests | Unit tests. Run `Projects/Sample/Binaries/Debug/Tests [filter]` |
+| EditorTests | Input actions editor tests. Run `Projects/Sample/Binaries/Debug/EditorTests` |
 
 ## Third party
 

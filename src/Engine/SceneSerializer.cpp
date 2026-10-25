@@ -59,6 +59,8 @@ namespace FP::SceneSerializer
 					for (int i = 0; i < count; ++i) if (!std::isfinite(values[i])) return false;
 				}
 			}
+			if (const auto* p = world.TryGet<PostProcessComponent>(entity); p &&
+				(p->BloomIntensity < 0 || p->BloomIntensity > 10 || p->BloomThreshold < 0 || p->BloomThreshold > 65504)) return false;
 			if (const auto* t = world.TryGet<TransformComponent>(entity); t && (t->Scale.X == 0 || t->Scale.Y == 0 || t->Scale.Z == 0)) return false;
 			if (const auto* l = world.TryGet<PointLightComponent>(entity); l && (!color(l->Color) || l->Intensity < 0 || l->Range <= 0)) return false;
 			if (const auto* l = world.TryGet<SpotLightComponent>(entity); l && (!color(l->Color) || l->Intensity < 0 || l->Range <= 0 || l->InnerAngle < 0 || l->OuterAngle <= 0 || l->OuterAngle >= 90 || l->InnerAngle > l->OuterAngle)) return false;

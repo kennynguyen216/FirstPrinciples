@@ -1,11 +1,13 @@
 #include "Editor/EditorWindow.h"
 #include "Engine/Assets/AssetDatabase.h"
+#include "Engine/EngineSettings.h"
 #include "Editor/MeshletDebugWidget.h"
 #include "Editor/AudioImport.h"
 #include "Engine/Audio/AudioDevice.h"
 #include "Engine/Audio/AudioWorld.h"
 #include "Engine/Audio/VoiceChat.h"
 #include "Editor/CodeEditor.h"
+#include "Editor/InputActionsEditor.h"
 #include "Editor/ContentBrowser.h"
 #include "Editor/DockTab.h"
 #include "Editor/EditorIcons.h"
@@ -46,6 +48,8 @@
 #include <QCloseEvent>
 #include <QCheckBox>
 #include <QDialog>
+#include <QDialogButtonBox>
+#include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QPushButton>
@@ -60,6 +64,7 @@
 #include <QRegularExpression>
 #include <QTextBlock>
 #include <QFileInfo>
+#include <QSaveFile>
 #include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
@@ -83,6 +88,18 @@ namespace FP::Editor
 {
 	namespace
 	{
+		CodeEditor* TextEditor(QWidget* widget)
+		{
+			if (auto* actions = qobject_cast<InputActionsEditor*>(widget)) return actions->GetSource();
+			return qobject_cast<CodeEditor*>(widget);
+		}
+
+		QWidget* EditorTab(CodeEditor* editor)
+		{
+			for (QWidget* parent = editor->parentWidget(); parent; parent = parent->parentWidget())
+				if (qobject_cast<InputActionsEditor*>(parent)) return parent;
+			return editor;
+		}
 
 		QString ToQString(const String& text) { return QString::fromUtf8(text.CStr(), text.Length()); }
 
@@ -232,13 +249,14 @@ namespace FP::Editor
 
 		// Details and Hierarchy share one narrow panel on the right as tabs, and the bottom panels run the full width.
 		QDockWidget* detailsDock = DockTab::Create(this, "Details", EditorIcon::Details, m_Inspector);
+		m_DetailsDock = detailsDock;
 		QDockWidget* hierarchyDock = DockTab::Create(this, "Hierarchy", EditorIcon::Hierarchy, m_Hierarchy);
 		setCorner(Qt::BottomLeftCorner, Qt::BottomDockWidgetArea);
 		setCorner(Qt::BottomRightCorner, Qt::BottomDockWidgetArea);
 		setTabPosition(Qt::AllDockWidgetAreas, QTabWidget::North);
 		addDockWidget(Qt::RightDockWidgetArea, detailsDock);
 		tabifyDockWidget(detailsDock, hierarchyDock);
-		detailsDock->raise();
+		hierarchyDock->raise();
 
 		m_Console = new QPlainTextEdit();
 		m_Console->setReadOnly(true);
@@ -310,7 +328,7 @@ namespace FP::Editor
 				if (ConfirmDiscard())
 					OpenScene(path);
 			}
-			else if (kind == "Script" || kind == "Page" || kind == "Web")
+			else if (kind == "Script" || kind == "Page" || kind == "Web" || kind == "Input Actions")
 			{
 				// Pages, styles and page scripts are text, so they open in a code tab too.
 				OpenScript(path);
@@ -363,7 +381,32 @@ namespace FP::Editor
 		}
 		m_RedoAction->setShortcuts(redoKeys);
 
+		edit->addSeparator();
+		edit->addAction("Input Actions...", this, [this]() {
+			const QString path = ToQString(Paths::Content("Input.actions"));
+			if (!QFileInfo::exists(path))
+			{
+				QSaveFile file(path);
+				const std::string_view defaults = Input::GetDefaultActions();
+				if (!file.open(QIODevice::WriteOnly) || file.write(defaults.data(), defaults.size()) != static_cast<qint64>(defaults.size()) || !file.commit())
+				{
+					QMessageBox::warning(this, "Input Actions", "Could not create " + path);
+					return;
+				}
+			}
+			OpenScript(path);
+		});
+
 		QMenu* entity = menuBar()->addMenu("&Entity");
+		entity->addAction("Post Processing...", this, [this]() {
+			for (Entity existing : m_World->GetEntities())
+				if (m_World->Has<PostProcessComponent>(existing)) { Select(existing); return; }
+			Entity settings = m_World->CreateEntity("Post Processing");
+			m_World->Add<PostProcessComponent>(settings);
+			MarkDirty();
+			RefreshHierarchy();
+			Select(settings);
+		});
 		entity->addAction("Create &Empty", QKeySequence("Ctrl+Shift+N"), this, [this]() { CreateEntity("Empty Entity"); });
 		entity->addAction("Create &Sprite", QKeySequence("Ctrl+Shift+A"), this, [this]() { CreateEntity("Sprite"); });
 		QMenu* meshes = entity->addMenu("Create &Mesh");
@@ -424,10 +467,10 @@ namespace FP::Editor
 					return;
 				for (int i = 0; i < m_CentralTabs->count(); ++i)
 				{
-					CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->widget(i));
+					CodeEditor* editor = TextEditor(m_CentralTabs->widget(i));
 					if (!editor || !editor->IsDirty())
 						continue;
-					const auto answer = QMessageBox::question(this, "Unsaved script", "Save changes to " + QFileInfo(editor->GetPath()).fileName() + " before packaging?",
+					const auto answer = QMessageBox::question(this, "Unsaved file", "Save changes to " + QFileInfo(editor->GetPath()).fileName() + " before packaging?",
 						QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
 					if (answer == QMessageBox::Cancel || (answer == QMessageBox::Save && !editor->Save()))
 						return;
@@ -526,6 +569,8 @@ namespace FP::Editor
 		settings->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 		settings->setPopupMode(QToolButton::InstantPopup);
 		QMenu* settingsMenu = new QMenu(settings);
+		settingsMenu->addAction("Engine Settings...", this, &EditorWindow::ShowEngineSettings);
+		settingsMenu->addSeparator();
 		settingsMenu->addAction(autoReload);
 		settingsMenu->addAction("Collect Garbage", this, []() {
 			const GarbageCollectionStats stats = GarbageCollector::Get().Collect();
@@ -814,7 +859,7 @@ namespace FP::Editor
 		m_Dirty = false;
 		for (int i = 0; i < m_CentralTabs->count(); ++i)
 		{
-			if (CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->widget(i)))
+			if (CodeEditor* editor = TextEditor(m_CentralTabs->widget(i)))
 				editor->document()->setModified(false);
 		}
 	}
@@ -823,6 +868,8 @@ namespace FP::Editor
 	{
 		Select(NullEntity);
 		m_Inspector->SetAsset(path);
+		m_DetailsDock->show();
+		m_DetailsDock->raise();
 	}
 
 	void EditorWindow::OpenScript(const QString& path)
@@ -830,23 +877,25 @@ namespace FP::Editor
 		const QString resolved = ScriptBuilder::ResolveSourcePath(path);
 		if (CodeEditor* open = FindScriptTab(resolved))
 		{
-			m_CentralTabs->setCurrentWidget(open);
-			open->setFocus();
+			m_CentralTabs->setCurrentWidget(EditorTab(open));
+			EditorTab(open)->setFocus();
 			return;
 		}
 
-		CodeEditor* editor = new CodeEditor();
-		if (!editor->LoadFile(resolved))
+		InputActionsEditor* actions = QFileInfo(resolved).suffix().compare("actions", Qt::CaseInsensitive) == 0 ? new InputActionsEditor() : nullptr;
+		CodeEditor* editor = actions ? actions->GetSource() : new CodeEditor();
+		QWidget* tab = actions ? static_cast<QWidget*>(actions) : editor;
+		if (!(actions ? actions->LoadFile(resolved) : editor->LoadFile(resolved)))
 		{
 			FP_LOG_ERROR("Could not open %s", resolved.toUtf8().constData());
-			delete editor;
+			delete tab;
 			return;
 		}
-		const int index = m_CentralTabs->addTab(editor, QFileInfo(resolved).fileName());
+		const int index = m_CentralTabs->addTab(tab, QFileInfo(resolved).fileName());
 		m_CentralTabs->setTabToolTip(index, resolved);
 		connect(editor->document(), &QTextDocument::modificationChanged, this, [this, editor](bool) { UpdateScriptTabTitle(editor); });
 		m_CentralTabs->setCurrentIndex(index);
-		editor->setFocus();
+		tab->setFocus();
 	}
 
 	CodeEditor* EditorWindow::FindScriptTab(const QString& path) const
@@ -854,7 +903,7 @@ namespace FP::Editor
 		const QString wanted = QFileInfo(path).canonicalFilePath();
 		for (int i = 0; i < m_CentralTabs->count(); ++i)
 		{
-			CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->widget(i));
+			CodeEditor* editor = TextEditor(m_CentralTabs->widget(i));
 			if (editor && QFileInfo(editor->GetPath()).canonicalFilePath() == wanted)
 				return editor;
 		}
@@ -863,20 +912,20 @@ namespace FP::Editor
 
 	void EditorWindow::UpdateScriptTabTitle(CodeEditor* editor)
 	{
-		const int index = m_CentralTabs->indexOf(editor);
+		const int index = m_CentralTabs->indexOf(EditorTab(editor));
 		if (index >= 0)
 			m_CentralTabs->setTabText(index, QFileInfo(editor->GetPath()).fileName() + (editor->IsDirty() ? "*" : ""));
 	}
 
 	bool EditorWindow::CloseScriptTab(int index)
 	{
-		CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->widget(index));
+		CodeEditor* editor = TextEditor(m_CentralTabs->widget(index));
 		if (!editor)
 			return false;
 		if (editor->IsDirty())
 		{
 			m_CentralTabs->setCurrentIndex(index);
-			const auto answer = QMessageBox::question(this, "Unsaved script", QString("Save changes to %1?").arg(QFileInfo(editor->GetPath()).fileName()),
+			const auto answer = QMessageBox::question(this, "Unsaved file", QString("Save changes to %1?").arg(QFileInfo(editor->GetPath()).fileName()),
 				QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
 			if (answer == QMessageBox::Cancel)
 				return false;
@@ -884,7 +933,7 @@ namespace FP::Editor
 				return false;
 		}
 		m_CentralTabs->removeTab(index);
-		editor->deleteLater();
+		EditorTab(editor)->deleteLater();
 		return true;
 	}
 
@@ -892,7 +941,7 @@ namespace FP::Editor
 	{
 		for (int i = m_CentralTabs->count() - 1; i >= 0; --i)
 		{
-			CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->widget(i));
+			CodeEditor* editor = TextEditor(m_CentralTabs->widget(i));
 			if (editor && editor->IsDirty() && !CloseScriptTab(i))
 				return false;
 		}
@@ -947,7 +996,7 @@ namespace FP::Editor
 
 	void EditorWindow::SaveCurrent()
 	{
-		if (CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->currentWidget()))
+		if (CodeEditor* editor = TextEditor(m_CentralTabs->currentWidget()))
 		{
 			if (editor->Save())
 				FP_LOG("Saved %s", QFileInfo(editor->GetPath()).fileName().toUtf8().constData());
@@ -962,7 +1011,7 @@ namespace FP::Editor
 	{
 		for (int i = 0; i < m_CentralTabs->count(); ++i)
 		{
-			CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->widget(i));
+			CodeEditor* editor = TextEditor(m_CentralTabs->widget(i));
 			if (editor && editor->IsDirty() && !editor->Save())
 				FP_LOG_ERROR("Could not save %s", editor->GetPath().toUtf8().constData());
 		}
@@ -1270,6 +1319,11 @@ namespace FP::Editor
 
 		if (changed)
 			m_Inspector->SetTarget(m_World.Get(), entity);
+		if (entity != NullEntity)
+		{
+			m_DetailsDock->show();
+			m_DetailsDock->raise();
+		}
 	}
 
 	void EditorWindow::RefreshHierarchy()
@@ -1312,7 +1366,7 @@ namespace FP::Editor
 
 	void EditorWindow::Undo()
 	{
-		if (CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->currentWidget()))
+		if (CodeEditor* editor = TextEditor(m_CentralTabs->currentWidget()))
 		{
 			editor->undo();
 			return;
@@ -1327,7 +1381,7 @@ namespace FP::Editor
 
 	void EditorWindow::Redo()
 	{
-		if (CodeEditor* editor = qobject_cast<CodeEditor*>(m_CentralTabs->currentWidget()))
+		if (CodeEditor* editor = TextEditor(m_CentralTabs->currentWidget()))
 		{
 			editor->redo();
 			return;
@@ -1355,7 +1409,7 @@ namespace FP::Editor
 
 	void EditorWindow::UpdateUndoActions()
 	{
-		if (qobject_cast<CodeEditor*>(m_CentralTabs->currentWidget()))
+		if (TextEditor(m_CentralTabs->currentWidget()))
 		{
 			m_UndoAction->setEnabled(true);
 			m_RedoAction->setEnabled(true);
@@ -1826,6 +1880,49 @@ namespace FP::Editor
 		addDockWidget(Qt::BottomDockWidgetArea, m_AudioDebugger);
 		tabifyDockWidget(m_ContentDock, m_AudioDebugger);
 		m_AudioDebugger->show(); m_AudioDebugger->raise(); enabled(); refresh();
+	}
+
+	void EditorWindow::ShowEngineSettings()
+	{
+		const EngineSettings original = EngineSettings::Get();
+		QDialog dialog(this);
+		dialog.setWindowTitle("Engine Settings");
+		QVBoxLayout* layout = new QVBoxLayout(&dialog);
+		QLabel* description = new QLabel("Color-blind assistance applies across scenes and projects in the editor and runtime.");
+		description->setWordWrap(true);
+		layout->addWidget(description);
+		QFormLayout* form = new QFormLayout();
+		layout->addLayout(form);
+		QComboBox* mode = new QComboBox();
+		for (const char* name : EngineSettings::ColorBlindModes()) mode->addItem(name);
+		mode->setCurrentText(ToQString(original.ColorBlindMode));
+		mode->setAccessibleName("Color-blind assistance mode");
+		form->addRow("Color-blind mode", mode);
+		QDoubleSpinBox* strength = new QDoubleSpinBox();
+		strength->setRange(0, 1);
+		strength->setSingleStep(0.05);
+		strength->setKeyboardTracking(false);
+		strength->setValue(original.ColorBlindStrength);
+		strength->setAccessibleName("Color-blind assistance strength");
+		form->addRow("Strength", strength);
+		connect(mode, &QComboBox::currentTextChanged, &dialog, [](const QString& value) {
+			EngineSettings::Get().ColorBlindMode = ToString(value);
+		});
+		connect(strength, &QDoubleSpinBox::valueChanged, &dialog, [](double value) {
+			EngineSettings::Get().ColorBlindStrength = static_cast<float>(value);
+		});
+		QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel);
+		layout->addWidget(buttons);
+		connect(buttons, &QDialogButtonBox::accepted, &dialog, [&dialog]() {
+			if (!EngineSettings::Get().Save())
+			{
+				QMessageBox::warning(&dialog, "Engine Settings", "Could not save your engine preferences. Check that your user settings folder is writable.");
+				return;
+			}
+			dialog.accept();
+		});
+		connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+		if (dialog.exec() != QDialog::Accepted) EngineSettings::Get() = original;
 	}
 
 	void EditorWindow::ShowAudioSettings()

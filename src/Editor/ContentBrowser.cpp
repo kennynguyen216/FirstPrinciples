@@ -539,6 +539,7 @@ namespace FP::Editor
 	QString ContentBrowser::AssetKind(const QString& path)
 	{
 		const QString suffix = QFileInfo(path).suffix().toLower();
+		if (suffix == "actions") return "Input Actions";
 		if (suffix == "scene") return "Scene";
 		if (suffix == "material") return "Material";
 		if (suffix == "hdr") return "Environment";
@@ -740,7 +741,7 @@ namespace FP::Editor
 
 	void ContentBrowser::ImportFiles()
 	{
-		const QStringList files = QFileDialog::getOpenFileNames(this, "Import", QString(), "Assets (*.hdr *.png *.jpg *.jpeg *.tga *.bmp *.obj *.gltf *.glb *.bin *.material *.scene);;All files (*)");
+		const QStringList files = QFileDialog::getOpenFileNames(this, "Import", QString(), "Assets (*.actions *.hdr *.png *.jpg *.jpeg *.tga *.bmp *.obj *.gltf *.glb *.bin *.material *.scene);;All files (*)");
 		QString last;
 		for (const QString& file : files)
 		{
@@ -889,6 +890,7 @@ namespace FP::Editor
 		}
 		else if (kind == "Environment") icon = TileIcon(EditorIcon::Texture, QColor(0x60, 0xb0, 0xc0));
 		else if (kind == "Scene") icon = TileIcon(EditorIcon::Scene, QColor(0xf0, 0xa0, 0x30));
+		else if (kind == "Input Actions") icon = TileIcon(EditorIcon::Script, QColor(0x60, 0xc0, 0xb0));
 		else if (kind == "Script") icon = TileIcon(EditorIcon::Script, QColor(0x4f, 0xa3, 0xe0));
 		else if (kind == "Page") icon = TileIcon(EditorIcon::Script, QColor(0xe0, 0x8a, 0x3a));
 		else if (kind == "Web") icon = TileIcon(EditorIcon::Script, QColor(0xc0, 0xa0, 0x40));

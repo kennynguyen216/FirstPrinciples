@@ -1,4 +1,5 @@
 #include "Engine/Render/Renderer.h"
+#include "Engine/EngineSettings.h"
 #include "Engine/Material.h"
 #include "Engine/Paths.h"
 #include "Engine/Animation/SkeletalModel.h"
@@ -101,7 +102,7 @@ namespace FP
 					SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
 			}
 		}
-		for (SDL_GPUGraphicsPipeline* pipeline : { m_OcclusionPipeline, m_PresentPipeline, m_SkyboxPipeline, m_UIPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1], m_ParticlePipelines[0], m_ParticlePipelines[1] })
+		for (SDL_GPUGraphicsPipeline* pipeline : { m_OcclusionPipeline, m_PresentPipeline, m_SkyboxPipeline, m_PostPipeline, m_FXAAPipeline, m_BloomPipeline, m_UIPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1], m_ParticlePipelines[0], m_ParticlePipelines[1] })
 		{
 			if (pipeline)
 				SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
@@ -118,7 +119,7 @@ namespace FP
 					return false;
 			}
 		}
-		return m_PresentPipeline && m_SkyboxPipeline && m_LinePipeline && m_EmptyEnvironment;
+		return m_PresentPipeline && m_PostPipeline && m_FXAAPipeline && m_BloomPipeline && m_SkyboxPipeline && m_LinePipeline && m_EmptyEnvironment;
 	}
 
 	SDL_GPUGraphicsPipeline* Renderer::GetPipeline(const Draw& draw) const
@@ -192,6 +193,31 @@ namespace FP
 		return pipeline;
 	}
 
+	SDL_GPUGraphicsPipeline* Renderer::CreateFullscreenPipeline(const char* fragment, uint32 samplers, SDL_GPUTextureFormat format)
+	{
+		SDL_GPUDevice* gpu = m_Device.GetHandle();
+		SDL_GPUShader* vert = m_Device.LoadShader("Present.vert", 0, 0);
+		SDL_GPUShader* frag = m_Device.LoadShader(fragment, samplers, 1);
+		SDL_GPUGraphicsPipeline* pipeline = nullptr;
+		if (vert && frag)
+		{
+			SDL_GPUColorTargetDescription colorTarget = {};
+			colorTarget.format = format;
+			SDL_GPUGraphicsPipelineCreateInfo info = {};
+			info.vertex_shader = vert;
+			info.fragment_shader = frag;
+			info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+			info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+			info.target_info.color_target_descriptions = &colorTarget;
+			info.target_info.num_color_targets = 1;
+			pipeline = SDL_CreateGPUGraphicsPipeline(gpu, &info);
+			if (!pipeline) FP_LOG_ERROR("Pipeline for %s failed: %s", fragment, SDL_GetError());
+		}
+		if (vert) SDL_ReleaseGPUShader(gpu, vert);
+		if (frag) SDL_ReleaseGPUShader(gpu, frag);
+		return pipeline;
+	}
+
 	void Renderer::CreatePipelines()
 	{
 		SDL_GPUDevice* gpu = m_Device.GetHandle();
@@ -212,7 +238,7 @@ namespace FP
 		colorTarget.format = m_TargetFormat;
 
 		SDL_GPUShader* presentVert = m_Device.LoadShader("Present.vert", 0, 0);
-		SDL_GPUShader* presentFrag = m_Device.LoadShader("Present.frag", 1, 1);
+		SDL_GPUShader* presentFrag = m_Device.LoadShader("Present.frag", 2, 1);
 		if (presentVert && presentFrag)
 		{
 			SDL_GPUGraphicsPipelineCreateInfo info = {};
@@ -246,6 +272,10 @@ namespace FP
 				SDL_ReleaseGPUShader(gpu, uiFrag);
 			}
 		}
+
+		m_PostPipeline = CreateFullscreenPipeline("Present.frag", 2, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB);
+		m_FXAAPipeline = CreateFullscreenPipeline("FXAA.frag", 1, m_TargetFormat);
+		m_BloomPipeline = CreateFullscreenPipeline("Bloom.frag", 1, SceneFormat);
 
 		SDL_GPUShader* skyFrag = m_Device.LoadShader("Skybox.frag", 0, 1, 1);
 		if (presentVert && skyFrag)
@@ -448,7 +478,7 @@ namespace FP
 
 	void Renderer::EnsureTargets(uint32 width, uint32 height)
 	{
-		if (m_SceneColor && m_SceneColor->GetWidth() == width && m_SceneColor->GetHeight() == height)
+		if (m_SceneColor && m_SceneCopy && m_Depth && m_SceneColor->GetWidth() == width && m_SceneColor->GetHeight() == height)
 			return;
 		m_SceneColor = m_Device.CreateRenderTarget(SceneFormat, width, height, false);
 		m_SceneCopy = m_Device.CreateRenderTarget(SceneFormat, width, height, false);
@@ -1029,6 +1059,7 @@ namespace FP
 			return;
 		m_Mode = view.Mode;
 		EnsureTargets(width, height);
+		if (!m_SceneColor || !m_SceneCopy || !m_Depth) return;
 		BuildFrameUniforms(world, view, width, height);
 		PrepareEnvironment(world);
 		RenderShadows(cmd, world, view);
@@ -1162,19 +1193,88 @@ namespace FP
 
 		const Array<GPUTexture*> pages = PrepareUI(cmd, world, view, width, height);
 
-		// Present pass with UI pages and editor lines on top.
+		PostProcessComponent settings;
+		for (Entity entity : world.GetEntities())
+		{
+			if (const auto* post = world.TryGet<PostProcessComponent>(entity))
+			{
+				settings = *post;
+				break;
+			}
+		}
+		// Keep bloom out of diagnostic view modes.
+		if (view.Mode != ViewMode::Lit)
+		{
+			settings.Bloom = false;
+		}
+		auto drawFullscreen = [&](SDL_GPUTexture* destination, SDL_GPUGraphicsPipeline* pipeline,
+			const SDL_GPUTextureSamplerBinding* sources, uint32 count, const void* uniforms, uint32 bytes) {
+			SDL_GPUColorTargetInfo output = {};
+			output.texture = destination;
+			output.load_op = SDL_GPU_LOADOP_DONT_CARE;
+			output.store_op = SDL_GPU_STOREOP_STORE;
+			SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &output, 1, nullptr);
+			SDL_BindGPUGraphicsPipeline(pass, pipeline);
+			SDL_PushGPUFragmentUniformData(cmd, 0, uniforms, bytes);
+			SDL_BindGPUFragmentSamplers(pass, 0, sources, count);
+			SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+			SDL_EndGPURenderPass(pass);
+		};
+		GPUTexture* bloom = m_Device.GetBlackTexture();
+		if (settings.Bloom && settings.BloomIntensity > 0)
+		{
+			const uint32 bw = std::max(1u, (width + 3) / 4), bh = std::max(1u, (height + 3) / 4);
+			if (!m_Bloom[0] || !m_Bloom[1] || m_Bloom[0]->GetWidth() != bw || m_Bloom[0]->GetHeight() != bh)
+				for (auto& texture : m_Bloom) texture = m_Device.CreateRenderTarget(SceneFormat, bw, bh, false);
+			if (m_Bloom[0] && m_Bloom[1])
+			{
+				SDL_GPUTextureSamplerBinding source{ m_SceneColor->GetHandle(), m_Device.GetClampSampler() };
+				Vec4 params{ 1.0f / width, 1.0f / height, std::clamp(settings.BloomThreshold, 0.0f, 65504.0f), 0 };
+				drawFullscreen(m_Bloom[0]->GetHandle(), m_BloomPipeline, &source, 1, &params, sizeof(params));
+				source.texture = m_Bloom[0]->GetHandle();
+				params = { 1.0f / bw, 0, 0, 1 };
+				drawFullscreen(m_Bloom[1]->GetHandle(), m_BloomPipeline, &source, 1, &params, sizeof(params));
+				source.texture = m_Bloom[1]->GetHandle();
+				params = { 0, 1.0f / bh, 0, 1 };
+				drawFullscreen(m_Bloom[0]->GetHandle(), m_BloomPipeline, &source, 1, &params, sizeof(params));
+				bloom = m_Bloom[0].Get();
+			}
+		}
+		else
+		{
+			for (auto& texture : m_Bloom) texture.Reset();
+		}
+		if (settings.FXAA && (!m_PostColor || m_PostColor->GetWidth() != width || m_PostColor->GetHeight() != height))
+			m_PostColor = m_Device.CreateRenderTarget(SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB, width, height, false);
+		if (!settings.FXAA) m_PostColor.Reset();
+		const bool fxaa = settings.FXAA && m_PostColor;
+		const EngineSettings& accessibility = EngineSettings::Get();
+		const auto& modes = EngineSettings::ColorBlindModes();
+		int32 colorMode = 0;
+		for (int32 i = 0; i < modes.Num(); ++i)
+			if (accessibility.ColorBlindMode == modes[i]) colorMode = i;
+		const Vec4 present[2] = {
+			{ view.Exposure, view.Tonemap ? 1.0f : 0.0f, std::clamp(settings.BloomIntensity, 0.0f, 10.0f), static_cast<float>(colorMode) },
+			{ std::clamp(accessibility.ColorBlindStrength, 0.0f, 1.0f), 0, 0, 0 }
+		};
+		SDL_GPUTextureSamplerBinding sources[2] = {
+			{ m_SceneColor->GetHandle(), m_Device.GetClampSampler() }, { bloom->GetHandle(), m_Device.GetClampSampler() }
+		};
+		drawFullscreen(fxaa ? m_PostColor->GetHandle() : target, fxaa ? m_PostPipeline : m_PresentPipeline, sources, 2, present, sizeof(present));
+		if (fxaa)
+		{
+			const Vec4 params{ 1.0f / width, 1.0f / height, 0, 0 };
+			const SDL_GPUTextureSamplerBinding source{ m_PostColor->GetHandle(), m_Device.GetClampSampler() };
+			drawFullscreen(target, m_FXAAPipeline, &source, 1, &params, sizeof(params));
+		}
+		if (!hasLines && pages.IsEmpty()) return;
+
+		// UI pages and editor lines stay sharp above the post-processed scene.
 		SDL_GPUColorTargetInfo output = {};
 		output.texture = target;
-		output.load_op = SDL_GPU_LOADOP_DONT_CARE;
+		output.load_op = SDL_GPU_LOADOP_LOAD;
 		output.store_op = SDL_GPU_STOREOP_STORE;
 		pass = SDL_BeginGPURenderPass(cmd, &output, 1, nullptr);
-
-		SDL_BindGPUGraphicsPipeline(pass, m_PresentPipeline);
-		const Vec4 present{ view.Exposure, view.Tonemap ? 1.0f : 0.0f, 0, 0 };
-		SDL_PushGPUFragmentUniformData(cmd, 0, &present, sizeof(present));
-		SDL_GPUTextureSamplerBinding scene = { m_SceneColor->GetHandle(), m_Device.GetClampSampler() };
-		SDL_BindGPUFragmentSamplers(pass, 0, &scene, 1);
-		SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
 
 		if (!pages.IsEmpty())
 		{

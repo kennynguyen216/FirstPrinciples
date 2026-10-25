@@ -104,6 +104,7 @@ FP_TEST(UI_SystemLoadsPagesForComponents)
 
 #include "Engine/Scripting/Script.h"
 #include "Engine/Scripting/ScriptSystem.h"
+#include "Engine/Scripting/ScriptRuntime.h"
 
 namespace
 {
@@ -153,4 +154,54 @@ FP_TEST(UI_PagesTalkToScripts)
 	FP_EXPECT(Pump([&] { world->Update(0.016f); return listener->LastEvent == "greeted"; }));
 	FP_EXPECT(listener->LastValue == 5);
 	world->EndPlay();
+}
+
+FP_TEST(UI_InputMenuRebindsAndPersistsThroughTheScriptModule)
+{
+	if (!UIRuntime::Get().IsAvailable()) return;
+	Engine::RegisterEngineComponents();
+	ScriptRuntime& runtime = ScriptRuntime::Get();
+	if (!runtime.LoadModule(ScriptRuntime::GetDefaultModulePath())) return;
+	if (!runtime.FindType("InputRebindMenu")) { runtime.UnloadModule(); return; }
+	Input::Reset();
+	Input::LoadActions(Input::GetDefaultActions());
+	const String slot = String("input_ui_") + Guid::New().ToString();
+	StrongObjectPtr<World> world(NewObject<World>());
+	const Entity menu = world->CreateEntity("Rebinding Menu");
+	world->Add<UIComponent>(menu).Page = "UI/InputBindings.html";
+	world->Add<ScriptComponent>(menu).Scripts.Emplace("InputRebindMenu", String::Format("SaveSlot \"%s\"\n", slot.CStr()));
+	world->AddSystem<ScriptSystem>();
+	world->AddSystem<UISystem>();
+	world->BeginPlay();
+	UIDocumentInstance* document = UISystem::For(*world.Get(), menu);
+	document->Resize(1000, 700, 1);
+	FP_EXPECT(Pump([&] {
+		world->Update(0.016f);
+		return document->IsReady() && document->RunScript("document.getElementById('action').value") == "Jump";
+	}));
+
+	document->RunScript("document.querySelector('.binding button').click()");
+	FP_EXPECT(Pump([&] { world->Update(0.016f); return Input::GetActionRebindStatus() == RebindStatus::Listening; }));
+	Input::SetKey(SDL_SCANCODE_H, true);
+	FP_EXPECT(Pump([&] {
+		world->Update(0.016f);
+		return document->RunScript("document.querySelector('.binding input').value") == "Key:H";
+	}));
+	FP_EXPECT(!Input::WasActionPressed("Jump"));
+	Input::SetKey(SDL_SCANCODE_H, false);
+	Input::EndFrame();
+	document->RunScript("document.querySelector('.binding input').value = 'Key:G'; document.querySelectorAll('.binding button')[1].click()");
+	FP_EXPECT(Pump([&] { world->Update(0.016f); return Input::GetActionBindings("Jump")[0] == "Key:G"; }));
+	document->RunScript("document.getElementById('save').click()");
+	FP_EXPECT(Pump([&] { world->Update(0.016f); return SaveData::Exists(slot.View()); }));
+	FP_EXPECT(Input::RebindAction("Jump", 0, "Key:J"));
+	document->RunScript("document.getElementById('load').click()");
+	FP_EXPECT(Pump([&] { world->Update(0.016f); return Input::GetActionBindings("Jump")[0] == "Key:G"; }));
+	document->RunScript("document.getElementById('reset').click()");
+	FP_EXPECT(Pump([&] { world->Update(0.016f); return Input::GetActionBindings("Jump")[0] == "Key:Space"; }));
+	world->EndPlay();
+	FP_EXPECT(SaveData::Delete(slot.View()));
+	runtime.UnloadModule();
+	Input::Reset();
+	Input::LoadActions(Input::GetDefaultActions());
 }

@@ -1,0 +1,9 @@
+# FirstPrinciples material
+Shader "Unlit"
+BaseColor 1 0.30 0.15 1
+BaseColorMap ""
+Metallic 0
+Roughness 0.8
+SoundTransmission 0.25
+SoundAbsorption 0.4
+SoundDamping 0.5

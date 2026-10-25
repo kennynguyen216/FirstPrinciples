@@ -121,6 +121,12 @@ namespace FP::Engine
 			.Field("Texture", &SpriteComponent::Texture).AssetPath(ImageFilter)
 			.Field("Layer", &SpriteComponent::Layer);
 
+		registry.Register<PostProcessComponent>("PostProcess")
+			.Field("FXAA", &PostProcessComponent::FXAA)
+			.Field("Bloom", &PostProcessComponent::Bloom)
+			.Field("BloomIntensity", &PostProcessComponent::BloomIntensity).Range(0, 10)
+			.Field("BloomThreshold", &PostProcessComponent::BloomThreshold).Range(0, 65504);
+
 		registry.Register<CameraComponent>("Camera")
 			.Field("Perspective", &CameraComponent::Perspective)
 			.Field("Zoom", &CameraComponent::Zoom)

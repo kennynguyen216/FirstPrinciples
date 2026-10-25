@@ -143,6 +143,7 @@ namespace FP::Editor
 		void DeleteSelected();
 		void ImportAudio(bool assign);
 		void ShowAudioSettings();
+		void ShowEngineSettings();
 
 		static void LogSink(LogLevel level, const char* message, void* userData);
 
@@ -202,6 +203,7 @@ namespace FP::Editor
 		ScriptBuilder* m_ScriptBuilder = nullptr;
 		QTabWidget* m_CentralTabs = nullptr;
 		ContentBrowser* m_ContentBrowser = nullptr;
+		QDockWidget* m_DetailsDock = nullptr;
 		QDockWidget* m_ConsoleDock = nullptr;
 		QDockWidget* m_ContentDock = nullptr;
 		QDockWidget* m_ProfilerDock = nullptr;
