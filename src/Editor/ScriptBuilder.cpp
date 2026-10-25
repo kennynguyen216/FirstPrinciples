@@ -195,6 +195,8 @@ FP_SCRIPT(NAME);
 	{
 #if defined(_WIN32)
 		return projectDir + (FP_BUILD_DEBUG ? "/Binaries/Debug/Editor.exe" : "/Binaries/Release/Editor.exe");
+#elif defined(__APPLE__)
+		return projectDir + (FP_BUILD_DEBUG ? "/Binaries/Debug/Editor.app/Contents/MacOS/Editor" : "/Binaries/Release/Editor.app/Contents/MacOS/Editor");
 #else
 		return projectDir + (FP_BUILD_DEBUG ? "/Binaries/Debug/Editor" : "/Binaries/Release/Editor");
 #endif

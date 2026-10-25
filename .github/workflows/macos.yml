@@ -1,0 +1,42 @@
+name: macOS
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and test (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+      - name: Install build dependencies
+        run: brew install premake sdl3 qt
+      - name: Build and test Debug and Release
+        run: |
+          set -euo pipefail
+          for config in debug release; do
+            Scripts/Build.sh "$config"
+            if [ "$config" = debug ]; then folder=Debug; else folder=Release; fi
+            Projects/Sample/Binaries/"$folder"/Tests
+            /usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "Projects/Sample/Binaries/$folder/Editor.app/Contents/Info.plist"
+            otool -l "Projects/Sample/Binaries/$folder/Runtime" | grep -A 2 __info_plist
+          done

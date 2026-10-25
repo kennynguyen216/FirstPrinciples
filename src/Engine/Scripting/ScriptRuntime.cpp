@@ -2,6 +2,7 @@
 #include "Engine/Scripting/ScriptSystem.h"
 #include "Engine/FieldSerializer.h"
 #include "Engine/Material.h"
+#include "Engine/Paths.h"
 
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_loadso.h>
@@ -34,7 +35,14 @@ namespace FP
 	String ScriptRuntime::GetDefaultModulePath()
 	{
 		const char* base = SDL_GetBasePath();
+#if FP_PLATFORM_MACOS
+		// SDL's bundle base is Resources; scripts are built beside the .app, shared with Runtime.
+		const String direct = String(base ? base : "") + ModuleFile;
+		if (std::filesystem::exists(direct.CStr())) return direct;
+		return Paths::GetProjectDir() + (FP_BUILD_DEBUG ? "/Binaries/Debug/" : "/Binaries/Release/") + ModuleFile;
+#else
 		return String(base ? base : "") + ModuleFile;
+#endif
 	}
 
 	bool ScriptRuntime::LoadModule(const String& path)

@@ -25,6 +25,14 @@ go in `Projects/Sample/Build` and everything builds into `Projects/Sample/Binari
 for an optimised build, and a project folder to build another one, like `Scripts/Build.sh debug Projects/MyGame`.
 For Xcode run `Scripts/GenerateXcode.sh` instead.
 
+Open `Projects/Sample/Binaries/Debug/Editor.app` after building (or `Release` for a release build).
+WAV/MP3 playback, streaming and proximity voice use the same SDL3 audio backend on Apple Silicon
+and Intel Macs. Enable voice in the engine before macOS asks for microphone access; allow it under
+**System Settings > Privacy & Security > Microphone** if you previously denied it. Runtime also
+includes the microphone usage description; a Terminal launch may use Terminal's permission.
+Intel Macs build without the optional Ultralight HTML game UI because its pinned SDK is ARM-only.
+The macOS workflow builds Debug and Release and runs the tests on native Apple Silicon and Intel runners.
+
 ### Windows
 
 1. Install Visual Studio 2022 or 2026 (the IDE or Build Tools) with the "Desktop development with C++" workload.

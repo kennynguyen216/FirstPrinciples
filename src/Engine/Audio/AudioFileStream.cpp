@@ -23,7 +23,7 @@ namespace FP
 		const auto frames = stream->m_Decoder.Read(stream->m_Ring.data(), stream->m_Capacity);
 		if (!stream->m_Decoder.Result()) { result = stream->m_Decoder.Result(); return {}; }
 		stream->m_Write.store(frames);
-		stream->m_Worker = std::jthread([self = stream.get()](std::stop_token stop) { self->Produce(stop); });
+		stream->m_Worker = std::thread([self = stream.get()] { self->Produce(); });
 		return stream;
 	}
 	catch (...)
@@ -33,15 +33,15 @@ namespace FP
 	}
 	AudioFileStream::~AudioFileStream()
 	{
-		m_Worker.request_stop();
+		m_Stop.store(true, std::memory_order_release);
 		if (m_Worker.joinable()) m_Worker.join();
 	}
-	void AudioFileStream::Produce(std::stop_token stop)
+	void AudioFileStream::Produce()
 	{
 		try
 		{
 			std::array<float, 4096> buffer{};
-			while (!stop.stop_requested())
+			while (!m_Stop.load(std::memory_order_acquire))
 			{
 				const uint64 write = m_Write.load(std::memory_order_relaxed);
 				const uint64 room = m_Capacity - (write - m_Read.load(std::memory_order_acquire));
