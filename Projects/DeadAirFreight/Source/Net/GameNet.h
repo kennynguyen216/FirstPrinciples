@@ -21,6 +21,7 @@ namespace GameNet
 		BayState, // some of one crew's tanks
 		BayCreatures, // one crew's creatures and airlock
 		DriverResults, // why the match ended
+		RaceAgain, // the same players race again: everyone restarts the match
 		// Everyone to the host.
 		CargoSpend, // oxygen a truck used (breathing, tickets) or won back, out of or into its tanks
 		TruckFinished, // a truck delivered, or is out of the race

@@ -1,4 +1,5 @@
 #include "Net/NetSyncSystem.h"
+#include "Match/Rematch.h"
 #include "Bridge/DriverBridge.h"
 #include "Crew/BayActions.h"
 #include "Enemies/Airlock.h"
@@ -173,6 +174,10 @@ void NetSyncSystem::Handle(World& world, const NetEvent& event)
 				link->PackageReady = FromText(link->PackageText, link->Package);
 			break;
 		}
+		case Message::RaceAgain:
+			if (!host)
+				Rematch::Begin(world, Rematch::Mode::RaceAgain);
+			break;
 		case Message::BayState:
 			if (!host)
 				ApplyBayState(world, in);

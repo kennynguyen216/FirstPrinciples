@@ -5,6 +5,7 @@
 #include "Engine/Net/NetworkSystem.h"
 #include "Engine/UI/UISystem.h"
 #include "Match/MatchQueries.h"
+#include "Match/Rematch.h"
 #include "Net/GameNet.h"
 
 #include <algorithm>
@@ -48,6 +49,8 @@ namespace
 	constexpr float ClearSeconds = 0.8f;
 	// GO stays up this long after the countdown.
 	constexpr float GoSeconds = 0.8f;
+	// The results stand alone this long before the buttons to go on come up.
+	constexpr float ResultsButtonsAfter = 1.5f;
 	// Where the Driver stands in the cab at GO.
 	constexpr const char* CabBodyName = "Driver";
 
@@ -104,6 +107,8 @@ void TitleSystem::OnStart(World& world)
 	}
 	m_CountdownLabel.clear();
 	m_GoTime = 0;
+	m_ResultsTime = 0;
+	m_Rejoining = Rematch::GetMode() == Rematch::Mode::RaceAgain;
 	m_ShowingTruck = false;
 	m_BobTime = 0;
 	m_Fade = Fade::None;
@@ -118,8 +123,18 @@ void TitleSystem::OnStart(World& world)
 	MatchStateComponent* state = GetState(world);
 	if (!state)
 		return;
-	// Started with --host or --join: the session is already up, so go straight to the lobby.
-	if (GameNet::IsNetworked(world) || m_Screen == NullEntity)
+	// Racing again with the same players: the page stays up to black out the restart and show the
+	// countdown, then fades into the race as usual.
+	if (m_Rejoining && m_Screen != NullEntity)
+	{
+		UIComponent& page = world.Get<UIComponent>(m_Screen);
+		page.Visible = true;
+		page.Input = false;
+		return;
+	}
+	// Started with --host or --join: the session is already up, so go straight to the lobby. Back
+	// from a race the session is gone, so it is the title screen again.
+	if ((GameNet::IsNetworked(world) && Rematch::GetMode() != Rematch::Mode::Title) || m_Screen == NullEntity)
 	{
 		if (m_Screen != NullEntity)
 			world.Get<UIComponent>(m_Screen).Visible = false;
@@ -153,7 +168,20 @@ void TitleSystem::Update(World& world, float deltaTime)
 		ShowSky(world, false, deltaTime);
 		if (state->Phase == MatchPhase::Countdown)
 			PreviewCab(world);
+		m_Rejoining = false;
 		Reveal(world, deltaTime);
+		if (state->Phase == MatchPhase::Results)
+			ShowResults(world, deltaTime);
+		return;
+	}
+	// The moment between restarting and the host's new countdown: black, not the lobby.
+	if (m_Rejoining)
+	{
+		if (UIDocumentInstance* document = UISystem::For(world, m_Screen); document && document->IsReady())
+		{
+			document->Set("screen", "none");
+			document->Set("fade", "black");
+		}
 		return;
 	}
 	// Each view puts the camera back as it ends, so the one ending goes first.
@@ -323,8 +351,45 @@ void TitleSystem::Reveal(World& world, float deltaTime)
 		document->Set("countdown", label);
 		m_CountdownLabel = label;
 	}
-	if (page.Visible && m_Fade == Fade::Done && label.empty())
+	// After the race the page stays for the results' buttons (ShowResults).
+	if (page.Visible && m_Fade == Fade::Done && label.empty() && (!state || state->Phase != MatchPhase::Results))
 		page.Visible = false;
+}
+
+void TitleSystem::ShowResults(World& world, float deltaTime)
+{
+	m_ResultsTime += deltaTime;
+	if (m_ResultsTime < ResultsButtonsAfter)
+		return;
+	UIComponent& page = world.Get<UIComponent>(m_Screen);
+	if (!page.Input)
+	{
+		page.Visible = true;
+		page.Input = true;
+		m_SincePage = PageInterval;
+	}
+	Input::SetCursorMode(CursorMode::Visible);
+
+	// Race again is the host's to call, for everyone; anyone can head back to the title screen.
+	if (TitleRequestComponent* request = world.TryGet<TitleRequestComponent>(m_Screen); request && !request->Action.IsEmpty())
+	{
+		const String action = request->Action;
+		request->Action = String();
+		if (action == "again" && GameNet::IsHost(world))
+			Rematch::RaceAgain(world);
+		else if (action == "title")
+		{
+			Leave(world);
+			Rematch::Begin(world, Rematch::Mode::Title);
+		}
+	}
+
+	m_SincePage += deltaTime;
+	if (m_SincePage >= PageInterval)
+	{
+		m_SincePage = 0;
+		ShowPage(world);
+	}
 }
 
 void TitleSystem::PreviewCab(World& world)
@@ -366,7 +431,9 @@ void TitleSystem::Host(World& world, const TitleScreenComponent& title)
 		return;
 	}
 	m_HostedPort = session.GetPort();
-	m_Status = "Hosting on port " + std::to_string(m_HostedPort);
+	// Where friends join from, for when the game does not show up in their list.
+	const std::string address = LanDiscovery::GetLocalAddress();
+	m_Status = address.empty() ? "Hosting on port " + std::to_string(m_HostedPort) : "Friends join at " + address + ":" + std::to_string(m_HostedPort);
 	GetState(world)->Phase = MatchPhase::Lobby;
 	FP_LOG("Title: hosting a game on port %u", m_HostedPort);
 }
@@ -426,7 +493,7 @@ void TitleSystem::ShowPage(World& world)
 	if (!page || !state)
 		return;
 
-	const char* screen = state->Phase == MatchPhase::Lobby ? "lobby" : m_Joining ? "join" : "title";
+	const char* screen = state->Phase == MatchPhase::Results ? "results" : state->Phase == MatchPhase::Lobby ? "lobby" : m_Joining ? "join" : "title";
 	page->Set("screen", screen);
 	page->Set("status", m_Status);
 	page->Set("isHost", GameNet::IsHost(world));

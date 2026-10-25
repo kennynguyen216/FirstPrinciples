@@ -1,5 +1,15 @@
 #include "Title/LanDiscovery.h"
 
+#ifdef _WIN32
+	#include <winsock2.h>
+	#include <ws2tcpip.h>
+#else
+	#include <arpa/inet.h>
+	#include <netinet/in.h>
+	#include <sys/socket.h>
+	#include <unistd.h>
+#endif
+
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -83,4 +93,39 @@ std::string LanDiscovery::GetMachineName()
 			return value;
 	}
 	return "Host";
+}
+
+std::string LanDiscovery::GetLocalAddress()
+{
+	// Aiming a UDP socket at an outside address sends nothing, but makes the system pick the network
+	// it would use, and so the address this machine has there.
+	std::string address;
+#ifdef _WIN32
+	const SOCKET probe = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	if (probe == INVALID_SOCKET)
+		return address;
+#else
+	const int probe = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	if (probe < 0)
+		return address;
+#endif
+	sockaddr_in outside = {};
+	outside.sin_family = AF_INET;
+	outside.sin_port = htons(53);
+	inet_pton(AF_INET, "8.8.8.8", &outside.sin_addr);
+	sockaddr_in local = {};
+	socklen_t size = sizeof(local);
+	if (connect(probe, reinterpret_cast<sockaddr*>(&outside), sizeof(outside)) == 0 &&
+		getsockname(probe, reinterpret_cast<sockaddr*>(&local), &size) == 0 && local.sin_addr.s_addr != 0)
+	{
+		char text[INET_ADDRSTRLEN] = {};
+		if (inet_ntop(AF_INET, &local.sin_addr, text, sizeof(text)))
+			address = text;
+	}
+#ifdef _WIN32
+	closesocket(probe);
+#else
+	close(probe);
+#endif
+	return address;
 }

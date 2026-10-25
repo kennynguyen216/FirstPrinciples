@@ -8,9 +8,11 @@
 #include "Enemies/SiphonSystems.h"
 #include "LifeSupport/LifeSupportSystems.h"
 #include "Match/MatchSystems.h"
+#include "Match/Rematch.h"
 #include "Net/NetSyncSystem.h"
 #include "Title/TitleSystem.h"
 #include "Bridge/DriverBridge.h"
+#include "Bot/BotDriverSystem.h"
 
 using namespace FP;
 
@@ -167,12 +169,19 @@ namespace Game
 
 	void AddSystems(World& world)
 	{
+		// First, so it remembers the scene before anything changes it, and so a restart starts every
+		// system after it again.
+		world.AddSystem<RestartSystem>();
 		world.AddSystem<SoundPreloadSystem>();
 		// What the host sent, applied before anything else looks at the match.
 		world.AddSystem<NetSyncSystem>();
 		// Seats first so every later system sees this frame's crews and roles.
 		world.AddSystem<CrewSystem>();
 		world.AddSystem<MatchSystem>();
+		// Only in a copy started to play itself (DAF_BOT), and before the Driver's systems so its
+		// mouse reaches them the same frame.
+		if (BotDriverSystem::IsEnabled())
+			world.AddSystem<BotDriverSystem>();
 		// After MatchSystem, which makes the match state. The title screen hosts or joins before the
 		// match begins.
 		world.AddSystem<TitleSystem>();
@@ -190,5 +199,7 @@ namespace Game
 		// Last, after everything that moves the camera before GO.
 		world.AddSystem<StarfieldSystem>();
 		world.AddSystem<FreeCamSystem>();
+		// The Driver's systems and the bridge to them, added into this at GO; last, as they always ran.
+		world.AddSystem<RaceSystemGroup>();
 	}
 }

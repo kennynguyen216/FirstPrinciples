@@ -32,6 +32,8 @@ public:
 
 	// This machine's name, for announcing.
 	static std::string GetMachineName();
+	// This machine's address on its network, the one others type to join, or empty when offline.
+	static std::string GetLocalAddress();
 
 private:
 	FP::UdpSocket m_Listener;

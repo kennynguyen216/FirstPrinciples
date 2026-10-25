@@ -912,6 +912,23 @@ namespace FP::Editor
 		m_CameraCenter += before - after;
 	}
 
+	bool ViewportWidget::event(QEvent* event)
+	{
+		// While the game plays it gets plain keys before the editor's menu shortcuts, so Backspace
+		// erases in its text boxes instead of deleting the selected entity, and Delete, arrows and
+		// the like reach it too. Keys held with Ctrl, Alt or Meta stay the editor's.
+		if (event->type() == QEvent::ShortcutOverride && m_Playing && !m_Paused)
+		{
+			const Qt::KeyboardModifiers held = static_cast<QKeyEvent*>(event)->modifiers() & ~(Qt::ShiftModifier | Qt::KeypadModifier);
+			if (held == Qt::NoModifier)
+			{
+				event->accept();
+				return true;
+			}
+		}
+		return QWidget::event(event);
+	}
+
 	void ViewportWidget::keyPressEvent(QKeyEvent* event)
 	{
 		if (m_Playing)

@@ -36,6 +36,8 @@ private:
 	// The Driver's cab starts at GO. Until then the Driver stands in it anyway and can look around,
 	// rather than staring at a still picture through the countdown.
 	void PreviewCab(FP::World& world);
+	// After a race: buttons to race again with the same players or go back to the title screen.
+	void ShowResults(FP::World& world, float deltaTime);
 
 	FP::Entity m_Screen = FP::NullEntity;
 	LanDiscovery m_Discovery;
@@ -61,6 +63,8 @@ private:
 	int m_SteadyFrames = 0;
 	std::string m_CountdownLabel;
 	float m_GoTime = 0;
+	float m_ResultsTime = 0;
+	bool m_Rejoining = false; // restarted to race again, waiting for the host's countdown
 
 	// From the Driver's settings, for the countdown's look around the cab.
 	float m_EyeHeight = 2.4f;

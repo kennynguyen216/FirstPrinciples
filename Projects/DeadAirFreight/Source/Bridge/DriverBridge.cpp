@@ -10,6 +10,7 @@
 #include "HudSend.h"
 #include "LifeSupport/Cargo.h"
 #include "Match/MatchQueries.h"
+#include "Match/Rematch.h"
 #include "Net/DriverNet.h"
 #include "Net/GameNet.h"
 #include "Title/TitleComponents.h"
@@ -398,19 +399,23 @@ void DriverLauncherSystem::Update(World& world, float)
 		}
 	}
 
+	// Into the race group, which a restart empties (the engine cannot take a system back).
+	RaceSystemGroup* race = RaceSystemGroup::Find(world);
+	if (!race)
+		return;
 	// The rivals first, while the truck still has the model they copy; the Driver's systems take it
 	// off this crew's own truck, which its players ride inside.
-	world.AddSystem<RivalTruckSystem>(crew);
+	race->Add<RivalTruckSystem>(world, crew);
 	// Added in this order so the bridge runs right before and right after the Driver's systems.
-	world.AddSystem<CargoBridgeInSystem>(crew, captain);
-	link->Driver = world.AddSystem<DriverSystem>(std::move(net));
-	world.AddSystem<CargoBridgeOutSystem>(crew, captain);
+	race->Add<CargoBridgeInSystem>(world, crew, captain);
+	link->Driver = race->Add<DriverSystem>(world, std::move(net));
+	race->Add<CargoBridgeOutSystem>(world, crew, captain);
 	// After the Driver's systems, so the hatch's ghosts follow where the cab is this frame.
-	world.AddSystem<TransitSystem>();
+	race->Add<TransitSystem>(world);
 	// And so the stars stay centered on the cab camera, which the Driver's systems just moved.
-	world.AddSystem<StarfieldSystem>();
+	race->Add<StarfieldSystem>(world);
 	// Last of all, so the trailer camera overrides the cab camera.
-	world.AddSystem<FreeCamSystem>();
+	race->Add<FreeCamSystem>(world);
 	if (host)
 		SendPackage(world, link->Driver->GetPackage());
 

@@ -150,6 +150,9 @@
 	.seat.joined { animation: joined 0.5s ease-out; }
 	@keyframes joined { 0% { transform: scale(1.12); } 100% { transform: scale(1); } }
 	.timer { font-size: 22px; letter-spacing: 2px; color: #e8ecf4; }
+	/* After a race: the Driver's HUD shows the results, these sit below them. */
+	#results { justify-content: flex-end; padding-bottom: 7vh; box-sizing: border-box; }
+	#results .row { display: flex; gap: 18px; }
 	.hint { color: #9fb3d9; font-size: 15px; text-align: center; max-width: 520px; }
 	.players { font-size: 22px; }
 </style>
@@ -192,6 +195,15 @@
 		<button class="small" onclick="engine.send('back')">Back</button>
 	</div>
 
+	<!-- After a race: go again with the same players, or back to the title screen. -->
+	<div class="screen" id="results">
+		<div class="hint" id="resultsHint"></div>
+		<div class="row">
+			<button id="again" onclick="engine.send('again')">Race Again</button>
+			<button onclick="engine.send('title')">Title Screen</button>
+		</div>
+	</div>
+
 	<!-- 3, 2, 1, GO over the game. -->
 	<div id="countdown"></div>
 
@@ -200,10 +212,10 @@
 
 	<script>
 		function show(screen) {
-			["title", "join", "lobby"].forEach(function (id) {
+			["title", "join", "lobby", "results"].forEach(function (id) {
 				document.getElementById(id).classList.toggle("shown", id === screen);
 			});
-			document.getElementById("backdrop").style.display = screen === "none" ? "none" : "block";
+			document.getElementById("backdrop").style.display = screen === "none" || screen === "results" ? "none" : "block";
 		}
 
 		// Black first, then start, so the moment the match loads is hidden.
@@ -230,6 +242,8 @@
 
 		function updateLobby() {
 			var isHost = engine.state.isHost === true;
+			document.getElementById("again").style.display = isHost ? "inline-block" : "none";
+			document.getElementById("resultsHint").textContent = isHost ? "" : "Waiting for the host to race again.";
 			var connected = engine.state.connected === true;
 			document.getElementById("lobbyTitle").textContent = isHost ? "Hosting" : connected ? "Joined" : "Joining";
 			document.getElementById("start").style.display = isHost ? "inline-block" : "none";
