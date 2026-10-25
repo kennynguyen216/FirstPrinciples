@@ -1086,6 +1086,7 @@ namespace FP::Editor
 		// Emitters run while editing too, so effects can be tuned without playing.
 		if (!m_World->IsPlaying())
 			Particles::Simulate(*m_World.Get(), deltaTime, true);
+		Input::SetDeltaTime(deltaTime);
 		m_World->Update(deltaTime);
 		Input::EndFrame();
 
@@ -1449,6 +1450,8 @@ namespace FP::Editor
 		CommitHistory();
 		// Snapshot the scene so Stop can put everything back.
 		m_PlaySnapshot = SceneSerializer::SaveToString(*m_World.Get());
+		// Picks up edits to the controls since the last play.
+		Input::LoadActionsFile(Paths::Content("Input.actions").CStr());
 		// Play starts from no particles, so bursts fire again.
 		Particles::Clear(*m_World.Get());
 		m_World->AddSystem<ScriptSystem>();
