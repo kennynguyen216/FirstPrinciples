@@ -102,7 +102,7 @@ namespace FP
 					SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
 			}
 		}
-		for (SDL_GPUGraphicsPipeline* pipeline : { m_OcclusionPipeline, m_PresentPipeline, m_SkyboxPipeline, m_PostPipeline, m_FXAAPipeline, m_BloomPipeline, m_UIPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1], m_ParticlePipelines[0], m_ParticlePipelines[1] })
+		for (SDL_GPUGraphicsPipeline* pipeline : { m_OcclusionPipeline, m_PresentPipeline, m_SkyboxPipeline, m_PostPipeline, m_FXAAPipeline, m_BloomPipeline, m_BloomAddPipeline, m_UIPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1], m_ParticlePipelines[0], m_ParticlePipelines[1] })
 		{
 			if (pipeline)
 				SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
@@ -119,7 +119,7 @@ namespace FP
 					return false;
 			}
 		}
-		return m_PresentPipeline && m_PostPipeline && m_FXAAPipeline && m_BloomPipeline && m_SkyboxPipeline && m_LinePipeline && m_EmptyEnvironment;
+		return m_PresentPipeline && m_PostPipeline && m_FXAAPipeline && m_BloomPipeline && m_BloomAddPipeline && m_SkyboxPipeline && m_LinePipeline && m_EmptyEnvironment;
 	}
 
 	SDL_GPUGraphicsPipeline* Renderer::GetPipeline(const Draw& draw) const
@@ -193,7 +193,7 @@ namespace FP
 		return pipeline;
 	}
 
-	SDL_GPUGraphicsPipeline* Renderer::CreateFullscreenPipeline(const char* fragment, uint32 samplers, SDL_GPUTextureFormat format)
+	SDL_GPUGraphicsPipeline* Renderer::CreateFullscreenPipeline(const char* fragment, uint32 samplers, SDL_GPUTextureFormat format, bool additive)
 	{
 		SDL_GPUDevice* gpu = m_Device.GetHandle();
 		SDL_GPUShader* vert = m_Device.LoadShader("Present.vert", 0, 0);
@@ -203,6 +203,8 @@ namespace FP
 		{
 			SDL_GPUColorTargetDescription colorTarget = {};
 			colorTarget.format = format;
+			if (additive)
+				colorTarget.blend_state = AdditiveBlend();
 			SDL_GPUGraphicsPipelineCreateInfo info = {};
 			info.vertex_shader = vert;
 			info.fragment_shader = frag;
@@ -276,6 +278,7 @@ namespace FP
 		m_PostPipeline = CreateFullscreenPipeline("Present.frag", 2, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB);
 		m_FXAAPipeline = CreateFullscreenPipeline("FXAA.frag", 1, m_TargetFormat);
 		m_BloomPipeline = CreateFullscreenPipeline("Bloom.frag", 1, SceneFormat);
+		m_BloomAddPipeline = CreateFullscreenPipeline("Bloom.frag", 1, SceneFormat, true);
 
 		SDL_GPUShader* skyFrag = m_Device.LoadShader("Skybox.frag", 0, 1, 1);
 		if (presentVert && skyFrag)
@@ -1208,10 +1211,10 @@ namespace FP
 			settings.Bloom = false;
 		}
 		auto drawFullscreen = [&](SDL_GPUTexture* destination, SDL_GPUGraphicsPipeline* pipeline,
-			const SDL_GPUTextureSamplerBinding* sources, uint32 count, const void* uniforms, uint32 bytes) {
+			const SDL_GPUTextureSamplerBinding* sources, uint32 count, const void* uniforms, uint32 bytes, bool keep = false) {
 			SDL_GPUColorTargetInfo output = {};
 			output.texture = destination;
-			output.load_op = SDL_GPU_LOADOP_DONT_CARE;
+			output.load_op = keep ? SDL_GPU_LOADOP_LOAD : SDL_GPU_LOADOP_DONT_CARE;
 			output.store_op = SDL_GPU_STOREOP_STORE;
 			SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &output, 1, nullptr);
 			SDL_BindGPUGraphicsPipeline(pass, pipeline);
@@ -1221,7 +1224,53 @@ namespace FP
 			SDL_EndGPURenderPass(pass);
 		};
 		GPUTexture* bloom = m_Device.GetBlackTexture();
-		if (settings.Bloom && settings.BloomIntensity > 0)
+		float bloomIntensity = std::clamp(settings.BloomIntensity, 0.0f, 10.0f);
+		if (!settings.Bloom || settings.BloomIntensity <= 0 || !settings.WideBloom)
+			m_BloomOctaves.Clear();
+		if (settings.Bloom && settings.BloomIntensity > 0 && settings.WideBloom)
+		{
+			// Halve down to 1/256 of the screen, then walk back up adding each smaller octave onto
+			// the next larger one, so the glow has a sharp core and a tail that spans the screen.
+			uint32 w = width, h = height;
+			int32 levels = 0;
+			for (; levels < 8 && w > 1 && h > 1; ++levels)
+			{
+				w = (w + 1) / 2;
+				h = (h + 1) / 2;
+				if (m_BloomOctaves.Num() <= levels)
+					m_BloomOctaves.Add(nullptr);
+				RefPtr<GPUTexture>& octave = m_BloomOctaves[levels];
+				if (!octave || octave->GetWidth() != w || octave->GetHeight() != h)
+					octave = m_Device.CreateRenderTarget(SceneFormat, w, h, false);
+				if (!octave)
+					break;
+			}
+			if (levels > 0)
+			{
+				SDL_GPUTextureSamplerBinding source{ m_SceneColor->GetHandle(), m_Device.GetClampSampler() };
+				Vec4 params{ 1.0f / width, 1.0f / height, std::clamp(settings.BloomThreshold, 0.0f, 65504.0f), 0 };
+				drawFullscreen(m_BloomOctaves[0]->GetHandle(), m_BloomPipeline, &source, 1, &params, sizeof(params));
+				for (int32 i = 1; i < levels; ++i)
+				{
+					GPUTexture* larger = m_BloomOctaves[i - 1].Get();
+					source.texture = larger->GetHandle();
+					params = { 1.0f / larger->GetWidth(), 1.0f / larger->GetHeight(), 0, 2 };
+					drawFullscreen(m_BloomOctaves[i]->GetHandle(), m_BloomPipeline, &source, 1, &params, sizeof(params));
+				}
+				for (int32 i = levels - 2; i >= 0; --i)
+				{
+					GPUTexture* smaller = m_BloomOctaves[i + 1].Get();
+					source.texture = smaller->GetHandle();
+					params = { 1.0f / smaller->GetWidth(), 1.0f / smaller->GetHeight(), 0, 3 };
+					drawFullscreen(m_BloomOctaves[i]->GetHandle(), m_BloomAddPipeline, &source, 1, &params, sizeof(params), true);
+				}
+				bloom = m_BloomOctaves[0].Get();
+				// Every octave carries the full extracted light, so average them to keep intensity comparable.
+				bloomIntensity /= static_cast<float>(levels);
+			}
+			for (auto& texture : m_Bloom) texture.Reset();
+		}
+		else if (settings.Bloom && settings.BloomIntensity > 0)
 		{
 			const uint32 bw = std::max(1u, (width + 3) / 4), bh = std::max(1u, (height + 3) / 4);
 			if (!m_Bloom[0] || !m_Bloom[1] || m_Bloom[0]->GetWidth() != bw || m_Bloom[0]->GetHeight() != bh)
@@ -1254,7 +1303,7 @@ namespace FP
 		for (int32 i = 0; i < modes.Num(); ++i)
 			if (accessibility.ColorBlindMode == modes[i]) colorMode = i;
 		const Vec4 present[2] = {
-			{ view.Exposure, view.Tonemap ? 1.0f : 0.0f, std::clamp(settings.BloomIntensity, 0.0f, 10.0f), static_cast<float>(colorMode) },
+			{ view.Exposure, view.Tonemap ? 1.0f : 0.0f, bloomIntensity, static_cast<float>(colorMode) },
 			{ std::clamp(accessibility.ColorBlindStrength, 0.0f, 1.0f), 0, 0, 0 }
 		};
 		SDL_GPUTextureSamplerBinding sources[2] = {

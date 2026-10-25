@@ -239,6 +239,7 @@ namespace FP
 		bool Bloom = false;
 		float BloomIntensity = 0.15f;
 		float BloomThreshold = 1;
+		bool WideBloom = false; // eight octaves of glow out to 1/256 of the screen instead of one short blur
 	};
 
 	// Flat light added everywhere so unlit sides are not pure black.

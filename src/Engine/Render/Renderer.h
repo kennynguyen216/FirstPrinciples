@@ -125,7 +125,7 @@ namespace FP
 		};
 
 		void CreatePipelines();
-		SDL_GPUGraphicsPipeline* CreateFullscreenPipeline(const char* fragment, uint32 samplers, SDL_GPUTextureFormat format);
+		SDL_GPUGraphicsPipeline* CreateFullscreenPipeline(const char* fragment, uint32 samplers, SDL_GPUTextureFormat format, bool additive = false);
 		SDL_GPUGraphicsPipeline* CreateMeshPipeline(const char* fragment, uint32 numSamplers, uint32 numUniforms, Surface surface, bool glass, bool wireframe = false);
 		SDL_GPUGraphicsPipeline* GetPipeline(const Draw& draw) const;
 		void EnsureTargets(uint32 width, uint32 height);
@@ -170,6 +170,7 @@ namespace FP
 		SDL_GPUGraphicsPipeline* m_PostPipeline = nullptr;
 		SDL_GPUGraphicsPipeline* m_FXAAPipeline = nullptr;
 		SDL_GPUGraphicsPipeline* m_BloomPipeline = nullptr;
+		SDL_GPUGraphicsPipeline* m_BloomAddPipeline = nullptr;
 		SDL_GPUGraphicsPipeline* m_SkyboxPipeline = nullptr;
 		EnvironmentMap m_Environment;
 		RefPtr<GPUBuffer> m_EnvironmentBuffer;
@@ -209,6 +210,7 @@ namespace FP
 		RefPtr<GPUTexture> m_Depth;
 		RefPtr<GPUTexture> m_PostColor;
 		RefPtr<GPUTexture> m_Bloom[2];
+		Array<RefPtr<GPUTexture>> m_BloomOctaves; // WideBloom: half size, quarter size, ... down to 1/256
 		Array<Mat4> m_BoneUpload; // always MaxSkinBones long, the size the shader reads
 
 		// Depth only pipelines for Mesh and SkinnedMesh. Missing ones just mean no shadows.

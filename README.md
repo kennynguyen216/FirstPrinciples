@@ -1075,6 +1075,8 @@ previous values. These preferences are independent of scene files and scene undo
 
 Use **Entity > Post Processing...** for scene FXAA and bloom. **BloomIntensity** controls glow
 (0-10), and **BloomThreshold** selects its minimum HDR brightness before exposure (default 1).
+**WideBloom** stacks eight octaves of blur for a soft halo that spreads across the screen, like film
+glare around very bright light. It is off by default, which keeps the tighter original glow.
 Both effects default to off. Save the scene to keep them. If more than one entity has PostProcess,
 the earliest created entity supplies the settings. Bloom is bypassed in Unlit and Wireframe views.
 
