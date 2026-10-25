@@ -11,6 +11,7 @@
 #include "Engine/Net/NetworkSystem.h"
 #include "Engine/Animation/AnimationSystem.h"
 #include "Engine/Physics/PhysicsSystem.h"
+#include "Engine/Physics/BlackHoleSystem.h"
 #include "Engine/Physics/PlayerInputSystem.h"
 #include "Engine/UI/UISystem.h"
 #include "Engine/Particles/ParticleSystem.h"
@@ -257,6 +258,7 @@ int main(int argc, char** argv)
 		return 1;
 	world->AddSystem<ScriptSystem>();
 	world->AddSystem<PlayerInputSystem>();
+	world->AddSystem<BlackHoleSystem>();
 	world->AddSystem<PhysicsSystem>();
 	world->AddSystem<AnimationSystem>();
 	world->AddSystem<UISystem>();

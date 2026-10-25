@@ -30,6 +30,7 @@
 #include "Engine/Scripting/ScriptSystem.h"
 #include "Engine/Animation/AnimationSystem.h"
 #include "Engine/Physics/PhysicsSystem.h"
+#include "Engine/Physics/BlackHoleSystem.h"
 #include "Engine/Physics/PlayerInputSystem.h"
 #include "Engine/UI/UISystem.h"
 #include "Engine/Particles/ParticleSystem.h"
@@ -1663,6 +1664,7 @@ namespace FP::Editor
 		Particles::Clear(*m_World.Get());
 		m_World->AddSystem<ScriptSystem>();
 		m_World->AddSystem<PlayerInputSystem>();
+		m_World->AddSystem<BlackHoleSystem>();
 		m_World->AddSystem<PhysicsSystem>();
 		m_World->AddSystem<AnimationSystem>();
 		m_World->AddSystem<UISystem>();

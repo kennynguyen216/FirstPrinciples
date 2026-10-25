@@ -133,6 +133,8 @@ namespace FP
 		void UploadLines(SDL_GPUCommandBuffer* cmd, const DebugLines& lines);
 		void PrepareEnvironment(World& world);
 		void DrawSkybox(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, const RenderView& view);
+		// Bends the finished scene around every BlackHoleComponent and draws their accretion disks.
+		void DrawBlackHoles(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view, uint32 width, uint32 height);
 		void BuildFrameUniforms(World& world, const RenderView& view, uint32 width, uint32 height);
 		void DrawObject(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, World& world, const Draw& draw, const Mat4& viewProjection);
 		void PushBones(SDL_GPUCommandBuffer* cmd, const Array<Mat4>* skin);
@@ -172,6 +174,7 @@ namespace FP
 		SDL_GPUGraphicsPipeline* m_FXAAPipeline = nullptr;
 		SDL_GPUGraphicsPipeline* m_BloomPipeline = nullptr;
 		SDL_GPUGraphicsPipeline* m_SkyboxPipeline = nullptr;
+		SDL_GPUGraphicsPipeline* m_BlackHolePipeline = nullptr; // optional, no lensing without it
 		EnvironmentMap m_Environment;
 		RefPtr<GPUBuffer> m_EnvironmentBuffer;
 		RefPtr<GPUBuffer> m_EmptyEnvironment;

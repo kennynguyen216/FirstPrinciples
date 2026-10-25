@@ -60,6 +60,22 @@ namespace FP
 		};
 		const uint16 QuadIndices[6] = { 0, 3, 2, 0, 2, 1 };
 
+		// Layout matches BlackHole.frag (std140).
+		constexpr int32 MaxBlackHoles = 4;
+		struct BlackHoleUniforms
+		{
+			Mat4 ViewProjection;
+			Mat4 InverseViewProjection;
+			Vec4 CameraForward;
+			Vec4 Background;
+			Vec4 Params;
+			Vec4 Environment;
+			Vec4 EnvironmentSize;
+			Vec4 Hole[MaxBlackHoles];
+			Vec4 Disk[MaxBlackHoles];
+			Vec4 DiskLight[MaxBlackHoles];
+		};
+
 		MaterialUniforms MakeMaterialUniforms(const MaterialData& data)
 		{
 			MaterialUniforms u;
@@ -103,7 +119,7 @@ namespace FP
 					SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
 			}
 		}
-		for (SDL_GPUGraphicsPipeline* pipeline : { m_OcclusionPipeline, m_PresentPipeline, m_SkyboxPipeline, m_PostPipeline, m_FXAAPipeline, m_BloomPipeline, m_UIPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1], m_ParticlePipelines[0], m_ParticlePipelines[1] })
+		for (SDL_GPUGraphicsPipeline* pipeline : { m_OcclusionPipeline, m_PresentPipeline, m_SkyboxPipeline, m_BlackHolePipeline, m_PostPipeline, m_FXAAPipeline, m_BloomPipeline, m_UIPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1], m_ParticlePipelines[0], m_ParticlePipelines[1] })
 		{
 			if (pipeline)
 				SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
@@ -299,6 +315,25 @@ namespace FP
 		if (skyFrag)
 			SDL_ReleaseGPUShader(gpu, skyFrag);
 
+		SDL_GPUShader* blackHoleFrag = m_Device.LoadShader("BlackHole.frag", 2, 1, 1);
+		if (presentVert && blackHoleFrag)
+		{
+			SDL_GPUColorTargetDescription lensTarget = {};
+			lensTarget.format = SceneFormat;
+			SDL_GPUGraphicsPipelineCreateInfo info = {};
+			info.vertex_shader = presentVert;
+			info.fragment_shader = blackHoleFrag;
+			info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+			info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+			info.target_info.color_target_descriptions = &lensTarget;
+			info.target_info.num_color_targets = 1;
+			m_BlackHolePipeline = SDL_CreateGPUGraphicsPipeline(gpu, &info);
+			if (!m_BlackHolePipeline)
+				FP_LOG_WARN("Black hole pipeline failed, so black holes will not bend light: %s", SDL_GetError());
+		}
+		if (blackHoleFrag)
+			SDL_ReleaseGPUShader(gpu, blackHoleFrag);
+
 		SDL_GPUShader* lineVert = m_Device.LoadShader("Line.vert", 0, 1);
 		SDL_GPUShader* lineFrag = m_Device.LoadShader("Line.frag", 0, 0);
 		if (lineVert && lineFrag)
@@ -483,7 +518,8 @@ namespace FP
 			return;
 		m_SceneColor = m_Device.CreateRenderTarget(SceneFormat, width, height, false);
 		m_SceneCopy = m_Device.CreateRenderTarget(SceneFormat, width, height, false);
-		m_Depth = m_Device.CreateRenderTarget(m_Device.GetDepthFormat(), width, height, true);
+		// Sampled so black holes can find the scene along their bent rays.
+		m_Depth = m_Device.CreateRenderTarget(m_Device.GetDepthFormat(), width, height, true, true);
 	}
 
 	void Renderer::UploadLines(SDL_GPUCommandBuffer* cmd, const DebugLines& lines)
@@ -558,6 +594,65 @@ namespace FP
 		SDL_GPUBuffer* buffer = m_EnvironmentBuffer->GetHandle();
 		SDL_BindGPUFragmentStorageBuffers(pass, 0, &buffer, 1);
 		SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+	}
+
+	void Renderer::DrawBlackHoles(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view, uint32 width, uint32 height)
+	{
+		if (!m_BlackHolePipeline || view.Mode == ViewMode::Wireframe || world.View<BlackHoleComponent>().empty())
+			return;
+		BlackHoleUniforms u = {};
+		int32 holes = 0;
+		float stars = 0;
+		for (auto [entity, transform, hole] : world.View<TransformComponent, BlackHoleComponent>().each())
+		{
+			if (holes == MaxBlackHoles)
+				break;
+			const float radius = std::max(hole.SchwarzschildRadius, 0.001f);
+			u.Hole[holes] = { transform.Position, radius };
+			u.Disk[holes] = { transform.GetRotation().Rotate({ 0, 0, 1 }), hole.AccretionDisk ? std::max(hole.DiskOuterRadius, 3 * radius) : 0 };
+			u.DiskLight[holes] = { std::max(hole.DiskTemperature, 1.0f), std::max(hole.DiskBrightness, 0.0f), std::max(hole.SpeedOfLight, 0.001f), 0 };
+			stars = std::max(stars, hole.StarBrightness);
+			++holes;
+		}
+
+		const bool hasSky = m_EnvironmentBuffer && m_Frame.EnvironmentSize.Z > 0 && m_Frame.EnvironmentParams.Z > 0;
+		u.ViewProjection = view.GetViewProjection();
+		u.InverseViewProjection = u.ViewProjection.Inverse();
+		u.CameraForward = { view.CameraForward, view.Orthographic ? 1.0f : 0.0f };
+		u.Background = { ToLinear(view.Background).XYZ(), stars };
+		u.Params = { static_cast<float>(holes), static_cast<float>(world.GetTime()), 0, 0 };
+		u.Environment = { m_Frame.EnvironmentParams.X, m_Frame.EnvironmentParams.Y, hasSky ? 1.0f : 0.0f, 0 };
+		u.EnvironmentSize = m_Frame.EnvironmentSize;
+
+		// Rays read the finished scene from a copy and write the lensed image back over it.
+		SDL_GPUBlitInfo blit = {};
+		blit.source.texture = m_SceneColor->GetHandle();
+		blit.source.w = width;
+		blit.source.h = height;
+		blit.destination.texture = m_SceneCopy->GetHandle();
+		blit.destination.w = width;
+		blit.destination.h = height;
+		blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
+		blit.filter = SDL_GPU_FILTER_NEAREST;
+		SDL_BlitGPUTexture(cmd, &blit);
+
+		SDL_GPUColorTargetInfo output = {};
+		output.texture = m_SceneColor->GetHandle();
+		output.load_op = SDL_GPU_LOADOP_DONT_CARE;
+		output.store_op = SDL_GPU_STOREOP_STORE;
+		SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &output, 1, nullptr);
+		SDL_BindGPUGraphicsPipeline(pass, m_BlackHolePipeline);
+		SDL_PushGPUFragmentUniformData(cmd, 0, &u, sizeof(u));
+		// ponytail: every pixel traces its ray, even far from any hole. Add a screen bound if it costs too much
+		const SDL_GPUTextureSamplerBinding sources[2] = {
+			{ m_SceneCopy->GetHandle(), m_Device.GetClampSampler() },
+			{ m_Depth->GetHandle(), m_Device.GetClampSampler() },
+		};
+		SDL_BindGPUFragmentSamplers(pass, 0, sources, 2);
+		SDL_GPUBuffer* environment = hasSky ? m_EnvironmentBuffer->GetHandle() : m_EmptyEnvironment->GetHandle();
+		SDL_BindGPUFragmentStorageBuffers(pass, 0, &environment, 1);
+		SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+		SDL_EndGPURenderPass(pass);
 	}
 
 	void Renderer::BuildFrameUniforms(World& world, const RenderView& view, uint32 width, uint32 height)
@@ -1191,6 +1286,8 @@ namespace FP
 			drawRange(pass, firstGlass, draws.Num());
 			SDL_EndGPURenderPass(pass);
 		}
+
+		DrawBlackHoles(cmd, world, view, width, height);
 
 		const Array<GPUTexture*> pages = PrepareUI(cmd, world, view, width, height);
 

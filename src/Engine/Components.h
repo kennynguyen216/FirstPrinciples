@@ -258,6 +258,30 @@ namespace FP
 		bool Enabled = true;
 	};
 
+	// Schwarzschild black hole. The renderer bends light around it and draws its accretion disk,
+	// and BlackHoleSystem pulls every GravityBody. SpeedOfLight is a game-scale c in world units
+	// per second, so relativity shows up at game speeds.
+	struct BlackHoleComponent
+	{
+		float SchwarzschildRadius = 1; // event horizon, world units
+		float SpeedOfLight = 20;
+		bool AccretionDisk = true; // in the transform's local XY plane, from the innermost stable orbit (3 radii) out
+		float DiskOuterRadius = 12;
+		float DiskTemperature = 4500; // kelvin at the hottest ring, sets the color
+		float DiskBrightness = 1.5f;
+		float StarBrightness = 1; // procedural stars where no skybox covers the sky
+		Vec3 LastPosition; // runtime only, for measuring how fast the hole moves
+	};
+
+	// Anything a black hole should pull, like a racer. With a Dynamic RigidBody the pull goes through
+	// physics. Without one, Velocity moves the transform directly.
+	struct GravityBodyComponent
+	{
+		Vec3 Velocity;
+		float Thrust = 0; // acceleration from the Move action, 0 for no input
+		bool Captured = false; // set once it crosses a horizon, then the game decides what happens next
+	};
+
 	// An HTML page from Content drawn over the screen, written with HTML, CSS and JavaScript.
 	// On a camera it draws over that camera's view, like a Unity canvas. On any other entity it
 	// draws over every view. The page talks to the entity's scripts through the engine object.

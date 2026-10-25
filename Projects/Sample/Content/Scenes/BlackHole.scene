@@ -1,0 +1,52 @@
+# FirstPrinciples scene
+version 2
+
+entity b1ac0001-0001-4001-8001-000000000001
+component Name
+  Name "Camera"
+component Transform
+  Position 0 -46 11
+  Rotation 77 0 0
+  Scale 1 1 1
+component Camera
+  Perspective true
+  FieldOfView 45
+  NearClip 0.100000001
+  FarClip 1000
+  Primary true
+  Background 0 0 0 1
+  Exposure 1
+  Tonemap true
+
+entity b1ac0003-0003-4003-8003-000000000003
+component Name
+  Name "Black Hole"
+component Transform
+  Position 0 0 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component BlackHole
+  SchwarzschildRadius 1.5
+  SpeedOfLight 20
+  AccretionDisk true
+  DiskOuterRadius 16
+  DiskTemperature 4500
+  DiskBrightness 1.5
+  StarBrightness 1
+
+entity b1ac0005-0005-4005-8005-000000000005
+component Name
+  Name "Racer"
+component Transform
+  Position -24 9 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component Sprite
+  Tint 0.35 0.75 1 1
+  Size 0.8 0.8
+  Texture ""
+  Layer 10
+component GravityBody
+  Velocity 10 0 0
+  Thrust 8
+  Captured false

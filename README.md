@@ -648,6 +648,32 @@ character about, and explosions push it too. `Content/Scenes/Character.scene` ha
 player with stairs, a walkable and a too steep ramp, a lift, crates and a zone
 that counts the player walking in.
 
+### Black holes
+
+A **BlackHole** bends light like the real thing. Every pixel's light ray is traced backwards through
+Schwarzschild spacetime, so you get the black shadow at 2.6 times the horizon radius, the photon ring,
+the far side of the accretion disk lensed up over the top and a thinner image wrapped underneath.
+A skybox is bent all the way around. Without one, procedural stars fill the sky.
+
+- `SchwarzschildRadius` is the event horizon in world units. `SpeedOfLight` is a game-scale c in world
+  units per second. Lower it and relativity shows up at slower speeds, and the disk spins faster.
+- The disk lies in the transform's local XY plane, so rotate the entity to tilt it. It starts at the
+  innermost stable orbit (3 radii) and runs to `DiskOuterRadius`. Each ring glows as a blackbody at
+  its own temperature, shifted by Doppler and gravitational redshift, so the side spinning toward
+  you is brighter and bluer. `DiskTemperature` sets the hottest ring (4500 K glows orange, 9000 K
+  white-blue).
+- Up to four holes render at once. Moving a hole is fine.
+
+A **GravityBody** is pulled by every black hole with the exact Schwarzschild orbit equation, so orbits
+precess, nothing stays in orbit inside 3 radii and anything under 1.5 radii spirals in. `Captured`
+turns on when it crosses a horizon, for your game to respawn it or end the race. With a Dynamic
+**RigidBody** the pull goes through physics (set `GravityScale` to 0 in space). Without one,
+`Velocity` moves the transform. `Thrust` lets the Move action push it.
+
+A still black hole bends a racer's path but hands back the same speed it came in with. Speed comes
+from thrusting at the closest pass, where you are fastest, or from swinging behind a moving hole.
+`Content/Scenes/BlackHole.scene` has a racer to fly around one with WASD.
+
 ### Particles
 
 A **ParticleEmitter** sprays small camera facing quads for fire, smoke, sparks, dust and magic.
