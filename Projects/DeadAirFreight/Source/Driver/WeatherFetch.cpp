@@ -7,7 +7,11 @@
 #include <chrono>
 #include <cstdio>
 #include <ctime>
+#include <condition_variable>
 #include <future>
+#include <memory>
+#include <mutex>
+#include <thread>
 
 #ifdef _WIN32
 #define popen _popen
@@ -63,39 +67,90 @@ namespace
 	}
 }
 
+namespace
+{
+	// One background gather and its result.
+	struct Prefetch
+	{
+		std::mutex Mutex;
+		std::condition_variable Done;
+		bool Ready = false;
+		MatchSources Sources;
+	};
+
+	std::mutex PendingMutex;
+	std::shared_ptr<Prefetch> Pending;
+
+	MatchSources GatherNow(const DriverSettings& settings);
+}
+
+void PrefetchMatchSources(const DriverSettings& settings)
+{
+	auto job = std::make_shared<Prefetch>();
+	{
+		std::lock_guard<std::mutex> lock(PendingMutex);
+		Pending = job;
+	}
+	// Detached, so quitting before the downloads finish never waits on them.
+	std::thread([job, settings] {
+		MatchSources sources = GatherNow(settings);
+		std::lock_guard<std::mutex> lock(job->Mutex);
+		job->Sources = std::move(sources);
+		job->Ready = true;
+		job->Done.notify_all();
+	}).detach();
+}
+
 MatchSources GatherMatchSources(const DriverSettings& settings)
 {
-	MatchSources sources;
-	if (settings.FetchLive > 0)
+	std::shared_ptr<Prefetch> job;
 	{
-		std::string key = Trim(ReadContent("Settings/NasaApiKey.txt"));
-		if (key.empty())
-			key = "DEMO_KEY";
-		const double now = static_cast<double>(std::time(nullptr));
-		const std::string flybyUrl = "https://api.nasa.gov/neo/rest/v1/feed?start_date=" + FormatDate(now - 86400) + "&end_date=" + FormatDate(now) + "&api_key=" + key;
-
-		const float timeout = settings.FetchTimeout;
-		auto wind = std::async(std::launch::async, Fetch, "https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json", timeout);
-		auto kp = std::async(std::launch::async, Fetch, "https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json", timeout);
-		auto flybys = std::async(std::launch::async, Fetch, flybyUrl, timeout);
-
-		sources.SolarWind = ParseSolarWind(wind.get());
-		sources.Kp = ParseKp(kp.get());
-		sources.WeatherLive = !sources.SolarWind.empty() && !sources.Kp.empty();
-		sources.Flybys = ParseFlybys(flybys.get());
-		sources.FlybysLive = !sources.Flybys.empty();
+		std::lock_guard<std::mutex> lock(PendingMutex);
+		job = std::move(Pending);
 	}
+	if (!job)
+		return GatherNow(settings);
+	std::unique_lock<std::mutex> lock(job->Mutex);
+	job->Done.wait(lock, [&] { return job->Ready; });
+	return std::move(job->Sources);
+}
 
-	if (!sources.WeatherLive)
+namespace
+{
+	MatchSources GatherNow(const DriverSettings& settings)
 	{
-		FP_LOG("Space weather: live data unavailable, replaying the saved real bundle");
-		sources.SolarWind = ParseSolarWind(ReadContent("SpaceWeather/Fallback/SolarWind.json"));
-		sources.Kp = ParseKp(ReadContent("SpaceWeather/Fallback/Kp.json"));
+		MatchSources sources;
+		if (settings.FetchLive > 0)
+		{
+			std::string key = Trim(ReadContent("Settings/NasaApiKey.txt"));
+			if (key.empty())
+				key = "DEMO_KEY";
+			const double now = static_cast<double>(std::time(nullptr));
+			const std::string flybyUrl = "https://api.nasa.gov/neo/rest/v1/feed?start_date=" + FormatDate(now - 86400) + "&end_date=" + FormatDate(now) + "&api_key=" + key;
+
+			const float timeout = settings.FetchTimeout;
+			auto wind = std::async(std::launch::async, Fetch, "https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json", timeout);
+			auto kp = std::async(std::launch::async, Fetch, "https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json", timeout);
+			auto flybys = std::async(std::launch::async, Fetch, flybyUrl, timeout);
+
+			sources.SolarWind = ParseSolarWind(wind.get());
+			sources.Kp = ParseKp(kp.get());
+			sources.WeatherLive = !sources.SolarWind.empty() && !sources.Kp.empty();
+			sources.Flybys = ParseFlybys(flybys.get());
+			sources.FlybysLive = !sources.Flybys.empty();
+		}
+
+		if (!sources.WeatherLive)
+		{
+			FP_LOG("Space weather: live data unavailable, replaying the saved real bundle");
+			sources.SolarWind = ParseSolarWind(ReadContent("SpaceWeather/Fallback/SolarWind.json"));
+			sources.Kp = ParseKp(ReadContent("SpaceWeather/Fallback/Kp.json"));
+		}
+		if (!sources.FlybysLive)
+		{
+			FP_LOG("Asteroids: live flybys unavailable, replaying the saved real bundle");
+			sources.Flybys = ParseFlybys(ReadContent("SpaceWeather/Fallback/Flybys.json"));
+		}
+		return sources;
 	}
-	if (!sources.FlybysLive)
-	{
-		FP_LOG("Asteroids: live flybys unavailable, replaying the saved real bundle");
-		sources.Flybys = ParseFlybys(ReadContent("SpaceWeather/Fallback/Flybys.json"));
-	}
-	return sources;
 }

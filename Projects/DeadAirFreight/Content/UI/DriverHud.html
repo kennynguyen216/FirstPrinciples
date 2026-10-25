@@ -6,6 +6,9 @@
      engine.state.hud once a frame; this page only lays it out. Sizes are in vh so any window works. -->
 <style>
 	html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+	/* The page opens at GO and fades in as the countdown's GO fades out (Title.html). */
+	body { animation: hud-in 0.8s ease-out; }
+	@keyframes hud-in { from { opacity: 0; } to { opacity: 1; } }
 	body { font-family: Menlo, Consolas, "Courier New", monospace; font-size: 2.5vh; color: #fff;
 		text-shadow: 0 0 0.4vh #000, 0 0 0.2vh #000; }
 	.layer { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }

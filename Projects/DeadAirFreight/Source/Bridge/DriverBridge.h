@@ -14,6 +14,10 @@
 // - The Driver's cab breathes for the crew, so LifeSupportSystem leaves that crew's cab alone.
 // - When the Driver's match ends (delivered, the colony out of air, or no cargo left) the shared
 //   match goes to Results too.
+// The scene has one truck, and it is Crew A's. A second truck for Crew B needs the Driver's
+// systems to run more than one.
+inline constexpr FP::int32 TruckCrew = 0;
+
 class DriverLauncherSystem : public FP::System
 {
 public:

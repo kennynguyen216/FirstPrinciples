@@ -12,6 +12,14 @@ struct TitleScreenComponent
 	FP::int32 DiscoveryPort = 7778;
 };
 
+// On the local Driver during the countdown: where they are looking around the cab, before the
+// Driver's systems start at GO. The launcher hands it to the cab so the view carries straight on.
+struct StartLookComponent
+{
+	float Yaw = 0;
+	float Pitch = 0;
+};
+
 // What the player picked on the title screen page. The page's TitleScreen script writes it and
 // TitleSystem acts on it, since page events reach scripts rather than systems.
 struct TitleRequestComponent

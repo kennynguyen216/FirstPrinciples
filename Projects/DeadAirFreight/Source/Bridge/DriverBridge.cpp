@@ -7,6 +7,7 @@
 #include "Match/MatchQueries.h"
 #include "Net/DriverNet.h"
 #include "Net/GameNet.h"
+#include "Title/TitleComponents.h"
 
 #include <algorithm>
 
@@ -22,9 +23,6 @@ namespace
 	constexpr const char* CabBodyName = "Driver";
 	constexpr const char* SeatName = "CabSeat";
 	constexpr const char* CabFloorName = "CabFloor";
-	// The scene has one truck, and it is Crew A's. A second truck for Crew B needs the Driver's
-	// systems to run more than one.
-	constexpr int32 TruckCrew = 0;
 	// Pieces of the match package, in characters, small enough for one network message.
 	constexpr int32 PackagePiece = 800;
 	// A crewmate on another machine not heard from for this long has left the wheel, or the cab.
@@ -158,7 +156,15 @@ void DriverLauncherSystem::Update(World& world, float)
 	// Either crewmate can fly or defend. The Driver's seat starts in the cab, the Defender's in the
 	// bay, and anyone not on the truck's crew stays out of its cab.
 	if (DriverState* cab = GetCab(world))
+	{
 		cab->InCab = onCrew && member->Role == CrewRole::Driver;
+		// Look the way the player was looking around the cab during the countdown.
+		if (const StartLookComponent* look = world.TryGet<StartLookComponent>(local); look && cab->InCab)
+		{
+			cab->Yaw = look->Yaw;
+			cab->Pitch = look->Pitch;
+		}
+	}
 	FP_LOG("Driver bridge: Crew %s's cab is running%s", GetCrewName(TruckCrew), host ? " (simulated here, as host)" : "");
 }
 
