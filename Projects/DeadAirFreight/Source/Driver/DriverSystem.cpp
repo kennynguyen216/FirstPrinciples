@@ -135,6 +135,8 @@ void DriverSystem::OnStart(World& world)
 	{
 		const Entity entity = world.CreateEntity("BlackHole");
 		world.Get<TransformComponent>(entity).Position = hole.Position;
+		// The disk lies in the local XY plane. Tipping it flat shows the truck its edge rather than its face.
+		world.Get<TransformComponent>(entity).Rotation = { 90, 0, 0 };
 		BlackHoleComponent& lens = world.Add<BlackHoleComponent>(entity);
 		lens.SchwarzschildRadius = hole.CoreRadius / 2.6f;
 		lens.SpeedOfLight = 20;

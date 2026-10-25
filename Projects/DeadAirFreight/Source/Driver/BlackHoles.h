@@ -5,7 +5,7 @@
 #include <vector>
 
 // A mini black hole off the route. Its pull bends the truck in; skimming the ring between the
-// core and RingRadius, nearer the core the faster, charges a slingshot that fires the hyperdrive boost.
+// core and RingRadius charges a slingshot that fires the hyperdrive boost.
 struct BlackHole
 {
 	FP::Vec3 Position;

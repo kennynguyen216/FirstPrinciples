@@ -82,8 +82,8 @@ BlackHoleEvent StepBlackHoles(TruckState& truck, std::vector<BlackHole>& holes, 
 		}
 		if (hole.Spent)
 			continue;
-		// Charges faster the nearer the core, so cutting straight through the ring isn't enough.
-		hole.Charge += closeness * deltaTime;
+		// Charges anywhere inside the ring, out to its edge.
+		hole.Charge += deltaTime;
 		if (hole.Charge >= settings.SlingshotTime)
 		{
 			hole.Spent = true;
