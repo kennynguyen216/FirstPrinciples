@@ -143,6 +143,7 @@ namespace FP::Editor
 		void DeleteSelected();
 		void ImportAudio(bool assign);
 		void ShowAudioSettings();
+		void ShowEngineSettings();
 
 		static void LogSink(LogLevel level, const char* message, void* userData);
 

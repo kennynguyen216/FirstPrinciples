@@ -232,6 +232,15 @@ namespace FP
 		float ShadowStrength = 1; // 0 is no shadow, 1 is only ambient light in shadow
 	};
 
+	// One scene-wide settings entity for visual effects.
+	struct PostProcessComponent
+	{
+		bool FXAA = false;
+		bool Bloom = false;
+		float BloomIntensity = 0.15f;
+		float BloomThreshold = 1;
+	};
+
 	// Flat light added everywhere so unlit sides are not pure black.
 	struct AmbientLightComponent
 	{
