@@ -12,6 +12,8 @@ struct DriverState
 	// False while this player is down the hatch in the cargo bay. The cab then leaves the player's
 	// input and camera alone (Dead Air Freight's TransitSystem moves them between the two).
 	bool InCab = true;
+	// Holding a spare LiOH canister from the rack, on the way to the scrubber.
+	bool Carrying = false;
 };
 
 struct CabBounds

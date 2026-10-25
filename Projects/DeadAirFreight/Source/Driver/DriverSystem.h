@@ -90,6 +90,11 @@ private:
 	float m_CabLightIntensity = 0;
 	FP::Vec3 m_Wheel;
 	FP::Vec3 m_Scrubber;
+	FP::Vec3 m_CanisterRack;
+	// The scrubber's status light, red while it is broken.
+	FP::Entity m_ScrubberLight = FP::NullEntity;
+	// Canister1, Canister2...: the spares standing on the rack, or the one in hand.
+	std::vector<CabPart> m_Canisters;
 	CabBounds m_CabBounds;
 	FP::Vec3 m_CabOrigin;
 	FP::Vec3 m_SeatEye;

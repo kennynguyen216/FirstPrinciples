@@ -15,7 +15,9 @@ CruiseSpeed 40
 ThrustAccel 12
 MouseSensitivity 0.15
 MaxPitch 80
-TurnTime90 1.5
+TurnTime90 3.75 # only used when NoseTurnRate is 0: travel lags the nose
+NoseTurnRate 45 # deg/s the heading (blue dot) swings at most toward where you look, 0 = mouse turns the nose instantly
+NoseTurnAccel 27 # deg/s per second to gather or shed swing
 
 CalmSolarWind 400
 StormSolarWind 700
@@ -41,7 +43,8 @@ EyeHeight 2.4
 InteractRange 2
 CabWallMargin 0.4
 
-ScrubberRepairTime 4
+ScrubberRepairTime 0.5 # holding E to slot a canister in
+SpareCanisters 2
 Co2RiseTime 40
 Co2FallTime 10
 BlackoutTime 5
@@ -79,8 +82,8 @@ DeliveryAltitude 150
 KmPerUnit 10000
 
 MaxClusters 20
-RocksPerCluster 10
-ClusterSpread 4
+RocksPerCluster 30
+ClusterSpread 5
 MinRockDiameter 10
 MaxRockDiameter 500
 MinRockSize 4

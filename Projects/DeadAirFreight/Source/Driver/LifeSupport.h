@@ -15,6 +15,8 @@ struct LifeSupport
 	float ColonyTimeLeft = 0;
 	float TicketSpend = 0;
 	int Tickets = 0;
+	// Spare LiOH canisters left on the rack. Slotting one into the broken scrubber fixes it.
+	int Canisters = 0;
 	bool ScrubberBroken = false;
 	bool AutoFix = false;
 };

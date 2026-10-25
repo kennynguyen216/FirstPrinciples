@@ -82,9 +82,32 @@ void StepTruck(TruckState& truck, const TruckControls& controls, const SpaceWeat
 	const TruckControls input = truck.AtWheel ? controls : TruckControls{};
 
 	const Vec2 push = StepDisturbance(truck, weather, settings, deltaTime) * (GetDriftAmount(truck, settings) * disturbanceScale);
-	truck.Yaw += -input.Aim.X + push.X * deltaTime;
-	truck.Pitch += -input.Aim.Y + push.Y * deltaTime;
+	// Like a ship: the mouse looks around freely and the heading (the blue dot, which the ship faces)
+	// swings slowly to meet the look, gathering and shedding speed. Sway and jerks shove the look, never the ship,
+	// so the ship only ever drifts by chasing a look that got knocked off. A NoseTurnRate of 0 turns the nose with the mouse instantly.
+	Vec2 turn = -input.Aim;
+	if (settings.NoseTurnRate > 0)
+	{
+		truck.Look += turn + push * deltaTime;
+		truck.Look.Y = std::clamp(truck.Look.Y, -settings.MaxPitch, settings.MaxPitch);
+		const Vec2 lead{ std::remainder(truck.Look.X - truck.Yaw, 360.0f), truck.Look.Y - truck.Pitch };
+		auto swing = [&](float offset, float& velocity) {
+			const float want = std::clamp(offset * 1.5f, -settings.NoseTurnRate, settings.NoseTurnRate);
+			const float accel = settings.NoseTurnAccel * deltaTime;
+			velocity += std::clamp(want - velocity, -accel, accel);
+			return velocity * deltaTime;
+		};
+		turn = { swing(lead.X, truck.TurnVelocity.X), swing(lead.Y, truck.TurnVelocity.Y) };
+	}
+	else
+	{
+		turn += push * deltaTime;
+	}
+	truck.Yaw += turn.X;
+	truck.Pitch += turn.Y;
 	truck.Pitch = std::clamp(truck.Pitch, -settings.MaxPitch, settings.MaxPitch);
+	if (settings.NoseTurnRate <= 0)
+		truck.Look = { truck.Yaw, truck.Pitch };
 
 	truck.Boost = std::max(truck.Boost - deltaTime, 0.0f);
 	const float targetSpeed = truck.Boost > 0 ? settings.CruiseSpeed * settings.BoostSpeedScale : settings.CruiseSpeed;
@@ -93,8 +116,9 @@ void StepTruck(TruckState& truck, const TruckControls& controls, const SpaceWeat
 	else
 		truck.Speed = std::max(truck.Speed - settings.ThrustAccel * deltaTime, targetSpeed);
 
+	// With the slow helm the ship always travels where it faces. Otherwise travel lags the nose.
 	const Vec3 nose = GetNose(truck);
 	const float turnRate = settings.TurnTime90 > 0 ? 90 / settings.TurnTime90 : 360;
-	truck.Travel = truck.Speed > 0.01f ? RotateTowards(truck.Travel, nose, turnRate * deltaTime) : nose;
+	truck.Travel = truck.Speed > 0.01f && settings.NoseTurnRate <= 0 ? RotateTowards(truck.Travel, nose, turnRate * deltaTime) : nose;
 	truck.Position += truck.Travel * (truck.Speed * deltaTime);
 }
