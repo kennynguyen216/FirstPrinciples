@@ -69,6 +69,7 @@ namespace FP::SceneSerializer
 			if (const auto* s = world.TryGet<SkyboxComponent>(entity); s && s->Intensity < 0) return false;
 			if (const auto* c = world.TryGet<CameraComponent>(entity); c && (c->Zoom <= 0 || c->FieldOfView <= 0 || c->FieldOfView >= 180 || c->NearClip <= 0 || c->FarClip <= c->NearClip || c->Exposure < 0 || !color(c->Background))) return false;
 			if (const auto* s = world.TryGet<SpriteComponent>(entity); s && (!color(s->Tint) || s->Size.X <= 0 || s->Size.Y <= 0)) return false;
+			if (const auto* l = world.TryGet<DIAComponent>(entity); l && (!color(l->SkyColor) || l->SkyIntensity < 0 || l->TraceDistance <= 0 || l->TraceDistance > 128 || l->DiffuseSamples < 1 || l->DiffuseSamples > 64 || l->ReflectionSamples < 1 || l->ReflectionSamples > 64 || l->CacheUpdates < 1 || l->CacheUpdates > 65536 || l->InternalHeight < 32 || l->InternalHeight > 1080)) return false;
 		}
 		return true;
 	}

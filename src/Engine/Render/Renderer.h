@@ -9,10 +9,12 @@
 #include "Engine/Render/RenderView.h"
 #include "Engine/Render/ShadowMap.h"
 #include "Engine/Render/TextureCache.h"
+#include <memory>
 
 namespace FP
 {
 	class Material;
+	class DIA;
 
 	// Uniform blocks. Layouts match Common.glsl (std140).
 	struct ObjectUniforms
@@ -86,7 +88,7 @@ namespace FP
 
 		// Records the frame into cmd. The caller submits it. An optional cullingView lets
 		// an editor observe the results from a wider or independent viewpoint.
-		void Render(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* target, uint32 width, uint32 height,
+		bool Render(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* target, uint32 width, uint32 height,
 			World& world, const RenderView& view, const DebugLines* lines = nullptr, const RenderView* cullingView = nullptr);
 
 		// Loads every texture the world's sprites and materials use, decoding them in parallel.
@@ -100,6 +102,9 @@ namespace FP
 		TextureCache& GetTextures() { return m_Textures; }
 		MeshLibrary& GetMeshes() { return m_Meshes; }
 		GPUDevice& GetDevice() { return m_Device; }
+		DIA* GetDIA() { return m_DIA.get(); }
+		GPUTexture* GetSceneColor() { return m_SceneColor.Get(); }
+		uint32 GetShadowMapCount() const { return (m_Frame.ShadowParams[0].X > 0 ? 1u : 0u) + (m_Frame.ShadowParams[1].X > 0 ? 1u : 0u) + (m_Frame.ShadowParams[2].X > 0 ? 6u : 0u); }
 		MeshletSettings& GetMeshletSettings() { return m_MeshletSettings; }
 		const MeshletStats& GetMeshletStats() { return m_Culling.ReadStats(); }
 		bool HasMeshletCulling() const { return m_Culling.IsValid() && m_OcclusionPipeline; }
@@ -148,8 +153,8 @@ namespace FP
 		ObjectUniforms MakeObjectUniforms(World& world, const Draw& draw, const Mat4& viewProjection) const;
 		void PrepareInstances(SDL_GPUCommandBuffer* cmd, World& world, Array<Draw>& draws);
 		bool CanBatch(World& world, const Draw& a, const Draw& b) const;
-		void EnsureTargets(uint32 width, uint32 height);
-		void UploadLines(SDL_GPUCommandBuffer* cmd, const DebugLines& lines);
+		bool EnsureTargets(uint32 width, uint32 height);
+		bool UploadLines(SDL_GPUCommandBuffer* cmd, const DebugLines& lines);
 		void PrepareEnvironment(World& world);
 		void DrawSkybox(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, const RenderView& view);
 		// Bends the finished scene around every BlackHoleComponent and draws their accretion disks.
@@ -255,5 +260,7 @@ namespace FP
 		bool m_ShadowMapCleared[8] = {};
 		Entity m_ShadowCasters[3] = { NullEntity, NullEntity, NullEntity };
 		int32 m_ShadowLights[3] = { -1, -1, -1 };
+		std::unique_ptr<DIA> m_DIA;
+		String m_DIAError;
 	};
 }

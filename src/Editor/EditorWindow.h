@@ -3,6 +3,7 @@
 #include "Engine/Render/RenderView.h"
 #include "Engine/SceneHistory.h"
 #include "Engine/World.h"
+#include "Engine/Material.h"
 
 #include <QMainWindow>
 
@@ -50,6 +51,7 @@ namespace FP::Editor
 		void StepFrame();
 		void Stop();
 		void Select(Entity entity, bool revealDetails = true);
+		bool CheckHistory();
 		void ShowAudioDebugger();
 		void ShowProfiler();
 
@@ -127,6 +129,8 @@ namespace FP::Editor
 		void ResetHistory();
 		void RestoreHistoryStep();
 		void UpdateUndoActions();
+		bool IsDIAEnabled() const;
+		void SetDIAEnabled(bool enabled);
 		void UpdateTitle();
 		void RefreshProfiler();
 		bool ConfirmDiscard();
@@ -176,6 +180,9 @@ namespace FP::Editor
 
 		QString m_ScenePath;
 		bool m_Dirty = false;
+		struct MaterialState { String Path; MaterialData Data; };
+		Array<MaterialState> CaptureMaterials() const;
+		Array<MaterialState> m_PlayMaterials;
 		String m_PlaySnapshot;
 
 		// Edits wait for a quiet moment so a drag or a typed name becomes one step.

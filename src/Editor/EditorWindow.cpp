@@ -605,6 +605,7 @@ namespace FP::Editor
 		// Opens in perspective, which is what the projection pill shows before anything is picked.
 		m_View3DAction->setChecked(true);
 		connect(m_ViewportToolbar, &ViewportToolbar::ViewModeChanged, this, &EditorWindow::SetViewMode);
+		connect(m_ViewportToolbar, &ViewportToolbar::DIAToggled, this, &EditorWindow::SetDIAEnabled);
 		connect(m_ViewportToolbar, &ViewportToolbar::SnapChanged, this, [this](bool on, float size) { m_Viewport->SetSnap(on, size); });
 		connect(m_ViewportToolbar, &ViewportToolbar::GizmoModeChanged, m_Viewport, &ViewportWidget::SetGizmoMode);
 		connect(m_ViewportToolbar, &ViewportToolbar::GizmoSpaceChanged, m_Viewport, &ViewportWidget::SetGizmoLocal);
@@ -1236,6 +1237,7 @@ namespace FP::Editor
 			}
 		}
 		m_Audio.Update();
+		m_ViewportToolbar->SetDIAEnabled(IsDIAEnabled());
 		m_AudioStatus->setText(m_Audio.IsReady() ? "Audio ready" : "Audio unavailable");
 		m_AudioStatus->setToolTip(ToQString(m_Audio.GetStatusText()));
 		const uint64 now = SDL_GetTicksNS();
@@ -1422,6 +1424,7 @@ namespace FP::Editor
 
 	void EditorWindow::UpdateUndoActions()
 	{
+		m_ViewportToolbar->SetDIAEnabled(IsDIAEnabled());
 		if (TextEditor(m_CentralTabs->currentWidget()))
 		{
 			m_UndoAction->setEnabled(true);
@@ -1430,6 +1433,32 @@ namespace FP::Editor
 		}
 		m_UndoAction->setEnabled(m_EditPending || m_History->CanUndo());
 		m_RedoAction->setEnabled(!m_EditPending && m_History->CanRedo());
+	}
+
+	bool EditorWindow::IsDIAEnabled() const
+	{
+		for (auto [entity, settings] : m_World->View<DIAComponent>().each())
+			if (settings.Enabled) return true;
+		return false;
+	}
+
+	void EditorWindow::SetDIAEnabled(bool enabled)
+	{
+		SetViewMode(ViewMode::Lit);
+		if (enabled != IsDIAEnabled())
+		{
+			CommitHistory();
+			if (enabled && m_World->View<DIAComponent>().empty())
+			{
+				m_World->Add<DIAComponent>(m_World->GetOrCreateSceneEntity());
+				RefreshHierarchy();
+			}
+			for (auto [entity, settings] : m_World->View<DIAComponent>().each()) settings.Enabled = enabled;
+			MarkDirty();
+			CommitHistory();
+			m_Inspector->SetTarget(m_World.Get(), m_Selected);
+		}
+		m_ViewportToolbar->SetDIAEnabled(IsDIAEnabled());
 	}
 
 	void EditorWindow::UpdateTitle()
@@ -1670,6 +1699,7 @@ namespace FP::Editor
 		CommitHistory();
 		// Snapshot the scene so Stop can put everything back.
 		m_PlaySnapshot = SceneSerializer::SaveToString(*m_World.Get());
+		m_PlayMaterials = CaptureMaterials();
 		// Picks up edits to the controls since the last play.
 		Input::LoadActionsFile(Paths::Content("Input.actions").CStr());
 		// Play starts from no particles, so bursts fire again.
@@ -1730,6 +1760,9 @@ namespace FP::Editor
 		m_Viewport->SetPlaying(false);
 		SceneSerializer::LoadFromString(*m_World.Get(), m_PlaySnapshot.View());
 		m_PlaySnapshot.Clear();
+		for (const auto& asset : m_PlayMaterials)
+			if (Material* material = MaterialLibrary::Get().Load(asset.Path)) { material->GetData() = asset.Data; material->MarkDirty(); }
+		m_PlayMaterials.Clear();
 
 		const Guid selected = m_SelectedGuid;
 		m_Selected = NullEntity;
@@ -1747,6 +1780,7 @@ namespace FP::Editor
 		UpdateTitle();
 		RefreshProfiler();
 		FP_LOG("Stop");
+		m_ViewportToolbar->SetDIAEnabled(IsDIAEnabled());
 	}
 
 	void EditorWindow::ImportAudio(bool assign)
@@ -2051,6 +2085,117 @@ namespace FP::Editor
 		connect(close, &QPushButton::clicked, &dialog, &QDialog::accept);
 		layout->addWidget(close);
 		dialog.exec();
+	}
+
+	Array<EditorWindow::MaterialState> EditorWindow::CaptureMaterials() const
+	{
+		Array<MaterialState> materials;
+		Array<String> paths;
+		for (Entity entity : m_World->GetEntities())
+			if (const auto* component = m_World->TryGet<MaterialComponent>(entity))
+			{
+				paths.AddUnique(component->Material);
+				for (const String& path : component->Slots) if (!path.IsEmpty()) paths.AddUnique(path);
+			}
+		for (const String& path : paths)
+			if (Material* material = MaterialLibrary::Get().Load(path)) materials.Add({ path, material->GetData() });
+		return materials;
+	}
+
+	bool EditorWindow::CheckHistory()
+	{
+		const String originalScene = SceneSerializer::SaveToString(*m_World.Get());
+		const auto originalMaterials = CaptureMaterials();
+		const Guid originalSelection = m_SelectedGuid;
+		QToolButton* toggle = m_ViewportToolbar->findChild<QToolButton*>("DIAToggle");
+		if (!toggle || !SceneSerializer::LoadFromString(*m_World.Get(), "version 2\n\n")) return false;
+		Select(NullEntity);
+		RefreshHierarchy();
+		ResetHistory();
+		toggle->click();
+		bool ok = IsDIAEnabled() && toggle->isChecked() && toggle->text() == "DIA On" && m_World->Has<DIAComponent>(m_World->GetSceneEntity());
+		Undo();
+		ok = ok && m_World->View<DIAComponent>().empty() && !toggle->isChecked() && toggle->text() == "DIA Off";
+		Redo();
+		ok = ok && IsDIAEnabled() && toggle->isChecked();
+		toggle->click();
+		ok = ok && !IsDIAEnabled() && !toggle->isChecked();
+		Undo();
+		ok = ok && IsDIAEnabled() && toggle->isChecked();
+		if (!SceneSerializer::LoadFromString(*m_World.Get(), originalScene.View())) return false;
+		RefreshHierarchy();
+		Select(m_World->FindEntityByGuid(originalSelection));
+		ResetHistory();
+		Material* material = MaterialLibrary::Get().Load("Materials/DIA/White.material");
+		if (!material) return false;
+		const MaterialData originalMaterial = material->GetData();
+		Entity entity = m_World->CreateEntity("History Check");
+		const Guid identity = m_World->Get<IdComponent>(entity).Id;
+		m_World->Add<SpotLightComponent>(entity);
+		m_World->Add<DIAComponent>(entity);
+		m_World->Add<MaterialComponent>(entity).Material = "Materials/DIA/White.material";
+		Select(entity);
+		MarkDirty();
+		CommitHistory();
+		m_Hierarchy->RenameRequested(identity, "History Renamed");
+		QApplication::sendPostedEvents(this, QEvent::MetaCall);
+		CommitHistory();
+		ok = ok && m_World->GetEntityName(m_World->FindEntityByGuid(identity)) == "History Renamed";
+		Undo();
+		ok = ok && m_World->GetEntityName(m_World->FindEntityByGuid(identity)) == "History Check";
+		Redo();
+		entity = m_World->FindEntityByGuid(identity);
+		ok = ok && m_World->GetEntityName(entity) == "History Renamed";
+		m_World->Get<SpotLightComponent>(entity).Intensity = 42;
+		m_World->Get<DIAComponent>(entity).SkyIntensity = 0.07f;
+		MarkDirty();
+		CommitHistory();
+		Undo();
+		entity = m_World->FindEntityByGuid(identity);
+		ok = ok && entity != NullEntity && m_World->Get<SpotLightComponent>(entity).Intensity == SpotLightComponent{}.Intensity;
+		Redo();
+		entity = m_World->FindEntityByGuid(identity);
+		ok = ok && entity != NullEntity && m_World->Get<SpotLightComponent>(entity).Intensity == 42 && m_World->Get<DIAComponent>(entity).SkyIntensity == 0.07f;
+		material->GetData().EmissiveIntensity = 7;
+		MarkDirty();
+		CommitHistory();
+		Undo();
+		ok = ok && material->GetData().EmissiveIntensity == originalMaterial.EmissiveIntensity;
+		Redo();
+		ok = ok && material->GetData().EmissiveIntensity == 7;
+		Select(m_World->FindEntityByGuid(identity));
+		DuplicateSelected();
+		CommitHistory();
+		const Guid duplicate = m_SelectedGuid;
+		ok = ok && m_World->Get<SpotLightComponent>(m_Selected).Intensity == 42;
+		DeleteSelected();
+		CommitHistory();
+		Undo();
+		entity = m_World->FindEntityByGuid(duplicate);
+		ok = ok && entity != NullEntity && m_World->Get<DIAComponent>(entity).SkyIntensity == 0.07f;
+		Play();
+		m_World->Get<SpotLightComponent>(entity).Intensity = 1;
+		material->GetData().EmissiveIntensity = 2;
+		toggle->click();
+		m_Viewport->RenderFrame();
+		ok = ok && !IsDIAEnabled() && !toggle->isChecked() && !m_Viewport->GetRenderer()->GetDIA();
+		toggle->click();
+		m_Viewport->RenderFrame();
+		ok = ok && IsDIAEnabled() && toggle->isChecked() && m_Viewport->GetRenderer()->GetDIA();
+		toggle->click();
+		Stop();
+		ok = ok && IsDIAEnabled() && toggle->isChecked();
+		entity = m_World->FindEntityByGuid(duplicate);
+		ok = ok && entity != NullEntity && m_World->Get<SpotLightComponent>(entity).Intensity == 42 && material->GetData().EmissiveIntensity == 7;
+		SceneSerializer::LoadFromString(*m_World.Get(), originalScene.View());
+		for (const auto& asset : originalMaterials)
+			if (Material* restored = MaterialLibrary::Get().Load(asset.Path)) { restored->GetData() = asset.Data; restored->MarkDirty(); }
+		Select(m_World->FindEntityByGuid(originalSelection));
+		material->GetData() = originalMaterial;
+		ResetHistory();
+		FP_LOG("DIA viewport toggle, undo and play restoration: %s", ok ? "PASS" : "FAIL");
+		FP_LOG("Lighting undo, duplication and play restoration: %s", ok ? "PASS" : "FAIL");
+		return ok;
 	}
 
 	void EditorWindow::closeEvent(QCloseEvent* event)

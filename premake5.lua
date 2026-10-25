@@ -304,6 +304,13 @@ project "Engine"
 		defines { 'FP_PROJECT_DIR="' .. ProjectDir .. '"' }
 	filter {}
 	EngineIncludes()
+	if IsWindows then
+		local VulkanSDK = os.getenv("VULKAN_SDK")
+		if VulkanSDK and os.isfile(VulkanSDK .. "/Include/vulkan/vulkan.h") then
+			externalincludedirs { VulkanSDK .. "/Include" }
+			defines { "FP_VULKAN_RAY_QUERY=1" }
+		end
+	end
 
 -- Game: the project's code, linked into Editor and Runtime.
 project "Game"

@@ -16,6 +16,7 @@
 
 #include <QApplication>
 #include <QDialog>
+#include <QStyleHints>
 #include <QTimer>
 
 int main(int argc, char** argv)
@@ -36,6 +37,7 @@ int main(int argc, char** argv)
 
 	QApplication::setApplicationName("FirstPrinciples Editor");
 	FP::Editor::EditorStyle::Apply(app);
+	app.styleHints()->setColorScheme(Qt::ColorScheme::Dark);
 
 	FP::Engine::RegisterEngineComponents();
 	Game::RegisterComponents();
@@ -75,6 +77,11 @@ int main(int argc, char** argv)
 		{
 			const QString mode = args[modeIndex + 1].toLower();
 			window.SetViewMode(mode == "unlit" ? FP::ViewMode::Unlit : mode == "wireframe" ? FP::ViewMode::Wireframe : FP::ViewMode::Lit);
+			if (mode == "direct") window.SetViewMode(FP::ViewMode::DIADirect);
+			if (mode == "diffuse") window.SetViewMode(FP::ViewMode::DIADiffuse);
+			if (mode == "reflections") window.SetViewMode(FP::ViewMode::DIAReflections);
+			if (mode == "coverage") window.SetViewMode(FP::ViewMode::DIACoverage);
+			if (mode == "cache") window.SetViewMode(FP::ViewMode::DIACache);
 		}
 		// --browse folder shows a folder in the content browser, relative to Content.
 		const int browseIndex = static_cast<int>(args.indexOf("--browse"));
@@ -167,7 +174,12 @@ int main(int argc, char** argv)
 				QApplication::quit();
 			});
 		}
-		result = app.exec();
+		if (args.contains("--check-history"))
+		{
+			result = window.CheckHistory() ? 0 : 1;
+			window.DiscardUnsavedChanges();
+		}
+		else result = app.exec();
 	}
 
 	FP::GarbageCollector::Get().Collect();

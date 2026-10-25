@@ -1,4 +1,5 @@
 #include "Engine/Render/GPUDevice.h"
+#include "Engine/Render/SDLVulkanBridge.h"
 #include "Engine/Paths.h"
 #include "Core/Misc/File.h"
 
@@ -10,7 +11,23 @@ namespace FP
 	{
 		// SPIR-V covers Vulkan on Windows and Linux. MSL covers Metal on macOS.
 		const SDL_GPUShaderFormat formats = SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_MSL;
-		SDL_GPUDevice* handle = SDL_CreateGPUDevice(formats, FP_BUILD_DEBUG != 0, nullptr);
+		const bool validation = FP_BUILD_DEBUG != 0 || (SDL_getenv("FP_GPU_VALIDATION") && std::strcmp(SDL_getenv("FP_GPU_VALIDATION"), "1") == 0);
+		SDL_GPUDevice* handle = nullptr;
+#if FP_PLATFORM_WINDOWS && FP_VULKAN_RAY_QUERY
+		SDL_PropertiesID createProperties = SDL_CreateProperties();
+		SDL_GPUVulkanOptions options = {};
+		options.vulkan_api_version = (1u << 22) | (2u << 12);
+		if (createProperties)
+		{
+			SDL_SetBooleanProperty(createProperties, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_SPIRV_BOOLEAN, true);
+			SDL_SetBooleanProperty(createProperties, SDL_PROP_GPU_DEVICE_CREATE_DEBUGMODE_BOOLEAN, validation);
+			SDL_SetBooleanProperty(createProperties, FP_SDL_RAY_QUERY_PROPERTY, true);
+			SDL_SetPointerProperty(createProperties, SDL_PROP_GPU_DEVICE_CREATE_VULKAN_OPTIONS_POINTER, &options);
+			handle = SDL_CreateGPUDeviceWithProperties(createProperties);
+			SDL_DestroyProperties(createProperties);
+		}
+#endif
+		if (!handle) handle = SDL_CreateGPUDevice(formats, validation, nullptr);
 		if (!handle)
 		{
 			FP_LOG_ERROR("No supported GPU backend (needs Vulkan or Metal): %s", SDL_GetError());
@@ -63,8 +80,17 @@ namespace FP
 		device->m_White = device->CreateTexture(white, 1, 1, false, false);
 		device->m_Black = device->CreateTexture(black, 1, 1, false, false);
 		device->m_FlatNormal = device->CreateTexture(flatNormal, 1, 1, false, false);
+		if (!device->m_LinearRepeat || !device->m_LinearClamp || !device->m_ShadowCompare || !device->m_White || !device->m_Black || !device->m_FlatNormal)
+		{
+			FP_LOG_ERROR("GPU initialization allocation failed: %s", SDL_GetError());
+			delete device;
+			return nullptr;
+		}
 
 		FP_LOG("GPU device ready (%s)", device->GetDriverName());
+		const SDL_PropertiesID properties = SDL_GetGPUDeviceProperties(handle);
+		FP_LOG("GPU adapter: %s, driver: %s", SDL_GetStringProperty(properties, SDL_PROP_GPU_DEVICE_NAME_STRING, "unknown"),
+			SDL_GetStringProperty(properties, SDL_PROP_GPU_DEVICE_DRIVER_NAME_STRING, "unknown"));
 		return device;
 	}
 
@@ -75,9 +101,9 @@ namespace FP
 		m_FlatNormal.Reset();
 		if (m_Download)
 			SDL_ReleaseGPUTransferBuffer(m_Device, m_Download);
-		SDL_ReleaseGPUSampler(m_Device, m_LinearRepeat);
-		SDL_ReleaseGPUSampler(m_Device, m_LinearClamp);
-		SDL_ReleaseGPUSampler(m_Device, m_ShadowCompare);
+		if (m_LinearRepeat) SDL_ReleaseGPUSampler(m_Device, m_LinearRepeat);
+		if (m_LinearClamp) SDL_ReleaseGPUSampler(m_Device, m_LinearClamp);
+		if (m_ShadowCompare) SDL_ReleaseGPUSampler(m_Device, m_ShadowCompare);
 		SDL_DestroyGPUDevice(m_Device);
 	}
 
@@ -137,6 +163,7 @@ namespace FP
 
 	RefPtr<GPUTexture> GPUDevice::CreateTexture(const void* rgba, uint32 width, uint32 height, bool srgb, bool mipmaps)
 	{
+		if (!rgba || !width || !height || static_cast<uint64>(width) * height > 64ull * 1024 * 1024) return nullptr;
 		uint32 levels = 1;
 		if (mipmaps)
 		{
@@ -164,10 +191,14 @@ namespace FP
 		transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
 		transferInfo.size = bytes;
 		SDL_GPUTransferBuffer* transfer = SDL_CreateGPUTransferBuffer(m_Device, &transferInfo);
-		std::memcpy(SDL_MapGPUTransferBuffer(m_Device, transfer, false), rgba, bytes);
+		if (!transfer) { SDL_ReleaseGPUTexture(m_Device, texture); return nullptr; }
+		void* mapped = SDL_MapGPUTransferBuffer(m_Device, transfer, false);
+		if (!mapped) { SDL_ReleaseGPUTransferBuffer(m_Device, transfer); SDL_ReleaseGPUTexture(m_Device, texture); return nullptr; }
+		std::memcpy(mapped, rgba, bytes);
 		SDL_UnmapGPUTransferBuffer(m_Device, transfer);
 
 		SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(m_Device);
+		if (!cmd) { SDL_ReleaseGPUTransferBuffer(m_Device, transfer); SDL_ReleaseGPUTexture(m_Device, texture); return nullptr; }
 		SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(cmd);
 		SDL_GPUTextureTransferInfo source = {};
 		source.transfer_buffer = transfer;
@@ -180,8 +211,9 @@ namespace FP
 		SDL_EndGPUCopyPass(copy);
 		if (levels > 1)
 			SDL_GenerateMipmapsForGPUTexture(cmd, texture);
-		SDL_SubmitGPUCommandBuffer(cmd);
+		const bool submitted = SDL_SubmitGPUCommandBuffer(cmd);
 		SDL_ReleaseGPUTransferBuffer(m_Device, transfer);
+		if (!submitted) { SDL_ReleaseGPUTexture(m_Device, texture); return nullptr; }
 
 		return MakeRef<GPUTexture>(m_Device, texture, width, height);
 	}
@@ -222,20 +254,24 @@ namespace FP
 		if (data)
 		{
 			SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(m_Device);
-			UploadToBuffer(cmd, *result, data, size);
-			SDL_SubmitGPUCommandBuffer(cmd);
+			if (!cmd) return nullptr;
+			if (!UploadToBuffer(cmd, *result, data, size)) { SDL_CancelGPUCommandBuffer(cmd); return nullptr; }
+			if (!SDL_SubmitGPUCommandBuffer(cmd)) return nullptr;
 		}
 		return result;
 	}
 
-	void GPUDevice::UploadToBuffer(SDL_GPUCommandBuffer* cmd, GPUBuffer& buffer, const void* data, uint32 size, bool cycle)
+	bool GPUDevice::UploadToBuffer(SDL_GPUCommandBuffer* cmd, GPUBuffer& buffer, const void* data, uint32 size, bool cycle)
 	{
-		FP_ASSERT(size <= buffer.GetSize());
+		if (!cmd || !data || size == 0 || size > buffer.GetSize()) return false;
 		SDL_GPUTransferBufferCreateInfo transferInfo = {};
 		transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
 		transferInfo.size = size;
 		SDL_GPUTransferBuffer* transfer = SDL_CreateGPUTransferBuffer(m_Device, &transferInfo);
-		std::memcpy(SDL_MapGPUTransferBuffer(m_Device, transfer, false), data, size);
+		if (!transfer) return false;
+		void* mapped = SDL_MapGPUTransferBuffer(m_Device, transfer, false);
+		if (!mapped) { SDL_ReleaseGPUTransferBuffer(m_Device, transfer); return false; }
+		std::memcpy(mapped, data, size);
 		SDL_UnmapGPUTransferBuffer(m_Device, transfer);
 
 		SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(cmd);
@@ -249,6 +285,7 @@ namespace FP
 
 		// Safe to release now. SDL keeps it alive until the command buffer finishes.
 		SDL_ReleaseGPUTransferBuffer(m_Device, transfer);
+		return true;
 	}
 
 	RefPtr<GPUTexture> GPUDevice::CreateDynamicTexture(SDL_GPUTextureFormat format, uint32 width, uint32 height)
@@ -304,9 +341,11 @@ namespace FP
 		SDL_ReleaseGPUTransferBuffer(m_Device, transfer);
 	}
 
-	bool GPUDevice::ReadPixels(SDL_GPUTexture* texture, uint32 width, uint32 height, void* outPixels)
+	bool GPUDevice::ReadPixels(SDL_GPUTexture* texture, uint32 width, uint32 height, void* outPixels, uint32 bytesPerPixel)
 	{
-		const uint32 bytes = width * height * 4;
+		if (!texture || !outPixels || width == 0 || height == 0 || (bytesPerPixel != 4 && bytesPerPixel != 16) ||
+			static_cast<uint64>(width) * height * bytesPerPixel > 256 * 1024 * 1024) return false;
+		const uint32 bytes = width * height * bytesPerPixel;
 		if (bytes > m_DownloadSize)
 		{
 			if (m_Download)
@@ -315,10 +354,12 @@ namespace FP
 			info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
 			info.size = bytes;
 			m_Download = SDL_CreateGPUTransferBuffer(m_Device, &info);
+			if (!m_Download) { m_DownloadSize = 0; return false; }
 			m_DownloadSize = bytes;
 		}
 
 		SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(m_Device);
+		if (!cmd) return false;
 		SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(cmd);
 		SDL_GPUTextureRegion source = {};
 		source.texture = texture;
@@ -333,10 +374,12 @@ namespace FP
 		SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
 		if (!fence)
 			return false;
-		SDL_WaitForGPUFences(m_Device, true, &fence, 1);
+		const bool completed = SDL_WaitForGPUFences(m_Device, true, &fence, 1);
 		SDL_ReleaseGPUFence(m_Device, fence);
+		if (!completed) return false;
 
 		const void* mapped = SDL_MapGPUTransferBuffer(m_Device, m_Download, false);
+		if (!mapped) return false;
 		std::memcpy(outPixels, mapped, bytes);
 		SDL_UnmapGPUTransferBuffer(m_Device, m_Download);
 		return true;

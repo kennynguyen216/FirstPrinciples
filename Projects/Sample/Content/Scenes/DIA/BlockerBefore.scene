@@ -1,0 +1,121 @@
+version 2
+
+entity 9cfa4a4f-0540-5e62-9ff6-1458e600935a
+component Name
+  Name "Main Camera"
+component Transform
+  Position 0 0 5
+  Rotation 0 0 0
+  Scale 1 1 1
+component Camera
+  Perspective true
+  FieldOfView 55
+  NearClip 0.1
+  FarClip 128
+  Exposure 1
+  Tonemap true
+component DIA
+  Enabled true
+  SkyColor 1 1 1 1
+  SkyIntensity 0
+  TraceDistance 128
+  DiffuseSamples 4
+  ReflectionSamples 1
+  CacheUpdates 4096
+  InternalHeight 180
+
+entity f5f097a2-e03b-5453-88cf-e1fd5320bf42
+component Name
+  Name "Floor"
+component Transform
+  Position 0 -2.1 0
+  Rotation 0 0 0
+  Scale 6.4 0.2 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity 8bf983da-a989-5556-9fe1-ea55055bc111
+component Name
+  Name "Ceiling"
+component Transform
+  Position 0 2.1 0
+  Rotation 0 0 0
+  Scale 6.4 0.2 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity 4379e482-6c23-5689-9c79-5f074ebde350
+component Name
+  Name "Left wall"
+component Transform
+  Position -3.1 0 0
+  Rotation 0 0 0
+  Scale 0.2 4 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/Red.material"
+
+entity 34d47b91-cada-5669-8448-e4b1457115c3
+component Name
+  Name "Right wall"
+component Transform
+  Position 3.1 0 0
+  Rotation 0 0 0
+  Scale 0.2 4 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/Green.material"
+
+entity 99c35431-c306-5619-ab04-061dda5f3c1c
+component Name
+  Name "Back wall"
+component Transform
+  Position 0 0 -3.1
+  Rotation 0 0 0
+  Scale 6 4 0.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity 4056571b-b3bb-53c6-a178-d341ac72fe24
+component Name
+  Name "Front wall"
+component Transform
+  Position 0 0 6.1
+  Rotation 0 0 0
+  Scale 6 4 0.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity 53c5a0a9-900b-521e-b5b4-40f238ba264e
+component Name
+  Name "PointLight"
+component Transform
+  Position 0 0 1
+  Rotation 0 0 0
+  Scale 1 1 1
+component PointLight
+  Color 1 1 1 1
+  Intensity 8
+  Range 30
+
+entity fa7c0e2d-a3b9-5fa2-8301-d2de99e77f69
+component Name
+  Name "Blocker"
+component Transform
+  Position 0 0 0
+  Rotation 0 0 0
+  Scale 1 1 0.05
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"

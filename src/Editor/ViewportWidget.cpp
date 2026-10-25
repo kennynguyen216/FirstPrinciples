@@ -656,8 +656,9 @@ namespace FP::Editor
 			}
 		}
 		SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(m_Device.GetHandle());
-		m_Renderer->Render(cmd, m_Target->GetHandle(), m_Target->GetWidth(), m_Target->GetHeight(), *m_World, view, &m_Lines, &cullingView);
-		SDL_SubmitGPUCommandBuffer(cmd);
+		if (!cmd) return;
+		const bool rendered = m_Renderer->Render(cmd, m_Target->GetHandle(), m_Target->GetWidth(), m_Target->GetHeight(), *m_World, view, &m_Lines, &cullingView);
+		if (!SDL_SubmitGPUCommandBuffer(cmd) || !rendered) return;
 		m_Device.ReadPixels(m_Target->GetHandle(), m_Target->GetWidth(), m_Target->GetHeight(), m_Image.bits());
 		update();
 	}

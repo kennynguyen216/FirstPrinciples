@@ -9,11 +9,17 @@
 #include "Engine/SceneSerializer.h"
 
 #include <chrono>
+#include <atomic>
 
 namespace FP
 {
 	namespace
 	{
+		uint64 NextSceneGeneration()
+		{
+			static std::atomic<uint64> generation{ 0 };
+			return ++generation;
+		}
 		// Remembers creation order so the hierarchy and scene files stay stable.
 		struct CreationOrderComponent
 		{
@@ -23,6 +29,7 @@ namespace FP
 
 	World::World()
 	{
+		m_SceneGeneration = NextSceneGeneration();
 		// Make every storage here in engine code so none is first created inside a script module.
 		(void)m_Registry.storage<CreationOrderComponent>();
 		for (const ComponentInfo* info : ComponentRegistry::Get().GetAll())
@@ -346,6 +353,7 @@ namespace FP
 
 	void World::Clear()
 	{
+		m_SceneGeneration = NextSceneGeneration();
 		m_Registry.clear();
 		if (m_Audio) m_Audio->ResetScene();
 		if (m_Physics) static_cast<PhysicsWorld&>(*m_Physics).Clear();
@@ -367,6 +375,8 @@ namespace FP
 		if (m_Physics) static_cast<PhysicsWorld&>(*m_Physics).Clear();
 		if (candidate.m_Physics) static_cast<PhysicsWorld&>(*candidate.m_Physics).Clear();
 		m_Registry.swap(candidate.m_Registry);
+		m_SceneGeneration = NextSceneGeneration();
+		candidate.m_SceneGeneration = NextSceneGeneration();
 		m_EntityOrderDirty = true;
 		candidate.m_EntityOrderDirty = true;
 		std::swap(m_NextCreationIndex, candidate.m_NextCreationIndex);

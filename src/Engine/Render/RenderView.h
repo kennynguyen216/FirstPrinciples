@@ -19,6 +19,11 @@ namespace FP
 		Lit,       // full materials and lights
 		Unlit,     // base color times tint, no lights
 		Wireframe, // triangle edges only
+		DIADirect,
+		DIADiffuse,
+		DIAReflections,
+		DIACoverage,
+		DIACache,
 	};
 
 	// Everything the renderer needs to know about the camera for one frame.
@@ -42,6 +47,8 @@ namespace FP
 		Entity Camera = NullEntity;
 		// Pixels per screen point. UI pages use it to keep their size on high DPI screens.
 		float PixelScale = 1;
+		uint64 ViewIdentity = 1;
+		uint64 HistoryEpoch = 0;
 
 		Mat4 GetViewProjection() const { return Projection * View; }
 
@@ -50,7 +57,7 @@ namespace FP
 		RenderView Expanded(float factor) const;
 
 		// Pixel coordinates from the top left of the target.
-		Ray ScreenToRay(Vec2 pixel) const;
+		Ray ScreenToRay(Vec2 pixel, float* farDistance = nullptr) const;
 		Vec2 WorldToScreen(Vec3 world) const;
 
 		// Size of one pixel in world units at a point. Keeps editor gizmos a constant screen size.

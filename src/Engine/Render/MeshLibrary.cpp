@@ -5,6 +5,26 @@
 
 namespace FP
 {
+	void MeshLibrary::ReleaseUnusedRayGeometry(const Array<String>& names)
+	{
+		Array<String> references;
+		for (const String& name : names) references.Add(Paths::AssetReference(name));
+		for (auto& pair : m_Meshes) if (!references.Contains(pair.Key))
+		{
+			pair.Value->RayGeometry.Reset();
+			pair.Value->RaySections.Clear();
+		}
+	}
+
+	void MeshLibrary::ReleaseRayGeometry()
+	{
+		for (auto& pair : m_Meshes)
+		{
+			pair.Value->RayGeometry.Reset();
+			pair.Value->RaySections.Clear();
+		}
+	}
+
 	void MeshLibrary::CheckRevision(const String& path)
 	{
 		const uint64 revision = Paths::GetAssets().Fingerprint(path);
@@ -48,6 +68,7 @@ namespace FP
 		}
 
 		RefPtr<GPUMesh> mesh = Upload(data);
+		if (!mesh) return nullptr;
 		m_Failed.Remove(nameOrPath);
 		m_Meshes.Add(nameOrPath, mesh);
 		return mesh.Get();
@@ -82,6 +103,7 @@ namespace FP
 			return nullptr;
 		}
 		RefPtr<GPUMesh> mesh = MakeRef<GPUMesh>();
+		mesh->Fingerprint = MeshFingerprint(data);
 		mesh->Vertices = m_Device.CreateBuffer(SDL_GPU_BUFFERUSAGE_VERTEX, data.Vertices.Data(), static_cast<uint32>(data.Vertices.Num()) * sizeof(MeshVertex));
 		mesh->Indices = m_Device.CreateBuffer(SDL_GPU_BUFFERUSAGE_INDEX, clusters.Indices.Data(), static_cast<uint32>(data.Indices.Num()) * sizeof(uint32));
 		mesh->IndexCount = static_cast<uint32>(data.Indices.Num());

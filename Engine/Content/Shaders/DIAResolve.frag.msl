@@ -1,0 +1,3723 @@
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+// Implementation of signed integer mod accurate to SPIR-V specification
+template<typename Tx, typename Ty>
+inline Tx spvSMod(Tx x, Ty y)
+{
+    Tx remainder = x - y * (x / y);
+    return select(Tx(remainder + y), remainder, remainder == 0 || (x >= 0) == (y >= 0));
+}
+
+template<typename T>
+[[clang::optnone]] T spvFMul(T l, T r)
+{
+    return fma(l, r, T(0));
+}
+
+template<typename T, int Cols, int Rows>
+[[clang::optnone]] vec<T, Cols> spvFMulVectorMatrix(vec<T, Rows> v, matrix<T, Cols, Rows> m)
+{
+    vec<T, Cols> res = vec<T, Cols>(0);
+    for (uint i = Rows; i > 0; --i)
+    {
+        vec<T, Cols> tmp(0);
+        for (uint j = 0; j < Cols; ++j)
+        {
+            tmp[j] = m[j][i - 1];
+        }
+        res = fma(tmp, vec<T, Cols>(v[i - 1]), res);
+    }
+    return res;
+}
+
+template<typename T, int Cols, int Rows>
+[[clang::optnone]] vec<T, Rows> spvFMulMatrixVector(matrix<T, Cols, Rows> m, vec<T, Cols> v)
+{
+    vec<T, Rows> res = vec<T, Rows>(0);
+    for (uint i = Cols; i > 0; --i)
+    {
+        res = fma(m[i - 1], vec<T, Rows>(v[i - 1]), res);
+    }
+    return res;
+}
+
+template<typename T, int LCols, int LRows, int RCols, int RRows>
+[[clang::optnone]] matrix<T, RCols, LRows> spvFMulMatrixMatrix(matrix<T, LCols, LRows> l, matrix<T, RCols, RRows> r)
+{
+    matrix<T, RCols, LRows> res;
+    for (uint i = 0; i < RCols; i++)
+    {
+        vec<T, RCols> tmp(0);
+        for (uint j = 0; j < LCols; j++)
+        {
+            tmp = fma(vec<T, RCols>(r[i][j]), l[j], tmp);
+        }
+        res[i] = tmp;
+    }
+    return res;
+}
+
+template<typename T>
+[[clang::optnone]] T spvFAdd(T l, T r)
+{
+    return fma(T(1), l, r);
+}
+
+template<typename T>
+[[clang::optnone]] T spvFSub(T l, T r)
+{
+    return fma(T(-1), r, l);
+}
+
+struct LHit
+{
+    uint Kind;
+    uint Instance;
+    uint Triangle;
+    float Distance;
+    float3 Bary;
+};
+
+struct DIAData
+{
+    float4x4 InverseViewProjection;
+    char _m1_pad[64];
+    float4 Camera;
+    float4 Sky;
+    float4 Extent;
+    uint4 Counts;
+    char _m5_pad[16];
+    float4 Settings;
+    char _m6_pad[48];
+    float4 CameraForward;
+};
+
+struct LNode
+{
+    float4 Minimum;
+    float4 Maximum;
+    uint4 Links;
+};
+
+struct NodeBuffer
+{
+    LNode Nodes[1];
+};
+
+struct LInstance
+{
+    float4x4 Transform;
+    float4x4 Inverse;
+    uint4 Geometry;
+    uint4 Metadata;
+    uint4 Identity;
+    float4 Tint;
+};
+
+struct InstanceBuffer
+{
+    LInstance Instances[1];
+};
+
+struct LMaterial
+{
+    float4 BaseColor;
+    float4 Emission;
+    float4 Parameters;
+    float4 Parameters2;
+    float4 UVTransform;
+    uint4 Textures[8];
+    uint4 Flags;
+};
+
+struct MaterialBuffer
+{
+    LMaterial Materials[1];
+};
+
+struct LTriangle
+{
+    float4 Position[3];
+    float4 Normal[3];
+    float4 Tangent[3];
+    float4 UV01;
+    float4 UV2;
+    uint4 Source;
+};
+
+struct TriangleBuffer
+{
+    LTriangle Triangles[1];
+};
+
+struct TexelBuffer
+{
+    uint4 Texels[1];
+};
+
+struct LLight
+{
+    float4 Position;
+    float4 ColorRange;
+    float4 DirectionInner;
+    float4 OuterRadius;
+};
+
+struct LightBuffer
+{
+    LLight Lights[1];
+};
+
+constant bool _14253 = {};
+constant float _14392 = {};
+constant float3 _14600 = {};
+constant bool _16729 = {};
+constant float _16742 = {};
+constant float3 _16982 = {};
+constant uint _17360 = {};
+
+struct main0_out
+{
+    float4 OutColor [[color(0)]];
+    float gl_FragDepth [[depth(any)]];
+};
+
+struct main0_in
+{
+    float2 InUV [[user(locn0)]];
+};
+
+static inline __attribute__((always_inline))
+LHit Trace(thread const float3& origin, thread const float3& direction, thread const float& maximum, thread const bool& segment, thread const bool& emitterOnly, thread uint& TraceDiagnostics, constant DIAData& DIA, const device NodeBuffer& _545, const device InstanceBuffer& _674, const device MaterialBuffer& _702, const device TriangleBuffer& _813)
+{
+    float3 _17257;
+    float _17303;
+    uint _17349;
+    uint _17396;
+    uint _17442;
+    do
+    {
+        uint _456 = segment ? 3u : 2u;
+        bool _464 = any(isnan(origin));
+        bool _471;
+        if (!_464)
+        {
+            _471 = any(isinf(origin));
+        }
+        else
+        {
+            _471 = _464;
+        }
+        bool _478;
+        if (!_471)
+        {
+            _478 = any(isnan(direction));
+        }
+        else
+        {
+            _478 = _471;
+        }
+        bool _485;
+        if (!_478)
+        {
+            _485 = any(isinf(direction));
+        }
+        else
+        {
+            _485 = _478;
+        }
+        bool _491;
+        if (!_485)
+        {
+            _491 = isnan(maximum);
+        }
+        else
+        {
+            _491 = _485;
+        }
+        bool _497;
+        if (!_491)
+        {
+            _497 = isinf(maximum);
+        }
+        else
+        {
+            _497 = _491;
+        }
+        bool _500 = _497 || (maximum <= 0.0);
+        bool _511;
+        if (!_500)
+        {
+            _511 = abs(dot(direction, direction) - 1.0) > 0.001000000047497451305389404296875;
+        }
+        else
+        {
+            _511 = _500;
+        }
+        if (_511)
+        {
+            TraceDiagnostics |= 4u;
+            _17442 = 6u;
+            _17396 = 4294967295u;
+            _17349 = 4294967295u;
+            _17303 = 0.0;
+            _17257 = float3(0.0);
+            break;
+        }
+        if (DIA.Counts.y == 0u)
+        {
+            _17442 = _456;
+            _17396 = 4294967295u;
+            _17349 = 4294967295u;
+            _17303 = maximum;
+            _17257 = float3(0.0);
+            break;
+        }
+        bool _538 = !segment;
+        bool _567;
+        float _16735;
+        if (_538)
+        {
+            float3 param = _545.Nodes[DIA.Counts.x].Minimum.xyz;
+            float3 param_1 = _545.Nodes[DIA.Counts.x].Maximum.xyz;
+            float3 param_2 = origin;
+            float3 param_3 = direction;
+            bool _16720;
+            float _16733;
+            do
+            {
+                bool _16716;
+                bool _16721;
+                float _17488;
+                float _17490;
+                int _16711 = 0;
+                float _16712 = 9.9999997473787516355514526367188e-05;
+                float _16713 = 1000000015047466219876688855040.0;
+                for (;;)
+                {
+                    if (_16711 < 3)
+                    {
+                        if (abs(param_3[_16711]) < 9.9999996826552253889678874634872e-21)
+                        {
+                            bool _10536 = param_2[_16711] < param[_16711];
+                            bool _10547;
+                            if (!_10536)
+                            {
+                                _10547 = param_2[_16711] > param_1[_16711];
+                            }
+                            else
+                            {
+                                _10547 = _10536;
+                            }
+                            if (_10547)
+                            {
+                                _16733 = _16713;
+                                _16721 = false;
+                                _16716 = true;
+                                break;
+                            }
+                            _17490 = _16713;
+                            _17488 = _16712;
+                            int _10589 = _16711 + 1;
+                            _16713 = _17490;
+                            _16712 = _17488;
+                            _16711 = _10589;
+                            continue;
+                        }
+                        float2 _10567 = (float2(param[_16711], param_1[_16711]) - float2(param_2[_16711])) / float2(param_3[_16711]);
+                        float _10570 = _10567.x;
+                        float _10572 = _10567.y;
+                        float _10574 = fast::max(_16712, fast::min(_10570, _10572));
+                        float _10581 = fast::min(_16713, fast::max(_10570, _10572));
+                        if (_10581 < _10574)
+                        {
+                            _16733 = _10581;
+                            _16721 = false;
+                            _16716 = true;
+                            break;
+                        }
+                        _17490 = _10581;
+                        _17488 = _10574;
+                        int _10589 = _16711 + 1;
+                        _16713 = _17490;
+                        _16712 = _17488;
+                        _16711 = _10589;
+                        continue;
+                    }
+                    else
+                    {
+                        _16733 = _16713;
+                        _16721 = _16729;
+                        _16716 = false;
+                        break;
+                    }
+                }
+                if (_16716)
+                {
+                    _16720 = _16721;
+                    break;
+                }
+                _16720 = true;
+                break;
+            } while(false);
+            _16735 = _16733;
+            _567 = _16720;
+        }
+        else
+        {
+            _16735 = _16742;
+            _567 = _538;
+        }
+        uint _17956 = (_567 && (_16735 > maximum)) ? 4u : _456;
+        float3 _16973;
+        float3 _17075;
+        float3 _17259;
+        _17075 = float3(0.0);
+        _16973 = _16982;
+        _17259 = _16982;
+        float3 _10777;
+        float3 _10778;
+        float3 _10779;
+        float3 _10780;
+        spvUnsafeArray<float4, 3> _11699;
+        bool _17193;
+        uint _17194;
+        uint _17209;
+        float3 _17240;
+        float _17244;
+        uint _17249;
+        uint _17253;
+        float3 _17258;
+        float3 _17273;
+        float _17304;
+        float _17319;
+        uint _17350;
+        uint _17366;
+        uint _17397;
+        uint _17412;
+        uint _17443;
+        uint _17458;
+        uint _17491;
+        uint _17515;
+        float _17534;
+        bool _17538;
+        bool _17601;
+        float _17628;
+        float3 _17635;
+        bool _17644;
+        float3 _17647;
+        uint _17649;
+        uint _17651;
+        uint _16750 = DIA.Counts.x;
+        uint _16751 = 0u;
+        float _16755 = maximum;
+        bool _16782;
+        bool _16848;
+        float _16938;
+        bool _17032 = false;
+        uint _17115 = 4294967295u;
+        uint _17155 = 4294967295u;
+        uint _17195 = _17956;
+        float _17305;
+        uint _17351;
+        uint _17398;
+        uint _17444;
+        for (;;)
+        {
+            if (_16750 < DIA.Counts.w)
+            {
+                uint _588 = _16751 + uint(1);
+                if (_588 > 8192u)
+                {
+                    TraceDiagnostics |= 2u;
+                    _17443 = 5u;
+                    _17397 = _17155;
+                    _17350 = _17115;
+                    _17304 = _16755;
+                    _17258 = _17075;
+                    _17253 = _17155;
+                    _17249 = _17115;
+                    _17244 = _16755;
+                    _17240 = _17075;
+                    _17194 = 5u;
+                    _17193 = true;
+                    break;
+                }
+                bool _620;
+                if (emitterOnly)
+                {
+                    _620 = (_545.Nodes[_16750].Links.z & 2147483648u) == 0u;
+                }
+                else
+                {
+                    _620 = emitterOnly;
+                }
+                if (_620)
+                {
+                    _17651 = _17155;
+                    _17649 = _17115;
+                    _17647 = _17075;
+                    _17644 = _17032;
+                    _17635 = _16973;
+                    _17628 = _16938;
+                    _17601 = _16848;
+                    _17538 = _16782;
+                    _17534 = _16755;
+                    _17515 = _588;
+                    _17491 = _545.Nodes[_16750].Links.w;
+                    _17458 = _17444;
+                    _17412 = _17398;
+                    _17366 = _17351;
+                    _17319 = _17305;
+                    _17273 = _17259;
+                    _17209 = _17195;
+                    _17155 = _17651;
+                    _17115 = _17649;
+                    _17075 = _17647;
+                    _17032 = _17644;
+                    _16973 = _17635;
+                    _16938 = _17628;
+                    _16848 = _17601;
+                    _16782 = _17538;
+                    _16755 = _17534;
+                    _16751 = _17515;
+                    _16750 = _17491;
+                    _17444 = _17458;
+                    _17398 = _17412;
+                    _17351 = _17366;
+                    _17305 = _17319;
+                    _17259 = _17273;
+                    _17195 = _17209;
+                    continue;
+                }
+                float3 param_4 = _545.Nodes[_16750].Minimum.xyz;
+                float3 param_5 = _545.Nodes[_16750].Maximum.xyz;
+                float3 param_6 = origin;
+                float3 param_7 = direction;
+                bool _16778;
+                do
+                {
+                    bool _16774;
+                    bool _16779;
+                    float _17535;
+                    float _17537;
+                    int _16769 = 0;
+                    float _16770 = 9.9999997473787516355514526367188e-05;
+                    float _16771 = _16755;
+                    for (;;)
+                    {
+                        if (_16769 < 3)
+                        {
+                            if (abs(param_7[_16769]) < 9.9999996826552253889678874634872e-21)
+                            {
+                                bool _10621 = param_6[_16769] < param_4[_16769];
+                                bool _10632;
+                                if (!_10621)
+                                {
+                                    _10632 = param_6[_16769] > param_5[_16769];
+                                }
+                                else
+                                {
+                                    _10632 = _10621;
+                                }
+                                if (_10632)
+                                {
+                                    _16779 = false;
+                                    _16774 = true;
+                                    break;
+                                }
+                                _17537 = _16771;
+                                _17535 = _16770;
+                                int _10674 = _16769 + 1;
+                                _16771 = _17537;
+                                _16770 = _17535;
+                                _16769 = _10674;
+                                continue;
+                            }
+                            float2 _10652 = (float2(param_4[_16769], param_5[_16769]) - float2(param_6[_16769])) / float2(param_7[_16769]);
+                            float _10655 = _10652.x;
+                            float _10657 = _10652.y;
+                            float _10659 = fast::max(_16770, fast::min(_10655, _10657));
+                            float _10666 = fast::min(_16771, fast::max(_10655, _10657));
+                            if (_10666 < _10659)
+                            {
+                                _16779 = false;
+                                _16774 = true;
+                                break;
+                            }
+                            _17537 = _10666;
+                            _17535 = _10659;
+                            int _10674 = _16769 + 1;
+                            _16771 = _17537;
+                            _16770 = _17535;
+                            _16769 = _10674;
+                            continue;
+                        }
+                        else
+                        {
+                            _16779 = _16782;
+                            _16774 = false;
+                            break;
+                        }
+                    }
+                    if (_16774)
+                    {
+                        _16778 = _16779;
+                        break;
+                    }
+                    _16778 = true;
+                    break;
+                } while(false);
+                if (!_16778)
+                {
+                    _17651 = _17155;
+                    _17649 = _17115;
+                    _17647 = _17075;
+                    _17644 = _17032;
+                    _17635 = _16973;
+                    _17628 = _16938;
+                    _17601 = _16848;
+                    _17538 = _16778;
+                    _17534 = _16755;
+                    _17515 = _588;
+                    _17491 = _545.Nodes[_16750].Links.w;
+                    _17458 = _17444;
+                    _17412 = _17398;
+                    _17366 = _17351;
+                    _17319 = _17305;
+                    _17273 = _17259;
+                    _17209 = _17195;
+                    _17155 = _17651;
+                    _17115 = _17649;
+                    _17075 = _17647;
+                    _17032 = _17644;
+                    _16973 = _17635;
+                    _16938 = _17628;
+                    _16848 = _17601;
+                    _16782 = _17538;
+                    _16755 = _17534;
+                    _16751 = _17515;
+                    _16750 = _17491;
+                    _17444 = _17458;
+                    _17398 = _17412;
+                    _17351 = _17366;
+                    _17305 = _17319;
+                    _17259 = _17273;
+                    _17195 = _17209;
+                    continue;
+                }
+                float3 _16968;
+                float3 _17070;
+                float3 _17281;
+                _17070 = _17075;
+                _16968 = _16973;
+                _17281 = _17259;
+                bool _17189;
+                uint _17216;
+                uint _17218;
+                float3 _17241;
+                float _17245;
+                uint _17250;
+                uint _17254;
+                float3 _17280;
+                float3 _17282;
+                float _17326;
+                float _17328;
+                uint _17373;
+                uint _17375;
+                uint _17419;
+                uint _17421;
+                uint _17465;
+                uint _17467;
+                uint _17516;
+                uint _17574;
+                float _17596;
+                bool _17602;
+                bool _17615;
+                float _17629;
+                float _17632;
+                float3 _17636;
+                float3 _17639;
+                bool _17645;
+                float3 _17648;
+                uint _17650;
+                uint _17652;
+                uint _16807 = _545.Nodes[_16750].Links.x;
+                uint _16812 = _588;
+                float _16823 = _16755;
+                bool _16843 = _16848;
+                float _16933 = _16938;
+                bool _17027 = _17032;
+                uint _17110 = _17115;
+                uint _17150 = _17155;
+                uint _17217 = _17195;
+                float _17327 = _17305;
+                uint _17374 = _17351;
+                uint _17420 = _17398;
+                uint _17466 = _17444;
+                for (;;)
+                {
+                    if (_16807 < (_545.Nodes[_16750].Links.x + _545.Nodes[_16750].Links.y))
+                    {
+                        bool _709;
+                        if (emitterOnly)
+                        {
+                            _709 = ((device uint*)&_702.Materials[_674.Instances[_16807].Metadata.x].Flags)[2u] == 0u;
+                        }
+                        else
+                        {
+                            _709 = emitterOnly;
+                        }
+                        if (_709)
+                        {
+                            _17652 = _17150;
+                            _17650 = _17110;
+                            _17648 = _17070;
+                            _17645 = _17027;
+                            _17639 = _16968;
+                            _17632 = _16933;
+                            _17615 = _16843;
+                            _17596 = _16823;
+                            _17574 = _16812;
+                            _17467 = _17466;
+                            _17421 = _17420;
+                            _17375 = _17374;
+                            _17328 = _17327;
+                            _17282 = _17281;
+                            _17218 = _17217;
+                            uint _879 = _16807 + uint(1);
+                            _17150 = _17652;
+                            _17110 = _17650;
+                            _17070 = _17648;
+                            _17027 = _17645;
+                            _16968 = _17639;
+                            _16933 = _17632;
+                            _16843 = _17615;
+                            _16823 = _17596;
+                            _16812 = _17574;
+                            _16807 = _879;
+                            _17466 = _17467;
+                            _17420 = _17421;
+                            _17374 = _17375;
+                            _17327 = _17328;
+                            _17281 = _17282;
+                            _17217 = _17218;
+                            continue;
+                        }
+                        float3 _722 = (_674.Instances[_16807].Inverse * float4(origin, 1.0)).xyz;
+                        float3 _732 = (_674.Instances[_16807].Inverse * float4(direction, 0.0)).xyz;
+                        float3 _16966;
+                        float3 _17068;
+                        float3 _17285;
+                        _16966 = _16968;
+                        _17285 = _17281;
+                        _17068 = _17070;
+                        uint _746;
+                        bool _16838;
+                        float3 _17091;
+                        uint _17131;
+                        uint _17171;
+                        bool _17188;
+                        uint _17220;
+                        uint _17222;
+                        float3 _17242;
+                        float _17246;
+                        uint _17251;
+                        uint _17255;
+                        float3 _17284;
+                        float3 _17286;
+                        float _17330;
+                        float _17332;
+                        uint _17377;
+                        uint _17379;
+                        uint _17423;
+                        uint _17425;
+                        uint _17469;
+                        uint _17471;
+                        uint _17517;
+                        uint _17562;
+                        float _17597;
+                        bool _17603;
+                        float _17630;
+                        float _17633;
+                        float3 _17637;
+                        float3 _17640;
+                        bool _17646;
+                        uint _16809 = _674.Instances[_16807].Geometry.x;
+                        uint _16810 = _16812;
+                        float _16821 = _16823;
+                        bool _16841 = _16843;
+                        float _16931 = _16933;
+                        bool _17025 = _17027;
+                        uint _17108 = _17110;
+                        uint _17148 = _17150;
+                        uint _17221 = _17217;
+                        float _17331 = _17327;
+                        uint _17378 = _17374;
+                        uint _17424 = _17420;
+                        uint _17470 = _17466;
+                        for (;;)
+                        {
+                            if (_16809 < _674.Instances[_16807].Metadata.z)
+                            {
+                                _746 = _16810 + uint(1);
+                                if (_746 > 8192u)
+                                {
+                                    TraceDiagnostics |= 2u;
+                                    _17637 = _16966;
+                                    _17630 = _16931;
+                                    _17603 = _16841;
+                                    _17517 = _746;
+                                    _17469 = 5u;
+                                    _17423 = _17148;
+                                    _17377 = _17108;
+                                    _17330 = _16821;
+                                    _17284 = _17068;
+                                    _17255 = _17148;
+                                    _17251 = _17108;
+                                    _17246 = _16821;
+                                    _17242 = _17068;
+                                    _17220 = 5u;
+                                    _17188 = true;
+                                    break;
+                                }
+                                float3 param_8 = _545.Nodes[_16809].Minimum.xyz;
+                                float3 param_9 = _545.Nodes[_16809].Maximum.xyz;
+                                float3 param_10 = _722;
+                                float3 param_11 = _732;
+                                do
+                                {
+                                    bool _16834;
+                                    bool _16839;
+                                    float _17598;
+                                    float _17600;
+                                    int _16829 = 0;
+                                    float _16830 = 9.9999997473787516355514526367188e-05;
+                                    float _16831 = _16821;
+                                    for (;;)
+                                    {
+                                        if (_16829 < 3)
+                                        {
+                                            if (abs(param_11[_16829]) < 9.9999996826552253889678874634872e-21)
+                                            {
+                                                bool _10706 = param_10[_16829] < param_8[_16829];
+                                                bool _10717;
+                                                if (!_10706)
+                                                {
+                                                    _10717 = param_10[_16829] > param_9[_16829];
+                                                }
+                                                else
+                                                {
+                                                    _10717 = _10706;
+                                                }
+                                                if (_10717)
+                                                {
+                                                    _16839 = false;
+                                                    _16834 = true;
+                                                    break;
+                                                }
+                                                _17600 = _16831;
+                                                _17598 = _16830;
+                                                int _10759 = _16829 + 1;
+                                                _16831 = _17600;
+                                                _16830 = _17598;
+                                                _16829 = _10759;
+                                                continue;
+                                            }
+                                            float2 _10737 = (float2(param_8[_16829], param_9[_16829]) - float2(param_10[_16829])) / float2(param_11[_16829]);
+                                            float _10740 = _10737.x;
+                                            float _10742 = _10737.y;
+                                            float _10744 = fast::max(_16830, fast::min(_10740, _10742));
+                                            float _10751 = fast::min(_16831, fast::max(_10740, _10742));
+                                            if (_10751 < _10744)
+                                            {
+                                                _16839 = false;
+                                                _16834 = true;
+                                                break;
+                                            }
+                                            _17600 = _10751;
+                                            _17598 = _10744;
+                                            int _10759 = _16829 + 1;
+                                            _16831 = _17600;
+                                            _16830 = _17598;
+                                            _16829 = _10759;
+                                            continue;
+                                        }
+                                        else
+                                        {
+                                            _16839 = _16841;
+                                            _16834 = false;
+                                            break;
+                                        }
+                                    }
+                                    if (_16834)
+                                    {
+                                        _16838 = _16839;
+                                        break;
+                                    }
+                                    _16838 = true;
+                                    break;
+                                } while(false);
+                                if (!_16838)
+                                {
+                                    _17646 = _17025;
+                                    _17640 = _16966;
+                                    _17633 = _16931;
+                                    _17597 = _16821;
+                                    _17562 = _545.Nodes[_16809].Links.w;
+                                    _17471 = _17470;
+                                    _17425 = _17424;
+                                    _17379 = _17378;
+                                    _17332 = _17331;
+                                    _17286 = _17285;
+                                    _17222 = _17221;
+                                    _17171 = _17148;
+                                    _17131 = _17108;
+                                    _17091 = _17068;
+                                    _17025 = _17646;
+                                    _16966 = _17640;
+                                    _16931 = _17633;
+                                    _16841 = _16838;
+                                    _16821 = _17597;
+                                    _16810 = _746;
+                                    _16809 = _17562;
+                                    _17470 = _17471;
+                                    _17424 = _17425;
+                                    _17378 = _17379;
+                                    _17331 = _17332;
+                                    _17285 = _17286;
+                                    _17221 = _17222;
+                                    _17148 = _17171;
+                                    _17108 = _17131;
+                                    _17068 = _17091;
+                                    continue;
+                                }
+                                float3 _16962;
+                                float3 _17098;
+                                _16962 = _16966;
+                                _17098 = _17068;
+                                float _17959;
+                                uint _17960;
+                                uint _17961;
+                                uint _17962;
+                                float3 _17964;
+                                float _16922;
+                                float3 _16957;
+                                bool _17020;
+                                float3 _17097;
+                                uint _17137;
+                                uint _17177;
+                                uint _17228;
+                                float _17247;
+                                float3 _17292;
+                                float _17338;
+                                uint _17385;
+                                uint _17431;
+                                uint _17477;
+                                float _17631;
+                                float3 _17638;
+                                uint _16874 = _545.Nodes[_16809].Links.x;
+                                float _16887 = _16821;
+                                float _16927 = _16931;
+                                uint _17138 = _17108;
+                                uint _17178 = _17148;
+                                uint _17229 = _17221;
+                                for (;;)
+                                {
+                                    if (_16874 < (_545.Nodes[_16809].Links.x + _545.Nodes[_16809].Links.y))
+                                    {
+                                        _11699[0] = _813.Triangles[_16874].Position[0u];
+                                        _11699[1] = _813.Triangles[_16874].Position[1u];
+                                        _11699[2] = _813.Triangles[_16874].Position[2u];
+                                        float3 param_12 = _732;
+                                        bool _16921;
+                                        do
+                                        {
+                                            float3 _10789 = abs(_732);
+                                            float _10791 = _10789.x;
+                                            float _10793 = _10789.y;
+                                            int _16893;
+                                            if (_10791 > _10793)
+                                            {
+                                                _16893 = (_10791 > _10789.z) ? 0 : 2;
+                                            }
+                                            else
+                                            {
+                                                _16893 = (_10793 > _10789.z) ? 1 : 2;
+                                            }
+                                            int _10813 = spvSMod(_16893 + 1, 3);
+                                            int _10816 = spvSMod(_10813 + 1, 3);
+                                            bool _10820 = param_12[_16893] < 0.0;
+                                            int _17957 = _10820 ? _10813 : _10816;
+                                            int _17958 = _10820 ? _10816 : _10813;
+                                            float _10833 = (-param_12[_17958]) / param_12[_16893];
+                                            float _10841 = (-param_12[_17957]) / param_12[_16893];
+                                            float _10845 = 1.0 / param_12[_16893];
+                                            for (int _16897 = 0; _16897 < 3; )
+                                            {
+                                                _10777 = spvFSub(_11699[_16897].xyz, _722);
+                                                _10778[_16897] = spvFAdd(_10777[_17958], spvFMul(_10833, _10777[_16893]));
+                                                _10779[_16897] = spvFAdd(_10777[_17957], spvFMul(_10841, _10777[_16893]));
+                                                _10780[_16897] = spvFMul(_10777[_16893], _10845);
+                                                _16897++;
+                                                continue;
+                                            }
+                                            float _10900 = spvFSub(spvFMul(_10778.y, _10779.z), spvFMul(_10779.y, _10778.z));
+                                            float _10911 = spvFSub(spvFMul(_10778.z, _10779.x), spvFMul(_10779.z, _10778.x));
+                                            float _10922 = spvFSub(spvFMul(_10778.x, _10779.y), spvFMul(_10779.x, _10778.y));
+                                            bool _10930 = ((_10900 < 0.0) || (_10911 < 0.0)) || (_10922 < 0.0);
+                                            bool _10941;
+                                            if (_10930)
+                                            {
+                                                _10941 = ((_10900 > 0.0) || (_10911 > 0.0)) || (_10922 > 0.0);
+                                            }
+                                            else
+                                            {
+                                                _10941 = _10930;
+                                            }
+                                            if (_10941)
+                                            {
+                                                _16957 = _16962;
+                                                _16922 = _16927;
+                                                _16921 = false;
+                                                break;
+                                            }
+                                            float _10948 = (_10900 + _10911) + _10922;
+                                            if (_10948 == 0.0)
+                                            {
+                                                _16957 = _16962;
+                                                _16922 = _16927;
+                                                _16921 = false;
+                                                break;
+                                            }
+                                            float _10968 = (((_10900 * _10780.x) + (_10911 * _10780.y)) + (_10922 * _10780.z)) / _10948;
+                                            bool _10970 = isnan(_10968);
+                                            bool _10976;
+                                            if (!_10970)
+                                            {
+                                                _10976 = isinf(_10968);
+                                            }
+                                            else
+                                            {
+                                                _10976 = _10970;
+                                            }
+                                            bool _10982;
+                                            if (!_10976)
+                                            {
+                                                _10982 = _10968 < 9.9999997473787516355514526367188e-05;
+                                            }
+                                            else
+                                            {
+                                                _10982 = _10976;
+                                            }
+                                            bool _10989;
+                                            if (!_10982)
+                                            {
+                                                _10989 = _10968 >= _16887;
+                                            }
+                                            else
+                                            {
+                                                _10989 = _10982;
+                                            }
+                                            if (_10989)
+                                            {
+                                                _16957 = _16962;
+                                                _16922 = _10968;
+                                                _16921 = false;
+                                                break;
+                                            }
+                                            _16957 = float3(_10900, _10911, _10922) / float3(_10948);
+                                            _16922 = _10968;
+                                            _16921 = true;
+                                            break;
+                                        } while(false);
+                                        if (_16921)
+                                        {
+                                            if (segment)
+                                            {
+                                                _17638 = _16957;
+                                                _17631 = _16922;
+                                                _17477 = 0u;
+                                                _17431 = _16807;
+                                                _17385 = _16874;
+                                                _17338 = _16922;
+                                                _17292 = _16957;
+                                                _17247 = _16922;
+                                                _17228 = 0u;
+                                                _17177 = _16807;
+                                                _17137 = _16874;
+                                                _17097 = _16957;
+                                                _17020 = true;
+                                                break;
+                                            }
+                                        }
+                                        _17959 = _16921 ? _16922 : _16887;
+                                        _17960 = _16921 ? 0u : _17229;
+                                        _17961 = _16921 ? _16807 : _17178;
+                                        _17962 = _16921 ? _16874 : _17138;
+                                        _17964 = select(_17098, _16957, bool3(_16921));
+                                        _16962 = _16957;
+                                        _16927 = _16922;
+                                        _16887 = _17959;
+                                        _16874++;
+                                        _17229 = _17960;
+                                        _17178 = _17961;
+                                        _17138 = _17962;
+                                        _17098 = _17964;
+                                        continue;
+                                    }
+                                    else
+                                    {
+                                        _17638 = _16962;
+                                        _17631 = _16927;
+                                        _17477 = _17470;
+                                        _17431 = _17424;
+                                        _17385 = _17378;
+                                        _17338 = _17331;
+                                        _17292 = _17285;
+                                        _17247 = _16887;
+                                        _17228 = _17229;
+                                        _17177 = _17178;
+                                        _17137 = _17138;
+                                        _17097 = _17098;
+                                        _17020 = _17025;
+                                        break;
+                                    }
+                                }
+                                if (_17020)
+                                {
+                                    _17637 = _17638;
+                                    _17630 = _17631;
+                                    _17603 = _16838;
+                                    _17517 = _746;
+                                    _17469 = _17477;
+                                    _17423 = _17431;
+                                    _17377 = _17385;
+                                    _17330 = _17338;
+                                    _17284 = _17292;
+                                    _17255 = _17177;
+                                    _17251 = _17137;
+                                    _17246 = _17247;
+                                    _17242 = _17097;
+                                    _17220 = _17228;
+                                    _17188 = _17020;
+                                    break;
+                                }
+                                _17646 = _17020;
+                                _17640 = _17638;
+                                _17633 = _17631;
+                                _17597 = _17247;
+                                _17562 = _16809 + uint(1);
+                                _17471 = _17477;
+                                _17425 = _17431;
+                                _17379 = _17385;
+                                _17332 = _17338;
+                                _17286 = _17292;
+                                _17222 = _17228;
+                                _17171 = _17177;
+                                _17131 = _17137;
+                                _17091 = _17097;
+                                _17025 = _17646;
+                                _16966 = _17640;
+                                _16931 = _17633;
+                                _16841 = _16838;
+                                _16821 = _17597;
+                                _16810 = _746;
+                                _16809 = _17562;
+                                _17470 = _17471;
+                                _17424 = _17425;
+                                _17378 = _17379;
+                                _17331 = _17332;
+                                _17285 = _17286;
+                                _17221 = _17222;
+                                _17148 = _17171;
+                                _17108 = _17131;
+                                _17068 = _17091;
+                                continue;
+                            }
+                            else
+                            {
+                                _17637 = _16966;
+                                _17630 = _16931;
+                                _17603 = _16841;
+                                _17517 = _16810;
+                                _17469 = _17470;
+                                _17423 = _17424;
+                                _17377 = _17378;
+                                _17330 = _17331;
+                                _17284 = _17285;
+                                _17255 = _17148;
+                                _17251 = _17108;
+                                _17246 = _16821;
+                                _17242 = _17068;
+                                _17220 = _17221;
+                                _17188 = _17025;
+                                break;
+                            }
+                        }
+                        if (_17188)
+                        {
+                            _17636 = _17637;
+                            _17629 = _17630;
+                            _17602 = _17603;
+                            _17516 = _17517;
+                            _17465 = _17469;
+                            _17419 = _17423;
+                            _17373 = _17377;
+                            _17326 = _17330;
+                            _17280 = _17284;
+                            _17254 = _17255;
+                            _17250 = _17251;
+                            _17245 = _17246;
+                            _17241 = _17242;
+                            _17216 = _17220;
+                            _17189 = _17188;
+                            break;
+                        }
+                        _17652 = _17255;
+                        _17650 = _17251;
+                        _17648 = _17242;
+                        _17645 = _17188;
+                        _17639 = _17637;
+                        _17632 = _17630;
+                        _17615 = _17603;
+                        _17596 = _17246;
+                        _17574 = _17517;
+                        _17467 = _17469;
+                        _17421 = _17423;
+                        _17375 = _17377;
+                        _17328 = _17330;
+                        _17282 = _17284;
+                        _17218 = _17220;
+                        uint _879 = _16807 + uint(1);
+                        _17150 = _17652;
+                        _17110 = _17650;
+                        _17070 = _17648;
+                        _17027 = _17645;
+                        _16968 = _17639;
+                        _16933 = _17632;
+                        _16843 = _17615;
+                        _16823 = _17596;
+                        _16812 = _17574;
+                        _16807 = _879;
+                        _17466 = _17467;
+                        _17420 = _17421;
+                        _17374 = _17375;
+                        _17327 = _17328;
+                        _17281 = _17282;
+                        _17217 = _17218;
+                        continue;
+                    }
+                    else
+                    {
+                        _17636 = _16968;
+                        _17629 = _16933;
+                        _17602 = _16843;
+                        _17516 = _16812;
+                        _17465 = _17466;
+                        _17419 = _17420;
+                        _17373 = _17374;
+                        _17326 = _17327;
+                        _17280 = _17281;
+                        _17254 = _17150;
+                        _17250 = _17110;
+                        _17245 = _16823;
+                        _17241 = _17070;
+                        _17216 = _17217;
+                        _17189 = _17027;
+                        break;
+                    }
+                }
+                if (_17189)
+                {
+                    _17443 = _17465;
+                    _17397 = _17419;
+                    _17350 = _17373;
+                    _17304 = _17326;
+                    _17258 = _17280;
+                    _17253 = _17254;
+                    _17249 = _17250;
+                    _17244 = _17245;
+                    _17240 = _17241;
+                    _17194 = _17216;
+                    _17193 = _17189;
+                    break;
+                }
+                _17651 = _17254;
+                _17649 = _17250;
+                _17647 = _17241;
+                _17644 = _17189;
+                _17635 = _17636;
+                _17628 = _17629;
+                _17601 = _17602;
+                _17538 = _16778;
+                _17534 = _17245;
+                _17515 = _17516;
+                _17491 = _16750 + uint(1);
+                _17458 = _17465;
+                _17412 = _17419;
+                _17366 = _17373;
+                _17319 = _17326;
+                _17273 = _17280;
+                _17209 = _17216;
+                _17155 = _17651;
+                _17115 = _17649;
+                _17075 = _17647;
+                _17032 = _17644;
+                _16973 = _17635;
+                _16938 = _17628;
+                _16848 = _17601;
+                _16782 = _17538;
+                _16755 = _17534;
+                _16751 = _17515;
+                _16750 = _17491;
+                _17444 = _17458;
+                _17398 = _17412;
+                _17351 = _17366;
+                _17305 = _17319;
+                _17259 = _17273;
+                _17195 = _17209;
+                continue;
+            }
+            else
+            {
+                _17443 = _17444;
+                _17397 = _17398;
+                _17350 = _17351;
+                _17304 = _17305;
+                _17258 = _17259;
+                _17253 = _17155;
+                _17249 = _17115;
+                _17244 = _16755;
+                _17240 = _17075;
+                _17194 = _17195;
+                _17193 = _17032;
+                break;
+            }
+        }
+        if (_17193)
+        {
+            _17442 = _17443;
+            _17396 = _17397;
+            _17349 = _17350;
+            _17303 = _17304;
+            _17257 = _17258;
+            break;
+        }
+        if (_17194 == 4u)
+        {
+            TraceDiagnostics |= 1u;
+        }
+        _17442 = _17194;
+        _17396 = _17253;
+        _17349 = _17249;
+        _17303 = _17244;
+        _17257 = _17240;
+        break;
+    } while(false);
+    return LHit{ _17442, _17396, _17349, _17303, _17257 };
+}
+
+fragment main0_out main0(main0_in in [[stage_in]], constant DIAData& DIA [[buffer(0)]], const device NodeBuffer& _545 [[buffer(1)]], const device TriangleBuffer& _813 [[buffer(2)]], const device InstanceBuffer& _674 [[buffer(3)]], const device MaterialBuffer& _702 [[buffer(4)]], const device LightBuffer& _1697 [[buffer(5)]], const device TexelBuffer& _952 [[buffer(6)]], texture2d<float> DenoisedDiffuse [[texture(1)]], texture2d<float> DenoisedSpecular [[texture(2)]], texture2d<float> RawPosition [[texture(3)]], texture2d<float> RawNormal [[texture(4)]], texture2d<float> RawDiffuse [[texture(5)]], texture2d<float> RawReflected [[texture(6)]], texture2d<float> RawSpecular [[texture(7)]], sampler DenoisedDiffuseSmplr [[sampler(1)]], sampler DenoisedSpecularSmplr [[sampler(2)]], sampler RawPositionSmplr [[sampler(3)]], sampler RawNormalSmplr [[sampler(4)]], sampler RawDiffuseSmplr [[sampler(5)]], sampler RawReflectedSmplr [[sampler(6)]], sampler RawSpecularSmplr [[sampler(7)]])
+{
+    main0_out out = {};
+    uint TraceDiagnostics;
+    do
+    {
+        TraceDiagnostics = 0u;
+        out.gl_FragDepth = 0.0;
+        float _1996 = (in.InUV.x * 2.0) - 1.0;
+        float _2000 = 1.0 - (in.InUV.y * 2.0);
+        float4 _2010 = DIA.InverseViewProjection * float4(_1996, _2000, 0.0, 1.0);
+        float4 _2018 = DIA.InverseViewProjection * float4(_1996, _2000, 1.0, 1.0);
+        float3 _2025 = _2010.xyz / float3(_2010.w);
+        float3 _2036 = (_2018.xyz / float3(_2018.w)) - _2025;
+        float3 _2037 = fast::normalize(_2036);
+        float3 _2880 = _2025;
+        float3 _2881 = _2037;
+        float _2882 = length(_2036);
+        bool _2883 = false;
+        bool _2884 = false;
+        LHit _2891 = Trace(_2880, _2881, _2882, _2883, _2884, TraceDiagnostics, DIA, _545, _674, _702, _813);
+        if (_2891.Kind != 0u)
+        {
+            float3 _15970;
+            if (_2891.Kind == 2u)
+            {
+                _15970 = DIA.Sky.xyz;
+            }
+            else
+            {
+                _15970 = float3(0.0);
+            }
+            bool _2898 = !any(isnan(_15970));
+            bool _2905;
+            if (_2898)
+            {
+                _2905 = !any(isinf(_15970));
+            }
+            else
+            {
+                _2905 = _2898;
+            }
+            bool _2908 = _2905 && (TraceDiagnostics == 0u);
+            float3 _15972;
+            if (_2908)
+            {
+                _15972 = fast::min(fast::max(_15970, float3(0.0)), float3(65504.0));
+            }
+            else
+            {
+                _15972 = float3(1.0, 0.0, 1.0);
+            }
+            out.OutColor = float4(_15972, float(int(_2908)));
+            break;
+        }
+        float4x4 _17662 = _674.Instances[_2891.Instance].Transform;
+        uint4 _17669 = _674.Instances[_2891.Instance].Metadata;
+        float4 _17673 = _674.Instances[_2891.Instance].Tint;
+        float4 _17678 = _813.Triangles[_2891.Triangle].Position[0u];
+        float4 _17680 = _813.Triangles[_2891.Triangle].Position[1u];
+        float4 _17682 = _813.Triangles[_2891.Triangle].Position[2u];
+        float4 _17696 = _813.Triangles[_2891.Triangle].Tangent[0u];
+        float4 _17698 = _813.Triangles[_2891.Triangle].Tangent[1u];
+        float4 _17700 = _813.Triangles[_2891.Triangle].Tangent[2u];
+        float4 _17708 = _702.Materials[_17669.x].BaseColor;
+        float4 _17710 = _702.Materials[_17669.x].Emission;
+        float4 _17712 = _702.Materials[_17669.x].Parameters;
+        uint4 _17738 = _702.Materials[_17669.x].Flags;
+        float3x3 _3080 = float3x3(_17662[0].xyz, _17662[1].xyz, _17662[2].xyz);
+        float3 _3107 = fast::normalize(cross(_3080 * (_17680.xyz - _17678.xyz), _3080 * (_17682.xyz - _17678.xyz)));
+        float3 _3139 = fast::normalize(transpose(float3x3(_674.Instances[_2891.Instance].Inverse[0].xyz, _674.Instances[_2891.Instance].Inverse[1].xyz, _674.Instances[_2891.Instance].Inverse[2].xyz)) * (((_813.Triangles[_2891.Triangle].Normal[0u].xyz * _2891.Bary.x) + (_813.Triangles[_2891.Triangle].Normal[1u].xyz * _2891.Bary.y)) + (_813.Triangles[_2891.Triangle].Normal[2u].xyz * _2891.Bary.z)));
+        float3 _11717;
+        if (dot(_3139, _3107) < 0.0)
+        {
+            _11717 = -_3139;
+        }
+        else
+        {
+            _11717 = _3139;
+        }
+        float3 _3150 = -_2037;
+        bool _3152 = dot(_3107, _3150) >= 0.0;
+        bool _3154 = !_3152;
+        bool _3160;
+        if (_3154)
+        {
+            _3160 = _17738.x != 0u;
+        }
+        else
+        {
+            _3160 = _3152;
+        }
+        bool _3168;
+        if (_3154)
+        {
+            _3168 = _17738.x != 0u;
+        }
+        else
+        {
+            _3168 = _3154;
+        }
+        float3 _11748;
+        float3 _11779;
+        if (_3168)
+        {
+            _11779 = -_3107;
+            _11748 = -_11717;
+        }
+        else
+        {
+            _11779 = _3107;
+            _11748 = _11717;
+        }
+        float2 _3202 = ((((_813.Triangles[_2891.Triangle].UV01.xy * _2891.Bary.x) + (_813.Triangles[_2891.Triangle].UV01.zw * _2891.Bary.y)) + (_813.Triangles[_2891.Triangle].UV2.xy * _2891.Bary.z)) * _702.Materials[_17669.x].UVTransform.xy) + _702.Materials[_17669.x].UVTransform.zw;
+        float4 _3219 = ((_17696 * _2891.Bary.x) + (_17698 * _2891.Bary.y)) + (_17700 * _2891.Bary.z);
+        float3 _3231 = _3080 * _3219.xyz;
+        float3 _3239 = fast::normalize(_3231 - (_11748 * dot(_3231, _11748)));
+        float4 _11758;
+        do
+        {
+            bool _3402 = _702.Materials[_17669.x].Textures[1u].y == 0u;
+            bool _3409;
+            if (!_3402)
+            {
+                _3409 = _702.Materials[_17669.x].Textures[1u].z == 0u;
+            }
+            else
+            {
+                _3409 = _3402;
+            }
+            if (_3409)
+            {
+                _11758 = float4(0.5, 0.5, 1.0, 1.0);
+                break;
+            }
+            float2 _3420 = (fract(_3202) * float2(_702.Materials[_17669.x].Textures[1u].yz)) - float2(0.5);
+            int2 _3423 = int2(floor(_3420));
+            float2 _3425 = fract(_3420);
+            int2 _3464 = int2(_702.Materials[_17669.x].Textures[1u].yz);
+            int2 _3471 = spvSMod(spvSMod(_3423, _3464) + _3464, _3464);
+            int _3477 = _3464.x;
+            uint _3483 = _702.Materials[_17669.x].Textures[1u].x + uint((_3471.y * _3477) + _3471.x);
+            uint _3485 = _3483 >> 2u;
+            uint _3487 = _3483 & 3u;
+            float4 _3506 = float4(float(((device uint*)&_952.Texels[_3485])[_3487] & 255u), float((((device uint*)&_952.Texels[_3485])[_3487] >> 8u) & 255u), float((((device uint*)&_952.Texels[_3485])[_3487] >> 16u) & 255u), float(((device uint*)&_952.Texels[_3485])[_3487] >> 24u)) * float4(0.0039215688593685626983642578125);
+            bool _3510 = (_702.Materials[_17669.x].Textures[1u].w & 1u) != 0u;
+            float4 _18683;
+            if (_3510)
+            {
+                float3 _3536 = select(_3506.xyz * float3(0.077399380505084991455078125), powr((_3506.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _3506.xyz > float3(0.040449999272823333740234375));
+                float4 _17991 = _3506;
+                _17991.x = _3536.x;
+                _17991.y = _3536.y;
+                _17991.z = _3536.z;
+                _18683 = _17991;
+            }
+            else
+            {
+                _18683 = _3506;
+            }
+            int2 _3553 = spvSMod(spvSMod(_3423 + int2(1, 0), _3464) + _3464, _3464);
+            uint _3565 = _702.Materials[_17669.x].Textures[1u].x + uint((_3553.y * _3477) + _3553.x);
+            uint _3567 = _3565 >> 2u;
+            uint _3569 = _3565 & 3u;
+            float4 _3588 = float4(float(((device uint*)&_952.Texels[_3567])[_3569] & 255u), float((((device uint*)&_952.Texels[_3567])[_3569] >> 8u) & 255u), float((((device uint*)&_952.Texels[_3567])[_3569] >> 16u) & 255u), float(((device uint*)&_952.Texels[_3567])[_3569] >> 24u)) * float4(0.0039215688593685626983642578125);
+            float4 _18684;
+            if (_3510)
+            {
+                float3 _3618 = select(_3588.xyz * float3(0.077399380505084991455078125), powr((_3588.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _3588.xyz > float3(0.040449999272823333740234375));
+                float4 _18002 = _3588;
+                _18002.x = _3618.x;
+                _18002.y = _3618.y;
+                _18002.z = _3618.z;
+                _18684 = _18002;
+            }
+            else
+            {
+                _18684 = _3588;
+            }
+            float4 _3435 = float4(_3425.x);
+            int2 _3635 = spvSMod(spvSMod(_3423 + int2(0, 1), _3464) + _3464, _3464);
+            uint _3647 = _702.Materials[_17669.x].Textures[1u].x + uint((_3635.y * _3477) + _3635.x);
+            uint _3649 = _3647 >> 2u;
+            uint _3651 = _3647 & 3u;
+            float4 _3670 = float4(float(((device uint*)&_952.Texels[_3649])[_3651] & 255u), float((((device uint*)&_952.Texels[_3649])[_3651] >> 8u) & 255u), float((((device uint*)&_952.Texels[_3649])[_3651] >> 16u) & 255u), float(((device uint*)&_952.Texels[_3649])[_3651] >> 24u)) * float4(0.0039215688593685626983642578125);
+            float4 _18685;
+            if (_3510)
+            {
+                float3 _3700 = select(_3670.xyz * float3(0.077399380505084991455078125), powr((_3670.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _3670.xyz > float3(0.040449999272823333740234375));
+                float4 _18014 = _3670;
+                _18014.x = _3700.x;
+                _18014.y = _3700.y;
+                _18014.z = _3700.z;
+                _18685 = _18014;
+            }
+            else
+            {
+                _18685 = _3670;
+            }
+            int2 _3717 = spvSMod(spvSMod(_3423 + int2(1), _3464) + _3464, _3464);
+            uint _3729 = _702.Materials[_17669.x].Textures[1u].x + uint((_3717.y * _3477) + _3717.x);
+            uint _3731 = _3729 >> 2u;
+            uint _3733 = _3729 & 3u;
+            float4 _3752 = float4(float(((device uint*)&_952.Texels[_3731])[_3733] & 255u), float((((device uint*)&_952.Texels[_3731])[_3733] >> 8u) & 255u), float((((device uint*)&_952.Texels[_3731])[_3733] >> 16u) & 255u), float(((device uint*)&_952.Texels[_3731])[_3733] >> 24u)) * float4(0.0039215688593685626983642578125);
+            float4 _18686;
+            if (_3510)
+            {
+                float3 _3782 = select(_3752.xyz * float3(0.077399380505084991455078125), powr((_3752.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _3752.xyz > float3(0.040449999272823333740234375));
+                float4 _18025 = _3752;
+                _18025.x = _3782.x;
+                _18025.y = _3782.y;
+                _18025.z = _3782.z;
+                _18686 = _18025;
+            }
+            else
+            {
+                _18686 = _3752;
+            }
+            _11758 = mix(mix(_18683, _18684, _3435), mix(_18685, _18686, _3435), float4(_3425.y));
+            break;
+        } while(false);
+        float3 _3265 = (_11758.xyz * 2.0) - float3(1.0);
+        float2 _3270 = _3265.xy * _17712.w;
+        float3 _3289 = fast::normalize(((_3239 * _3270.x) + (((cross(_11748, _3239) * _3219.w) * sign(determinant(_3080))) * _3270.y)) + (_11748 * _3265.z));
+        float3 _17949 = select(_3289, _11779, bool3(dot(_3289, _11779) < 0.001000000047497451305389404296875));
+        float4 _11807;
+        do
+        {
+            bool _3801 = _702.Materials[_17669.x].Textures[0u].y == 0u;
+            bool _3808;
+            if (!_3801)
+            {
+                _3808 = _702.Materials[_17669.x].Textures[0u].z == 0u;
+            }
+            else
+            {
+                _3808 = _3801;
+            }
+            if (_3808)
+            {
+                _11807 = float4(1.0);
+                break;
+            }
+            float2 _3819 = (fract(_3202) * float2(_702.Materials[_17669.x].Textures[0u].yz)) - float2(0.5);
+            int2 _3822 = int2(floor(_3819));
+            float2 _3824 = fract(_3819);
+            int2 _3863 = int2(_702.Materials[_17669.x].Textures[0u].yz);
+            int2 _3870 = spvSMod(spvSMod(_3822, _3863) + _3863, _3863);
+            int _3876 = _3863.x;
+            uint _3882 = _702.Materials[_17669.x].Textures[0u].x + uint((_3870.y * _3876) + _3870.x);
+            uint _3884 = _3882 >> 2u;
+            uint _3886 = _3882 & 3u;
+            float4 _3905 = float4(float(((device uint*)&_952.Texels[_3884])[_3886] & 255u), float((((device uint*)&_952.Texels[_3884])[_3886] >> 8u) & 255u), float((((device uint*)&_952.Texels[_3884])[_3886] >> 16u) & 255u), float(((device uint*)&_952.Texels[_3884])[_3886] >> 24u)) * float4(0.0039215688593685626983642578125);
+            bool _3909 = (_702.Materials[_17669.x].Textures[0u].w & 1u) != 0u;
+            float4 _18687;
+            if (_3909)
+            {
+                float3 _3935 = select(_3905.xyz * float3(0.077399380505084991455078125), powr((_3905.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _3905.xyz > float3(0.040449999272823333740234375));
+                float4 _18048 = _3905;
+                _18048.x = _3935.x;
+                _18048.y = _3935.y;
+                _18048.z = _3935.z;
+                _18687 = _18048;
+            }
+            else
+            {
+                _18687 = _3905;
+            }
+            int2 _3952 = spvSMod(spvSMod(_3822 + int2(1, 0), _3863) + _3863, _3863);
+            uint _3964 = _702.Materials[_17669.x].Textures[0u].x + uint((_3952.y * _3876) + _3952.x);
+            uint _3966 = _3964 >> 2u;
+            uint _3968 = _3964 & 3u;
+            float4 _3987 = float4(float(((device uint*)&_952.Texels[_3966])[_3968] & 255u), float((((device uint*)&_952.Texels[_3966])[_3968] >> 8u) & 255u), float((((device uint*)&_952.Texels[_3966])[_3968] >> 16u) & 255u), float(((device uint*)&_952.Texels[_3966])[_3968] >> 24u)) * float4(0.0039215688593685626983642578125);
+            float4 _18688;
+            if (_3909)
+            {
+                float3 _4017 = select(_3987.xyz * float3(0.077399380505084991455078125), powr((_3987.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _3987.xyz > float3(0.040449999272823333740234375));
+                float4 _18059 = _3987;
+                _18059.x = _4017.x;
+                _18059.y = _4017.y;
+                _18059.z = _4017.z;
+                _18688 = _18059;
+            }
+            else
+            {
+                _18688 = _3987;
+            }
+            float4 _3834 = float4(_3824.x);
+            int2 _4034 = spvSMod(spvSMod(_3822 + int2(0, 1), _3863) + _3863, _3863);
+            uint _4046 = _702.Materials[_17669.x].Textures[0u].x + uint((_4034.y * _3876) + _4034.x);
+            uint _4048 = _4046 >> 2u;
+            uint _4050 = _4046 & 3u;
+            float4 _4069 = float4(float(((device uint*)&_952.Texels[_4048])[_4050] & 255u), float((((device uint*)&_952.Texels[_4048])[_4050] >> 8u) & 255u), float((((device uint*)&_952.Texels[_4048])[_4050] >> 16u) & 255u), float(((device uint*)&_952.Texels[_4048])[_4050] >> 24u)) * float4(0.0039215688593685626983642578125);
+            float4 _18689;
+            if (_3909)
+            {
+                float3 _4099 = select(_4069.xyz * float3(0.077399380505084991455078125), powr((_4069.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _4069.xyz > float3(0.040449999272823333740234375));
+                float4 _18071 = _4069;
+                _18071.x = _4099.x;
+                _18071.y = _4099.y;
+                _18071.z = _4099.z;
+                _18689 = _18071;
+            }
+            else
+            {
+                _18689 = _4069;
+            }
+            int2 _4116 = spvSMod(spvSMod(_3822 + int2(1), _3863) + _3863, _3863);
+            uint _4128 = _702.Materials[_17669.x].Textures[0u].x + uint((_4116.y * _3876) + _4116.x);
+            uint _4130 = _4128 >> 2u;
+            uint _4132 = _4128 & 3u;
+            float4 _4151 = float4(float(((device uint*)&_952.Texels[_4130])[_4132] & 255u), float((((device uint*)&_952.Texels[_4130])[_4132] >> 8u) & 255u), float((((device uint*)&_952.Texels[_4130])[_4132] >> 16u) & 255u), float(((device uint*)&_952.Texels[_4130])[_4132] >> 24u)) * float4(0.0039215688593685626983642578125);
+            float4 _18690;
+            if (_3909)
+            {
+                float3 _4181 = select(_4151.xyz * float3(0.077399380505084991455078125), powr((_4151.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _4151.xyz > float3(0.040449999272823333740234375));
+                float4 _18082 = _4151;
+                _18082.x = _4181.x;
+                _18082.y = _4181.y;
+                _18082.z = _4181.z;
+                _18690 = _18082;
+            }
+            else
+            {
+                _18690 = _4151;
+            }
+            _11807 = mix(mix(_18687, _18688, _3834), mix(_18689, _18690, _3834), float4(_3824.y));
+            break;
+        } while(false);
+        float4 _11870;
+        do
+        {
+            bool _4200 = _702.Materials[_17669.x].Textures[3u].y == 0u;
+            bool _4207;
+            if (!_4200)
+            {
+                _4207 = _702.Materials[_17669.x].Textures[3u].z == 0u;
+            }
+            else
+            {
+                _4207 = _4200;
+            }
+            if (_4207)
+            {
+                _11870 = float4(1.0);
+                break;
+            }
+            float2 _4218 = (fract(_3202) * float2(_702.Materials[_17669.x].Textures[3u].yz)) - float2(0.5);
+            int2 _4221 = int2(floor(_4218));
+            float2 _4223 = fract(_4218);
+            int2 _4262 = int2(_702.Materials[_17669.x].Textures[3u].yz);
+            int2 _4269 = spvSMod(spvSMod(_4221, _4262) + _4262, _4262);
+            int _4275 = _4262.x;
+            uint _4281 = _702.Materials[_17669.x].Textures[3u].x + uint((_4269.y * _4275) + _4269.x);
+            uint _4283 = _4281 >> 2u;
+            uint _4285 = _4281 & 3u;
+            float4 _4304 = float4(float(((device uint*)&_952.Texels[_4283])[_4285] & 255u), float((((device uint*)&_952.Texels[_4283])[_4285] >> 8u) & 255u), float((((device uint*)&_952.Texels[_4283])[_4285] >> 16u) & 255u), float(((device uint*)&_952.Texels[_4283])[_4285] >> 24u)) * float4(0.0039215688593685626983642578125);
+            bool _4308 = (_702.Materials[_17669.x].Textures[3u].w & 1u) != 0u;
+            float4 _18691;
+            if (_4308)
+            {
+                float3 _4334 = select(_4304.xyz * float3(0.077399380505084991455078125), powr((_4304.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _4304.xyz > float3(0.040449999272823333740234375));
+                float4 _18098 = _4304;
+                _18098.x = _4334.x;
+                _18098.y = _4334.y;
+                _18098.z = _4334.z;
+                _18691 = _18098;
+            }
+            else
+            {
+                _18691 = _4304;
+            }
+            int2 _4351 = spvSMod(spvSMod(_4221 + int2(1, 0), _4262) + _4262, _4262);
+            uint _4363 = _702.Materials[_17669.x].Textures[3u].x + uint((_4351.y * _4275) + _4351.x);
+            uint _4365 = _4363 >> 2u;
+            uint _4367 = _4363 & 3u;
+            float4 _4386 = float4(float(((device uint*)&_952.Texels[_4365])[_4367] & 255u), float((((device uint*)&_952.Texels[_4365])[_4367] >> 8u) & 255u), float((((device uint*)&_952.Texels[_4365])[_4367] >> 16u) & 255u), float(((device uint*)&_952.Texels[_4365])[_4367] >> 24u)) * float4(0.0039215688593685626983642578125);
+            float4 _18692;
+            if (_4308)
+            {
+                float3 _4416 = select(_4386.xyz * float3(0.077399380505084991455078125), powr((_4386.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _4386.xyz > float3(0.040449999272823333740234375));
+                float4 _18109 = _4386;
+                _18109.x = _4416.x;
+                _18109.y = _4416.y;
+                _18109.z = _4416.z;
+                _18692 = _18109;
+            }
+            else
+            {
+                _18692 = _4386;
+            }
+            float4 _4233 = float4(_4223.x);
+            int2 _4433 = spvSMod(spvSMod(_4221 + int2(0, 1), _4262) + _4262, _4262);
+            uint _4445 = _702.Materials[_17669.x].Textures[3u].x + uint((_4433.y * _4275) + _4433.x);
+            uint _4447 = _4445 >> 2u;
+            uint _4449 = _4445 & 3u;
+            float4 _4468 = float4(float(((device uint*)&_952.Texels[_4447])[_4449] & 255u), float((((device uint*)&_952.Texels[_4447])[_4449] >> 8u) & 255u), float((((device uint*)&_952.Texels[_4447])[_4449] >> 16u) & 255u), float(((device uint*)&_952.Texels[_4447])[_4449] >> 24u)) * float4(0.0039215688593685626983642578125);
+            float4 _18693;
+            if (_4308)
+            {
+                float3 _4498 = select(_4468.xyz * float3(0.077399380505084991455078125), powr((_4468.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _4468.xyz > float3(0.040449999272823333740234375));
+                float4 _18121 = _4468;
+                _18121.x = _4498.x;
+                _18121.y = _4498.y;
+                _18121.z = _4498.z;
+                _18693 = _18121;
+            }
+            else
+            {
+                _18693 = _4468;
+            }
+            int2 _4515 = spvSMod(spvSMod(_4221 + int2(1), _4262) + _4262, _4262);
+            uint _4527 = _702.Materials[_17669.x].Textures[3u].x + uint((_4515.y * _4275) + _4515.x);
+            uint _4529 = _4527 >> 2u;
+            uint _4531 = _4527 & 3u;
+            float4 _4550 = float4(float(((device uint*)&_952.Texels[_4529])[_4531] & 255u), float((((device uint*)&_952.Texels[_4529])[_4531] >> 8u) & 255u), float((((device uint*)&_952.Texels[_4529])[_4531] >> 16u) & 255u), float(((device uint*)&_952.Texels[_4529])[_4531] >> 24u)) * float4(0.0039215688593685626983642578125);
+            float4 _18694;
+            if (_4308)
+            {
+                float3 _4580 = select(_4550.xyz * float3(0.077399380505084991455078125), powr((_4550.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _4550.xyz > float3(0.040449999272823333740234375));
+                float4 _18132 = _4550;
+                _18132.x = _4580.x;
+                _18132.y = _4580.y;
+                _18132.z = _4580.z;
+                _18694 = _18132;
+            }
+            else
+            {
+                _18694 = _4550;
+            }
+            _11870 = mix(mix(_18691, _18692, _4233), mix(_18693, _18694, _4233), float4(_4223.y));
+            break;
+        } while(false);
+        float _3315 = fast::clamp(_17712.x * _11870.x, 0.0, 1.0);
+        float4 _11905;
+        do
+        {
+            bool _4599 = _702.Materials[_17669.x].Textures[4u].y == 0u;
+            bool _4606;
+            if (!_4599)
+            {
+                _4606 = _702.Materials[_17669.x].Textures[4u].z == 0u;
+            }
+            else
+            {
+                _4606 = _4599;
+            }
+            if (_4606)
+            {
+                _11905 = float4(1.0);
+                break;
+            }
+            float2 _4617 = (fract(_3202) * float2(_702.Materials[_17669.x].Textures[4u].yz)) - float2(0.5);
+            int2 _4620 = int2(floor(_4617));
+            float2 _4622 = fract(_4617);
+            int2 _4661 = int2(_702.Materials[_17669.x].Textures[4u].yz);
+            int2 _4668 = spvSMod(spvSMod(_4620, _4661) + _4661, _4661);
+            int _4674 = _4661.x;
+            uint _4680 = _702.Materials[_17669.x].Textures[4u].x + uint((_4668.y * _4674) + _4668.x);
+            uint _4682 = _4680 >> 2u;
+            uint _4684 = _4680 & 3u;
+            float4 _4703 = float4(float(((device uint*)&_952.Texels[_4682])[_4684] & 255u), float((((device uint*)&_952.Texels[_4682])[_4684] >> 8u) & 255u), float((((device uint*)&_952.Texels[_4682])[_4684] >> 16u) & 255u), float(((device uint*)&_952.Texels[_4682])[_4684] >> 24u)) * float4(0.0039215688593685626983642578125);
+            bool _4707 = (_702.Materials[_17669.x].Textures[4u].w & 1u) != 0u;
+            float4 _18695;
+            if (_4707)
+            {
+                float3 _4733 = select(_4703.xyz * float3(0.077399380505084991455078125), powr((_4703.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _4703.xyz > float3(0.040449999272823333740234375));
+                float4 _18148 = _4703;
+                _18148.x = _4733.x;
+                _18148.y = _4733.y;
+                _18148.z = _4733.z;
+                _18695 = _18148;
+            }
+            else
+            {
+                _18695 = _4703;
+            }
+            int2 _4750 = spvSMod(spvSMod(_4620 + int2(1, 0), _4661) + _4661, _4661);
+            uint _4762 = _702.Materials[_17669.x].Textures[4u].x + uint((_4750.y * _4674) + _4750.x);
+            uint _4764 = _4762 >> 2u;
+            uint _4766 = _4762 & 3u;
+            float4 _4785 = float4(float(((device uint*)&_952.Texels[_4764])[_4766] & 255u), float((((device uint*)&_952.Texels[_4764])[_4766] >> 8u) & 255u), float((((device uint*)&_952.Texels[_4764])[_4766] >> 16u) & 255u), float(((device uint*)&_952.Texels[_4764])[_4766] >> 24u)) * float4(0.0039215688593685626983642578125);
+            float4 _18696;
+            if (_4707)
+            {
+                float3 _4815 = select(_4785.xyz * float3(0.077399380505084991455078125), powr((_4785.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _4785.xyz > float3(0.040449999272823333740234375));
+                float4 _18159 = _4785;
+                _18159.x = _4815.x;
+                _18159.y = _4815.y;
+                _18159.z = _4815.z;
+                _18696 = _18159;
+            }
+            else
+            {
+                _18696 = _4785;
+            }
+            float4 _4632 = float4(_4622.x);
+            int2 _4832 = spvSMod(spvSMod(_4620 + int2(0, 1), _4661) + _4661, _4661);
+            uint _4844 = _702.Materials[_17669.x].Textures[4u].x + uint((_4832.y * _4674) + _4832.x);
+            uint _4846 = _4844 >> 2u;
+            uint _4848 = _4844 & 3u;
+            float4 _4867 = float4(float(((device uint*)&_952.Texels[_4846])[_4848] & 255u), float((((device uint*)&_952.Texels[_4846])[_4848] >> 8u) & 255u), float((((device uint*)&_952.Texels[_4846])[_4848] >> 16u) & 255u), float(((device uint*)&_952.Texels[_4846])[_4848] >> 24u)) * float4(0.0039215688593685626983642578125);
+            float4 _18697;
+            if (_4707)
+            {
+                float3 _4897 = select(_4867.xyz * float3(0.077399380505084991455078125), powr((_4867.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _4867.xyz > float3(0.040449999272823333740234375));
+                float4 _18171 = _4867;
+                _18171.x = _4897.x;
+                _18171.y = _4897.y;
+                _18171.z = _4897.z;
+                _18697 = _18171;
+            }
+            else
+            {
+                _18697 = _4867;
+            }
+            int2 _4914 = spvSMod(spvSMod(_4620 + int2(1), _4661) + _4661, _4661);
+            uint _4926 = _702.Materials[_17669.x].Textures[4u].x + uint((_4914.y * _4674) + _4914.x);
+            uint _4928 = _4926 >> 2u;
+            uint _4930 = _4926 & 3u;
+            float4 _4949 = float4(float(((device uint*)&_952.Texels[_4928])[_4930] & 255u), float((((device uint*)&_952.Texels[_4928])[_4930] >> 8u) & 255u), float((((device uint*)&_952.Texels[_4928])[_4930] >> 16u) & 255u), float(((device uint*)&_952.Texels[_4928])[_4930] >> 24u)) * float4(0.0039215688593685626983642578125);
+            float4 _18698;
+            if (_4707)
+            {
+                float3 _4979 = select(_4949.xyz * float3(0.077399380505084991455078125), powr((_4949.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _4949.xyz > float3(0.040449999272823333740234375));
+                float4 _18182 = _4949;
+                _18182.x = _4979.x;
+                _18182.y = _4979.y;
+                _18182.z = _4979.z;
+                _18698 = _18182;
+            }
+            else
+            {
+                _18698 = _4949;
+            }
+            _11905 = mix(mix(_18695, _18696, _4632), mix(_18697, _18698, _4632), float4(_4622.y));
+            break;
+        } while(false);
+        float _3324 = fast::clamp(_17712.y * _11905.x, 0.0, 1.0);
+        float4 _11946;
+        do
+        {
+            bool _4998 = _702.Materials[_17669.x].Textures[5u].y == 0u;
+            bool _5005;
+            if (!_4998)
+            {
+                _5005 = _702.Materials[_17669.x].Textures[5u].z == 0u;
+            }
+            else
+            {
+                _5005 = _4998;
+            }
+            if (_5005)
+            {
+                _11946 = float4(1.0);
+                break;
+            }
+            float2 _5016 = (fract(_3202) * float2(_702.Materials[_17669.x].Textures[5u].yz)) - float2(0.5);
+            int2 _5019 = int2(floor(_5016));
+            float2 _5021 = fract(_5016);
+            int2 _5060 = int2(_702.Materials[_17669.x].Textures[5u].yz);
+            int2 _5067 = spvSMod(spvSMod(_5019, _5060) + _5060, _5060);
+            int _5073 = _5060.x;
+            uint _5079 = _702.Materials[_17669.x].Textures[5u].x + uint((_5067.y * _5073) + _5067.x);
+            uint _5081 = _5079 >> 2u;
+            uint _5083 = _5079 & 3u;
+            float4 _5102 = float4(float(((device uint*)&_952.Texels[_5081])[_5083] & 255u), float((((device uint*)&_952.Texels[_5081])[_5083] >> 8u) & 255u), float((((device uint*)&_952.Texels[_5081])[_5083] >> 16u) & 255u), float(((device uint*)&_952.Texels[_5081])[_5083] >> 24u)) * float4(0.0039215688593685626983642578125);
+            bool _5106 = (_702.Materials[_17669.x].Textures[5u].w & 1u) != 0u;
+            float4 _18699;
+            if (_5106)
+            {
+                float3 _5132 = select(_5102.xyz * float3(0.077399380505084991455078125), powr((_5102.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _5102.xyz > float3(0.040449999272823333740234375));
+                float4 _18198 = _5102;
+                _18198.x = _5132.x;
+                _18198.y = _5132.y;
+                _18198.z = _5132.z;
+                _18699 = _18198;
+            }
+            else
+            {
+                _18699 = _5102;
+            }
+            int2 _5149 = spvSMod(spvSMod(_5019 + int2(1, 0), _5060) + _5060, _5060);
+            uint _5161 = _702.Materials[_17669.x].Textures[5u].x + uint((_5149.y * _5073) + _5149.x);
+            uint _5163 = _5161 >> 2u;
+            uint _5165 = _5161 & 3u;
+            float4 _5184 = float4(float(((device uint*)&_952.Texels[_5163])[_5165] & 255u), float((((device uint*)&_952.Texels[_5163])[_5165] >> 8u) & 255u), float((((device uint*)&_952.Texels[_5163])[_5165] >> 16u) & 255u), float(((device uint*)&_952.Texels[_5163])[_5165] >> 24u)) * float4(0.0039215688593685626983642578125);
+            float4 _18700;
+            if (_5106)
+            {
+                float3 _5214 = select(_5184.xyz * float3(0.077399380505084991455078125), powr((_5184.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _5184.xyz > float3(0.040449999272823333740234375));
+                float4 _18209 = _5184;
+                _18209.x = _5214.x;
+                _18209.y = _5214.y;
+                _18209.z = _5214.z;
+                _18700 = _18209;
+            }
+            else
+            {
+                _18700 = _5184;
+            }
+            float4 _5031 = float4(_5021.x);
+            int2 _5231 = spvSMod(spvSMod(_5019 + int2(0, 1), _5060) + _5060, _5060);
+            uint _5243 = _702.Materials[_17669.x].Textures[5u].x + uint((_5231.y * _5073) + _5231.x);
+            uint _5245 = _5243 >> 2u;
+            uint _5247 = _5243 & 3u;
+            float4 _5266 = float4(float(((device uint*)&_952.Texels[_5245])[_5247] & 255u), float((((device uint*)&_952.Texels[_5245])[_5247] >> 8u) & 255u), float((((device uint*)&_952.Texels[_5245])[_5247] >> 16u) & 255u), float(((device uint*)&_952.Texels[_5245])[_5247] >> 24u)) * float4(0.0039215688593685626983642578125);
+            float4 _18701;
+            if (_5106)
+            {
+                float3 _5296 = select(_5266.xyz * float3(0.077399380505084991455078125), powr((_5266.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _5266.xyz > float3(0.040449999272823333740234375));
+                float4 _18221 = _5266;
+                _18221.x = _5296.x;
+                _18221.y = _5296.y;
+                _18221.z = _5296.z;
+                _18701 = _18221;
+            }
+            else
+            {
+                _18701 = _5266;
+            }
+            int2 _5313 = spvSMod(spvSMod(_5019 + int2(1), _5060) + _5060, _5060);
+            uint _5325 = _702.Materials[_17669.x].Textures[5u].x + uint((_5313.y * _5073) + _5313.x);
+            uint _5327 = _5325 >> 2u;
+            uint _5329 = _5325 & 3u;
+            float4 _5348 = float4(float(((device uint*)&_952.Texels[_5327])[_5329] & 255u), float((((device uint*)&_952.Texels[_5327])[_5329] >> 8u) & 255u), float((((device uint*)&_952.Texels[_5327])[_5329] >> 16u) & 255u), float(((device uint*)&_952.Texels[_5327])[_5329] >> 24u)) * float4(0.0039215688593685626983642578125);
+            float4 _18702;
+            if (_5106)
+            {
+                float3 _5378 = select(_5348.xyz * float3(0.077399380505084991455078125), powr((_5348.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _5348.xyz > float3(0.040449999272823333740234375));
+                float4 _18232 = _5348;
+                _18232.x = _5378.x;
+                _18232.y = _5378.y;
+                _18232.z = _5378.z;
+                _18702 = _18232;
+            }
+            else
+            {
+                _18702 = _5348;
+            }
+            _11946 = mix(mix(_18699, _18700, _5031), mix(_18701, _18702, _5031), float4(_5021.y));
+            break;
+        } while(false);
+        float4 _12028;
+        do
+        {
+            bool _5397 = _702.Materials[_17669.x].Textures[6u].y == 0u;
+            bool _5404;
+            if (!_5397)
+            {
+                _5404 = _702.Materials[_17669.x].Textures[6u].z == 0u;
+            }
+            else
+            {
+                _5404 = _5397;
+            }
+            if (_5404)
+            {
+                _12028 = float4(1.0);
+                break;
+            }
+            float2 _5415 = (fract(_3202) * float2(_702.Materials[_17669.x].Textures[6u].yz)) - float2(0.5);
+            int2 _5418 = int2(floor(_5415));
+            float2 _5420 = fract(_5415);
+            int2 _5459 = int2(_702.Materials[_17669.x].Textures[6u].yz);
+            int2 _5466 = spvSMod(spvSMod(_5418, _5459) + _5459, _5459);
+            int _5472 = _5459.x;
+            uint _5478 = _702.Materials[_17669.x].Textures[6u].x + uint((_5466.y * _5472) + _5466.x);
+            uint _5480 = _5478 >> 2u;
+            uint _5482 = _5478 & 3u;
+            float4 _5501 = float4(float(((device uint*)&_952.Texels[_5480])[_5482] & 255u), float((((device uint*)&_952.Texels[_5480])[_5482] >> 8u) & 255u), float((((device uint*)&_952.Texels[_5480])[_5482] >> 16u) & 255u), float(((device uint*)&_952.Texels[_5480])[_5482] >> 24u)) * float4(0.0039215688593685626983642578125);
+            bool _5505 = (_702.Materials[_17669.x].Textures[6u].w & 1u) != 0u;
+            float4 _18703;
+            if (_5505)
+            {
+                float3 _5531 = select(_5501.xyz * float3(0.077399380505084991455078125), powr((_5501.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _5501.xyz > float3(0.040449999272823333740234375));
+                float4 _18247 = _5501;
+                _18247.x = _5531.x;
+                _18247.y = _5531.y;
+                _18247.z = _5531.z;
+                _18703 = _18247;
+            }
+            else
+            {
+                _18703 = _5501;
+            }
+            int2 _5548 = spvSMod(spvSMod(_5418 + int2(1, 0), _5459) + _5459, _5459);
+            uint _5560 = _702.Materials[_17669.x].Textures[6u].x + uint((_5548.y * _5472) + _5548.x);
+            uint _5562 = _5560 >> 2u;
+            uint _5564 = _5560 & 3u;
+            float4 _5583 = float4(float(((device uint*)&_952.Texels[_5562])[_5564] & 255u), float((((device uint*)&_952.Texels[_5562])[_5564] >> 8u) & 255u), float((((device uint*)&_952.Texels[_5562])[_5564] >> 16u) & 255u), float(((device uint*)&_952.Texels[_5562])[_5564] >> 24u)) * float4(0.0039215688593685626983642578125);
+            float4 _18704;
+            if (_5505)
+            {
+                float3 _5613 = select(_5583.xyz * float3(0.077399380505084991455078125), powr((_5583.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _5583.xyz > float3(0.040449999272823333740234375));
+                float4 _18258 = _5583;
+                _18258.x = _5613.x;
+                _18258.y = _5613.y;
+                _18258.z = _5613.z;
+                _18704 = _18258;
+            }
+            else
+            {
+                _18704 = _5583;
+            }
+            float4 _5430 = float4(_5420.x);
+            int2 _5630 = spvSMod(spvSMod(_5418 + int2(0, 1), _5459) + _5459, _5459);
+            uint _5642 = _702.Materials[_17669.x].Textures[6u].x + uint((_5630.y * _5472) + _5630.x);
+            uint _5644 = _5642 >> 2u;
+            uint _5646 = _5642 & 3u;
+            float4 _5665 = float4(float(((device uint*)&_952.Texels[_5644])[_5646] & 255u), float((((device uint*)&_952.Texels[_5644])[_5646] >> 8u) & 255u), float((((device uint*)&_952.Texels[_5644])[_5646] >> 16u) & 255u), float(((device uint*)&_952.Texels[_5644])[_5646] >> 24u)) * float4(0.0039215688593685626983642578125);
+            float4 _18705;
+            if (_5505)
+            {
+                float3 _5695 = select(_5665.xyz * float3(0.077399380505084991455078125), powr((_5665.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _5665.xyz > float3(0.040449999272823333740234375));
+                float4 _18270 = _5665;
+                _18270.x = _5695.x;
+                _18270.y = _5695.y;
+                _18270.z = _5695.z;
+                _18705 = _18270;
+            }
+            else
+            {
+                _18705 = _5665;
+            }
+            int2 _5712 = spvSMod(spvSMod(_5418 + int2(1), _5459) + _5459, _5459);
+            uint _5724 = _702.Materials[_17669.x].Textures[6u].x + uint((_5712.y * _5472) + _5712.x);
+            uint _5726 = _5724 >> 2u;
+            uint _5728 = _5724 & 3u;
+            float4 _5747 = float4(float(((device uint*)&_952.Texels[_5726])[_5728] & 255u), float((((device uint*)&_952.Texels[_5726])[_5728] >> 8u) & 255u), float((((device uint*)&_952.Texels[_5726])[_5728] >> 16u) & 255u), float(((device uint*)&_952.Texels[_5726])[_5728] >> 24u)) * float4(0.0039215688593685626983642578125);
+            float4 _18706;
+            if (_5505)
+            {
+                float3 _5777 = select(_5747.xyz * float3(0.077399380505084991455078125), powr((_5747.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _5747.xyz > float3(0.040449999272823333740234375));
+                float4 _18281 = _5747;
+                _18281.x = _5777.x;
+                _18281.y = _5777.y;
+                _18281.z = _5777.z;
+                _18706 = _18281;
+            }
+            else
+            {
+                _18706 = _5747;
+            }
+            _12028 = mix(mix(_18703, _18704, _5430), mix(_18705, _18706, _5430), float4(_5420.y));
+            break;
+        } while(false);
+        float3 _3351 = (_17662 * float4(((_17678.xyz * _2891.Bary.x) + (_17680.xyz * _2891.Bary.y)) + (_17682.xyz * _2891.Bary.z), 1.0)).xyz;
+        float3 _3355 = ((_11807 * _17708) * _17673).xyz;
+        float3 _3359 = select(float3(0.0), _17710.xyz * _12028.xyz, bool3(_3160));
+        float3 _3367 = mix(float3(0.07999999821186065673828125 * fast::clamp(_17712.z * _11946.x, 0.0, 1.0)), _3355, float3(_3315));
+        bool _3382 = _17738.y != 0u;
+        bool _2077 = !_3160;
+        if (_2077)
+        {
+            bool _6183 = !any(isnan(float3(0.0)));
+            bool _6190;
+            if (_6183)
+            {
+                _6190 = !any(isinf(float3(0.0)));
+            }
+            else
+            {
+                _6190 = _6183;
+            }
+            bool _6193 = _6190 && (TraceDiagnostics == 0u);
+            out.OutColor = float4(select(float3(1.0, 0.0, 1.0), float3(0.0), bool3(_6193)), float(int(_6193)));
+            break;
+        }
+        if (_3382)
+        {
+            float3 _2091 = _3355 + _3359;
+            bool _6215 = !any(isnan(_2091));
+            bool _6222;
+            if (_6215)
+            {
+                _6222 = !any(isinf(_2091));
+            }
+            else
+            {
+                _6222 = _6215;
+            }
+            bool _6225 = _6222 && (TraceDiagnostics == 0u);
+            float3 _15965;
+            if (_6225)
+            {
+                _15965 = fast::min(fast::max(_2091, float3(0.0)), float3(65504.0));
+            }
+            else
+            {
+                _15965 = float3(1.0, 0.0, 1.0);
+            }
+            out.OutColor = float4(_15965, float(int(_6225)));
+            break;
+        }
+        spvUnsafeArray<uint4, 8> _11376;
+        _11376[0] = _702.Materials[((device uint*)&_674.Instances[_2891.Instance].Metadata)[0u]].Textures[0u];
+        _11376[1] = _702.Materials[((device uint*)&_674.Instances[_2891.Instance].Metadata)[0u]].Textures[1u];
+        _11376[2] = _702.Materials[((device uint*)&_674.Instances[_2891.Instance].Metadata)[0u]].Textures[2u];
+        _11376[3] = _702.Materials[((device uint*)&_674.Instances[_2891.Instance].Metadata)[0u]].Textures[3u];
+        _11376[4] = _702.Materials[((device uint*)&_674.Instances[_2891.Instance].Metadata)[0u]].Textures[4u];
+        _11376[5] = _702.Materials[((device uint*)&_674.Instances[_2891.Instance].Metadata)[0u]].Textures[5u];
+        _11376[6] = _702.Materials[((device uint*)&_674.Instances[_2891.Instance].Metadata)[0u]].Textures[6u];
+        _11376[7] = _702.Materials[((device uint*)&_674.Instances[_2891.Instance].Metadata)[0u]].Textures[7u];
+        bool _12434;
+        _12434 = false;
+        bool _2149;
+        for (int _12374 = 0; _12374 < 7; _12434 = _2149, _12374++)
+        {
+            if (!_12434)
+            {
+                _2149 = _11376[_12374].y != 0u;
+            }
+            else
+            {
+                _2149 = _12434;
+            }
+        }
+        float3 _6251 = float3(1.0) - _3367;
+        float3 _6252 = (_3355 * (1.0 - _3315)) * _6251;
+        bool _2159 = any(_6252 > float3(0.0));
+        float2 _2164 = float2(float(_2159 ? 0 : 1), 0.0);
+        bool _2168 = _3324 <= 0.0199999995529651641845703125;
+        float3 _2173 = reflect(_2037, _17949);
+        bool _2180 = !_12434;
+        float _13258;
+        uint _14096;
+        bool _14232;
+        bool _14302;
+        float _14441;
+        float _14510;
+        float3 _14579;
+        float3 _14649;
+        float3 _14718;
+        float3 _14787;
+        float3 _14856;
+        float3 _14923;
+        bool _15712;
+        float3 _15747;
+        uint _15763;
+        float3 _15799;
+        float2 _18732;
+        if (_2168 && _2180)
+        {
+            float _2187 = dot(_2173, _11779);
+            float _13259;
+            uint _14097;
+            bool _14282;
+            bool _14351;
+            float _14490;
+            float _14559;
+            float3 _14629;
+            float3 _14698;
+            float3 _14767;
+            float3 _14836;
+            float3 _14905;
+            float3 _14972;
+            bool _15713;
+            float3 _15748;
+            uint _15764;
+            float3 _15800;
+            float2 _18733;
+            if (_2187 <= 0.0)
+            {
+                float2 _18612 = _2164;
+                _18612.y = 1.0;
+                _18733 = _18612;
+                _15800 = float3(0.0);
+                _15764 = 4294967295u;
+                _15748 = float3(0.0);
+                _15713 = false;
+                _14972 = _14600;
+                _14905 = _14600;
+                _14836 = _14600;
+                _14767 = _14600;
+                _14698 = _14600;
+                _14629 = _14600;
+                _14559 = _14392;
+                _14490 = _14392;
+                _14351 = _14253;
+                _14282 = _14253;
+                _14097 = 6u;
+                _13259 = 0.0;
+            }
+            else
+            {
+                float3 _6267 = _3351 + (_11779 * ((_2187 >= 0.0) ? 0.00019999999494757503271102905273438 : (-0.00019999999494757503271102905273438)));
+                float3 _6268 = _2173;
+                float _6269 = DIA.Settings.x;
+                bool _6270 = false;
+                bool _6271 = false;
+                LHit _6278 = Trace(_6267, _6268, _6269, _6270, _6271, TraceDiagnostics, DIA, _545, _674, _702, _813);
+                bool _14283;
+                bool _14352;
+                float _14491;
+                float _14560;
+                float3 _14630;
+                float3 _14699;
+                float3 _14768;
+                float3 _14837;
+                float3 _14906;
+                float3 _14973;
+                bool _15714;
+                float3 _15749;
+                float3 _15801;
+                if (_6278.Kind == 0u)
+                {
+                    float3x3 _6435 = float3x3(_674.Instances[_6278.Instance].Transform[0].xyz, _674.Instances[_6278.Instance].Transform[1].xyz, _674.Instances[_6278.Instance].Transform[2].xyz);
+                    float3 _6462 = fast::normalize(cross(_6435 * (_813.Triangles[_6278.Triangle].Position[1u].xyz - _813.Triangles[_6278.Triangle].Position[0u].xyz), _6435 * (_813.Triangles[_6278.Triangle].Position[2u].xyz - _813.Triangles[_6278.Triangle].Position[0u].xyz)));
+                    float3 _6494 = fast::normalize(transpose(float3x3(_674.Instances[_6278.Instance].Inverse[0].xyz, _674.Instances[_6278.Instance].Inverse[1].xyz, _674.Instances[_6278.Instance].Inverse[2].xyz)) * (((_813.Triangles[_6278.Triangle].Normal[0u].xyz * _6278.Bary.x) + (_813.Triangles[_6278.Triangle].Normal[1u].xyz * _6278.Bary.y)) + (_813.Triangles[_6278.Triangle].Normal[2u].xyz * _6278.Bary.z)));
+                    float3 _12440;
+                    if (dot(_6494, _6462) < 0.0)
+                    {
+                        _12440 = -_6494;
+                    }
+                    else
+                    {
+                        _12440 = _6494;
+                    }
+                    bool _6507 = dot(_6462, -_2173) >= 0.0;
+                    bool _6509 = !_6507;
+                    bool _6515;
+                    if (_6509)
+                    {
+                        _6515 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Flags.x != 0u;
+                    }
+                    else
+                    {
+                        _6515 = _6507;
+                    }
+                    bool _6523;
+                    if (_6509)
+                    {
+                        _6523 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Flags.x != 0u;
+                    }
+                    else
+                    {
+                        _6523 = _6509;
+                    }
+                    float3 _12471;
+                    float3 _12502;
+                    if (_6523)
+                    {
+                        _12502 = -_6462;
+                        _12471 = -_12440;
+                    }
+                    else
+                    {
+                        _12502 = _6462;
+                        _12471 = _12440;
+                    }
+                    float2 _6557 = ((((_813.Triangles[_6278.Triangle].UV01.xy * _6278.Bary.x) + (_813.Triangles[_6278.Triangle].UV01.zw * _6278.Bary.y)) + (_813.Triangles[_6278.Triangle].UV2.xy * _6278.Bary.z)) * _702.Materials[_674.Instances[_6278.Instance].Metadata.x].UVTransform.xy) + _702.Materials[_674.Instances[_6278.Instance].Metadata.x].UVTransform.zw;
+                    float4 _6574 = ((_813.Triangles[_6278.Triangle].Tangent[0u] * _6278.Bary.x) + (_813.Triangles[_6278.Triangle].Tangent[1u] * _6278.Bary.y)) + (_813.Triangles[_6278.Triangle].Tangent[2u] * _6278.Bary.z);
+                    float3 _6586 = _6435 * _6574.xyz;
+                    float3 _6594 = fast::normalize(_6586 - (_12471 * dot(_6586, _12471)));
+                    float4 _12481;
+                    do
+                    {
+                        bool _6757 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[1u].y == 0u;
+                        bool _6764;
+                        if (!_6757)
+                        {
+                            _6764 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[1u].z == 0u;
+                        }
+                        else
+                        {
+                            _6764 = _6757;
+                        }
+                        if (_6764)
+                        {
+                            _12481 = float4(0.5, 0.5, 1.0, 1.0);
+                            break;
+                        }
+                        float2 _6775 = (fract(_6557) * float2(_702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[1u].yz)) - float2(0.5);
+                        int2 _6778 = int2(floor(_6775));
+                        float2 _6780 = fract(_6775);
+                        int2 _6819 = int2(_702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[1u].yz);
+                        int2 _6826 = spvSMod(spvSMod(_6778, _6819) + _6819, _6819);
+                        int _6832 = _6819.x;
+                        uint _6838 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[1u].x + uint((_6826.y * _6832) + _6826.x);
+                        uint _6840 = _6838 >> 2u;
+                        uint _6842 = _6838 & 3u;
+                        float4 _6861 = float4(float(((device uint*)&_952.Texels[_6840])[_6842] & 255u), float((((device uint*)&_952.Texels[_6840])[_6842] >> 8u) & 255u), float((((device uint*)&_952.Texels[_6840])[_6842] >> 16u) & 255u), float(((device uint*)&_952.Texels[_6840])[_6842] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        bool _6865 = (_702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[1u].w & 1u) != 0u;
+                        float4 _18707;
+                        if (_6865)
+                        {
+                            float3 _6891 = select(_6861.xyz * float3(0.077399380505084991455078125), powr((_6861.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _6861.xyz > float3(0.040449999272823333740234375));
+                            float4 _18313 = _6861;
+                            _18313.x = _6891.x;
+                            _18313.y = _6891.y;
+                            _18313.z = _6891.z;
+                            _18707 = _18313;
+                        }
+                        else
+                        {
+                            _18707 = _6861;
+                        }
+                        int2 _6908 = spvSMod(spvSMod(_6778 + int2(1, 0), _6819) + _6819, _6819);
+                        uint _6920 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[1u].x + uint((_6908.y * _6832) + _6908.x);
+                        uint _6922 = _6920 >> 2u;
+                        uint _6924 = _6920 & 3u;
+                        float4 _6943 = float4(float(((device uint*)&_952.Texels[_6922])[_6924] & 255u), float((((device uint*)&_952.Texels[_6922])[_6924] >> 8u) & 255u), float((((device uint*)&_952.Texels[_6922])[_6924] >> 16u) & 255u), float(((device uint*)&_952.Texels[_6922])[_6924] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        float4 _18708;
+                        if (_6865)
+                        {
+                            float3 _6973 = select(_6943.xyz * float3(0.077399380505084991455078125), powr((_6943.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _6943.xyz > float3(0.040449999272823333740234375));
+                            float4 _18324 = _6943;
+                            _18324.x = _6973.x;
+                            _18324.y = _6973.y;
+                            _18324.z = _6973.z;
+                            _18708 = _18324;
+                        }
+                        else
+                        {
+                            _18708 = _6943;
+                        }
+                        float4 _6790 = float4(_6780.x);
+                        int2 _6990 = spvSMod(spvSMod(_6778 + int2(0, 1), _6819) + _6819, _6819);
+                        uint _7002 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[1u].x + uint((_6990.y * _6832) + _6990.x);
+                        uint _7004 = _7002 >> 2u;
+                        uint _7006 = _7002 & 3u;
+                        float4 _7025 = float4(float(((device uint*)&_952.Texels[_7004])[_7006] & 255u), float((((device uint*)&_952.Texels[_7004])[_7006] >> 8u) & 255u), float((((device uint*)&_952.Texels[_7004])[_7006] >> 16u) & 255u), float(((device uint*)&_952.Texels[_7004])[_7006] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        float4 _18709;
+                        if (_6865)
+                        {
+                            float3 _7055 = select(_7025.xyz * float3(0.077399380505084991455078125), powr((_7025.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _7025.xyz > float3(0.040449999272823333740234375));
+                            float4 _18336 = _7025;
+                            _18336.x = _7055.x;
+                            _18336.y = _7055.y;
+                            _18336.z = _7055.z;
+                            _18709 = _18336;
+                        }
+                        else
+                        {
+                            _18709 = _7025;
+                        }
+                        int2 _7072 = spvSMod(spvSMod(_6778 + int2(1), _6819) + _6819, _6819);
+                        uint _7084 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[1u].x + uint((_7072.y * _6832) + _7072.x);
+                        uint _7086 = _7084 >> 2u;
+                        uint _7088 = _7084 & 3u;
+                        float4 _7107 = float4(float(((device uint*)&_952.Texels[_7086])[_7088] & 255u), float((((device uint*)&_952.Texels[_7086])[_7088] >> 8u) & 255u), float((((device uint*)&_952.Texels[_7086])[_7088] >> 16u) & 255u), float(((device uint*)&_952.Texels[_7086])[_7088] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        float4 _18710;
+                        if (_6865)
+                        {
+                            float3 _7137 = select(_7107.xyz * float3(0.077399380505084991455078125), powr((_7107.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _7107.xyz > float3(0.040449999272823333740234375));
+                            float4 _18347 = _7107;
+                            _18347.x = _7137.x;
+                            _18347.y = _7137.y;
+                            _18347.z = _7137.z;
+                            _18710 = _18347;
+                        }
+                        else
+                        {
+                            _18710 = _7107;
+                        }
+                        _12481 = mix(mix(_18707, _18708, _6790), mix(_18709, _18710, _6790), float4(_6780.y));
+                        break;
+                    } while(false);
+                    float3 _6620 = (_12481.xyz * 2.0) - float3(1.0);
+                    float2 _6625 = _6620.xy * _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Parameters.w;
+                    float3 _6644 = fast::normalize(((_6594 * _6625.x) + (((cross(_12471, _6594) * _6574.w) * sign(determinant(_6435))) * _6625.y)) + (_12471 * _6620.z));
+                    float4 _12530;
+                    do
+                    {
+                        bool _7156 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[0u].y == 0u;
+                        bool _7163;
+                        if (!_7156)
+                        {
+                            _7163 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[0u].z == 0u;
+                        }
+                        else
+                        {
+                            _7163 = _7156;
+                        }
+                        if (_7163)
+                        {
+                            _12530 = float4(1.0);
+                            break;
+                        }
+                        float2 _7174 = (fract(_6557) * float2(_702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[0u].yz)) - float2(0.5);
+                        int2 _7177 = int2(floor(_7174));
+                        float2 _7179 = fract(_7174);
+                        int2 _7218 = int2(_702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[0u].yz);
+                        int2 _7225 = spvSMod(spvSMod(_7177, _7218) + _7218, _7218);
+                        int _7231 = _7218.x;
+                        uint _7237 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[0u].x + uint((_7225.y * _7231) + _7225.x);
+                        uint _7239 = _7237 >> 2u;
+                        uint _7241 = _7237 & 3u;
+                        float4 _7260 = float4(float(((device uint*)&_952.Texels[_7239])[_7241] & 255u), float((((device uint*)&_952.Texels[_7239])[_7241] >> 8u) & 255u), float((((device uint*)&_952.Texels[_7239])[_7241] >> 16u) & 255u), float(((device uint*)&_952.Texels[_7239])[_7241] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        bool _7264 = (_702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[0u].w & 1u) != 0u;
+                        float4 _18711;
+                        if (_7264)
+                        {
+                            float3 _7290 = select(_7260.xyz * float3(0.077399380505084991455078125), powr((_7260.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _7260.xyz > float3(0.040449999272823333740234375));
+                            float4 _18370 = _7260;
+                            _18370.x = _7290.x;
+                            _18370.y = _7290.y;
+                            _18370.z = _7290.z;
+                            _18711 = _18370;
+                        }
+                        else
+                        {
+                            _18711 = _7260;
+                        }
+                        int2 _7307 = spvSMod(spvSMod(_7177 + int2(1, 0), _7218) + _7218, _7218);
+                        uint _7319 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[0u].x + uint((_7307.y * _7231) + _7307.x);
+                        uint _7321 = _7319 >> 2u;
+                        uint _7323 = _7319 & 3u;
+                        float4 _7342 = float4(float(((device uint*)&_952.Texels[_7321])[_7323] & 255u), float((((device uint*)&_952.Texels[_7321])[_7323] >> 8u) & 255u), float((((device uint*)&_952.Texels[_7321])[_7323] >> 16u) & 255u), float(((device uint*)&_952.Texels[_7321])[_7323] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        float4 _18712;
+                        if (_7264)
+                        {
+                            float3 _7372 = select(_7342.xyz * float3(0.077399380505084991455078125), powr((_7342.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _7342.xyz > float3(0.040449999272823333740234375));
+                            float4 _18381 = _7342;
+                            _18381.x = _7372.x;
+                            _18381.y = _7372.y;
+                            _18381.z = _7372.z;
+                            _18712 = _18381;
+                        }
+                        else
+                        {
+                            _18712 = _7342;
+                        }
+                        float4 _7189 = float4(_7179.x);
+                        int2 _7389 = spvSMod(spvSMod(_7177 + int2(0, 1), _7218) + _7218, _7218);
+                        uint _7401 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[0u].x + uint((_7389.y * _7231) + _7389.x);
+                        uint _7403 = _7401 >> 2u;
+                        uint _7405 = _7401 & 3u;
+                        float4 _7424 = float4(float(((device uint*)&_952.Texels[_7403])[_7405] & 255u), float((((device uint*)&_952.Texels[_7403])[_7405] >> 8u) & 255u), float((((device uint*)&_952.Texels[_7403])[_7405] >> 16u) & 255u), float(((device uint*)&_952.Texels[_7403])[_7405] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        float4 _18713;
+                        if (_7264)
+                        {
+                            float3 _7454 = select(_7424.xyz * float3(0.077399380505084991455078125), powr((_7424.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _7424.xyz > float3(0.040449999272823333740234375));
+                            float4 _18393 = _7424;
+                            _18393.x = _7454.x;
+                            _18393.y = _7454.y;
+                            _18393.z = _7454.z;
+                            _18713 = _18393;
+                        }
+                        else
+                        {
+                            _18713 = _7424;
+                        }
+                        int2 _7471 = spvSMod(spvSMod(_7177 + int2(1), _7218) + _7218, _7218);
+                        uint _7483 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[0u].x + uint((_7471.y * _7231) + _7471.x);
+                        uint _7485 = _7483 >> 2u;
+                        uint _7487 = _7483 & 3u;
+                        float4 _7506 = float4(float(((device uint*)&_952.Texels[_7485])[_7487] & 255u), float((((device uint*)&_952.Texels[_7485])[_7487] >> 8u) & 255u), float((((device uint*)&_952.Texels[_7485])[_7487] >> 16u) & 255u), float(((device uint*)&_952.Texels[_7485])[_7487] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        float4 _18714;
+                        if (_7264)
+                        {
+                            float3 _7536 = select(_7506.xyz * float3(0.077399380505084991455078125), powr((_7506.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _7506.xyz > float3(0.040449999272823333740234375));
+                            float4 _18404 = _7506;
+                            _18404.x = _7536.x;
+                            _18404.y = _7536.y;
+                            _18404.z = _7536.z;
+                            _18714 = _18404;
+                        }
+                        else
+                        {
+                            _18714 = _7506;
+                        }
+                        _12530 = mix(mix(_18711, _18712, _7189), mix(_18713, _18714, _7189), float4(_7179.y));
+                        break;
+                    } while(false);
+                    float4 _12593;
+                    do
+                    {
+                        bool _7555 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[3u].y == 0u;
+                        bool _7562;
+                        if (!_7555)
+                        {
+                            _7562 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[3u].z == 0u;
+                        }
+                        else
+                        {
+                            _7562 = _7555;
+                        }
+                        if (_7562)
+                        {
+                            _12593 = float4(1.0);
+                            break;
+                        }
+                        float2 _7573 = (fract(_6557) * float2(_702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[3u].yz)) - float2(0.5);
+                        int2 _7576 = int2(floor(_7573));
+                        float2 _7578 = fract(_7573);
+                        int2 _7617 = int2(_702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[3u].yz);
+                        int2 _7624 = spvSMod(spvSMod(_7576, _7617) + _7617, _7617);
+                        int _7630 = _7617.x;
+                        uint _7636 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[3u].x + uint((_7624.y * _7630) + _7624.x);
+                        uint _7638 = _7636 >> 2u;
+                        uint _7640 = _7636 & 3u;
+                        float4 _7659 = float4(float(((device uint*)&_952.Texels[_7638])[_7640] & 255u), float((((device uint*)&_952.Texels[_7638])[_7640] >> 8u) & 255u), float((((device uint*)&_952.Texels[_7638])[_7640] >> 16u) & 255u), float(((device uint*)&_952.Texels[_7638])[_7640] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        bool _7663 = (_702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[3u].w & 1u) != 0u;
+                        float4 _18715;
+                        if (_7663)
+                        {
+                            float3 _7689 = select(_7659.xyz * float3(0.077399380505084991455078125), powr((_7659.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _7659.xyz > float3(0.040449999272823333740234375));
+                            float4 _18420 = _7659;
+                            _18420.x = _7689.x;
+                            _18420.y = _7689.y;
+                            _18420.z = _7689.z;
+                            _18715 = _18420;
+                        }
+                        else
+                        {
+                            _18715 = _7659;
+                        }
+                        int2 _7706 = spvSMod(spvSMod(_7576 + int2(1, 0), _7617) + _7617, _7617);
+                        uint _7718 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[3u].x + uint((_7706.y * _7630) + _7706.x);
+                        uint _7720 = _7718 >> 2u;
+                        uint _7722 = _7718 & 3u;
+                        float4 _7741 = float4(float(((device uint*)&_952.Texels[_7720])[_7722] & 255u), float((((device uint*)&_952.Texels[_7720])[_7722] >> 8u) & 255u), float((((device uint*)&_952.Texels[_7720])[_7722] >> 16u) & 255u), float(((device uint*)&_952.Texels[_7720])[_7722] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        float4 _18716;
+                        if (_7663)
+                        {
+                            float3 _7771 = select(_7741.xyz * float3(0.077399380505084991455078125), powr((_7741.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _7741.xyz > float3(0.040449999272823333740234375));
+                            float4 _18431 = _7741;
+                            _18431.x = _7771.x;
+                            _18431.y = _7771.y;
+                            _18431.z = _7771.z;
+                            _18716 = _18431;
+                        }
+                        else
+                        {
+                            _18716 = _7741;
+                        }
+                        float4 _7588 = float4(_7578.x);
+                        int2 _7788 = spvSMod(spvSMod(_7576 + int2(0, 1), _7617) + _7617, _7617);
+                        uint _7800 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[3u].x + uint((_7788.y * _7630) + _7788.x);
+                        uint _7802 = _7800 >> 2u;
+                        uint _7804 = _7800 & 3u;
+                        float4 _7823 = float4(float(((device uint*)&_952.Texels[_7802])[_7804] & 255u), float((((device uint*)&_952.Texels[_7802])[_7804] >> 8u) & 255u), float((((device uint*)&_952.Texels[_7802])[_7804] >> 16u) & 255u), float(((device uint*)&_952.Texels[_7802])[_7804] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        float4 _18717;
+                        if (_7663)
+                        {
+                            float3 _7853 = select(_7823.xyz * float3(0.077399380505084991455078125), powr((_7823.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _7823.xyz > float3(0.040449999272823333740234375));
+                            float4 _18443 = _7823;
+                            _18443.x = _7853.x;
+                            _18443.y = _7853.y;
+                            _18443.z = _7853.z;
+                            _18717 = _18443;
+                        }
+                        else
+                        {
+                            _18717 = _7823;
+                        }
+                        int2 _7870 = spvSMod(spvSMod(_7576 + int2(1), _7617) + _7617, _7617);
+                        uint _7882 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[3u].x + uint((_7870.y * _7630) + _7870.x);
+                        uint _7884 = _7882 >> 2u;
+                        uint _7886 = _7882 & 3u;
+                        float4 _7905 = float4(float(((device uint*)&_952.Texels[_7884])[_7886] & 255u), float((((device uint*)&_952.Texels[_7884])[_7886] >> 8u) & 255u), float((((device uint*)&_952.Texels[_7884])[_7886] >> 16u) & 255u), float(((device uint*)&_952.Texels[_7884])[_7886] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        float4 _18718;
+                        if (_7663)
+                        {
+                            float3 _7935 = select(_7905.xyz * float3(0.077399380505084991455078125), powr((_7905.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _7905.xyz > float3(0.040449999272823333740234375));
+                            float4 _18454 = _7905;
+                            _18454.x = _7935.x;
+                            _18454.y = _7935.y;
+                            _18454.z = _7935.z;
+                            _18718 = _18454;
+                        }
+                        else
+                        {
+                            _18718 = _7905;
+                        }
+                        _12593 = mix(mix(_18715, _18716, _7588), mix(_18717, _18718, _7588), float4(_7578.y));
+                        break;
+                    } while(false);
+                    float _6670 = fast::clamp(_702.Materials[_674.Instances[_6278.Instance].Metadata.x].Parameters.x * _12593.x, 0.0, 1.0);
+                    float4 _12628;
+                    do
+                    {
+                        bool _7954 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[4u].y == 0u;
+                        bool _7961;
+                        if (!_7954)
+                        {
+                            _7961 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[4u].z == 0u;
+                        }
+                        else
+                        {
+                            _7961 = _7954;
+                        }
+                        if (_7961)
+                        {
+                            _12628 = float4(1.0);
+                            break;
+                        }
+                        float2 _7972 = (fract(_6557) * float2(_702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[4u].yz)) - float2(0.5);
+                        int2 _7975 = int2(floor(_7972));
+                        float2 _7977 = fract(_7972);
+                        int2 _8016 = int2(_702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[4u].yz);
+                        int2 _8023 = spvSMod(spvSMod(_7975, _8016) + _8016, _8016);
+                        int _8029 = _8016.x;
+                        uint _8035 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[4u].x + uint((_8023.y * _8029) + _8023.x);
+                        uint _8037 = _8035 >> 2u;
+                        uint _8039 = _8035 & 3u;
+                        float4 _8058 = float4(float(((device uint*)&_952.Texels[_8037])[_8039] & 255u), float((((device uint*)&_952.Texels[_8037])[_8039] >> 8u) & 255u), float((((device uint*)&_952.Texels[_8037])[_8039] >> 16u) & 255u), float(((device uint*)&_952.Texels[_8037])[_8039] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        bool _8062 = (_702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[4u].w & 1u) != 0u;
+                        float4 _18719;
+                        if (_8062)
+                        {
+                            float3 _8088 = select(_8058.xyz * float3(0.077399380505084991455078125), powr((_8058.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _8058.xyz > float3(0.040449999272823333740234375));
+                            float4 _18470 = _8058;
+                            _18470.x = _8088.x;
+                            _18470.y = _8088.y;
+                            _18470.z = _8088.z;
+                            _18719 = _18470;
+                        }
+                        else
+                        {
+                            _18719 = _8058;
+                        }
+                        int2 _8105 = spvSMod(spvSMod(_7975 + int2(1, 0), _8016) + _8016, _8016);
+                        uint _8117 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[4u].x + uint((_8105.y * _8029) + _8105.x);
+                        uint _8119 = _8117 >> 2u;
+                        uint _8121 = _8117 & 3u;
+                        float4 _8140 = float4(float(((device uint*)&_952.Texels[_8119])[_8121] & 255u), float((((device uint*)&_952.Texels[_8119])[_8121] >> 8u) & 255u), float((((device uint*)&_952.Texels[_8119])[_8121] >> 16u) & 255u), float(((device uint*)&_952.Texels[_8119])[_8121] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        float4 _18720;
+                        if (_8062)
+                        {
+                            float3 _8170 = select(_8140.xyz * float3(0.077399380505084991455078125), powr((_8140.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _8140.xyz > float3(0.040449999272823333740234375));
+                            float4 _18481 = _8140;
+                            _18481.x = _8170.x;
+                            _18481.y = _8170.y;
+                            _18481.z = _8170.z;
+                            _18720 = _18481;
+                        }
+                        else
+                        {
+                            _18720 = _8140;
+                        }
+                        float4 _7987 = float4(_7977.x);
+                        int2 _8187 = spvSMod(spvSMod(_7975 + int2(0, 1), _8016) + _8016, _8016);
+                        uint _8199 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[4u].x + uint((_8187.y * _8029) + _8187.x);
+                        uint _8201 = _8199 >> 2u;
+                        uint _8203 = _8199 & 3u;
+                        float4 _8222 = float4(float(((device uint*)&_952.Texels[_8201])[_8203] & 255u), float((((device uint*)&_952.Texels[_8201])[_8203] >> 8u) & 255u), float((((device uint*)&_952.Texels[_8201])[_8203] >> 16u) & 255u), float(((device uint*)&_952.Texels[_8201])[_8203] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        float4 _18721;
+                        if (_8062)
+                        {
+                            float3 _8252 = select(_8222.xyz * float3(0.077399380505084991455078125), powr((_8222.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _8222.xyz > float3(0.040449999272823333740234375));
+                            float4 _18493 = _8222;
+                            _18493.x = _8252.x;
+                            _18493.y = _8252.y;
+                            _18493.z = _8252.z;
+                            _18721 = _18493;
+                        }
+                        else
+                        {
+                            _18721 = _8222;
+                        }
+                        int2 _8269 = spvSMod(spvSMod(_7975 + int2(1), _8016) + _8016, _8016);
+                        uint _8281 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[4u].x + uint((_8269.y * _8029) + _8269.x);
+                        uint _8283 = _8281 >> 2u;
+                        uint _8285 = _8281 & 3u;
+                        float4 _8304 = float4(float(((device uint*)&_952.Texels[_8283])[_8285] & 255u), float((((device uint*)&_952.Texels[_8283])[_8285] >> 8u) & 255u), float((((device uint*)&_952.Texels[_8283])[_8285] >> 16u) & 255u), float(((device uint*)&_952.Texels[_8283])[_8285] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        float4 _18722;
+                        if (_8062)
+                        {
+                            float3 _8334 = select(_8304.xyz * float3(0.077399380505084991455078125), powr((_8304.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _8304.xyz > float3(0.040449999272823333740234375));
+                            float4 _18504 = _8304;
+                            _18504.x = _8334.x;
+                            _18504.y = _8334.y;
+                            _18504.z = _8334.z;
+                            _18722 = _18504;
+                        }
+                        else
+                        {
+                            _18722 = _8304;
+                        }
+                        _12628 = mix(mix(_18719, _18720, _7987), mix(_18721, _18722, _7987), float4(_7977.y));
+                        break;
+                    } while(false);
+                    float4 _12669;
+                    do
+                    {
+                        bool _8353 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[5u].y == 0u;
+                        bool _8360;
+                        if (!_8353)
+                        {
+                            _8360 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[5u].z == 0u;
+                        }
+                        else
+                        {
+                            _8360 = _8353;
+                        }
+                        if (_8360)
+                        {
+                            _12669 = float4(1.0);
+                            break;
+                        }
+                        float2 _8371 = (fract(_6557) * float2(_702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[5u].yz)) - float2(0.5);
+                        int2 _8374 = int2(floor(_8371));
+                        float2 _8376 = fract(_8371);
+                        int2 _8415 = int2(_702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[5u].yz);
+                        int2 _8422 = spvSMod(spvSMod(_8374, _8415) + _8415, _8415);
+                        int _8428 = _8415.x;
+                        uint _8434 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[5u].x + uint((_8422.y * _8428) + _8422.x);
+                        uint _8436 = _8434 >> 2u;
+                        uint _8438 = _8434 & 3u;
+                        float4 _8457 = float4(float(((device uint*)&_952.Texels[_8436])[_8438] & 255u), float((((device uint*)&_952.Texels[_8436])[_8438] >> 8u) & 255u), float((((device uint*)&_952.Texels[_8436])[_8438] >> 16u) & 255u), float(((device uint*)&_952.Texels[_8436])[_8438] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        bool _8461 = (_702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[5u].w & 1u) != 0u;
+                        float4 _18723;
+                        if (_8461)
+                        {
+                            float3 _8487 = select(_8457.xyz * float3(0.077399380505084991455078125), powr((_8457.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _8457.xyz > float3(0.040449999272823333740234375));
+                            float4 _18520 = _8457;
+                            _18520.x = _8487.x;
+                            _18520.y = _8487.y;
+                            _18520.z = _8487.z;
+                            _18723 = _18520;
+                        }
+                        else
+                        {
+                            _18723 = _8457;
+                        }
+                        int2 _8504 = spvSMod(spvSMod(_8374 + int2(1, 0), _8415) + _8415, _8415);
+                        uint _8516 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[5u].x + uint((_8504.y * _8428) + _8504.x);
+                        uint _8518 = _8516 >> 2u;
+                        uint _8520 = _8516 & 3u;
+                        float4 _8539 = float4(float(((device uint*)&_952.Texels[_8518])[_8520] & 255u), float((((device uint*)&_952.Texels[_8518])[_8520] >> 8u) & 255u), float((((device uint*)&_952.Texels[_8518])[_8520] >> 16u) & 255u), float(((device uint*)&_952.Texels[_8518])[_8520] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        float4 _18724;
+                        if (_8461)
+                        {
+                            float3 _8569 = select(_8539.xyz * float3(0.077399380505084991455078125), powr((_8539.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _8539.xyz > float3(0.040449999272823333740234375));
+                            float4 _18531 = _8539;
+                            _18531.x = _8569.x;
+                            _18531.y = _8569.y;
+                            _18531.z = _8569.z;
+                            _18724 = _18531;
+                        }
+                        else
+                        {
+                            _18724 = _8539;
+                        }
+                        float4 _8386 = float4(_8376.x);
+                        int2 _8586 = spvSMod(spvSMod(_8374 + int2(0, 1), _8415) + _8415, _8415);
+                        uint _8598 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[5u].x + uint((_8586.y * _8428) + _8586.x);
+                        uint _8600 = _8598 >> 2u;
+                        uint _8602 = _8598 & 3u;
+                        float4 _8621 = float4(float(((device uint*)&_952.Texels[_8600])[_8602] & 255u), float((((device uint*)&_952.Texels[_8600])[_8602] >> 8u) & 255u), float((((device uint*)&_952.Texels[_8600])[_8602] >> 16u) & 255u), float(((device uint*)&_952.Texels[_8600])[_8602] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        float4 _18725;
+                        if (_8461)
+                        {
+                            float3 _8651 = select(_8621.xyz * float3(0.077399380505084991455078125), powr((_8621.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _8621.xyz > float3(0.040449999272823333740234375));
+                            float4 _18543 = _8621;
+                            _18543.x = _8651.x;
+                            _18543.y = _8651.y;
+                            _18543.z = _8651.z;
+                            _18725 = _18543;
+                        }
+                        else
+                        {
+                            _18725 = _8621;
+                        }
+                        int2 _8668 = spvSMod(spvSMod(_8374 + int2(1), _8415) + _8415, _8415);
+                        uint _8680 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[5u].x + uint((_8668.y * _8428) + _8668.x);
+                        uint _8682 = _8680 >> 2u;
+                        uint _8684 = _8680 & 3u;
+                        float4 _8703 = float4(float(((device uint*)&_952.Texels[_8682])[_8684] & 255u), float((((device uint*)&_952.Texels[_8682])[_8684] >> 8u) & 255u), float((((device uint*)&_952.Texels[_8682])[_8684] >> 16u) & 255u), float(((device uint*)&_952.Texels[_8682])[_8684] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        float4 _18726;
+                        if (_8461)
+                        {
+                            float3 _8733 = select(_8703.xyz * float3(0.077399380505084991455078125), powr((_8703.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _8703.xyz > float3(0.040449999272823333740234375));
+                            float4 _18554 = _8703;
+                            _18554.x = _8733.x;
+                            _18554.y = _8733.y;
+                            _18554.z = _8733.z;
+                            _18726 = _18554;
+                        }
+                        else
+                        {
+                            _18726 = _8703;
+                        }
+                        _12669 = mix(mix(_18723, _18724, _8386), mix(_18725, _18726, _8386), float4(_8376.y));
+                        break;
+                    } while(false);
+                    float4 _12751;
+                    do
+                    {
+                        bool _8752 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[6u].y == 0u;
+                        bool _8759;
+                        if (!_8752)
+                        {
+                            _8759 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[6u].z == 0u;
+                        }
+                        else
+                        {
+                            _8759 = _8752;
+                        }
+                        if (_8759)
+                        {
+                            _12751 = float4(1.0);
+                            break;
+                        }
+                        float2 _8770 = (fract(_6557) * float2(_702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[6u].yz)) - float2(0.5);
+                        int2 _8773 = int2(floor(_8770));
+                        float2 _8775 = fract(_8770);
+                        int2 _8814 = int2(_702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[6u].yz);
+                        int2 _8821 = spvSMod(spvSMod(_8773, _8814) + _8814, _8814);
+                        int _8827 = _8814.x;
+                        uint _8833 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[6u].x + uint((_8821.y * _8827) + _8821.x);
+                        uint _8835 = _8833 >> 2u;
+                        uint _8837 = _8833 & 3u;
+                        float4 _8856 = float4(float(((device uint*)&_952.Texels[_8835])[_8837] & 255u), float((((device uint*)&_952.Texels[_8835])[_8837] >> 8u) & 255u), float((((device uint*)&_952.Texels[_8835])[_8837] >> 16u) & 255u), float(((device uint*)&_952.Texels[_8835])[_8837] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        bool _8860 = (_702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[6u].w & 1u) != 0u;
+                        float4 _18727;
+                        if (_8860)
+                        {
+                            float3 _8886 = select(_8856.xyz * float3(0.077399380505084991455078125), powr((_8856.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _8856.xyz > float3(0.040449999272823333740234375));
+                            float4 _18569 = _8856;
+                            _18569.x = _8886.x;
+                            _18569.y = _8886.y;
+                            _18569.z = _8886.z;
+                            _18727 = _18569;
+                        }
+                        else
+                        {
+                            _18727 = _8856;
+                        }
+                        int2 _8903 = spvSMod(spvSMod(_8773 + int2(1, 0), _8814) + _8814, _8814);
+                        uint _8915 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[6u].x + uint((_8903.y * _8827) + _8903.x);
+                        uint _8917 = _8915 >> 2u;
+                        uint _8919 = _8915 & 3u;
+                        float4 _8938 = float4(float(((device uint*)&_952.Texels[_8917])[_8919] & 255u), float((((device uint*)&_952.Texels[_8917])[_8919] >> 8u) & 255u), float((((device uint*)&_952.Texels[_8917])[_8919] >> 16u) & 255u), float(((device uint*)&_952.Texels[_8917])[_8919] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        float4 _18728;
+                        if (_8860)
+                        {
+                            float3 _8968 = select(_8938.xyz * float3(0.077399380505084991455078125), powr((_8938.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _8938.xyz > float3(0.040449999272823333740234375));
+                            float4 _18580 = _8938;
+                            _18580.x = _8968.x;
+                            _18580.y = _8968.y;
+                            _18580.z = _8968.z;
+                            _18728 = _18580;
+                        }
+                        else
+                        {
+                            _18728 = _8938;
+                        }
+                        float4 _8785 = float4(_8775.x);
+                        int2 _8985 = spvSMod(spvSMod(_8773 + int2(0, 1), _8814) + _8814, _8814);
+                        uint _8997 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[6u].x + uint((_8985.y * _8827) + _8985.x);
+                        uint _8999 = _8997 >> 2u;
+                        uint _9001 = _8997 & 3u;
+                        float4 _9020 = float4(float(((device uint*)&_952.Texels[_8999])[_9001] & 255u), float((((device uint*)&_952.Texels[_8999])[_9001] >> 8u) & 255u), float((((device uint*)&_952.Texels[_8999])[_9001] >> 16u) & 255u), float(((device uint*)&_952.Texels[_8999])[_9001] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        float4 _18729;
+                        if (_8860)
+                        {
+                            float3 _9050 = select(_9020.xyz * float3(0.077399380505084991455078125), powr((_9020.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _9020.xyz > float3(0.040449999272823333740234375));
+                            float4 _18592 = _9020;
+                            _18592.x = _9050.x;
+                            _18592.y = _9050.y;
+                            _18592.z = _9050.z;
+                            _18729 = _18592;
+                        }
+                        else
+                        {
+                            _18729 = _9020;
+                        }
+                        int2 _9067 = spvSMod(spvSMod(_8773 + int2(1), _8814) + _8814, _8814);
+                        uint _9079 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Textures[6u].x + uint((_9067.y * _8827) + _9067.x);
+                        uint _9081 = _9079 >> 2u;
+                        uint _9083 = _9079 & 3u;
+                        float4 _9102 = float4(float(((device uint*)&_952.Texels[_9081])[_9083] & 255u), float((((device uint*)&_952.Texels[_9081])[_9083] >> 8u) & 255u), float((((device uint*)&_952.Texels[_9081])[_9083] >> 16u) & 255u), float(((device uint*)&_952.Texels[_9081])[_9083] >> 24u)) * float4(0.0039215688593685626983642578125);
+                        float4 _18730;
+                        if (_8860)
+                        {
+                            float3 _9132 = select(_9102.xyz * float3(0.077399380505084991455078125), powr((_9102.xyz + float3(0.054999999701976776123046875)) * float3(0.947867333889007568359375), float3(2.400000095367431640625)), _9102.xyz > float3(0.040449999272823333740234375));
+                            float4 _18603 = _9102;
+                            _18603.x = _9132.x;
+                            _18603.y = _9132.y;
+                            _18603.z = _9132.z;
+                            _18730 = _18603;
+                        }
+                        else
+                        {
+                            _18730 = _9102;
+                        }
+                        _12751 = mix(mix(_18727, _18728, _8785), mix(_18729, _18730, _8785), float4(_8775.y));
+                        break;
+                    } while(false);
+                    float3 _6706 = (_674.Instances[_6278.Instance].Transform * float4(((_813.Triangles[_6278.Triangle].Position[0u].xyz * _6278.Bary.x) + (_813.Triangles[_6278.Triangle].Position[1u].xyz * _6278.Bary.y)) + (_813.Triangles[_6278.Triangle].Position[2u].xyz * _6278.Bary.z), 1.0)).xyz;
+                    float3 _6710 = ((_12530 * _702.Materials[_674.Instances[_6278.Instance].Metadata.x].BaseColor) * _674.Instances[_6278.Instance].Tint).xyz;
+                    spvUnsafeArray<uint4, 8> _11455;
+                    _11455[0] = _702.Materials[((device uint*)&_674.Instances[_6278.Instance].Metadata)[0u]].Textures[0u];
+                    _11455[1] = _702.Materials[((device uint*)&_674.Instances[_6278.Instance].Metadata)[0u]].Textures[1u];
+                    _11455[2] = _702.Materials[((device uint*)&_674.Instances[_6278.Instance].Metadata)[0u]].Textures[2u];
+                    _11455[3] = _702.Materials[((device uint*)&_674.Instances[_6278.Instance].Metadata)[0u]].Textures[3u];
+                    _11455[4] = _702.Materials[((device uint*)&_674.Instances[_6278.Instance].Metadata)[0u]].Textures[4u];
+                    _11455[5] = _702.Materials[((device uint*)&_674.Instances[_6278.Instance].Metadata)[0u]].Textures[5u];
+                    _11455[6] = _702.Materials[((device uint*)&_674.Instances[_6278.Instance].Metadata)[0u]].Textures[6u];
+                    _11455[7] = _702.Materials[((device uint*)&_674.Instances[_6278.Instance].Metadata)[0u]].Textures[7u];
+                    bool _13100;
+                    _13100 = _6515;
+                    bool _2275;
+                    for (int _13097 = 0; _13097 < 8; _13100 = _2275, _13097++)
+                    {
+                        if (_13100)
+                        {
+                            _2275 = _11455[_13097].y == 0u;
+                        }
+                        else
+                        {
+                            _2275 = _13100;
+                        }
+                    }
+                    _15801 = _12502;
+                    _15749 = _6706;
+                    _15714 = _13100;
+                    _14973 = _6706;
+                    _14906 = _12502;
+                    _14837 = select(_6644, _12502, bool3(dot(_6644, _12502) < 0.001000000047497451305389404296875));
+                    _14768 = _6710;
+                    _14699 = select(float3(0.0), _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Emission.xyz * _12751.xyz, bool3(_6515));
+                    _14630 = mix(float3(0.07999999821186065673828125 * fast::clamp(_702.Materials[_674.Instances[_6278.Instance].Metadata.x].Parameters.z * _12669.x, 0.0, 1.0)), _6710, float3(_6670));
+                    _14560 = fast::clamp(_702.Materials[_674.Instances[_6278.Instance].Metadata.x].Parameters.y * _12628.x, 0.0, 1.0);
+                    _14491 = _6670;
+                    _14352 = _6515;
+                    _14283 = _702.Materials[_674.Instances[_6278.Instance].Metadata.x].Flags.y != 0u;
+                }
+                else
+                {
+                    _15801 = float3(0.0);
+                    _15749 = float3(0.0);
+                    _15714 = _6278.Kind == 2u;
+                    _14973 = _14600;
+                    _14906 = _14600;
+                    _14837 = _14600;
+                    _14768 = _14600;
+                    _14699 = _14600;
+                    _14630 = _14600;
+                    _14560 = _14392;
+                    _14491 = _14392;
+                    _14352 = _14253;
+                    _14283 = _14253;
+                }
+                _18733 = _2164;
+                _15800 = _15801;
+                _15764 = _6278.Instance;
+                _15748 = _15749;
+                _15713 = _15714;
+                _14972 = _14973;
+                _14905 = _14906;
+                _14836 = _14837;
+                _14767 = _14768;
+                _14698 = _14699;
+                _14629 = _14630;
+                _14559 = _14560;
+                _14490 = _14491;
+                _14351 = _14352;
+                _14282 = _14283;
+                _14097 = _6278.Kind;
+                _13259 = _6278.Distance;
+            }
+            _18732 = _18733;
+            _15799 = _15800;
+            _15763 = _15764;
+            _15747 = _15748;
+            _15712 = _15713;
+            _14923 = _14972;
+            _14856 = _14905;
+            _14787 = _14836;
+            _14718 = _14767;
+            _14649 = _14698;
+            _14579 = _14629;
+            _14510 = _14559;
+            _14441 = _14490;
+            _14302 = _14351;
+            _14232 = _14282;
+            _14096 = _14097;
+            _13258 = _13259;
+        }
+        else
+        {
+            _18732 = _2164;
+            _15799 = float3(0.0);
+            _15763 = 4294967295u;
+            _15747 = float3(0.0);
+            _15712 = false;
+            _14923 = _14600;
+            _14856 = _14600;
+            _14787 = _14600;
+            _14718 = _14600;
+            _14649 = _14600;
+            _14579 = _14600;
+            _14510 = _14392;
+            _14441 = _14392;
+            _14302 = _14253;
+            _14232 = _14253;
+            _14096 = 6u;
+            _13258 = 0.0;
+        }
+        float3 _15232;
+        float3 _15314;
+        float2 _18731;
+        if (_2180)
+        {
+            float2 _2293 = (in.InUV * DIA.Extent.xy) - float2(0.5);
+            int2 _2297 = int2(floor(_2293));
+            float2 _2300 = fract(_2293);
+            float _2309 = length(_3351 - DIA.Camera.xyz);
+            float _2314 = fast::max(0.00999999977648258209228515625, (_2309 * 4.0) / DIA.Extent.y);
+            float _2322 = fast::max(0.001000000047497451305389404296875, (1.5 * _3324) * _3324);
+            float _2338 = fast::max(0.00999999977648258209228515625, ((_2309 + _13258) * 4.0) / DIA.Extent.y);
+            float _2344 = cos(fast::max(0.001000000047497451305389404296875, 4.0 / DIA.Extent.y));
+            float3 _15285;
+            float3 _15367;
+            float2 _18777;
+            _18777 = _18732;
+            _15367 = float3(0.0);
+            _15285 = float3(0.0);
+            float3 _15660;
+            float3 _15935;
+            float2 _18822;
+            for (int _13310 = 0; _13310 < 2; _18777 = _18822, _15367 = _15935, _15285 = _15660, _13310++)
+            {
+                _18822 = _18777;
+                _15935 = _15367;
+                _15660 = _15285;
+                float3 _16578;
+                float3 _16709;
+                float2 _18837;
+                for (int _15505 = 0; _15505 < 2; _18822 = _18837, _15935 = _16709, _15660 = _16578, _15505++)
+                {
+                    int2 _2366 = _2297 + int2(_15505, _13310);
+                    bool _2371 = any(_2366 < int2(0));
+                    bool _2382;
+                    if (!_2371)
+                    {
+                        _2382 = any(_2366 >= int2(DIA.Extent.xy));
+                    }
+                    else
+                    {
+                        _2382 = _2371;
+                    }
+                    if (_2382)
+                    {
+                        _18837 = _18822;
+                        _16709 = _15935;
+                        _16578 = _15660;
+                        continue;
+                    }
+                    float _15510;
+                    if (_15505 == 0)
+                    {
+                        _15510 = 1.0 - _2300.x;
+                    }
+                    else
+                    {
+                        _15510 = _2300.x;
+                    }
+                    float _15513;
+                    if (_13310 == 0)
+                    {
+                        _15513 = 1.0 - _2300.y;
+                    }
+                    else
+                    {
+                        _15513 = _2300.y;
+                    }
+                    float _2411 = _15510 * _15513;
+                    bool _2413 = _2411 <= 0.0;
+                    bool _2431;
+                    if (!_2413)
+                    {
+                        _2431 = RawDiffuse.read(uint2(_2366), 0).w != float(_2891.Instance + 1u);
+                    }
+                    else
+                    {
+                        _2431 = _2413;
+                    }
+                    if (_2431)
+                    {
+                        _18837 = _18822;
+                        _16709 = _15935;
+                        _16578 = _15660;
+                        continue;
+                    }
+                    float3 _2444 = RawPosition.read(uint2(_2366), 0).xyz - _3351;
+                    float4 _2450 = RawNormal.read(uint2(_2366), 0);
+                    float3 _2453 = _2450.xyz;
+                    float _2456 = dot(_2453, _17949);
+                    float _2460 = length(_2444);
+                    bool _2472 = _2460 > _2314;
+                    bool _2483;
+                    if (!_2472)
+                    {
+                        _2483 = abs(dot(_2444, _17949)) > fast::max(0.00200000009499490261077880859375, _2460 * sqrt(fast::max(0.0, 1.0 - (_2456 * _2456))));
+                    }
+                    else
+                    {
+                        _2483 = _2472;
+                    }
+                    if (_2483 || (_2456 < 0.99500000476837158203125))
+                    {
+                        _18837 = _18822;
+                        _16709 = _15935;
+                        _16578 = _15660;
+                        continue;
+                    }
+                    float3 _16586;
+                    float2 _18829;
+                    if (_2159)
+                    {
+                        float2 _18619 = _18822;
+                        _18619.x = _18822.x + _2411;
+                        _18829 = _18619;
+                        _16586 = _15660 + (DenoisedDiffuse.read(uint2(_2366), 0).xyz * _2411);
+                    }
+                    else
+                    {
+                        _18829 = _18822;
+                        _16586 = _15660;
+                    }
+                    float4 _2514 = RawReflected.read(uint2(_2366), 0);
+                    float3 _2521 = DenoisedSpecular.read(uint2(_2366), 0).xyz;
+                    bool _2524 = !_2168;
+                    bool _2534;
+                    if (_2524)
+                    {
+                        _2534 = abs(_2450.w - _3324) < 0.00999999977648258209228515625;
+                    }
+                    else
+                    {
+                        _2534 = _2524;
+                    }
+                    bool _2541;
+                    if (_2534)
+                    {
+                        _2541 = _2456 >= cos(_2322);
+                    }
+                    else
+                    {
+                        _2541 = _2534;
+                    }
+                    bool _2547;
+                    if (_2541)
+                    {
+                        _2547 = _2514.w >= 0.0;
+                    }
+                    else
+                    {
+                        _2547 = _2541;
+                    }
+                    float _15698;
+                    if (_2168)
+                    {
+                        _15698 = 1.0;
+                    }
+                    else
+                    {
+                        _15698 = exp(((-4.0) * fast::max(0.0, 1.0 - _2456)) / (_2322 * _2322));
+                    }
+                    float _2566 = _2411 * _15698;
+                    bool _2569 = _2168 && _15712;
+                    bool _2575;
+                    if (_2569)
+                    {
+                        _2575 = _2450.w <= 0.0199999995529651641845703125;
+                    }
+                    else
+                    {
+                        _2575 = _2569;
+                    }
+                    bool _15908;
+                    float3 _15913;
+                    if (_2575 && (_2456 >= 0.999999523162841796875))
+                    {
+                        float _2589 = abs(RawSpecular.read(uint2(_2366), 0).w);
+                        bool _15912;
+                        if (_14096 == 2u)
+                        {
+                            bool _2600 = (_2514.w == 0.0) && (_2589 == 0.0);
+                            bool _2609;
+                            if (_2600)
+                            {
+                                _2609 = dot(_2514.xyz, _2173) >= _2344;
+                            }
+                            else
+                            {
+                                _2609 = _2600;
+                            }
+                            _15912 = _2609;
+                        }
+                        else
+                        {
+                            float3 _2613 = _2514.xyz;
+                            float3 _2615 = _2613 - _15747;
+                            bool _2628 = _2514.w == 1.0;
+                            bool _2637;
+                            if (_2628)
+                            {
+                                _2637 = _2589 == float(_15763 + 1u);
+                            }
+                            else
+                            {
+                                _2637 = _2628;
+                            }
+                            bool _2644;
+                            if (_2637)
+                            {
+                                _2644 = length(_2615) <= _2338;
+                            }
+                            else
+                            {
+                                _2644 = _2637;
+                            }
+                            bool _2655;
+                            if (_2644)
+                            {
+                                _2655 = abs(dot(_2615, _15799)) <= fast::max(0.00200000009499490261077880859375, _2338 * 0.0199999995529651641845703125);
+                            }
+                            else
+                            {
+                                _2655 = _2644;
+                            }
+                            bool _2663;
+                            if (_2655)
+                            {
+                                _2663 = dot(fast::normalize(_2613 - RawPosition.read(uint2(_2366), 0).xyz), _2173) >= _2344;
+                            }
+                            else
+                            {
+                                _2663 = _2655;
+                            }
+                            _15912 = _2663;
+                        }
+                        float3 _15843;
+                        if (DIA.Camera.w > 0.5)
+                        {
+                            _15843 = -DIA.CameraForward.xyz;
+                        }
+                        else
+                        {
+                            _15843 = fast::normalize(DIA.Camera.xyz - RawPosition.read(uint2(_2366), 0).xyz);
+                        }
+                        _15913 = _2521 * ((_3367 + (_6251 * powr(fast::clamp(1.0 - fast::max(dot(_17949, _3150), 0.0), 0.0, 1.0), 5.0))) / fast::max(_3367 + (_6251 * powr(fast::clamp(1.0 - fast::max(dot(_2453, _15843), 0.0), 0.0, 1.0), 5.0)), float3(9.9999999392252902907785028219223e-09)));
+                        _15908 = _15912;
+                    }
+                    else
+                    {
+                        _15913 = _2521;
+                        _15908 = _2547;
+                    }
+                    float3 _16710;
+                    float2 _18838;
+                    if (_15908)
+                    {
+                        float2 _18627 = _18829;
+                        _18627.y = _18829.y + _2566;
+                        _18838 = _18627;
+                        _16710 = _15935 + (_15913 * _2566);
+                    }
+                    else
+                    {
+                        _18838 = _18829;
+                        _16710 = _15935;
+                    }
+                    _18837 = _18838;
+                    _16709 = _16710;
+                    _16578 = _16586;
+                }
+            }
+            _18731 = _18777;
+            _15314 = _15367;
+            _15232 = _15285;
+        }
+        else
+        {
+            _18731 = _18732;
+            _15314 = float3(0.0);
+            _15232 = float3(0.0);
+        }
+        bool _2736 = _18731.x <= 9.9999997473787516355514526367188e-05;
+        bool _2743;
+        if (!_2736)
+        {
+            _2743 = _18731.y <= 9.9999997473787516355514526367188e-05;
+        }
+        else
+        {
+            _2743 = _2736;
+        }
+        if (_2743)
+        {
+            if (TraceDiagnostics == 0u)
+            {
+                out.gl_FragDepth = 1.0;
+                out.OutColor = float4(0.0, 0.0, 0.0, 1.0);
+            }
+            else
+            {
+                bool _9562 = !any(isnan(float3(0.0)));
+                bool _9569;
+                if (_9562)
+                {
+                    _9569 = !any(isinf(float3(0.0)));
+                }
+                else
+                {
+                    _9569 = _9562;
+                }
+                bool _9572 = _9569 && (TraceDiagnostics == 0u);
+                out.OutColor = float4(select(float3(1.0, 0.0, 1.0), float3(0.0), bool3(_9572)), float(int(_9572)));
+            }
+            break;
+        }
+        float3 _14011;
+        float3 _14012;
+        do
+        {
+            bool _9631 = _2077 || _3382;
+            bool _9646;
+            if (!_9631)
+            {
+                bool _9644;
+                if (_2168)
+                {
+                    _9644 = !_2159;
+                }
+                else
+                {
+                    _9644 = _2168;
+                }
+                _9646 = _9644;
+            }
+            else
+            {
+                _9646 = _9631;
+            }
+            if (_9646)
+            {
+                _14012 = float3(0.0);
+                _14011 = float3(0.0);
+                break;
+            }
+            float3 _13979;
+            float3 _13999;
+            _13999 = float3(0.0);
+            _13979 = float3(0.0);
+            float3 _16160;
+            float3 _16164;
+            for (uint _13868 = 0u; _13868 < DIA.Counts.z; _13999 = _16164, _13979 = _16160, _13868++)
+            {
+                float4 _17878 = _1697.Lights[_13868].Position;
+                bool _9674 = _17878.w > 0.5;
+                float3 _13877;
+                float3 _18779;
+                if (_9674)
+                {
+                    float3 _9682 = _17878.xyz - _3351;
+                    float _9684 = length(_9682);
+                    float3 _9689 = _9682 / float3(fast::max(_9684, 9.9999999392252902907785028219223e-09));
+                    float _9694 = _9684 / fast::max(_1697.Lights[_13868].ColorRange.w, 9.9999997473787516355514526367188e-05);
+                    float _9703 = fast::max(0.0, 1.0 - (((_9694 * _9694) * _9694) * _9694));
+                    float3 _9718 = _1697.Lights[_13868].ColorRange.xyz * ((_9703 * _9703) / fast::max(_9684 * _9684, _1697.Lights[_13868].OuterRadius.y * _1697.Lights[_13868].OuterRadius.y));
+                    float3 _18780;
+                    if (_17878.w > 1.5)
+                    {
+                        _18780 = _9718 * smoothstep(_1697.Lights[_13868].OuterRadius.x, _1697.Lights[_13868].DirectionInner.w, dot(-_9689, _1697.Lights[_13868].DirectionInner.xyz));
+                    }
+                    else
+                    {
+                        _18780 = _9718;
+                    }
+                    _18779 = _18780;
+                    _13877 = _9689;
+                }
+                else
+                {
+                    _18779 = _1697.Lights[_13868].ColorRange.xyz;
+                    _13877 = -fast::normalize(_17878.xyz);
+                }
+                float _9748 = fast::max(dot(_17949, _13877), 0.0);
+                bool _9750 = _9748 <= 0.0;
+                bool _9759;
+                if (!_9750)
+                {
+                    _9759 = dot(_11779, _13877) <= 0.0;
+                }
+                else
+                {
+                    _9759 = _9750;
+                }
+                bool _9772;
+                if (!_9759)
+                {
+                    _9772 = fast::max(_18779.x, fast::max(_18779.y, _18779.z)) == 0.0;
+                }
+                else
+                {
+                    _9772 = _9759;
+                }
+                if (_9772)
+                {
+                    _16164 = _13999;
+                    _16160 = _13979;
+                    continue;
+                }
+                float3 _9899 = _3351 + (_11779 * ((dot(_13877, _11779) >= 0.0) ? 0.00019999999494757503271102905273438 : (-0.00019999999494757503271102905273438)));
+                float3 _13944;
+                float _13945;
+                if (_9674)
+                {
+                    float3 _9785 = _17878.xyz - _9899;
+                    float _9787 = length(_9785);
+                    float3 _13940;
+                    if (_9787 > 9.9999997473787516355514526367188e-05)
+                    {
+                        _13940 = _9785 / float3(_9787);
+                    }
+                    else
+                    {
+                        _13940 = _13877;
+                    }
+                    _13945 = fast::max(9.9999997473787516355514526367188e-05, _9787 - 9.9999997473787516355514526367188e-05);
+                    _13944 = _13940;
+                }
+                else
+                {
+                    _13945 = DIA.Settings.x;
+                    _13944 = _13877;
+                }
+                float3 _9900 = _9899;
+                float3 _9901 = _13944;
+                float _9902 = _13945;
+                bool _9903 = _9674;
+                bool _9904 = false;
+                LHit _9911 = Trace(_9900, _9901, _9902, _9903, _9904, TraceDiagnostics, DIA, _545, _674, _702, _813);
+                if (_9911.Kind != (_9674 ? 3u : 2u))
+                {
+                    _16164 = _13999;
+                    _16160 = _13979;
+                    continue;
+                }
+                float _9828 = fast::max(dot(_17949, _3150), 9.9999997473787516355514526367188e-05);
+                float3 _9832 = fast::normalize(_13877 - _2037);
+                float _9837 = fast::max(dot(_17949, _9832), 0.0);
+                float3 _16165;
+                if (_3324 > 0.0199999995529651641845703125)
+                {
+                    float _9944 = fast::max(_3324 * _3324, 0.00039999998989515006542205810546875);
+                    float _9947 = _9944 * _9944;
+                    float _9954 = ((_9837 * _9837) * (_9947 - 1.0)) + 1.0;
+                    float _9991 = 1.0 - _9947;
+                    _16165 = _13999 + ((((_18779 * (_3367 + (_6251 * powr(fast::clamp(1.0 - fast::max(dot(_3150, _9832), 0.0), 0.0, 1.0), 5.0)))) * (_9947 / fast::max((3.1415927410125732421875 * _9954) * _9954, 9.9999996826552253889678874634872e-21))) * (((2.0 * _9828) / fast::max(_9828 + sqrt(_9947 + ((_9991 * _9828) * _9828)), 9.9999999392252902907785028219223e-09)) * ((2.0 * _9748) / fast::max(_9748 + sqrt(_9947 + ((_9991 * _9748) * _9748)), 9.9999999392252902907785028219223e-09)))) / float3(4.0 * _9828));
+                }
+                else
+                {
+                    _16165 = _13999;
+                }
+                _16164 = _16165;
+                _16160 = _13979 + ((_6252 * _18779) * (_9748 * 0.3183098733425140380859375));
+            }
+            _14012 = _13999;
+            _14011 = _13979;
+            break;
+        } while(false);
+        float3 _2777 = (_3359 + _14011) + _14012;
+        bool _2784;
+        if (_2168)
+        {
+            _2784 = _14096 == 0u;
+        }
+        else
+        {
+            _2784 = _2168;
+        }
+        float3 _15498;
+        if (_2784)
+        {
+            float3 _2788 = -_2173;
+            float3 _15128;
+            float3 _15129;
+            do
+            {
+                bool _10070 = (!_14302) || _14232;
+                bool _10085;
+                if (!_10070)
+                {
+                    bool _10075 = _14510 <= 0.0199999995529651641845703125;
+                    bool _10083;
+                    if (_10075)
+                    {
+                        _10083 = !any(((_14718 * (1.0 - _14441)) * (float3(1.0) - _14579)) > float3(0.0));
+                    }
+                    else
+                    {
+                        _10083 = _10075;
+                    }
+                    _10085 = _10083;
+                }
+                else
+                {
+                    _10085 = _10070;
+                }
+                if (_10085)
+                {
+                    _15129 = float3(0.0);
+                    _15128 = float3(0.0);
+                    break;
+                }
+                float3 _15096;
+                float3 _15116;
+                _15116 = float3(0.0);
+                _15096 = float3(0.0);
+                float3 _16437;
+                float3 _16441;
+                for (uint _14985 = 0u; _14985 < DIA.Counts.z; _15116 = _16441, _15096 = _16437, _14985++)
+                {
+                    float4 _17887 = _1697.Lights[_14985].Position;
+                    bool _10113 = _17887.w > 0.5;
+                    float3 _14994;
+                    float3 _18785;
+                    if (_10113)
+                    {
+                        float3 _10121 = _17887.xyz - _14923;
+                        float _10123 = length(_10121);
+                        float3 _10128 = _10121 / float3(fast::max(_10123, 9.9999999392252902907785028219223e-09));
+                        float _10133 = _10123 / fast::max(_1697.Lights[_14985].ColorRange.w, 9.9999997473787516355514526367188e-05);
+                        float _10142 = fast::max(0.0, 1.0 - (((_10133 * _10133) * _10133) * _10133));
+                        float3 _10157 = _1697.Lights[_14985].ColorRange.xyz * ((_10142 * _10142) / fast::max(_10123 * _10123, _1697.Lights[_14985].OuterRadius.y * _1697.Lights[_14985].OuterRadius.y));
+                        float3 _18786;
+                        if (_17887.w > 1.5)
+                        {
+                            _18786 = _10157 * smoothstep(_1697.Lights[_14985].OuterRadius.x, _1697.Lights[_14985].DirectionInner.w, dot(-_10128, _1697.Lights[_14985].DirectionInner.xyz));
+                        }
+                        else
+                        {
+                            _18786 = _10157;
+                        }
+                        _18785 = _18786;
+                        _14994 = _10128;
+                    }
+                    else
+                    {
+                        _18785 = _1697.Lights[_14985].ColorRange.xyz;
+                        _14994 = -fast::normalize(_17887.xyz);
+                    }
+                    float _10187 = fast::max(dot(_14787, _14994), 0.0);
+                    bool _10189 = _10187 <= 0.0;
+                    bool _10198;
+                    if (!_10189)
+                    {
+                        _10198 = dot(_14856, _14994) <= 0.0;
+                    }
+                    else
+                    {
+                        _10198 = _10189;
+                    }
+                    bool _10211;
+                    if (!_10198)
+                    {
+                        _10211 = fast::max(_18785.x, fast::max(_18785.y, _18785.z)) == 0.0;
+                    }
+                    else
+                    {
+                        _10211 = _10198;
+                    }
+                    if (_10211)
+                    {
+                        _16441 = _15116;
+                        _16437 = _15096;
+                        continue;
+                    }
+                    float3 _10338 = _14923 + (_14856 * ((dot(_14994, _14856) >= 0.0) ? 0.00019999999494757503271102905273438 : (-0.00019999999494757503271102905273438)));
+                    float3 _15061;
+                    float _15062;
+                    if (_10113)
+                    {
+                        float3 _10224 = _17887.xyz - _10338;
+                        float _10226 = length(_10224);
+                        float3 _15057;
+                        if (_10226 > 9.9999997473787516355514526367188e-05)
+                        {
+                            _15057 = _10224 / float3(_10226);
+                        }
+                        else
+                        {
+                            _15057 = _14994;
+                        }
+                        _15062 = fast::max(9.9999997473787516355514526367188e-05, _10226 - 9.9999997473787516355514526367188e-05);
+                        _15061 = _15057;
+                    }
+                    else
+                    {
+                        _15062 = DIA.Settings.x;
+                        _15061 = _14994;
+                    }
+                    float3 _10339 = _10338;
+                    float3 _10340 = _15061;
+                    float _10341 = _15062;
+                    bool _10342 = _10113;
+                    bool _10343 = false;
+                    LHit _10350 = Trace(_10339, _10340, _10341, _10342, _10343, TraceDiagnostics, DIA, _545, _674, _702, _813);
+                    if (_10350.Kind != (_10113 ? 3u : 2u))
+                    {
+                        _16441 = _15116;
+                        _16437 = _15096;
+                        continue;
+                    }
+                    float3 _10361 = float3(1.0) - _14579;
+                    float _10267 = fast::max(dot(_14787, _2788), 9.9999997473787516355514526367188e-05);
+                    float3 _10271 = fast::normalize(_14994 - _2173);
+                    float _10276 = fast::max(dot(_14787, _10271), 0.0);
+                    float3 _16442;
+                    if (_14510 > 0.0199999995529651641845703125)
+                    {
+                        float _10383 = fast::max(_14510 * _14510, 0.00039999998989515006542205810546875);
+                        float _10386 = _10383 * _10383;
+                        float _10393 = ((_10276 * _10276) * (_10386 - 1.0)) + 1.0;
+                        float _10430 = 1.0 - _10386;
+                        _16442 = _15116 + ((((_18785 * (_14579 + (_10361 * powr(fast::clamp(1.0 - fast::max(dot(_2788, _10271), 0.0), 0.0, 1.0), 5.0)))) * (_10386 / fast::max((3.1415927410125732421875 * _10393) * _10393, 9.9999996826552253889678874634872e-21))) * (((2.0 * _10267) / fast::max(_10267 + sqrt(_10386 + ((_10430 * _10267) * _10267)), 9.9999999392252902907785028219223e-09)) * ((2.0 * _10187) / fast::max(_10187 + sqrt(_10386 + ((_10430 * _10187) * _10187)), 9.9999999392252902907785028219223e-09)))) / float3(4.0 * _10267));
+                    }
+                    else
+                    {
+                        _16442 = _15116;
+                    }
+                    _16441 = _16442;
+                    _16437 = _15096 + ((((_14718 * (1.0 - _14441)) * _10361) * _18785) * (_10187 * 0.3183098733425140380859375));
+                }
+                _15129 = _15116;
+                _15128 = _15096;
+                break;
+            } while(false);
+            _15498 = _2777 + ((_3367 + (_6251 * powr(fast::clamp(1.0 - fast::max(dot(_17949, _3150), 0.0), 0.0, 1.0), 5.0))) * ((_14649 + _15128) + _15129));
+        }
+        else
+        {
+            _15498 = _2777;
+        }
+        float3 _2831 = ((_15232 / float3(_18731.x)) + (_15314 / float3(_18731.y))) + _15498;
+        bool _10484 = !any(isnan(_2831));
+        bool _10491;
+        if (_10484)
+        {
+            _10491 = !any(isinf(_2831));
+        }
+        else
+        {
+            _10491 = _10484;
+        }
+        bool _10494 = _10491 && (TraceDiagnostics == 0u);
+        float3 _15500;
+        if (_10494)
+        {
+            _15500 = fast::min(fast::max(_2831, float3(0.0)), float3(65504.0));
+        }
+        else
+        {
+            _15500 = float3(1.0, 0.0, 1.0);
+        }
+        out.OutColor = float4(_15500, float(int(_10494)));
+        break;
+    } while(false);
+    return out;
+}

@@ -33,7 +33,7 @@ namespace FP
 		return result;
 	}
 
-	Ray RenderView::ScreenToRay(Vec2 pixel) const
+	Ray RenderView::ScreenToRay(Vec2 pixel, float* farDistance) const
 	{
 		const float x = pixel.X / static_cast<float>(Width) * 2.0f - 1.0f;
 		const float y = 1.0f - pixel.Y / static_cast<float>(Height) * 2.0f;
@@ -42,6 +42,7 @@ namespace FP
 		const Vec4 farPoint = inverse * Vec4(x, y, 1, 1);
 		const Vec3 a = nearPoint.XYZ() / nearPoint.W;
 		const Vec3 b = farPoint.XYZ() / farPoint.W;
+		if (farDistance) *farDistance = (b - a).Length();
 		return { a, (b - a).Normalized() };
 	}
 
@@ -97,7 +98,8 @@ namespace FP
 	{
 		if (const Entity camera = world.GetActiveCamera(); camera != NullEntity)
 		{
-			RenderView view = FromCamera(world.GetWorldTransform(camera), world.Get<CameraComponent>(camera), width, height);
+			const TransformComponent transform = world.GetParent(camera) == NullEntity ? world.Get<TransformComponent>(camera) : world.GetWorldTransform(camera);
+			RenderView view = FromCamera(transform, world.Get<CameraComponent>(camera), width, height);
 			view.Camera = camera;
 			return view;
 		}

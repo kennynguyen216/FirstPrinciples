@@ -23,6 +23,7 @@ ThirdParty/Ultralight/
 .idea/
 *.user
 .DS_Store
+__pycache__/
 
 # Local planning notes
 docs/PLAN.md

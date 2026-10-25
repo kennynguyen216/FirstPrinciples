@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Compiles the engine base shaders to SPIR-V (Vulkan) and MSL (Metal).
 # Only engine developers need this. The compiled files are committed so game developers do not.
-# Needs glslangValidator and spirv-cross (brew install glslang spirv-cross).
+# Needs Python 3, glslangValidator, spirv-opt and spirv-cross.
 set -e
 cd "$(dirname "$0")/.."
 SRC=src/Engine/Shaders
@@ -10,6 +10,7 @@ mkdir -p "$OUT"
 for file in "$SRC"/*.vert "$SRC"/*.frag "$SRC"/*.comp; do
 	name=$(basename "$file")
 	glslangValidator -V --quiet -I"$SRC" -o "$OUT/$name.spv" "$file"
+	case "$name" in DIA*) python3 Scripts/OptimizeDIAShader.py "$OUT/$name.spv";; esac
 	metalInput="$OUT/$name.spv"
 	if [[ "$file" == *.comp || "$name" == Lit.frag || "$name" == Glass.frag || "$name" == Skybox.frag || "$name" == BlackHole.frag ]]; then
 		metalInput=$(mktemp)
@@ -21,5 +22,24 @@ for file in "$SRC"/*.vert "$SRC"/*.frag "$SRC"/*.comp; do
 		awk '{ sub(/[ \t\r]+$/, ""); lines[NR]=$0; if (length($0)) last=NR } END { for (i=1; i<=last; ++i) print lines[i] }' "$OUT/$name.msl" > "$metalInput"
 		mv "$metalInput" "$OUT/$name.msl"
 	fi
+	storage_base=1
+	case "$name" in DIAHistory.frag) storage_base=11;; DIADenoise.frag|DIAResolve.frag|DIAResolveFallback.frag|DIAResolveFallbackLit.frag) storage_base=8;; esac
+	if (( storage_base > 1 )); then
+		remap=()
+		for ((binding=storage_base; binding<storage_base+8; ++binding)); do
+			remap+=(-e "s/\[\[buffer($binding)\]\]/[[buffer($((binding-storage_base+1)))]]/g")
+		done
+		sed "${remap[@]}" "$OUT/$name.msl" > "$OUT/$name.msl.tmp"
+		mv "$OUT/$name.msl.tmp" "$OUT/$name.msl"
+	fi
 	echo "compiled $name"
+	case "$name" in
+		DIACache.frag|DIATrace.frag|DIATraceLitOne.frag|DIAResolve.frag|DIAResolveFallback.frag|DIAResolveFallbackLit.frag)
+			ray_name="${name%.frag}RT.frag"
+			glslangValidator -V --target-env vulkan1.2 --glsl-version 460 --quiet -I"$SRC" -DDIA_HARDWARE_RT=1 -o "$OUT/$ray_name.spv" "$file"
+			python3 Scripts/OptimizeDIAShader.py "$OUT/$ray_name.spv"
+			spirv-val --target-env vulkan1.2 "$OUT/$ray_name.spv"
+			echo "compiled $ray_name"
+			;;
+	esac
 done

@@ -61,7 +61,6 @@ namespace FP
 		// Loads Engine/Content/Shaders/<name>.spv or .msl depending on the backend.
 		SDL_GPUShader* LoadShader(const char* name, uint32 numSamplers, uint32 numUniformBuffers, uint32 numStorageBuffers = 0);
 
-		// Compute shaders use one uniform buffer; resource counts follow SDL binding order.
 		SDL_GPUComputePipeline* LoadComputeShader(const char* name, uint32 samplers, uint32 readBuffers, uint32 writeBuffers, uint32 threadsX, uint32 threadsY);
 
 		// Uploads tightly packed RGBA8 pixels. Mipmaps are generated on the GPU when asked.
@@ -73,7 +72,7 @@ namespace FP
 		RefPtr<GPUBuffer> CreateBuffer(SDL_GPUBufferUsageFlags usage, const void* data, uint32 size);
 
 		// Copies into a buffer large enough for size. Cycle preserves earlier draws.
-		void UploadToBuffer(SDL_GPUCommandBuffer* cmd, GPUBuffer& buffer, const void* data, uint32 size, bool cycle = false);
+		bool UploadToBuffer(SDL_GPUCommandBuffer* cmd, GPUBuffer& buffer, const void* data, uint32 size, bool cycle = false);
 
 		// A texture refilled from the CPU every so often, like a UI page. 4 bytes per pixel.
 		RefPtr<GPUTexture> CreateDynamicTexture(SDL_GPUTextureFormat format, uint32 width, uint32 height);
@@ -83,7 +82,7 @@ namespace FP
 		void UploadToTexture(SDL_GPUCommandBuffer* cmd, GPUTexture& texture, const void* pixels, uint32 rowBytes);
 
 		// Copies a 4 byte per pixel texture to the CPU. Waits for the GPU so use it for the editor and screenshots.
-		bool ReadPixels(SDL_GPUTexture* texture, uint32 width, uint32 height, void* outPixels);
+		bool ReadPixels(SDL_GPUTexture* texture, uint32 width, uint32 height, void* outPixels, uint32 bytesPerPixel = 4);
 
 		SDL_GPUSampler* GetDefaultSampler() const { return m_LinearRepeat; }
 		SDL_GPUSampler* GetClampSampler() const { return m_LinearClamp; }

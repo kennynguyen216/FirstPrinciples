@@ -48,7 +48,10 @@ namespace FP
 		float SoundTransmission = 0.25f;
 		float SoundAbsorption = 0.4f;
 		float SoundDamping = 0.5f;
+		bool TwoSided = false;
 	};
+
+	bool ValidateMaterial(const MaterialData& data);
 
 	// A shared material asset. Entities point at it by path through MaterialComponent.
 	class Material : public RefCounted
@@ -68,7 +71,7 @@ namespace FP
 
 		// The .material file text. Undo keeps these to put edits back.
 		String SaveToString() const;
-		void LoadFromString(std::string_view text);
+		bool LoadFromString(std::string_view text);
 
 		static const Array<FieldInfo>& GetFields();
 		static const Array<const char*>& GetShaderNames();
@@ -91,7 +94,7 @@ namespace FP
 		// Writes a new material with default values and returns it.
 		Material* Create(const String& path);
 
-		// Saves every material changed in the editor. Returns how many were written.
+		// Returns the number saved, or -1 on failure. Failed assets remain dirty.
 		int32 SaveDirty();
 
 		// Every material loaded so far.

@@ -32,7 +32,7 @@ configuration before rebuilding. Source files and content are kept.
 ### Windows
 
 1. Install Visual Studio 2022 or 2026 (the IDE or Build Tools) with the "Desktop development with C++" workload.
-2. Install Qt 6 with the [Qt online installer](https://www.qt.io/download-qt-installer) and pick the
+2. Install Qt 6.8 or newer with the [Qt online installer](https://www.qt.io/download-qt-installer) and pick the
    `MSVC 2022 64-bit` kit.
 3. MSVC 64-bit kits under `C:\Qt` are detected automatically. For another location, set `QT_DIR`
    to the kit directory and reopen your terminal. MinGW kits cannot link with this MSVC build.
@@ -1247,14 +1247,39 @@ Shader sources live in `src/Engine/Shaders`. The compiled SPIR-V and MSL in `Eng
 committed, so only engine developers who change a shader need the tools:
 
 ```bash
-brew install glslang spirv-cross
+brew install python glslang spirv-tools spirv-cross
 ```
 
 ```bash
 Scripts/CompileShaders.sh
 ```
 
-On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\CompileShaders.ps1`.
+On Windows install Python 3 and the [Vulkan SDK](https://vulkan.lunarg.com), then run `Scripts\CompileShaders.ps1`.
+
+### DIA preview
+
+Use the viewport's DIA On/Off button to compare scene-wide DIA with standard lighting.
+Changes support undo in edit mode. During Play they reset when you stop.
+
+DIA traces opaque diffuse lighting and reflections through a software BVH on SDL_GPU.
+`Scenes/DIA/Review.scene` exposes lighting defects. `Scenes/DIA/Showcase.scene` is a small gallery
+with a ceiling area light, colored bounce, and white, gold and chrome spheres. Use a Release build:
+
+```powershell
+Binaries\Release\Editor.exe --scene Scenes/DIA/Showcase.scene --3d --play
+```
+
+Lighting traces at a lower internal resolution, with separate diffuse and reflection history
+and variance-guided filtering. The lit view reconstructs visible surfaces at viewport resolution.
+Newly exposed surfaces and sharp reflections can still show noise during camera movement.
+
+Windows can use Vulkan hardware ray queries with the optional SDL bridge. Install the Vulkan SDK,
+run `Scripts\BuildSDLVulkan.ps1 -Install`, then regenerate projects and rebuild Release.
+The hardware path is experimental and currently slower on the tested RTX 3060 Laptop GPU, so software remains the default.
+Use `Projects/Sample/Binaries/Release/Runtime.exe --ray-backend hardware` to select it or `--ray-backend software` for comparison.
+The editor reads the same choice from `FP_DIA_RAY_BACKEND`. Hardware traversal uses conservative
+triangle bounds and the existing triangle intersection math. Run
+`python Scripts\ValidateDIAHardware.py --lifecycle` for the opt-in GPU resource tests.
 
 ### Batching and mesh instancing
 

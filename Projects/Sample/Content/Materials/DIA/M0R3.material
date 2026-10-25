@@ -1,0 +1,5 @@
+Shader "Lit"
+BaseColor 0.9 0.55 0.2 1
+Roughness 0.9
+Metallic 0
+TwoSided false

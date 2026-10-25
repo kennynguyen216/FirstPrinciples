@@ -1,0 +1,409 @@
+version 2
+
+entity 9cfa4a4f-0540-5e62-9ff6-1458e600935a
+component Name
+  Name "Main Camera"
+component Transform
+  Position 0 0 5
+  Rotation 0 0 0
+  Scale 1 1 1
+component Camera
+  Perspective true
+  FieldOfView 55
+  NearClip 0.1
+  FarClip 128
+  Exposure 1
+  Tonemap true
+component DIA
+  Enabled true
+  SkyColor 1 1 1 1
+  SkyIntensity 0
+  TraceDistance 128
+  DiffuseSamples 4
+  ReflectionSamples 1
+  CacheUpdates 4096
+  InternalHeight 180
+
+entity a0a838fb-4622-5d91-a89c-f7f0806daf20
+component Name
+  Name "Room 0 Floor"
+component Transform
+  Position 0 -2.1 0
+  Rotation 0 0 0
+  Scale 6.4 0.2 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity 4536902d-5010-577a-a206-7bba415121bf
+component Name
+  Name "Room 0 Ceiling"
+component Transform
+  Position 0 2.1 0
+  Rotation 0 0 0
+  Scale 6.4 0.2 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity 744fd019-24f8-55c3-aa87-deb3db7ac0a5
+component Name
+  Name "Room 0 Left wall"
+component Transform
+  Position -3.1 0 0
+  Rotation 0 0 0
+  Scale 0.2 4 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/Red.material"
+
+entity 69632f4d-5b3f-5a87-b672-3c617db938a0
+component Name
+  Name "Room 0 Right wall"
+component Transform
+  Position 3.1 0 0
+  Rotation 0 0 0
+  Scale 0.2 4 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/Green.material"
+
+entity 34cc512d-0d41-59f9-8dfd-0aea42f27980
+component Name
+  Name "Room 0 Back wall"
+component Transform
+  Position 0 0 -3.1
+  Rotation 0 0 0
+  Scale 6 4 0.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity 6e07cf36-8a98-51aa-a07c-bf883b0cb55b
+component Name
+  Name "Room 0 Front wall"
+component Transform
+  Position 0 0 6.1
+  Rotation 0 0 0
+  Scale 6 4 0.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity 6a318ab7-2074-50ae-8549-ab4bca3352a1
+component Name
+  Name "Room 0 PointLight"
+component Transform
+  Position 0 1 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component PointLight
+  Color 1 1 1 1
+  Intensity 8
+  Range 30
+
+entity 1600c779-d86e-5471-baec-cbf708ac1ba3
+component Name
+  Name "Room 0 Receiver"
+component Transform
+  Position 0 -0.5 -0.5
+  Rotation 0 0 0
+  Scale 1 2 1
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity 4882854f-a39d-5508-900c-24bf28bc78ff
+component Name
+  Name "Room 1 Floor"
+component Transform
+  Position 12 -2.1 0
+  Rotation 0 0 0
+  Scale 6.4 0.2 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity a27347fc-23d2-519e-a394-749f863eb94d
+component Name
+  Name "Room 1 Ceiling"
+component Transform
+  Position 12 2.1 0
+  Rotation 0 0 0
+  Scale 6.4 0.2 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity aa7e5a68-2cb6-5a87-878d-4c28792e3092
+component Name
+  Name "Room 1 Left wall"
+component Transform
+  Position 8.9 0 0
+  Rotation 0 0 0
+  Scale 0.2 4 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/Red.material"
+
+entity 6cb5bb26-eaef-5bfb-a2eb-23d993496e0f
+component Name
+  Name "Room 1 Right wall"
+component Transform
+  Position 15.1 0 0
+  Rotation 0 0 0
+  Scale 0.2 4 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/Green.material"
+
+entity c170bf0e-fae5-5833-b1d6-80561db951f5
+component Name
+  Name "Room 1 Back wall"
+component Transform
+  Position 12 0 -3.1
+  Rotation 0 0 0
+  Scale 6 4 0.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity 4761724e-06cd-5dc7-b26f-e758a96eda31
+component Name
+  Name "Room 1 Front wall"
+component Transform
+  Position 12 0 6.1
+  Rotation 0 0 0
+  Scale 6 4 0.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity 232557b4-cd39-5ee0-ae32-3644322650f1
+component Name
+  Name "Room 1 PointLight"
+component Transform
+  Position 12 1 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component PointLight
+  Color 1 1 1 1
+  Intensity 8
+  Range 30
+
+entity f6e9524f-8fb8-594d-8d50-40e7882cef8a
+component Name
+  Name "Room 1 Receiver"
+component Transform
+  Position 12 -0.5 -0.5
+  Rotation 0 0 0
+  Scale 1 2 1
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity 94dbefba-f7e7-552b-92f2-53023f49b27a
+component Name
+  Name "Room 2 Floor"
+component Transform
+  Position 24 -2.1 0
+  Rotation 0 0 0
+  Scale 6.4 0.2 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity 468ef548-9445-52eb-bc45-a6e9d43f362f
+component Name
+  Name "Room 2 Ceiling"
+component Transform
+  Position 24 2.1 0
+  Rotation 0 0 0
+  Scale 6.4 0.2 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity a1ae3598-e077-5267-ae43-89c0d7682472
+component Name
+  Name "Room 2 Left wall"
+component Transform
+  Position 20.9 0 0
+  Rotation 0 0 0
+  Scale 0.2 4 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/Red.material"
+
+entity cb22a274-00fe-5546-a02a-3b0cdb1605b7
+component Name
+  Name "Room 2 Right wall"
+component Transform
+  Position 27.1 0 0
+  Rotation 0 0 0
+  Scale 0.2 4 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/Green.material"
+
+entity 6761b5ca-3f50-5262-8240-ef0b05e5ccd0
+component Name
+  Name "Room 2 Back wall"
+component Transform
+  Position 24 0 -3.1
+  Rotation 0 0 0
+  Scale 6 4 0.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity e621a634-cc51-527b-9a99-2b7b75cf2e16
+component Name
+  Name "Room 2 Front wall"
+component Transform
+  Position 24 0 6.1
+  Rotation 0 0 0
+  Scale 6 4 0.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity 244bf420-4705-5399-94e6-ae1b2a9fb60b
+component Name
+  Name "Room 2 PointLight"
+component Transform
+  Position 24 1 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component PointLight
+  Color 1 1 1 1
+  Intensity 8
+  Range 30
+
+entity 2ca2eba6-b067-5b44-bff2-cb8d936f6293
+component Name
+  Name "Room 2 Receiver"
+component Transform
+  Position 24 -0.5 -0.5
+  Rotation 0 0 0
+  Scale 1 2 1
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity 70be1076-7d12-56e4-af24-8cb55d34503f
+component Name
+  Name "Room 3 Floor"
+component Transform
+  Position 36 -2.1 0
+  Rotation 0 0 0
+  Scale 6.4 0.2 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity 83b24b62-f451-5f54-bf29-fe7ba4f0f972
+component Name
+  Name "Room 3 Ceiling"
+component Transform
+  Position 36 2.1 0
+  Rotation 0 0 0
+  Scale 6.4 0.2 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity 74d28182-6eac-5903-a91b-eb61539d07c7
+component Name
+  Name "Room 3 Left wall"
+component Transform
+  Position 32.9 0 0
+  Rotation 0 0 0
+  Scale 0.2 4 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/Red.material"
+
+entity 06a2e731-a4b2-5c4b-9b19-ce6418ee5ca0
+component Name
+  Name "Room 3 Right wall"
+component Transform
+  Position 39.1 0 0
+  Rotation 0 0 0
+  Scale 0.2 4 12
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/Green.material"
+
+entity c7c4b4b4-3d81-5649-b29b-a37f45824d06
+component Name
+  Name "Room 3 Back wall"
+component Transform
+  Position 36 0 -3.1
+  Rotation 0 0 0
+  Scale 6 4 0.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity 9c81a835-fa88-58b4-b048-db80dd9795ea
+component Name
+  Name "Room 3 Front wall"
+component Transform
+  Position 36 0 6.1
+  Rotation 0 0 0
+  Scale 6 4 0.2
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"
+
+entity 583e6a2f-1cfc-5f0c-bee6-1142f2e8b5eb
+component Name
+  Name "Room 3 PointLight"
+component Transform
+  Position 36 1 0
+  Rotation 0 0 0
+  Scale 1 1 1
+component PointLight
+  Color 1 1 1 1
+  Intensity 8
+  Range 30
+
+entity 210e11ff-f1b9-547d-82f5-cc168ccb18bd
+component Name
+  Name "Room 3 Receiver"
+component Transform
+  Position 36 -0.5 -0.5
+  Rotation 0 0 0
+  Scale 1 2 1
+component Mesh
+  Mesh "Cube"
+component Material
+  Material "Materials/DIA/White.material"

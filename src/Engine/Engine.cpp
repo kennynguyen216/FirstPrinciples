@@ -261,6 +261,17 @@ namespace FP::Engine
 			.Field("Color", &AmbientLightComponent::Color)
 			.Field("Intensity", &AmbientLightComponent::Intensity);
 
+		registry.Register<DIAComponent>("DIA")
+			.Field("Enabled", &DIAComponent::Enabled)
+			.Field("SkyColor", &DIAComponent::SkyColor)
+			.Field("SkyIntensity", &DIAComponent::SkyIntensity)
+			.Field("TraceDistance", &DIAComponent::TraceDistance)
+			.Field("DiffuseSamples", &DIAComponent::DiffuseSamples)
+			.Field("ReflectionSamples", &DIAComponent::ReflectionSamples)
+			.Field("CacheUpdates", &DIAComponent::CacheUpdates)
+			.Field("InternalHeight", &DIAComponent::InternalHeight)
+			.Field("Seed", &DIAComponent::Seed);
+
 		registry.Register<BlackHoleComponent>("BlackHole")
 			.Field("SchwarzschildRadius", &BlackHoleComponent::SchwarzschildRadius).Range(0.01f, 1000).Tooltip("Event horizon radius in world units")
 			.Field("SpeedOfLight", &BlackHoleComponent::SpeedOfLight).Range(0.1f, 10000).Tooltip("World units per second. Lower makes relativity stronger at game speeds")

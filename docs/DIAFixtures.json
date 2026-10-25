@@ -1,0 +1,173 @@
+{
+  "baseline": "75e5fb7",
+  "seed": 911,
+  "output_extent": [
+    1280,
+    720
+  ],
+  "transport_extent": [
+    320,
+    180
+  ],
+  "reference_extent": [
+    64,
+    64
+  ],
+  "reference_seeds": [
+    911,
+    1237,
+    3217
+  ],
+  "diffuse_samples": 4,
+  "reflection_samples": 1,
+  "quality_extent": [
+    64,
+    64
+  ],
+  "primary_sampling": "pixel-center",
+  "warmup_frames": 300,
+  "measured_frames": 300,
+  "pairs": 3,
+  "fixtures": {
+    "Sealed": {
+      "scene": "Scenes/DIA/Sealed.scene",
+      "receiver_region": [
+        0.1,
+        0.55,
+        0.9,
+        0.9
+      ],
+      "black_floor": 1e-05
+    },
+    "Open": {
+      "scene": "Scenes/DIA/Open.scene",
+      "receiver_region": [
+        0.1,
+        0.55,
+        0.9,
+        0.9
+      ],
+      "black_floor": 1e-05
+    },
+    "Emissive": {
+      "scene": "Scenes/DIA/Emissive.scene",
+      "receiver_region": [
+        0.1,
+        0.55,
+        0.9,
+        0.9
+      ],
+      "black_floor": 1e-05
+    },
+    "Point": {
+      "scene": "Scenes/DIA/Point.scene",
+      "receiver_region": [
+        0.1,
+        0.55,
+        0.9,
+        0.9
+      ],
+      "black_floor": 1e-05
+    },
+    "Spot": {
+      "scene": "Scenes/DIA/Spot.scene",
+      "receiver_region": [
+        0.1,
+        0.55,
+        0.9,
+        0.9
+      ],
+      "black_floor": 1e-05
+    },
+    "BlockerBefore": {
+      "scene": "Scenes/DIA/BlockerBefore.scene",
+      "receiver_region": [
+        0.1,
+        0.55,
+        0.9,
+        0.9
+      ],
+      "black_floor": 1e-05
+    },
+    "BlockerBehind": {
+      "scene": "Scenes/DIA/BlockerBehind.scene",
+      "receiver_region": [
+        0.1,
+        0.55,
+        0.9,
+        0.9
+      ],
+      "black_floor": 1e-05
+    },
+    "ThinWall": {
+      "scene": "Scenes/DIA/ThinWall.scene",
+      "receiver_region": [
+        0.1,
+        0.55,
+        0.9,
+        0.9
+      ],
+      "black_floor": 1e-05
+    },
+    "Mirror": {
+      "scene": "Scenes/DIA/Mirror.scene",
+      "receiver_region": [
+        0.1,
+        0.55,
+        0.9,
+        0.9
+      ],
+      "black_floor": 1e-05
+    },
+    "BrightPatch": {
+      "scene": "Scenes/DIA/BrightPatch.scene",
+      "receiver_region": [
+        0.1,
+        0.55,
+        0.9,
+        0.9
+      ],
+      "black_floor": 1e-05
+    },
+    "Sweep": {
+      "scene": "Scenes/DIA/Sweep.scene",
+      "receiver_region": [
+        0.1,
+        0.55,
+        0.9,
+        0.9
+      ],
+      "black_floor": 1e-05
+    },
+    "Review": {
+      "scene": "Scenes/DIA/Review.scene",
+      "receiver_region": [
+        0.1,
+        0.55,
+        0.9,
+        0.9
+      ],
+      "black_floor": 1e-05
+    },
+    "Travel": {
+      "scene": "Scenes/DIA/Travel.scene",
+      "receiver_region": [
+        0.1,
+        0.55,
+        0.9,
+        0.9
+      ],
+      "black_floor": 1e-05
+    },
+    "Mixed": {
+      "scene": "Scenes/DIA/Mixed.scene",
+      "receiver_region": [
+        0.1,
+        0.55,
+        0.9,
+        0.9
+      ],
+      "black_floor": 1e-05
+    }
+  }
+}

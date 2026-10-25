@@ -242,6 +242,19 @@ namespace FP
 		bool WideBloom = false; // eight octaves of glow out to 1/256 of the screen instead of one short blur
 	};
 
+	struct DIAComponent
+	{
+		bool Enabled = true;
+		::FP::Color SkyColor{ 1, 1, 1, 1 };
+		float SkyIntensity = 0.1f;
+		float TraceDistance = 128;
+		int32 DiffuseSamples = 4;
+		int32 ReflectionSamples = 1;
+		int32 CacheUpdates = 4096;
+		int32 InternalHeight = 180;
+		int32 Seed = 911;
+	};
+
 	// Flat light added everywhere so unlit sides are not pure black.
 	struct AmbientLightComponent
 	{

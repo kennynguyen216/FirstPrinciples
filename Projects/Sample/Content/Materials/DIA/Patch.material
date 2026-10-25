@@ -1,0 +1,8 @@
+Shader "Lit"
+BaseColor 0 0 0 1
+Roughness 0.7
+Metallic 0
+TwoSided false
+EmissiveColor 1 1 1 1
+EmissiveIntensity 100
+EmissiveMap "Textures/DIAPatch.png"

@@ -1,0 +1,1835 @@
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+// Implementation of signed integer mod accurate to SPIR-V specification
+template<typename Tx, typename Ty>
+inline Tx spvSMod(Tx x, Ty y)
+{
+    Tx remainder = x - y * (x / y);
+    return select(Tx(remainder + y), remainder, remainder == 0 || (x >= 0) == (y >= 0));
+}
+
+struct DIAData
+{
+    float4x4 InverseViewProjection;
+    char _m1_pad[64];
+    float4 Camera;
+    char _m2_pad[16];
+    float4 Extent;
+    uint4 Counts;
+    char _m4_pad[16];
+    float4 Settings;
+    char _m5_pad[16];
+    float4 Emitters;
+    char _m6_pad[16];
+    float4 CameraForward;
+};
+
+struct LMaterial
+{
+    float4 BaseColor;
+    float4 Emission;
+    float4 Parameters;
+    float4 Parameters2;
+    float4 UVTransform;
+    uint4 Textures[8];
+    uint4 Flags;
+};
+
+struct MaterialBuffer
+{
+    LMaterial Materials[1];
+};
+
+struct LInstance
+{
+    float4x4 Transform;
+    float4x4 Inverse;
+    uint4 Geometry;
+    uint4 Metadata;
+    uint4 Identity;
+    float4 Tint;
+};
+
+struct InstanceBuffer
+{
+    LInstance Instances[1];
+};
+
+constant bool _4652 = {};
+
+constant spvUnsafeArray<int2, 4> _512 = spvUnsafeArray<int2, 4>({ int2(-1, 0), int2(1, 0), int2(0, -1), int2(0, 1) });
+constant spvUnsafeArray<float, 3> _1464 = spvUnsafeArray<float, 3>({ 0.375, 0.25, 0.0625 });
+
+struct main0_out
+{
+    float4 OutDiffuse [[color(0)]];
+    float4 OutSpecular [[color(1)]];
+};
+
+struct main0_in
+{
+    float2 InUV [[user(locn0)]];
+};
+
+fragment main0_out main0(main0_in in [[stage_in]], constant DIAData& DIA [[buffer(0)]], const device InstanceBuffer& _1002 [[buffer(1)]], const device MaterialBuffer& _997 [[buffer(2)]], texture2d<float> InputDiffuse [[texture(0)]], texture2d<float> InputSpecular [[texture(1)]], texture2d<float> Position [[texture(2)]], texture2d<float> Normal [[texture(3)]], texture2d<float> Counts [[texture(4)]], texture2d<float> Reflected [[texture(5)]], texture2d<float> Identity [[texture(6)]], texture2d<float> RawSpecular [[texture(7)]], sampler InputDiffuseSmplr [[sampler(0)]], sampler InputSpecularSmplr [[sampler(1)]], sampler PositionSmplr [[sampler(2)]], sampler NormalSmplr [[sampler(3)]], sampler CountsSmplr [[sampler(4)]], sampler ReflectedSmplr [[sampler(5)]], sampler IdentitySmplr [[sampler(6)]], sampler RawSpecularSmplr [[sampler(7)]])
+{
+    main0_out out = {};
+    do
+    {
+        int2 _1641 = int2(DIA.Extent.xy);
+        int2 _1652 = int2(fast::clamp(in.InUV, float2(0.0), float2(0.999998986721038818359375)) * DIA.Extent.xy);
+        int _1658 = max(1, int(DIA.Emitters.z + 0.5));
+        bool _1663 = DIA.Emitters.w < 0.5;
+        float4 _1669 = InputDiffuse.read(uint2(_1652), 0);
+        float4 _1674 = InputSpecular.read(uint2(_1652), 0);
+        float4 _1679 = Identity.read(uint2(_1652), 0);
+        float _1680 = _1679.w;
+        float _4620;
+        if (_1663)
+        {
+            _4620 = 0.0;
+        }
+        else
+        {
+            _4620 = _1669.w;
+        }
+        out.OutDiffuse = float4(_1669.xyz, _4620);
+        float _4622;
+        if (_1663)
+        {
+            _4622 = 0.0;
+        }
+        else
+        {
+            _4622 = _1674.w;
+        }
+        out.OutSpecular = float4(_1674.xyz, _4622);
+        if ((DIA.Settings.w >= 4.0) || (_1680 <= 0.0))
+        {
+            out.OutDiffuse.w = 0.0;
+            out.OutSpecular.w = 0.0;
+            break;
+        }
+        bool _1726 = !_1663;
+        bool _1736;
+        if (_1726)
+        {
+            bool _4647;
+            do
+            {
+                bool _4641;
+                bool _4646;
+                bool _4648;
+                bool _4653;
+                int _4630 = -1;
+                bool _4643 = false;
+                bool _4649;
+                for (;;)
+                {
+                    if (_4630 <= 1)
+                    {
+                        int _4631 = -1;
+                        for (;;)
+                        {
+                            if (_4631 <= 1)
+                            {
+                                int2 _2568 = int2(_4631, _4630);
+                                int2 _2569 = _1652 + _2568;
+                                bool _2572 = any(_2569 < int2(0));
+                                bool _2580;
+                                if (!_2572)
+                                {
+                                    _2580 = any(_2569 >= _1641);
+                                }
+                                else
+                                {
+                                    _2580 = _2572;
+                                }
+                                if (_2580)
+                                {
+                                    int _2594 = _4631 + 1;
+                                    _4631 = _2594;
+                                    continue;
+                                }
+                                if (Identity.read(uint2(_2569), 0).w != _1680)
+                                {
+                                    _4653 = true;
+                                    _4641 = true;
+                                    break;
+                                }
+                                int _2594 = _4631 + 1;
+                                _4631 = _2594;
+                                continue;
+                            }
+                            else
+                            {
+                                _4653 = _4649;
+                                _4641 = _4643;
+                                break;
+                            }
+                        }
+                        if (_4641)
+                        {
+                            _4648 = _4653;
+                            _4646 = _4641;
+                            break;
+                        }
+                        _4643 = _4641;
+                        _4630++;
+                        _4649 = _4653;
+                        continue;
+                    }
+                    else
+                    {
+                        _4648 = _4649;
+                        _4646 = _4643;
+                        break;
+                    }
+                }
+                if (_4646)
+                {
+                    _4647 = _4648;
+                    break;
+                }
+                _4647 = false;
+                break;
+            } while(false);
+            _1736 = _4647;
+        }
+        else
+        {
+            _1736 = _1726;
+        }
+        float4 _1741 = Position.read(uint2(_1652), 0);
+        float4 _1746 = Normal.read(uint2(_1652), 0);
+        float4 _1756 = Reflected.read(uint2(_1652), 0);
+        float _1757 = _1756.w;
+        float _1760 = _1746.w;
+        bool _1768 = _1680 >= 1.0;
+        bool _1769 = ((DIA.Settings.w == 0.0) && (_1760 <= 0.0199999995529651641845703125)) && _1768;
+        bool _1777;
+        if (_1769)
+        {
+            _1777 = _1680 <= float(DIA.Counts.y);
+        }
+        else
+        {
+            _1777 = _1769;
+        }
+        if (_1777)
+        {
+            if (_1663)
+            {
+                float3 _1791 = _1674.xyz;
+                float3 _5932;
+                do
+                {
+                    float4 _2685 = RawSpecular.read(uint2(_1652), 0);
+                    float _2686 = _2685.w;
+                    bool _2696;
+                    if (_1768)
+                    {
+                        _2696 = _1680 <= float(DIA.Counts.y);
+                    }
+                    else
+                    {
+                        _2696 = _1768;
+                    }
+                    bool _2699 = _2696 && (_2686 >= 1.0);
+                    bool _2707;
+                    if (_2699)
+                    {
+                        _2707 = _2686 <= float(DIA.Counts.y);
+                    }
+                    else
+                    {
+                        _2707 = _2699;
+                    }
+                    if (!_2707)
+                    {
+                        _5932 = _1791;
+                        break;
+                    }
+                    if (_997.Materials[((device uint*)&_1002.Instances[uint(_2686) - 1u].Metadata)[0u]].Parameters.y < 0.5)
+                    {
+                        _5932 = _1791;
+                        break;
+                    }
+                    bool _4794;
+                    float3 _4831;
+                    do
+                    {
+                        bool _3259 = any(_1652 < int2(1));
+                        bool _3269;
+                        if (!_3259)
+                        {
+                            _3269 = any(_1652 >= (_1641 - int2(1)));
+                        }
+                        else
+                        {
+                            _3269 = _3259;
+                        }
+                        if (_3269)
+                        {
+                            _4831 = float3(0.0);
+                            _4794 = false;
+                            break;
+                        }
+                        float4 _3275 = Normal.read(uint2(_1652), 0);
+                        float3 _3280 = Position.read(uint2(_1652), 0).xyz;
+                        float4 _3284 = Reflected.read(uint2(_1652), 0);
+                        bool _3287 = _3275.w > 0.0199999995529651641845703125;
+                        bool _3294;
+                        if (!_3287)
+                        {
+                            _3294 = _3284.w != 1.0;
+                        }
+                        else
+                        {
+                            _3294 = _3287;
+                        }
+                        bool _3305;
+                        if (!_3294)
+                        {
+                            _3305 = Identity.read(uint2(_1652), 0).w != _1680;
+                        }
+                        else
+                        {
+                            _3305 = _3294;
+                        }
+                        bool _3316;
+                        if (!_3305)
+                        {
+                            _3316 = RawSpecular.read(uint2(_1652), 0).w != _2686;
+                        }
+                        else
+                        {
+                            _3316 = _3305;
+                        }
+                        if (_3316)
+                        {
+                            _4831 = float3(0.0);
+                            _4794 = false;
+                            break;
+                        }
+                        spvUnsafeArray<float3, 4> _3248;
+                        bool _4757;
+                        bool _4795;
+                        int _4703 = 0;
+                        for (;;)
+                        {
+                            if (_4703 < 4)
+                            {
+                                int2 _3328 = _1652 + _512[_4703];
+                                float4 _3332 = Normal.read(uint2(_3328), 0);
+                                float4 _3336 = Reflected.read(uint2(_3328), 0);
+                                float3 _3343 = Position.read(uint2(_3328), 0).xyz - _3280;
+                                bool _3350 = Identity.read(uint2(_3328), 0).w != _1680;
+                                bool _3361;
+                                if (!_3350)
+                                {
+                                    _3361 = RawSpecular.read(uint2(_3328), 0).w != _2686;
+                                }
+                                else
+                                {
+                                    _3361 = _3350;
+                                }
+                                bool _3368;
+                                if (!_3361)
+                                {
+                                    _3368 = _3336.w != 1.0;
+                                }
+                                else
+                                {
+                                    _3368 = _3361;
+                                }
+                                bool _3375;
+                                if (!_3368)
+                                {
+                                    _3375 = _3332.w > 0.0199999995529651641845703125;
+                                }
+                                else
+                                {
+                                    _3375 = _3368;
+                                }
+                                bool _3386;
+                                if (!_3375)
+                                {
+                                    float3 _3380 = _3275.xyz;
+                                    float3 _3382 = _3332.xyz;
+                                    float _3512 = fast::max(9.9999997473787516355514526367188e-06, fast::min(0.00200000009499490261077880859375, 0.0199999995529651641845703125 * length(_3343)));
+                                    bool _3516 = !any(isnan(_3343));
+                                    bool _3523;
+                                    if (_3516)
+                                    {
+                                        _3523 = !any(isinf(_3343));
+                                    }
+                                    else
+                                    {
+                                        _3523 = _3516;
+                                    }
+                                    bool _3530;
+                                    if (_3523)
+                                    {
+                                        _3530 = !any(isnan(_3380));
+                                    }
+                                    else
+                                    {
+                                        _3530 = _3523;
+                                    }
+                                    bool _3537;
+                                    if (_3530)
+                                    {
+                                        _3537 = !any(isinf(_3380));
+                                    }
+                                    else
+                                    {
+                                        _3537 = _3530;
+                                    }
+                                    bool _3544;
+                                    if (_3537)
+                                    {
+                                        _3544 = !any(isnan(_3382));
+                                    }
+                                    else
+                                    {
+                                        _3544 = _3537;
+                                    }
+                                    bool _3551;
+                                    if (_3544)
+                                    {
+                                        _3551 = !any(isinf(_3382));
+                                    }
+                                    else
+                                    {
+                                        _3551 = _3544;
+                                    }
+                                    bool _3558;
+                                    if (_3551)
+                                    {
+                                        _3558 = dot(_3380, _3382) >= 0.999999523162841796875;
+                                    }
+                                    else
+                                    {
+                                        _3558 = _3551;
+                                    }
+                                    bool _3567;
+                                    if (_3558)
+                                    {
+                                        _3567 = abs(dot(_3343, _3380)) <= _3512;
+                                    }
+                                    else
+                                    {
+                                        _3567 = _3558;
+                                    }
+                                    bool _3576;
+                                    if (_3567)
+                                    {
+                                        _3576 = abs(dot(_3343, _3382)) <= _3512;
+                                    }
+                                    else
+                                    {
+                                        _3576 = _3567;
+                                    }
+                                    _3386 = !_3576;
+                                }
+                                else
+                                {
+                                    _3386 = _3375;
+                                }
+                                if (_3386)
+                                {
+                                    _4795 = false;
+                                    _4757 = true;
+                                    break;
+                                }
+                                _3248[_4703] = _3336.xyz - _3284.xyz;
+                                _4703++;
+                                continue;
+                            }
+                            else
+                            {
+                                _4795 = _4652;
+                                _4757 = false;
+                                break;
+                            }
+                        }
+                        if (_4757)
+                        {
+                            _4831 = float3(0.0);
+                            _4794 = _4795;
+                            break;
+                        }
+                        float3 _3406 = _3248[1] - _3248[0];
+                        float3 _3411 = _3248[3] - _3248[2];
+                        float3 _3414 = cross(_3406, _3411);
+                        bool _3417 = any(isnan(_3414));
+                        bool _3424;
+                        if (!_3417)
+                        {
+                            _3424 = any(isinf(_3414));
+                        }
+                        else
+                        {
+                            _3424 = _3417;
+                        }
+                        if (_3424)
+                        {
+                            _4831 = float3(0.0);
+                            _4794 = false;
+                            break;
+                        }
+                        if (dot(_3414, _3414) <= fast::max(9.9999996826552253889678874634872e-21, (9.9999999747524270787835121154785e-07 * dot(_3406, _3406)) * dot(_3411, _3411)))
+                        {
+                            _4831 = float3(0.0);
+                            _4794 = false;
+                            break;
+                        }
+                        float3 _3443 = fast::normalize(_3414);
+                        bool _3446 = any(isnan(_3443));
+                        bool _3453;
+                        if (!_3446)
+                        {
+                            _3453 = any(isinf(_3443));
+                        }
+                        else
+                        {
+                            _3453 = _3446;
+                        }
+                        if (_3453)
+                        {
+                            _4831 = _3443;
+                            _4794 = false;
+                            break;
+                        }
+                        float _3463 = fast::max(9.9999997473787516355514526367188e-06, fast::min(0.00200000009499490261077880859375, 0.0199999995529651641845703125 * fast::max(length(_3406), length(_3411))));
+                        bool _4788;
+                        bool _4825;
+                        int _4780 = 0;
+                        for (;;)
+                        {
+                            if (_4780 < 4)
+                            {
+                                bool _3473 = any(isnan(_3248[_4780]));
+                                bool _3482;
+                                if (!_3473)
+                                {
+                                    _3482 = any(isinf(_3248[_4780]));
+                                }
+                                else
+                                {
+                                    _3482 = _3473;
+                                }
+                                bool _3494;
+                                if (!_3482)
+                                {
+                                    _3494 = abs(dot(_3248[_4780], _3443)) > _3463;
+                                }
+                                else
+                                {
+                                    _3494 = _3482;
+                                }
+                                if (_3494)
+                                {
+                                    _4825 = false;
+                                    _4788 = true;
+                                    break;
+                                }
+                                _4780++;
+                                continue;
+                            }
+                            else
+                            {
+                                _4825 = _4795;
+                                _4788 = _4757;
+                                break;
+                            }
+                        }
+                        if (_4788)
+                        {
+                            _4831 = _3443;
+                            _4794 = _4825;
+                            break;
+                        }
+                        _4831 = _3443;
+                        _4794 = true;
+                        break;
+                    } while(false);
+                    if (!_4794)
+                    {
+                        _5932 = _1791;
+                        break;
+                    }
+                    float3 _2769 = Normal.read(uint2(_1652), 0).xyz;
+                    float3 _2774 = Position.read(uint2(_1652), 0).xyz;
+                    float3 _2779 = Reflected.read(uint2(_1652), 0).xyz;
+                    bool _4913;
+                    float3 _4956;
+                    float3 _4957;
+                    do
+                    {
+                        float3 _3611 = reflect(_4831, _2769);
+                        float _3615 = (in.InUV.x * 2.0) - 1.0;
+                        float _3619 = 1.0 - (in.InUV.y * 2.0);
+                        float4 _3627 = DIA.InverseViewProjection * float4(_3615, _3619, 0.0, 1.0);
+                        float4 _3634 = DIA.InverseViewProjection * float4(_3615, _3619, 1.0, 1.0);
+                        float3 _3639 = float3(_3627.w);
+                        float3 _3640 = _3627.xyz / _3639;
+                        float3 _3645 = float3(_3634.w);
+                        float3 _3646 = _3634.xyz / _3645;
+                        float3 _3649 = _3646 - _3640;
+                        float _3652 = dot(_3611, _3649);
+                        if (abs(_3652) <= (9.9999999747524270787835121154785e-07 * length(_3649)))
+                        {
+                            _4957 = float3(0.0);
+                            _4956 = float3(0.0);
+                            _4913 = false;
+                            break;
+                        }
+                        float _3667 = dot((_2779 - ((_2769 * 2.0) * dot(_2779 - _2774, _2769))) - _3640, _3611) / _3652;
+                        float3 _4904;
+                        float3 _4909;
+                        _4909 = float3(0.0);
+                        _4904 = float3(0.0);
+                        float3 _8194;
+                        float3 _8196;
+                        bool _4898;
+                        bool _4914;
+                        int _4878 = 0;
+                        for (;;)
+                        {
+                            if (_4878 < 2)
+                            {
+                                bool _3677 = _4878 == 0;
+                                float _4879;
+                                if (_3677)
+                                {
+                                    _4879 = 2.0 / DIA.Extent.x;
+                                }
+                                else
+                                {
+                                    _4879 = (-2.0) / DIA.Extent.y;
+                                }
+                                float4 _3688 = DIA.InverseViewProjection[_4878] * _4879;
+                                float3 _3690 = _3688.xyz;
+                                float _3693 = _3688.w;
+                                float3 _3715 = mix((_3690 - (_3640 * _3693)) / _3639, (_3690 - (_3646 * _3693)) / _3645, float3(_3667));
+                                float3 _3726 = reflect(_3715 - (_3649 * (dot(_3611, _3715) / _3652)), _2769);
+                                bool _3729 = any(isnan(_3726));
+                                bool _3736;
+                                if (!_3729)
+                                {
+                                    _3736 = any(isinf(_3726));
+                                }
+                                else
+                                {
+                                    _3736 = _3729;
+                                }
+                                if (_3736)
+                                {
+                                    _4914 = false;
+                                    _4898 = true;
+                                    break;
+                                }
+                                bool3 _8193 = bool3(_3677);
+                                _8194 = select(_3726, _4909, _8193);
+                                _8196 = select(_4904, _3726, _8193);
+                                _4878++;
+                                _4909 = _8194;
+                                _4904 = _8196;
+                                continue;
+                            }
+                            else
+                            {
+                                _4914 = _4652;
+                                _4898 = false;
+                                break;
+                            }
+                        }
+                        if (_4898)
+                        {
+                            _4957 = _4909;
+                            _4956 = _4904;
+                            _4913 = _4914;
+                            break;
+                        }
+                        float3 _3754 = cross(_4904, _4909);
+                        _4957 = _4909;
+                        _4956 = _4904;
+                        _4913 = dot(_3754, _3754) > fast::max(9.9999996826552253889678874634872e-21, (9.9999999747524270787835121154785e-07 * dot(_4904, _4904)) * dot(_4909, _4909));
+                        break;
+                    } while(false);
+                    if (!_4913)
+                    {
+                        _5932 = _1791;
+                        break;
+                    }
+                    float _2793 = dot(_4956, _4956);
+                    float _2796 = dot(_4956, _4957);
+                    float _2799 = dot(_4957, _4957);
+                    float _2811 = (_2793 * _2799) - (_2796 * _2796);
+                    bool _2813 = _2811 <= 0.0;
+                    bool _2819;
+                    if (!_2813)
+                    {
+                        _2819 = isnan(_2811);
+                    }
+                    else
+                    {
+                        _2819 = _2813;
+                    }
+                    bool _2825;
+                    if (!_2819)
+                    {
+                        _2825 = isinf(_2811);
+                    }
+                    else
+                    {
+                        _2825 = _2819;
+                    }
+                    if (_2825)
+                    {
+                        _5932 = _1791;
+                        break;
+                    }
+                    float _2836 = fast::max(9.9999997473787516355514526367188e-06, fast::min(0.00200000009499490261077880859375, 0.0199999995529651641845703125 * fast::max(length(_4956), length(_4957))));
+                    uint _2839 = uint(_1680) - 1u;
+                    float3 _2904 = mix(float3(0.07999999821186065673828125 * fast::clamp(_997.Materials[_1002.Instances[_2839].Metadata.x].Parameters.z, 0.0, 1.0)), _997.Materials[_1002.Instances[_2839].Metadata.x].BaseColor.xyz * _1002.Instances[_2839].Tint.xyz, float3(fast::clamp(_997.Materials[_1002.Instances[_2839].Metadata.x].Parameters.x, 0.0, 1.0)));
+                    bool _3778 = DIA.Camera.w > 0.5;
+                    float3 _5004;
+                    if (_3778)
+                    {
+                        _5004 = -DIA.CameraForward.xyz;
+                    }
+                    else
+                    {
+                        _5004 = fast::normalize(DIA.Camera.xyz - Position.read(uint2(_1652), 0).xyz);
+                    }
+                    float3 _3808 = float3(1.0) - _2904;
+                    float3 _3813 = _2904 + (_3808 * powr(1.0 - fast::clamp(dot(Normal.read(uint2(_1652), 0).xyz, _5004), 0.0, 1.0), 5.0));
+                    float _5008;
+                    float _5009;
+                    float _5010;
+                    _5010 = 0.0;
+                    _5009 = 0.0;
+                    _5008 = 0.0;
+                    spvUnsafeArray<float, 9> _2642;
+                    spvUnsafeArray<float3, 9> _2643;
+                    spvUnsafeArray<float, 9> _2644;
+                    spvUnsafeArray<float, 9> _2645;
+                    spvUnsafeArray<float3, 4> _3828;
+                    bool _5228;
+                    float _7419;
+                    float _7420;
+                    float _7421;
+                    bool _5235;
+                    for (int _5007 = 0; _5007 < 9; _5235 = _5228, _5010 = _7421, _5009 = _7420, _5008 = _7419, _5007++)
+                    {
+                        int _2915 = spvSMod(_5007, 3) - 1;
+                        int _2918 = (_5007 / 3) - 1;
+                        int2 _2922 = _1652 + int2(_2915, _2918);
+                        _2642[_5007] = 0.0;
+                        _2643[_5007] = _1791;
+                        _2645[_5007] = 0.0;
+                        _2644[_5007] = 0.0;
+                        float3 _5300;
+                        do
+                        {
+                            bool _3839 = any(_2922 < int2(1));
+                            bool _3849;
+                            if (!_3839)
+                            {
+                                _3849 = any(_2922 >= (_1641 - int2(1)));
+                            }
+                            else
+                            {
+                                _3849 = _3839;
+                            }
+                            if (_3849)
+                            {
+                                _5300 = float3(0.0);
+                                _5228 = false;
+                                break;
+                            }
+                            float4 _3855 = Normal.read(uint2(_2922), 0);
+                            float3 _3860 = Position.read(uint2(_2922), 0).xyz;
+                            float4 _3864 = Reflected.read(uint2(_2922), 0);
+                            bool _3867 = _3855.w > 0.0199999995529651641845703125;
+                            bool _3874;
+                            if (!_3867)
+                            {
+                                _3874 = _3864.w != 1.0;
+                            }
+                            else
+                            {
+                                _3874 = _3867;
+                            }
+                            bool _3885;
+                            if (!_3874)
+                            {
+                                _3885 = Identity.read(uint2(_2922), 0).w != _1680;
+                            }
+                            else
+                            {
+                                _3885 = _3874;
+                            }
+                            bool _3896;
+                            if (!_3885)
+                            {
+                                _3896 = RawSpecular.read(uint2(_2922), 0).w != _2686;
+                            }
+                            else
+                            {
+                                _3896 = _3885;
+                            }
+                            if (_3896)
+                            {
+                                _5300 = float3(0.0);
+                                _5228 = false;
+                                break;
+                            }
+                            bool _5191;
+                            bool _5229;
+                            int _5137 = 0;
+                            for (;;)
+                            {
+                                if (_5137 < 4)
+                                {
+                                    int2 _3908 = _2922 + _512[_5137];
+                                    float4 _3912 = Normal.read(uint2(_3908), 0);
+                                    float4 _3916 = Reflected.read(uint2(_3908), 0);
+                                    float3 _3923 = Position.read(uint2(_3908), 0).xyz - _3860;
+                                    bool _3930 = Identity.read(uint2(_3908), 0).w != _1680;
+                                    bool _3941;
+                                    if (!_3930)
+                                    {
+                                        _3941 = RawSpecular.read(uint2(_3908), 0).w != _2686;
+                                    }
+                                    else
+                                    {
+                                        _3941 = _3930;
+                                    }
+                                    bool _3948;
+                                    if (!_3941)
+                                    {
+                                        _3948 = _3916.w != 1.0;
+                                    }
+                                    else
+                                    {
+                                        _3948 = _3941;
+                                    }
+                                    bool _3955;
+                                    if (!_3948)
+                                    {
+                                        _3955 = _3912.w > 0.0199999995529651641845703125;
+                                    }
+                                    else
+                                    {
+                                        _3955 = _3948;
+                                    }
+                                    bool _3966;
+                                    if (!_3955)
+                                    {
+                                        float3 _3960 = _3855.xyz;
+                                        float3 _3962 = _3912.xyz;
+                                        float _4092 = fast::max(9.9999997473787516355514526367188e-06, fast::min(0.00200000009499490261077880859375, 0.0199999995529651641845703125 * length(_3923)));
+                                        bool _4096 = !any(isnan(_3923));
+                                        bool _4103;
+                                        if (_4096)
+                                        {
+                                            _4103 = !any(isinf(_3923));
+                                        }
+                                        else
+                                        {
+                                            _4103 = _4096;
+                                        }
+                                        bool _4110;
+                                        if (_4103)
+                                        {
+                                            _4110 = !any(isnan(_3960));
+                                        }
+                                        else
+                                        {
+                                            _4110 = _4103;
+                                        }
+                                        bool _4117;
+                                        if (_4110)
+                                        {
+                                            _4117 = !any(isinf(_3960));
+                                        }
+                                        else
+                                        {
+                                            _4117 = _4110;
+                                        }
+                                        bool _4124;
+                                        if (_4117)
+                                        {
+                                            _4124 = !any(isnan(_3962));
+                                        }
+                                        else
+                                        {
+                                            _4124 = _4117;
+                                        }
+                                        bool _4131;
+                                        if (_4124)
+                                        {
+                                            _4131 = !any(isinf(_3962));
+                                        }
+                                        else
+                                        {
+                                            _4131 = _4124;
+                                        }
+                                        bool _4138;
+                                        if (_4131)
+                                        {
+                                            _4138 = dot(_3960, _3962) >= 0.999999523162841796875;
+                                        }
+                                        else
+                                        {
+                                            _4138 = _4131;
+                                        }
+                                        bool _4147;
+                                        if (_4138)
+                                        {
+                                            _4147 = abs(dot(_3923, _3960)) <= _4092;
+                                        }
+                                        else
+                                        {
+                                            _4147 = _4138;
+                                        }
+                                        bool _4156;
+                                        if (_4147)
+                                        {
+                                            _4156 = abs(dot(_3923, _3962)) <= _4092;
+                                        }
+                                        else
+                                        {
+                                            _4156 = _4147;
+                                        }
+                                        _3966 = !_4156;
+                                    }
+                                    else
+                                    {
+                                        _3966 = _3955;
+                                    }
+                                    if (_3966)
+                                    {
+                                        _5229 = false;
+                                        _5191 = true;
+                                        break;
+                                    }
+                                    _3828[_5137] = _3916.xyz - _3864.xyz;
+                                    _5137++;
+                                    continue;
+                                }
+                                else
+                                {
+                                    _5229 = _5235;
+                                    _5191 = false;
+                                    break;
+                                }
+                            }
+                            if (_5191)
+                            {
+                                _5300 = float3(0.0);
+                                _5228 = _5229;
+                                break;
+                            }
+                            float3 _3986 = _3828[1] - _3828[0];
+                            float3 _3991 = _3828[3] - _3828[2];
+                            float3 _3994 = cross(_3986, _3991);
+                            bool _3997 = any(isnan(_3994));
+                            bool _4004;
+                            if (!_3997)
+                            {
+                                _4004 = any(isinf(_3994));
+                            }
+                            else
+                            {
+                                _4004 = _3997;
+                            }
+                            if (_4004)
+                            {
+                                _5300 = float3(0.0);
+                                _5228 = false;
+                                break;
+                            }
+                            if (dot(_3994, _3994) <= fast::max(9.9999996826552253889678874634872e-21, (9.9999999747524270787835121154785e-07 * dot(_3986, _3986)) * dot(_3991, _3991)))
+                            {
+                                _5300 = float3(0.0);
+                                _5228 = false;
+                                break;
+                            }
+                            float3 _4023 = fast::normalize(_3994);
+                            bool _4026 = any(isnan(_4023));
+                            bool _4033;
+                            if (!_4026)
+                            {
+                                _4033 = any(isinf(_4023));
+                            }
+                            else
+                            {
+                                _4033 = _4026;
+                            }
+                            if (_4033)
+                            {
+                                _5300 = _4023;
+                                _5228 = false;
+                                break;
+                            }
+                            float _4043 = fast::max(9.9999997473787516355514526367188e-06, fast::min(0.00200000009499490261077880859375, 0.0199999995529651641845703125 * fast::max(length(_3986), length(_3991))));
+                            bool _5222;
+                            bool _5294;
+                            int _5214 = 0;
+                            for (;;)
+                            {
+                                if (_5214 < 4)
+                                {
+                                    bool _4053 = any(isnan(_3828[_5214]));
+                                    bool _4062;
+                                    if (!_4053)
+                                    {
+                                        _4062 = any(isinf(_3828[_5214]));
+                                    }
+                                    else
+                                    {
+                                        _4062 = _4053;
+                                    }
+                                    bool _4074;
+                                    if (!_4062)
+                                    {
+                                        _4074 = abs(dot(_3828[_5214], _4023)) > _4043;
+                                    }
+                                    else
+                                    {
+                                        _4074 = _4062;
+                                    }
+                                    if (_4074)
+                                    {
+                                        _5294 = false;
+                                        _5222 = true;
+                                        break;
+                                    }
+                                    _5214++;
+                                    continue;
+                                }
+                                else
+                                {
+                                    _5294 = _5229;
+                                    _5222 = _5191;
+                                    break;
+                                }
+                            }
+                            if (_5222)
+                            {
+                                _5300 = _4023;
+                                _5228 = _5294;
+                                break;
+                            }
+                            _5300 = _4023;
+                            _5228 = true;
+                            break;
+                        } while(false);
+                        if (!_5228)
+                        {
+                            _7421 = _5010;
+                            _7420 = _5009;
+                            _7419 = _5008;
+                            continue;
+                        }
+                        float3 _2945 = Normal.read(uint2(_2922), 0).xyz;
+                        float3 _2952 = Position.read(uint2(_2922), 0).xyz - _2774;
+                        float3 _2959 = Reflected.read(uint2(_2922), 0).xyz - _2779;
+                        float _2962 = dot(_2959, _4956);
+                        float _2965 = dot(_2959, _4957);
+                        float2 _2992 = float2((_2799 * _2962) - (_2796 * _2965), (_2793 * _2965) - (_2796 * _2962)) / float2(_2811);
+                        float3 _5526;
+                        if (_3778)
+                        {
+                            _5526 = -DIA.CameraForward.xyz;
+                        }
+                        else
+                        {
+                            _5526 = fast::normalize(DIA.Camera.xyz - Position.read(uint2(_2922), 0).xyz);
+                        }
+                        float3 _2998 = (_2904 + (_3808 * powr(1.0 - fast::clamp(dot(Normal.read(uint2(_2922), 0).xyz, _5526), 0.0, 1.0), 5.0))) / fast::max(_3813, float3(9.9999999392252902907785028219223e-09));
+                        float _4207 = fast::max(9.9999997473787516355514526367188e-06, fast::min(0.00200000009499490261077880859375, 0.0199999995529651641845703125 * length(_2952)));
+                        bool _4211 = !any(isnan(_2952));
+                        bool _4218;
+                        if (_4211)
+                        {
+                            _4218 = !any(isinf(_2952));
+                        }
+                        else
+                        {
+                            _4218 = _4211;
+                        }
+                        bool _4225;
+                        if (_4218)
+                        {
+                            _4225 = !any(isnan(_2769));
+                        }
+                        else
+                        {
+                            _4225 = _4218;
+                        }
+                        bool _4232;
+                        if (_4225)
+                        {
+                            _4232 = !any(isinf(_2769));
+                        }
+                        else
+                        {
+                            _4232 = _4225;
+                        }
+                        bool _4239;
+                        if (_4232)
+                        {
+                            _4239 = !any(isnan(_2945));
+                        }
+                        else
+                        {
+                            _4239 = _4232;
+                        }
+                        bool _4246;
+                        if (_4239)
+                        {
+                            _4246 = !any(isinf(_2945));
+                        }
+                        else
+                        {
+                            _4246 = _4239;
+                        }
+                        bool _4253;
+                        if (_4246)
+                        {
+                            _4253 = dot(_2769, _2945) >= 0.999999523162841796875;
+                        }
+                        else
+                        {
+                            _4253 = _4246;
+                        }
+                        bool _4262;
+                        if (_4253)
+                        {
+                            _4262 = abs(dot(_2952, _2769)) <= _4207;
+                        }
+                        else
+                        {
+                            _4262 = _4253;
+                        }
+                        bool _4271;
+                        if (_4262)
+                        {
+                            _4271 = abs(dot(_2952, _2945)) <= _4207;
+                        }
+                        else
+                        {
+                            _4271 = _4262;
+                        }
+                        bool _3012;
+                        if (_4271)
+                        {
+                            _3012 = abs(dot(_4831, _5300)) < 0.99500000476837158203125;
+                        }
+                        else
+                        {
+                            _3012 = !_4271;
+                        }
+                        bool _3022;
+                        if (!_3012)
+                        {
+                            _3022 = abs(dot(_2959, _4831)) > _2836;
+                        }
+                        else
+                        {
+                            _3022 = _3012;
+                        }
+                        bool _3032;
+                        if (!_3022)
+                        {
+                            _3032 = abs(dot(_2959, _5300)) > _2836;
+                        }
+                        else
+                        {
+                            _3032 = _3022;
+                        }
+                        bool _3040;
+                        if (!_3032)
+                        {
+                            _3040 = dot(_2992, _2992) > 2.25;
+                        }
+                        else
+                        {
+                            _3040 = _3032;
+                        }
+                        bool _3047;
+                        if (!_3040)
+                        {
+                            _3047 = any(_2998 < float3(0.980392158031463623046875));
+                        }
+                        else
+                        {
+                            _3047 = _3040;
+                        }
+                        bool _3054;
+                        if (!_3047)
+                        {
+                            _3054 = any(_2998 > float3(1.019999980926513671875));
+                        }
+                        else
+                        {
+                            _3054 = _3047;
+                        }
+                        if (_3054)
+                        {
+                            _7421 = _5010;
+                            _7420 = _5009;
+                            _7419 = _5008;
+                            continue;
+                        }
+                        _2643[_5007] = InputSpecular.read(uint2(_2922), 0).xyz;
+                        bool _3068 = any(isnan(_2643[_5007]));
+                        bool _3077;
+                        if (!_3068)
+                        {
+                            _3077 = any(isinf(_2643[_5007]));
+                        }
+                        else
+                        {
+                            _3077 = _3068;
+                        }
+                        if (_3077)
+                        {
+                            _7421 = _5010;
+                            _7420 = _5009;
+                            _7419 = _5008;
+                            continue;
+                        }
+                        _2642[_5007] = _1464[abs(_2915)] * _1464[abs(_2918)];
+                        float _4275 = dot(_2643[_5007], float3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875));
+                        float4 _3100 = Counts.read(uint2(_2922), 0);
+                        float _3110 = _3100.y;
+                        _2644[_5007] = fast::max(_3100.w - (_4275 * _4275), 0.0) / fast::max(_3110, 1.0);
+                        _2645[_5007] = fast::clamp((_3110 - 1.0) * 0.3333333432674407958984375, 0.0, 1.0);
+                        _7421 = _5010 + (_2642[_5007] * _4275);
+                        _7420 = _5009 + ((_2642[_5007] * _4275) * _4275);
+                        _7419 = _5008 + _2642[_5007];
+                    }
+                    if (_5008 <= _2642[4])
+                    {
+                        _5932 = _1791;
+                        break;
+                    }
+                    float _3158 = _5010 / _5008;
+                    float _3164 = fast::max((_5009 / _5008) - (_3158 * _3158), 0.0);
+                    float _3170 = mix(_3164, _2644[4], _2645[4]);
+                    float _5012;
+                    float3 _5051;
+                    _5051 = float3(0.0);
+                    _5012 = 0.0;
+                    for (int _5011 = 0; _5011 < 9; )
+                    {
+                        float _3206 = _2642[_5011] * exp((-abs(dot(_2643[_5011], float3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875)) - dot(_1791, float3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875)))) / ((4.0 * sqrt(fast::max(_3170 + mix(_3164, _2644[_5011], _2645[_5011]), 0.0))) + 9.9999999747524270787835121154785e-07));
+                        _5051 += (_2643[_5011] * _3206);
+                        _5012 += _3206;
+                        _5011++;
+                        continue;
+                    }
+                    float3 _5052;
+                    if (_5012 > 0.0)
+                    {
+                        _5052 = _5051 / float3(_5012);
+                    }
+                    else
+                    {
+                        _5052 = _1791;
+                    }
+                    _5932 = _5052;
+                    break;
+                } while(false);
+                out.OutSpecular.x = _5932.x;
+                out.OutSpecular.y = _5932.y;
+                out.OutSpecular.z = _5932.z;
+            }
+            if (((device float*)&_997.Materials[((device uint*)&_1002.Instances[uint(_1680) - 1u].Metadata)[0u]].Parameters)[0u] >= 1.0)
+            {
+                out.OutSpecular.w = 0.0;
+                out.OutDiffuse.w = 0.0;
+                break;
+            }
+        }
+        float _1817 = (1.5 * _1760) * _1760;
+        bool _1823 = (_1760 > 0.0199999995529651641845703125) && (_1757 >= 0.0);
+        if (!_1823)
+        {
+            out.OutSpecular.w = 0.0;
+        }
+        float _4287 = dot(_1669.xyz, float3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875));
+        float _4291 = dot(_1674.xyz, float3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875));
+        float2 _1838 = float2(_4287, _4291);
+        float2 _6845;
+        if (_1663)
+        {
+            float2 _6272;
+            float2 _6273;
+            float2 _6274;
+            float2 _6275;
+            float2 _6276;
+            float2 _6277;
+            _6277 = float2(0.0);
+            _6276 = float2(0.0);
+            _6275 = float2(0.0);
+            _6274 = float2(0.0);
+            _6273 = float2(0.0);
+            _6272 = float2(0.0);
+            float2 _7296;
+            float2 _7303;
+            float2 _7309;
+            float2 _7315;
+            float2 _7322;
+            float2 _7328;
+            for (int _6271 = -2; _6271 <= 2; _6277 = _7328, _6276 = _7322, _6275 = _7315, _6274 = _7309, _6273 = _7296, _6272 = _7303, _6271++)
+            {
+                _7328 = _6277;
+                _7322 = _6276;
+                _7315 = _6275;
+                _7309 = _6274;
+                _7303 = _6272;
+                _7296 = _6273;
+                float2 _8103;
+                float2 _8104;
+                float2 _8105;
+                float2 _8106;
+                float2 _8107;
+                float2 _8108;
+                for (int _7271 = -2; _7271 <= 2; _7328 = _8108, _7322 = _8107, _7315 = _8106, _7309 = _8105, _7303 = _8104, _7296 = _8103, _7271++)
+                {
+                    int2 _1876 = _1652 + int2(_7271, _6271);
+                    bool _1879 = any(_1876 < int2(0));
+                    bool _1887;
+                    if (!_1879)
+                    {
+                        _1887 = any(_1876 >= _1641);
+                    }
+                    else
+                    {
+                        _1887 = _1879;
+                    }
+                    if (_1887)
+                    {
+                        _8108 = _7328;
+                        _8107 = _7322;
+                        _8106 = _7315;
+                        _8105 = _7309;
+                        _8104 = _7303;
+                        _8103 = _7296;
+                        continue;
+                    }
+                    if (Identity.read(uint2(_1876), 0).w != _1680)
+                    {
+                        _8108 = _7328;
+                        _8107 = _7322;
+                        _8106 = _7315;
+                        _8105 = _7309;
+                        _8104 = _7303;
+                        _8103 = _7296;
+                        continue;
+                    }
+                    float4 _1905 = Normal.read(uint2(_1876), 0);
+                    float3 _1916 = _1746.xyz;
+                    float3 _4298 = Position.read(uint2(_1876), 0).xyz - _1741.xyz;
+                    float _4309 = dot(_1916, _1905.xyz);
+                    float _4315 = powr(fast::max(_4309, 0.0), 128.0) * exp((-8.0) * (abs(dot(_4298, _1916)) / (length(_4298) + 9.9999999747524270787835121154785e-07)));
+                    float2 _1925 = float2(_4315, 0.0);
+                    bool _1935;
+                    if (_1823)
+                    {
+                        _1935 = abs(_1905.w - _1760) < 0.0199999995529651641845703125;
+                    }
+                    else
+                    {
+                        _1935 = _1823;
+                    }
+                    bool _1944;
+                    if (_1935)
+                    {
+                        _1944 = Reflected.read(uint2(_1876), 0).w >= 0.0;
+                    }
+                    else
+                    {
+                        _1944 = _1935;
+                    }
+                    float2 _8329;
+                    if (_1944)
+                    {
+                        float2 _8240 = _1925;
+                        _8240.y = _4315 * exp(((-4.0) * fast::max(0.0, 1.0 - _4309)) / fast::max(_1817 * _1817, 9.9999999392252902907785028219223e-09));
+                        _8329 = _8240;
+                    }
+                    else
+                    {
+                        _8329 = _1925;
+                    }
+                    float4 _1963 = Counts.read(uint2(_1876), 0);
+                    float2 _1979 = float2(dot(InputDiffuse.read(uint2(_1876), 0).xyz, float3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875)), dot(InputSpecular.read(uint2(_1876), 0).xyz, float3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875)));
+                    bool _1982 = any(isnan(_1979));
+                    bool _1989;
+                    if (!_1982)
+                    {
+                        _1989 = any(isinf(_1979));
+                    }
+                    else
+                    {
+                        _1989 = _1982;
+                    }
+                    if (_1989)
+                    {
+                        _8108 = _7328;
+                        _8107 = _7322;
+                        _8106 = _7315;
+                        _8105 = _7309;
+                        _8104 = _7303;
+                        _8103 = _7296;
+                        continue;
+                    }
+                    float2 _1998 = _8329 * _1979;
+                    float2 _2024 = _8329 * fast::clamp((_1963.xy - float2(1.0)) * float2(0.3333333432674407958984375), float2(0.0), float2(1.0));
+                    _8108 = _7328 + _2024;
+                    _8107 = _7322 + (_2024 * fast::max(_1963.zw - (_1979 * _1979), float2(0.0)));
+                    _8106 = _7315 + float2(_8329 > float2(0.5));
+                    _8105 = _7309 + (_1998 * _1979);
+                    _8104 = _7303 + _1998;
+                    _8103 = _7296 + _8329;
+                }
+            }
+            float2 _2047 = fast::max(_6273, float2(9.9999999747524270787835121154785e-07));
+            float2 _2048 = _6272 / _2047;
+            float2 _2058 = fast::max((_6274 / _2047) - (_2048 * _2048), float2(0.0));
+            float2 _2076 = Counts.read(uint2(_1652), 0).xy;
+            _6845 = mix(mix(_2058, fast::max(_2058, _1838 * _1838), float2(_6275 < float2(4.0))), (_6276 / fast::max(_6277, float2(9.9999999747524270787835121154785e-07))) / fast::max(_2076, float2(1.0)), fast::clamp((_2076 - float2(1.0)) * float2(0.3333333432674407958984375), float2(0.0), float2(1.0)) * fast::clamp(_6277, float2(0.0), float2(1.0)));
+        }
+        else
+        {
+            _6845 = float2(_1669.w, _1674.w);
+        }
+        float _6368;
+        if (_1757 == 1.0)
+        {
+            _6368 = _1741.w;
+        }
+        else
+        {
+            _6368 = DIA.Settings.x;
+        }
+        float3 _2112 = _1741.xyz;
+        float3 _2115 = _1746.xyz;
+        float _4358 = (in.InUV.x * 2.0) - 1.0;
+        float _4362 = 1.0 - (in.InUV.y * 2.0);
+        float4 _4370 = DIA.InverseViewProjection * float4(_4358, _4362, 0.0, 1.0);
+        float4 _4377 = DIA.InverseViewProjection * float4(_4358, _4362, 1.0, 1.0);
+        float3 _4382 = float3(_4370.w);
+        float3 _4383 = _4370.xyz / _4382;
+        float3 _4388 = float3(_4377.w);
+        float3 _4389 = _4377.xyz / _4388;
+        float3 _4392 = _4389 - _4383;
+        float _4401 = dot(_2112 - _4383, _4392) / dot(_4392, _4392);
+        float _4404 = dot(_2115, _4392);
+        float _6374;
+        if (abs(_4404) > 9.9999999747524270787835121154785e-07)
+        {
+            float _6375;
+            _6375 = 0.0;
+            float _4468;
+            for (int _6373 = 0; _6373 < 2; _6375 = _4468, _6373++)
+            {
+                float _7256;
+                if (_6373 == 0)
+                {
+                    _7256 = 2.0 / DIA.Extent.x;
+                }
+                else
+                {
+                    _7256 = (-2.0) / DIA.Extent.y;
+                }
+                float4 _4429 = DIA.InverseViewProjection[_6373] * _7256;
+                float3 _4431 = _4429.xyz;
+                float _4434 = _4429.w;
+                float3 _4456 = mix((_4431 - (_4383 * _4434)) / _4382, (_4431 - (_4389 * _4434)) / _4388, float3(_4401));
+                _4468 = fast::max(_6375, length(_4456 - (_4392 * (dot(_2115, _4456) / _4404))));
+            }
+            _6374 = _6375;
+        }
+        else
+        {
+            _6374 = 0.0;
+        }
+        float _2119 = ((_6368 * _1817) / fast::max(_6374, 9.9999999747524270787835121154785e-07)) + 1.0;
+        float3 _6469;
+        float3 _6479;
+        float2 _8278;
+        float2 _8279;
+        _8279 = float2(0.0);
+        _8278 = float2(0.0);
+        _6479 = float3(0.0);
+        _6469 = float3(0.0);
+        bool _6909;
+        float3 _7034;
+        float3 _7241;
+        float2 _8291;
+        float2 _8310;
+        bool _6910;
+        for (int _6376 = -2; _6376 <= 2; _8279 = _8310, _8278 = _8291, _6479 = _7241, _6469 = _7034, _6376++, _6910 = _6909)
+        {
+            _8310 = _8279;
+            _8291 = _8278;
+            _7241 = _6479;
+            _7034 = _6469;
+            _6909 = _6910;
+            bool _8021;
+            float3 _8031;
+            float3 _8064;
+            float2 _8330;
+            float2 _8333;
+            for (int _6480 = -2; _6480 <= 2; _8310 = _8333, _8291 = _8330, _7241 = _8064, _7034 = _8031, _6909 = _8021, _6480++)
+            {
+                int2 _2148 = _1652 + (int2(_6480, _6376) * int2(_1658));
+                bool _2151 = any(_2148 < int2(0));
+                bool _2159;
+                if (!_2151)
+                {
+                    _2159 = any(_2148 >= _1641);
+                }
+                else
+                {
+                    _2159 = _2151;
+                }
+                if (_2159)
+                {
+                    _8333 = _8310;
+                    _8330 = _8291;
+                    _8064 = _7241;
+                    _8031 = _7034;
+                    _8021 = _6909;
+                    continue;
+                }
+                bool _2168 = (_6480 == 0) && (_6376 == 0);
+                bool _2170 = !_2168;
+                bool _2180;
+                if (_2170)
+                {
+                    _2180 = Identity.read(uint2(_2148), 0).w != _1680;
+                }
+                else
+                {
+                    _2180 = _2170;
+                }
+                if (_2180)
+                {
+                    _8333 = _8310;
+                    _8330 = _8291;
+                    _8064 = _7241;
+                    _8031 = _7034;
+                    _8021 = _6909;
+                    continue;
+                }
+                float4 _6783;
+                if (_2168)
+                {
+                    _6783 = _1669;
+                }
+                else
+                {
+                    _6783 = InputDiffuse.read(uint2(_2148), 0);
+                }
+                float4 _6786;
+                if (_2168)
+                {
+                    _6786 = _1674;
+                }
+                else
+                {
+                    _6786 = InputSpecular.read(uint2(_2148), 0);
+                }
+                bool _2240;
+                if (_2170)
+                {
+                    bool _2215 = any(isnan(_6783.xyz));
+                    bool _2223;
+                    if (!_2215)
+                    {
+                        _2223 = any(isinf(_6783.xyz));
+                    }
+                    else
+                    {
+                        _2223 = _2215;
+                    }
+                    bool _2231;
+                    if (!_2223)
+                    {
+                        _2231 = any(isnan(_6786.xyz));
+                    }
+                    else
+                    {
+                        _2231 = _2223;
+                    }
+                    bool _2239;
+                    if (!_2231)
+                    {
+                        _2239 = any(isinf(_6786.xyz));
+                    }
+                    else
+                    {
+                        _2239 = _2231;
+                    }
+                    _2240 = _2239;
+                }
+                else
+                {
+                    _2240 = _2170;
+                }
+                if (_2240)
+                {
+                    _8333 = _8310;
+                    _8330 = _8291;
+                    _8064 = _7241;
+                    _8031 = _7034;
+                    _8021 = _6909;
+                    continue;
+                }
+                float4 _6797;
+                if (_2168)
+                {
+                    _6797 = _1746;
+                }
+                else
+                {
+                    _6797 = Normal.read(uint2(_2148), 0);
+                }
+                float _6816;
+                if (_2168)
+                {
+                    _6816 = 1.0;
+                }
+                else
+                {
+                    float3 _4481 = Position.read(uint2(_2148), 0).xyz - _2112;
+                    _6816 = powr(fast::max(dot(_2115, _6797.xyz), 0.0), 128.0) * exp((-8.0) * (abs(dot(_4481, _2115)) / (length(_4481) + 9.9999999747524270787835121154785e-07)));
+                }
+                float2 _6850;
+                if (_1663)
+                {
+                    _6850 = _6845;
+                }
+                else
+                {
+                    _6850 = float2(_6783.w, _6786.w);
+                }
+                float2 _2312 = (sqrt(fast::max(_6845 + _6850, float2(0.0))) * 4.0) + float2(9.9999999747524270787835121154785e-07);
+                float _2316 = (_1464[abs(_6480)] * _1464[abs(_6376)]) * _6816;
+                bool _2335 = _1726 && _2170;
+                bool _2345;
+                bool _8026;
+                if (_2335)
+                {
+                    bool _6898;
+                    do
+                    {
+                        bool _6892;
+                        bool _6897;
+                        bool _6899;
+                        bool _7014;
+                        int _6881 = -1;
+                        bool _6894 = false;
+                        bool _6900 = _6909;
+                        for (;;)
+                        {
+                            if (_6881 <= 1)
+                            {
+                                int _6882 = -1;
+                                for (;;)
+                                {
+                                    if (_6882 <= 1)
+                                    {
+                                        int2 _4524 = int2(_6882, _6881);
+                                        int2 _4525 = _2148 + _4524;
+                                        bool _4528 = any(_4525 < int2(0));
+                                        bool _4536;
+                                        if (!_4528)
+                                        {
+                                            _4536 = any(_4525 >= _1641);
+                                        }
+                                        else
+                                        {
+                                            _4536 = _4528;
+                                        }
+                                        if (_4536)
+                                        {
+                                            int _4550 = _6882 + 1;
+                                            _6882 = _4550;
+                                            continue;
+                                        }
+                                        if (Identity.read(uint2(_4525), 0).w != _1680)
+                                        {
+                                            _7014 = true;
+                                            _6892 = true;
+                                            break;
+                                        }
+                                        int _4550 = _6882 + 1;
+                                        _6882 = _4550;
+                                        continue;
+                                    }
+                                    else
+                                    {
+                                        _7014 = _6900;
+                                        _6892 = _6894;
+                                        break;
+                                    }
+                                }
+                                if (_6892)
+                                {
+                                    _6899 = _7014;
+                                    _6897 = _6892;
+                                    break;
+                                }
+                                _6894 = _6892;
+                                _6881++;
+                                _6900 = _7014;
+                                continue;
+                            }
+                            else
+                            {
+                                _6899 = _6900;
+                                _6897 = _6894;
+                                break;
+                            }
+                        }
+                        if (_6897)
+                        {
+                            _6898 = _6899;
+                            break;
+                        }
+                        _6898 = false;
+                        break;
+                    } while(false);
+                    _8026 = _6898;
+                    _2345 = _6898;
+                }
+                else
+                {
+                    _8026 = _6909;
+                    _2345 = _2335;
+                }
+                float _8197 = _2345 ? 0.0 : (_2316 * exp((-abs(dot(_6783.xyz, float3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875)) - _4287)) / _2312.x));
+                float _2357 = _8291.x + _8197;
+                float2 _8254 = _8291;
+                _8254.x = _2357;
+                float _2367 = _8310.x + ((_8197 * _8197) * _6850.x);
+                float2 _8258 = _8310;
+                _8258.x = _2367;
+                bool _2378;
+                if (_1823)
+                {
+                    _2378 = abs(_6797.w - _1760) < 0.0199999995529651641845703125;
+                }
+                else
+                {
+                    _2378 = _1823;
+                }
+                bool _2392;
+                if (_2378)
+                {
+                    bool _2391;
+                    if (_2170)
+                    {
+                        _2391 = Reflected.read(uint2(_2148), 0).w >= 0.0;
+                    }
+                    else
+                    {
+                        _2391 = _2168;
+                    }
+                    _2392 = _2391;
+                }
+                else
+                {
+                    _2392 = _2378;
+                }
+                float3 _8065;
+                float2 _8331;
+                float2 _8334;
+                if (_2392)
+                {
+                    float _2445 = ((_2316 * exp(((-4.0) * fast::max(0.0, 1.0 - dot(_2115, _6797.xyz))) / fast::max(_1817 * _1817, 9.9999999392252902907785028219223e-09))) * exp((-(float((_6480 * _6480) + (_6376 * _6376)) * float(_1658 * _1658))) / ((2.0 * _2119) * _2119))) * exp((-abs(dot(_6786.xyz, float3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875)) - _4291)) / _2312.y);
+                    _8334 = float2(_2367, _8310.y + ((_2445 * _2445) * _6850.y));
+                    _8331 = float2(_2357, _8291.y + _2445);
+                    _8065 = _7241 + (_6786.xyz * _2445);
+                }
+                else
+                {
+                    _8334 = _8258;
+                    _8331 = _8254;
+                    _8065 = _7241;
+                }
+                _8333 = _8334;
+                _8330 = _8331;
+                _8064 = _8065;
+                _8031 = _7034 + (_6783.xyz * _8197);
+                _8021 = _8026;
+            }
+        }
+        if (!_1736)
+        {
+            out.OutDiffuse = float4(_6469 / float3(_8278.x), _8279.x / (_8278.x * _8278.x));
+        }
+        if (_1823)
+        {
+            out.OutSpecular = float4(_6479 / float3(_8278.y), _8279.y / (_8278.y * _8278.y));
+        }
+        break;
+    } while(false);
+    return out;
+}

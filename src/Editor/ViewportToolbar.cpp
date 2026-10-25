@@ -4,6 +4,7 @@
 #include <QButtonGroup>
 #include <QHBoxLayout>
 #include <QMenu>
+#include <QSignalBlocker>
 #include <QToolButton>
 
 namespace FP::Editor
@@ -30,7 +31,7 @@ namespace FP::Editor
 			return button;
 		}
 
-		const char* ViewModeNames[] = { "Lit", "Unlit", "Wireframe" };
+		const char* ViewModeNames[] = { "Lit", "Unlit", "Wireframe", "DIA Direct", "DIA Diffuse", "DIA Reflections", "DIA Coverage", "DIA Cache" };
 
 		// Buttons that sit side by side as one pill, rounded only at the ends of the group.
 		const char* GroupStyle =
@@ -60,13 +61,19 @@ namespace FP::Editor
 		m_ViewMode = MakePill(EditorIcons::Get(EditorIcon::Lit), "Lit", "View mode (Alt+4 Lit, Alt+3 Unlit, Alt+2 Wireframe)");
 		m_ViewMode->setPopupMode(QToolButton::InstantPopup);
 		QMenu* modes = new QMenu(m_ViewMode);
-		for (int i = 0; i < 3; ++i)
+		for (int i = 0; i < static_cast<int>(sizeof(ViewModeNames) / sizeof(ViewModeNames[0])); ++i)
 		{
 			const ViewMode mode = static_cast<ViewMode>(i);
 			modes->addAction(ViewModeNames[i], this, [this, mode]() { SetViewMode(mode); emit ViewModeChanged(mode); });
 		}
 		m_ViewMode->setMenu(modes);
 		layout->addWidget(m_ViewMode);
+		m_DIA = MakePill(EditorIcons::Get(EditorIcon::Lit), "DIA Off", "Compare DIA with standard lighting");
+		m_DIA->setObjectName("DIAToggle");
+		m_DIA->setAccessibleName("DIA lighting");
+		m_DIA->setCheckable(true);
+		connect(m_DIA, &QToolButton::toggled, this, &ViewportToolbar::DIAToggled);
+		layout->addWidget(m_DIA);
 		layout->addStretch(1);
 
 		// Select, move, rotate and scale, like UE's transform tools.
@@ -139,5 +146,12 @@ namespace FP::Editor
 	void ViewportToolbar::SetGizmoMode(GizmoMode mode)
 	{
 		m_GizmoModes->button(static_cast<int>(mode))->setChecked(true);
+	}
+
+	void ViewportToolbar::SetDIAEnabled(bool enabled)
+	{
+		const QSignalBlocker blocked(m_DIA);
+		m_DIA->setChecked(enabled);
+		m_DIA->setText(enabled ? "DIA On" : "DIA Off");
 	}
 }

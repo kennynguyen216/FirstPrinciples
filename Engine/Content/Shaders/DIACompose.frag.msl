@@ -1,0 +1,48 @@
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+struct DIAData
+{
+    char _m0_pad[160];
+    float4 Extent;
+};
+
+struct main0_out
+{
+    float4 OutColor [[color(0)]];
+};
+
+struct main0_in
+{
+    float2 InUV [[user(locn0)]];
+};
+
+fragment main0_out main0(main0_in in [[stage_in]], constant DIAData& DIA [[buffer(0)]], texture2d<float> Diffuse [[texture(0)]], texture2d<float> Specular [[texture(1)]], texture2d<float> Exact [[texture(2)]], sampler DiffuseSmplr [[sampler(0)]], sampler SpecularSmplr [[sampler(1)]], sampler ExactSmplr [[sampler(2)]])
+{
+    main0_out out = {};
+    int2 _33 = int2(fast::clamp(in.InUV, float2(0.0), float2(0.999998986721038818359375)) * DIA.Extent.xy);
+    float3 _60 = (Diffuse.read(uint2(_33), 0).xyz + Specular.read(uint2(_33), 0).xyz) + Exact.read(uint2(_33), 0).xyz;
+    bool _68 = !any(isnan(_60));
+    bool _75;
+    if (_68)
+    {
+        _75 = !any(isinf(_60));
+    }
+    else
+    {
+        _75 = _68;
+    }
+    float3 _98;
+    if (_75)
+    {
+        _98 = fast::max(_60, float3(0.0));
+    }
+    else
+    {
+        _98 = float3(1.0, 0.0, 1.0);
+    }
+    out.OutColor = float4(_98, float(_75));
+    return out;
+}

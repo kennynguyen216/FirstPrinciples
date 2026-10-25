@@ -123,6 +123,7 @@ namespace FP
 		// Removes every entity.
 		void Clear();
 		void ReplaceScene(World& candidate);
+		uint64 GetSceneGeneration() const { return m_SceneGeneration; }
 
 		// ---- Cameras -------------------------------------------------------
 
@@ -207,6 +208,7 @@ namespace FP
 		Array<RefPtr<System>> m_Systems;
 		Array<Entity> m_PendingDestroy;
 		uint64 m_NextCreationIndex = 0;
+		uint64 m_SceneGeneration = 1;
 		mutable Array<Entity> m_EntityOrder;
 		mutable bool m_EntityOrderDirty = true;
 		double m_Time = 0;

@@ -1,4 +1,5 @@
 #include "Engine/Render/Renderer.h"
+#include "Engine/Render/DIA.h"
 #include "Engine/EngineSettings.h"
 #include "Engine/Material.h"
 #include "Engine/Paths.h"
@@ -569,17 +570,21 @@ namespace FP
 		}
 	}
 
-	void Renderer::EnsureTargets(uint32 width, uint32 height)
+	bool Renderer::EnsureTargets(uint32 width, uint32 height)
 	{
 		if (m_SceneColor && m_SceneCopy && m_Depth && m_SceneColor->GetWidth() == width && m_SceneColor->GetHeight() == height)
-			return;
-		m_SceneColor = m_Device.CreateRenderTarget(SceneFormat, width, height, false);
-		m_SceneCopy = m_Device.CreateRenderTarget(SceneFormat, width, height, false);
-		// Sampled so black holes can find the scene along their bent rays.
-		m_Depth = m_Device.CreateRenderTarget(m_Device.GetDepthFormat(), width, height, true, true);
+			return true;
+		auto color = m_Device.CreateRenderTarget(SceneFormat, width, height, false);
+		auto copy = m_Device.CreateRenderTarget(SceneFormat, width, height, false);
+		auto depth = m_Device.CreateRenderTarget(m_Device.GetDepthFormat(), width, height, true, true);
+		if (!color || !copy || !depth) return false;
+		m_SceneColor = std::move(color);
+		m_SceneCopy = std::move(copy);
+		m_Depth = std::move(depth);
+		return true;
 	}
 
-	void Renderer::UploadLines(SDL_GPUCommandBuffer* cmd, const DebugLines& lines)
+	bool Renderer::UploadLines(SDL_GPUCommandBuffer* cmd, const DebugLines& lines)
 	{
 		const uint32 bytes = static_cast<uint32>(lines.GetVertices().Num()) * sizeof(LineVertex);
 		if (!m_LineVertices || m_LineVertices->GetSize() < bytes)
@@ -589,7 +594,7 @@ namespace FP
 				capacity *= 2;
 			m_LineVertices = m_Device.CreateBuffer(SDL_GPU_BUFFERUSAGE_VERTEX, nullptr, capacity);
 		}
-		m_Device.UploadToBuffer(cmd, *m_LineVertices, lines.GetVertices().Data(), bytes);
+		return m_LineVertices && m_Device.UploadToBuffer(cmd, *m_LineVertices, lines.GetVertices().Data(), bytes, true);
 	}
 
 	void Renderer::PrepareEnvironment(World& world)
@@ -1303,153 +1308,205 @@ namespace FP
 		else for (Draw& draw : draws) { draw.IndirectFirst = -1; draw.MeshletCount = 0; }
 	}
 
-	void Renderer::Render(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* target, uint32 width, uint32 height,
+	bool Renderer::Render(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* target, uint32 width, uint32 height,
 		World& world, const RenderView& view, const DebugLines* lines, const RenderView* cullingView)
 	{
 		m_RenderStats = {};
-		if (!IsValid() || width == 0 || height == 0)
-			return;
+		m_ActiveMeshlets = 0;
+		if (!IsValid() || !cmd || !target || width == 0 || height == 0)
+			return false;
 		m_Mode = view.Mode;
-		EnsureTargets(width, height);
-		if (!m_SceneColor || !m_SceneCopy || !m_Depth) return;
+		if (!EnsureTargets(width, height)) { FP_LOG_ERROR("Scene target allocation failed"); return false; }
 		BuildFrameUniforms(world, view, width, height);
 		PrepareEnvironment(world);
 
-		const bool hasLines = lines && !lines->GetVertices().IsEmpty();
-		if (hasLines)
-			UploadLines(cmd, *lines);
+		const bool hasLines = lines && !lines->GetVertices().IsEmpty() && UploadLines(cmd, *lines);
 		PrepareParticles(cmd, world, view);
 
-		// Collect everything visible with its shader and surface.
-		Array<Draw> draws;
-		bool hasGlass = false;
-		auto resolve = [&](Entity entity, Surface type, int32 layer, const GPUMesh* mesh, int32 section) {
-			const MaterialComponent* materialComponent = world.TryGet<MaterialComponent>(entity);
-			const Material* material = materialComponent ? MaterialLibrary::Get().Load(materialComponent->GetForSection(section)) : nullptr;
-			// Meshes default to lit so they have shape. Sprites default to unlit so plain 2D games need no lights.
-			ShaderKind kind = type != Surface::Sprite ? ShaderKind::Lit : ShaderKind::Unlit;
-			if (material)
-			{
-				const String& shader = material->GetData().Shader;
-				kind = shader == "Glass" ? ShaderKind::Glass : shader == "Unlit" ? ShaderKind::Unlit : ShaderKind::Lit;
-			}
-			// Unlit and wireframe views flatten every material, glass included, to the unlit shader.
-			if (m_Mode != ViewMode::Lit)
-				kind = ShaderKind::Unlit;
-			hasGlass |= kind == ShaderKind::Glass;
-			const MeshSection* part = mesh ? &mesh->Sections[section] : nullptr;
-			const SkeletalPoseComponent* pose = type == Surface::SkinnedMesh ? world.TryGet<SkeletalPoseComponent>(entity) : nullptr;
-			draws.Add({ layer, Vec3::Dot(world.GetWorldPosition(entity) - view.CameraPosition, view.CameraForward), entity, kind, type, material, mesh,
-				part ? part->FirstIndex : 0, part ? part->IndexCount : 6, pose ? &pose->Skin : nullptr });
-		};
-		for (auto [entity, transform, sprite] : world.View<TransformComponent, SpriteComponent>().each())
-			resolve(entity, Surface::Sprite, sprite.Layer, nullptr, 0);
-		// One draw per section so each can use its own material and shader.
-		for (auto [entity, transform, meshComponent] : world.View<TransformComponent, MeshComponent>().each())
-		{
-			if (const GPUMesh* mesh = m_Meshes.Get(meshComponent.Mesh))
-			{
-				for (int32 section = 0; section < mesh->Sections.Num(); ++section)
-					resolve(entity, Surface::Mesh, 0, mesh, section);
-			}
-		}
-		for (auto [entity, transform, skeletal] : world.View<TransformComponent, SkeletalMeshComponent>().each())
-		{
-			if (const GPUMesh* mesh = m_Meshes.GetSkinned(skeletal.Mesh))
-			{
-				for (int32 section = 0; section < mesh->Sections.Num(); ++section)
-					resolve(entity, Surface::SkinnedMesh, 0, mesh, section);
-			}
-		}
-
-		// Opaque meshes front to back, then sprites by layer back to front, then glass back to front.
-		auto bucket = [](const Draw& d) { return d.Kind == ShaderKind::Glass ? 2 : d.Type != Surface::Sprite ? 0 : 1; };
-		std::stable_sort(draws.begin(), draws.end(), [&](const Draw& a, const Draw& b) {
-			const int ba = bucket(a);
-			const int bb = bucket(b);
-			if (ba != bb)
-				return ba < bb;
-			if (ba == 0)
-				return a.Depth < b.Depth;
-			if (ba == 1 && a.Layer != b.Layer)
-				return a.Layer < b.Layer;
-			return a.Depth > b.Depth;
-		});
-
-		PrepareInstances(cmd, world, draws);
-		RenderShadows(cmd, world, view, draws);
-		PrepareMeshlets(cmd, world, cullingView ? *cullingView : view, draws);
 		const Mat4 viewProjection = view.GetViewProjection();
-		SDL_PushGPUFragmentUniformData(cmd, 1, &m_Frame, sizeof(m_Frame));
-
-		auto beginScenePass = [&](bool clear) {
-			const Vec4 background = ToLinear(view.Background);
-			SDL_GPUColorTargetInfo color = {};
-			color.texture = m_SceneColor->GetHandle();
-			color.clear_color = { background.X, background.Y, background.Z, 1 };
-			color.load_op = clear ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
-			color.store_op = SDL_GPU_STOREOP_STORE;
-
-			SDL_GPUDepthStencilTargetInfo depth = {};
-			depth.texture = m_Depth->GetHandle();
-			depth.clear_depth = 1;
-			depth.load_op = clear ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
-			depth.store_op = SDL_GPU_STOREOP_STORE;
-			depth.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
-			depth.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
-			return SDL_BeginGPURenderPass(cmd, &color, 1, &depth);
-		};
-
-		auto drawRange = [&](SDL_GPURenderPass* pass, int32 from, int32 to) {
-			SDL_GPUGraphicsPipeline* bound = nullptr;
-			for (int32 i = from; i < to;)
-			{
-				int32 end = i + 1;
-				uint32 commands = draws[i].MeshletCount;
-				while (end < to && CanBatch(world, draws[end - 1], draws[end]))
-					commands += draws[end++].MeshletCount;
-				SDL_GPUGraphicsPipeline* pipeline = GetPipeline(draws[i]);
-				if (pipeline != bound)
-				{
-					SDL_BindGPUGraphicsPipeline(pass, pipeline);
-					bound = pipeline;
-				}
-				DrawObject(cmd, pass, world, draws[i], viewProjection, static_cast<uint32>(end - i), commands);
-				i = end;
-			}
-		};
-
-		int32 firstGlass = 0;
-		while (firstGlass < draws.Num() && draws[firstGlass].Kind != ShaderKind::Glass)
-			++firstGlass;
-
-		SDL_GPURenderPass* pass = beginScenePass(true);
-		DrawSkybox(cmd, pass, view);
-		drawRange(pass, 0, firstGlass);
-		// Particles go before glass so glass refracts them.
-		DrawParticles(cmd, pass, viewProjection);
-		SDL_EndGPURenderPass(pass);
-
-		// Glass pass. Each glass object sees the scene as it was before any glass was drawn.
-		if (hasGlass)
+		bool useDIA = false;
+		for (auto [entity, settings] : world.View<DIAComponent>().each())
+			useDIA = useDIA || (settings.Enabled && (view.Mode == ViewMode::Lit || view.Mode >= ViewMode::DIADirect));
+		if (useDIA)
 		{
-			SDL_GPUBlitInfo blit = {};
-			blit.source.texture = m_SceneColor->GetHandle();
-			blit.source.w = width;
-			blit.source.h = height;
-			blit.destination.texture = m_SceneCopy->GetHandle();
-			blit.destination.w = width;
-			blit.destination.h = height;
-			blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
-			blit.filter = SDL_GPU_FILTER_NEAREST;
-			SDL_BlitGPUTexture(cmd, &blit);
-
-			pass = beginScenePass(false);
-			drawRange(pass, firstGlass, draws.Num());
-			SDL_EndGPURenderPass(pass);
+			if (!m_DIA) m_DIA = std::make_unique<DIA>(m_Device);
+			m_DIA->SetDebugMode(view.Mode >= ViewMode::DIADirect ? static_cast<uint32>(view.Mode) - 2 : 0);
+			if (m_DIA->Render(cmd, world, m_Meshes, view))
+			{
+				GPUTexture* source = m_DIA->GetOutput();
+				if (view.Mode == ViewMode::Lit && (source->GetWidth() != width || source->GetHeight() != height))
+				{
+					if (!m_DIA->Resolve(cmd, *m_SceneColor)) return false;
+				}
+				else
+				{
+					SDL_GPUBlitInfo blit = {};
+					blit.source.texture = source->GetHandle();
+					blit.source.w = source->GetWidth();
+					blit.source.h = source->GetHeight();
+					blit.destination.texture = m_SceneColor->GetHandle();
+					blit.destination.w = width;
+					blit.destination.h = height;
+					blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
+					blit.filter = SDL_GPU_FILTER_LINEAR;
+					SDL_BlitGPUTexture(cmd, &blit);
+				}
+				m_DIAError.Clear();
+			}
+			else
+			{
+				if (m_DIAError != m_DIA->GetError())
+				{
+					m_DIAError = m_DIA->GetError();
+					FP_LOG_ERROR("DIA is not ready: %s", m_DIAError.CStr());
+				}
+				SDL_GPUColorTargetInfo errorTarget = {};
+				errorTarget.texture = m_SceneColor->GetHandle();
+				errorTarget.clear_color = { 0.3f, 0, 0.3f, 1 };
+				errorTarget.load_op = SDL_GPU_LOADOP_CLEAR;
+				errorTarget.store_op = SDL_GPU_STOREOP_STORE;
+				SDL_GPURenderPass* errorPass = SDL_BeginGPURenderPass(cmd, &errorTarget, 1, nullptr);
+				if (!errorPass) return false;
+				SDL_EndGPURenderPass(errorPass);
+			}
 		}
+		else if (m_DIA)
+		{
+			m_DIA.reset();
+			m_Meshes.ReleaseRayGeometry();
+		}
+		if (!useDIA)
+		{
+			// Collect everything visible with its shader and surface.
+			Array<Draw> draws;
+			bool hasGlass = false;
+			auto resolve = [&](Entity entity, Surface type, int32 layer, const GPUMesh* mesh, int32 section) {
+				const MaterialComponent* materialComponent = world.TryGet<MaterialComponent>(entity);
+				const Material* material = materialComponent ? MaterialLibrary::Get().Load(materialComponent->GetForSection(section)) : nullptr;
+				// Meshes default to lit so they have shape. Sprites default to unlit so plain 2D games need no lights.
+				ShaderKind kind = type != Surface::Sprite ? ShaderKind::Lit : ShaderKind::Unlit;
+				if (material)
+				{
+					const String& shader = material->GetData().Shader;
+					kind = shader == "Glass" ? ShaderKind::Glass : shader == "Unlit" ? ShaderKind::Unlit : ShaderKind::Lit;
+				}
+				// Unlit and wireframe views flatten every material, glass included, to the unlit shader.
+				if (m_Mode != ViewMode::Lit)
+					kind = ShaderKind::Unlit;
+				hasGlass |= kind == ShaderKind::Glass;
+				const MeshSection* part = mesh ? &mesh->Sections[section] : nullptr;
+				const SkeletalPoseComponent* pose = type == Surface::SkinnedMesh ? world.TryGet<SkeletalPoseComponent>(entity) : nullptr;
+				draws.Add({ layer, Vec3::Dot(world.GetWorldPosition(entity) - view.CameraPosition, view.CameraForward), entity, kind, type, material, mesh,
+					part ? part->FirstIndex : 0, part ? part->IndexCount : 6, pose ? &pose->Skin : nullptr });
+			};
+			for (auto [entity, transform, sprite] : world.View<TransformComponent, SpriteComponent>().each())
+				resolve(entity, Surface::Sprite, sprite.Layer, nullptr, 0);
+			// One draw per section so each can use its own material and shader.
+			for (auto [entity, transform, meshComponent] : world.View<TransformComponent, MeshComponent>().each())
+			{
+				if (const GPUMesh* mesh = m_Meshes.Get(meshComponent.Mesh))
+				{
+					for (int32 section = 0; section < mesh->Sections.Num(); ++section)
+						resolve(entity, Surface::Mesh, 0, mesh, section);
+				}
+			}
+			for (auto [entity, transform, skeletal] : world.View<TransformComponent, SkeletalMeshComponent>().each())
+			{
+				if (const GPUMesh* mesh = m_Meshes.GetSkinned(skeletal.Mesh))
+				{
+					for (int32 section = 0; section < mesh->Sections.Num(); ++section)
+						resolve(entity, Surface::SkinnedMesh, 0, mesh, section);
+				}
+			}
 
-		DrawBlackHoles(cmd, world, view, width, height);
+			// Opaque meshes front to back, then sprites by layer back to front, then glass back to front.
+			auto bucket = [](const Draw& d) { return d.Kind == ShaderKind::Glass ? 2 : d.Type != Surface::Sprite ? 0 : 1; };
+			std::stable_sort(draws.begin(), draws.end(), [&](const Draw& a, const Draw& b) {
+				const int ba = bucket(a);
+				const int bb = bucket(b);
+				if (ba != bb)
+					return ba < bb;
+				if (ba == 0)
+					return a.Depth < b.Depth;
+				if (ba == 1 && a.Layer != b.Layer)
+					return a.Layer < b.Layer;
+				return a.Depth > b.Depth;
+			});
+
+			PrepareInstances(cmd, world, draws);
+			RenderShadows(cmd, world, view, draws);
+			PrepareMeshlets(cmd, world, cullingView ? *cullingView : view, draws);
+			SDL_PushGPUFragmentUniformData(cmd, 1, &m_Frame, sizeof(m_Frame));
+
+			auto beginScenePass = [&](bool clear) {
+				const Vec4 background = ToLinear(view.Background);
+				SDL_GPUColorTargetInfo color = {};
+				color.texture = m_SceneColor->GetHandle();
+				color.clear_color = { background.X, background.Y, background.Z, 1 };
+				color.load_op = clear ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+				color.store_op = SDL_GPU_STOREOP_STORE;
+
+				SDL_GPUDepthStencilTargetInfo depth = {};
+				depth.texture = m_Depth->GetHandle();
+				depth.clear_depth = 1;
+				depth.load_op = clear ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+				depth.store_op = SDL_GPU_STOREOP_STORE;
+				depth.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
+				depth.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+				return SDL_BeginGPURenderPass(cmd, &color, 1, &depth);
+			};
+
+			auto drawRange = [&](SDL_GPURenderPass* pass, int32 from, int32 to) {
+				SDL_GPUGraphicsPipeline* bound = nullptr;
+				for (int32 i = from; i < to;)
+				{
+					int32 end = i + 1;
+					uint32 commands = draws[i].MeshletCount;
+					while (end < to && CanBatch(world, draws[end - 1], draws[end]))
+						commands += draws[end++].MeshletCount;
+					SDL_GPUGraphicsPipeline* pipeline = GetPipeline(draws[i]);
+					if (pipeline != bound)
+					{
+						SDL_BindGPUGraphicsPipeline(pass, pipeline);
+						bound = pipeline;
+					}
+					DrawObject(cmd, pass, world, draws[i], viewProjection, static_cast<uint32>(end - i), commands);
+					i = end;
+				}
+			};
+
+			int32 firstGlass = 0;
+			while (firstGlass < draws.Num() && draws[firstGlass].Kind != ShaderKind::Glass)
+				++firstGlass;
+
+			SDL_GPURenderPass* pass = beginScenePass(true);
+			DrawSkybox(cmd, pass, view);
+			drawRange(pass, 0, firstGlass);
+			// Particles go before glass so glass refracts them.
+			DrawParticles(cmd, pass, viewProjection);
+			SDL_EndGPURenderPass(pass);
+
+			// Glass pass. Each glass object sees the scene as it was before any glass was drawn.
+			if (hasGlass)
+			{
+				SDL_GPUBlitInfo blit = {};
+				blit.source.texture = m_SceneColor->GetHandle();
+				blit.source.w = width;
+				blit.source.h = height;
+				blit.destination.texture = m_SceneCopy->GetHandle();
+				blit.destination.w = width;
+				blit.destination.h = height;
+				blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
+				blit.filter = SDL_GPU_FILTER_NEAREST;
+				SDL_BlitGPUTexture(cmd, &blit);
+
+				pass = beginScenePass(false);
+				drawRange(pass, firstGlass, draws.Num());
+				SDL_EndGPURenderPass(pass);
+			}
+
+			DrawBlackHoles(cmd, world, view, width, height);
+		}
 
 		const Array<GPUTexture*> pages = PrepareUI(cmd, world, view, width, height);
 
@@ -1573,14 +1630,14 @@ namespace FP
 			const SDL_GPUTextureSamplerBinding source{ m_PostColor->GetHandle(), m_Device.GetClampSampler() };
 			drawFullscreen(target, m_FXAAPipeline, &source, 1, &params, sizeof(params));
 		}
-		if (!hasLines && pages.IsEmpty()) return;
+		if (!hasLines && pages.IsEmpty()) return !useDIA || m_DIAError.IsEmpty();
 
 		// UI pages and editor lines stay sharp above the post-processed scene.
 		SDL_GPUColorTargetInfo output = {};
 		output.texture = target;
 		output.load_op = SDL_GPU_LOADOP_LOAD;
 		output.store_op = SDL_GPU_STOREOP_STORE;
-		pass = SDL_BeginGPURenderPass(cmd, &output, 1, nullptr);
+		SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &output, 1, nullptr);
 
 		if (!pages.IsEmpty())
 		{
@@ -1602,5 +1659,6 @@ namespace FP
 			SDL_DrawGPUPrimitives(pass, static_cast<uint32>(lines->GetVertices().Num()), 1, 0, 0);
 		}
 		SDL_EndGPURenderPass(pass);
+		return !useDIA || m_DIAError.IsEmpty();
 	}
 }

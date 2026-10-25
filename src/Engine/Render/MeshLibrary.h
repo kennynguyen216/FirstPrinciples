@@ -2,6 +2,7 @@
 
 #include "Engine/Render/GPUDevice.h"
 #include "Engine/Render/Meshlets.h"
+#include "Engine/Render/RayScene.h"
 
 namespace FP
 {
@@ -17,6 +18,9 @@ namespace FP
 		RefPtr<GPUBuffer> Skin; // SkinVertex per vertex, only on skeletal meshes
 		Vec3 BoundsMin;
 		Vec3 BoundsMax;
+		RefPtr<RayMesh> RayGeometry;
+		Array<RefPtr<RayMesh>> RaySections;
+		uint64 Fingerprint = 0;
 	};
 
 	// Turns MeshComponent names into GPU meshes. Built in primitives are made in code and
@@ -31,6 +35,8 @@ namespace FP
 
 		// A glTF with its skin weights. Null when it fails to load or has no skin.
 		GPUMesh* GetSkinned(const String& path);
+		void ReleaseRayGeometry();
+		void ReleaseUnusedRayGeometry(const Array<String>& names);
 
 	private:
 		RefPtr<GPUMesh> Upload(const MeshData& data);

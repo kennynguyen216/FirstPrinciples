@@ -5,9 +5,27 @@
 #include "Engine/Assets/AssetDatabase.h"
 #include "Core/Misc/File.h"
 #include "Core/Misc/ModuleContext.h"
+#include <cmath>
 
 namespace FP
 {
+	bool ValidateMaterial(const MaterialData& data)
+	{
+		if (data.Shader != "Lit" && data.Shader != "Unlit" && data.Shader != "Glass") return false;
+		for (const FieldInfo& field : Material::GetFields())
+		{
+			const uint8* pointer = reinterpret_cast<const uint8*>(&data) + field.Offset;
+			const int count = field.Type == FieldType::Color ? 4 : field.Type == FieldType::Vec2 ? 2 : field.Type == FieldType::Float ? 1 : 0;
+			for (int i = 0; i < count; ++i)
+				if (!std::isfinite(reinterpret_cast<const float*>(pointer)[i])) return false;
+		}
+		return data.Metallic >= 0 && data.Metallic <= 1 && data.Roughness >= 0 && data.Roughness <= 1 &&
+			data.Specular >= 0 && data.Specular <= 1 && data.AlphaCutoff >= 0 && data.AlphaCutoff <= 1 &&
+			data.EmissiveIntensity >= 0 && data.NormalStrength >= 0 && data.AmbientOcclusionStrength >= 0 &&
+			data.Subsurface >= 0 && data.Subsurface <= 1 && data.IndexOfRefraction > 0 && data.Thickness >= 0 &&
+			data.BaseColor.R >= 0 && data.BaseColor.R <= 1 && data.BaseColor.G >= 0 && data.BaseColor.G <= 1 && data.BaseColor.B >= 0 && data.BaseColor.B <= 1 && data.BaseColor.A >= 0 && data.BaseColor.A <= 1 &&
+			data.EmissiveColor.R >= 0 && data.EmissiveColor.G >= 0 && data.EmissiveColor.B >= 0;
+	}
 	const Array<const char*>& Material::GetShaderNames()
 	{
 		static const Array<const char*> names = { "Lit", "Unlit", "Glass" };
@@ -46,7 +64,8 @@ namespace FP
 				.Field("AlphaCutoff", &MaterialData::AlphaCutoff)
 				.Field("SoundTransmission", &MaterialData::SoundTransmission).Range(0, 1).Tooltip("Sound level passing through this object: 0 blocks, 1 passes at full volume")
 				.Field("SoundAbsorption", &MaterialData::SoundAbsorption).Range(0, 1).Tooltip("Reflected sound absorbed by the surface: 0 reflects fully, 1 absorbs fully")
-				.Field("SoundDamping", &MaterialData::SoundDamping).Range(0, 1).Tooltip("High-frequency loss for transmitted sound and reflections: 0 is clear, 1 is heavily muffled");
+				.Field("SoundDamping", &MaterialData::SoundDamping).Range(0, 1).Tooltip("High-frequency loss for transmitted sound and reflections: 0 is clear, 1 is heavily muffled")
+				.Field("TwoSided", &MaterialData::TwoSided);
 			return list;
 		}();
 		return fields;
@@ -58,16 +77,14 @@ namespace FP
 		const String fullPath = Paths::Content(m_Path);
 		if (!File::ReadAllText(fullPath.CStr(), text))
 			return false;
-		LoadFromString(text.View());
-		m_Dirty = false;
-		return true;
+		return LoadFromString(text.View());
 	}
 
-	void Material::LoadFromString(std::string_view text)
+	bool Material::LoadFromString(std::string_view text)
 	{
-		m_Data = MaterialData();
+		MaterialData candidate;
 		const Array<FieldInfo>& fields = GetFields();
-		FieldSerializer::ForEachLine(text, [&](int32 lineNumber, const Array<String>& tokens) {
+		const bool parsed = FieldSerializer::ForEachLine(text, [&](int32 lineNumber, const Array<String>& tokens) {
 			const FieldInfo* match = nullptr;
 			for (const FieldInfo& field : fields)
 			{
@@ -75,15 +92,21 @@ namespace FP
 					match = &field;
 			}
 			if (match)
-				FieldSerializer::Read(*match, &m_Data, tokens);
+				return FieldSerializer::Read(*match, &candidate, tokens);
 			else
 				FP_LOG_WARN("%s line %d: unknown field %s", m_Path.CStr(), lineNumber, tokens[0].CStr());
 			return true;
 		});
+		if (!parsed || !ValidateMaterial(candidate)) return false;
+		m_Data = std::move(candidate);
+		m_Dirty = false;
+		return true;
 	}
 
 	String Material::SaveToString() const
 	{
+		if (!ValidateMaterial(m_Data))
+			return {};
 		String out = "# FirstPrinciples material\n";
 		for (const FieldInfo& field : GetFields())
 			FieldSerializer::Write(out, field, &m_Data, "");
@@ -92,6 +115,7 @@ namespace FP
 
 	bool Material::Save()
 	{
+		if (!ValidateMaterial(m_Data)) return false;
 		const String out = SaveToString();
 		const String fullPath = Paths::Content(m_Path);
 		if (!File::WriteAllText(fullPath.CStr(), out.View()))
@@ -159,8 +183,11 @@ namespace FP
 		int32 saved = 0;
 		for (auto& pair : m_Materials)
 		{
-			if (pair.Value->IsDirty() && pair.Value->Save())
+			if (pair.Value->IsDirty())
+			{
+				if (!pair.Value->Save()) return -1;
 				++saved;
+			}
 		}
 		return saved;
 	}
