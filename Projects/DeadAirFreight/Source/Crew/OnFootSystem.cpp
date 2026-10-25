@@ -4,6 +4,7 @@
 #include "Effects/CombatEffects.h"
 #include "Engine/Physics/Physics.h"
 #include "Engine/UI/UISystem.h"
+#include "HudSend.h"
 #include "Enemies/Airlock.h"
 #include "Enemies/SiphonComponents.h"
 #include "LifeSupport/LifeSupportComponents.h"
@@ -97,7 +98,7 @@ namespace
 			world.Get<TransformComponent>(onFoot.Crosshair).Scale = {};
 		const Entity hud = world.FindEntityByName(RaceHudName);
 		if (UIDocumentInstance* page = world.IsValid(hud) ? UISystem::For(world, hud) : nullptr; page && page->IsReady())
-			page->Set("overheat", left);
+			SendIfChanged(*page, "overheat", std::to_string(std::round(left * 100) / 100));
 	}
 
 	const TransformComponent* FindHatch(World& world, int32 crew)

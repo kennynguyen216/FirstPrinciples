@@ -5,6 +5,7 @@
 #include "WeatherFetch.h"
 
 #include "Engine/UI/UISystem.h"
+#include "HudSend.h"
 
 #include <algorithm>
 #include <cstdarg>
@@ -306,6 +307,12 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 	else if (Input::WasMousePressed(MouseButton::Left))
 		m_CursorFree = false;
 	Input::SetCursorMode(m_CursorFree ? CursorMode::Visible : CursorMode::Locked);
+	// J calms the sway and jerks, for recording.
+	if (Input::WasKeyPressed(SDL_SCANCODE_J))
+	{
+		m_Calm = !m_Calm;
+		Notify(m_Calm ? "TURBULENCE OFF" : "TURBULENCE ON", Warn, 1.5f);
+	}
 	// The trailer camera has the mouse and WASD while it flies.
 	const bool listening = !FreeCam::IsFlying();
 	const Vec2 mouseMove = listening ? Input::GetMouseDelta() : Vec2{};
@@ -778,5 +785,5 @@ void DriverSystem::DrawHud(World& world, const TruckState& truck, const LifeSupp
 		field("results", list(results));
 	}
 	json += "}";
-	page->SetJson("hud", json);
+	SendIfChanged(*page, "hud", json);
 }

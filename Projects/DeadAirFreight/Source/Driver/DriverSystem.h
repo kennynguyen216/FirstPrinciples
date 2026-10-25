@@ -108,6 +108,7 @@ private:
 	FP::VoiceHandle m_BoostVoice;
 
 	bool m_CursorFree = false;
+	bool m_Calm = false;
 	float m_WindNow = 0;
 	float m_KpNow = 0;
 	float m_PeakWindFought = 0;

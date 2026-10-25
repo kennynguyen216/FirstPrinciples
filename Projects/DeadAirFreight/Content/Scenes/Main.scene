@@ -1635,7 +1635,7 @@ component PointLight
   Color 0.300000012 0.800000012 1 1
   Intensity 1
   Range 3.5
-  CastShadows true
+  CastShadows false
   ShadowResolution 512
   ShadowStrength 1
 
@@ -1650,7 +1650,7 @@ component PointLight
   Color 1 0.600000024 0.150000006 1
   Intensity 1.5
   Range 4
-  CastShadows true
+  CastShadows false
   ShadowResolution 512
   ShadowStrength 1
 
@@ -2679,7 +2679,7 @@ component PointLight
   Color 1 0.600000024 0.150000006 1
   Intensity 1.5
   Range 4
-  CastShadows true
+  CastShadows false
   ShadowResolution 512
   ShadowStrength 1
 
@@ -3138,7 +3138,7 @@ component PointLight
   Color 1 0.600000024 0.150000006 1
   Intensity 1.5
   Range 4
-  CastShadows true
+  CastShadows false
   ShadowResolution 512
   ShadowStrength 1
 

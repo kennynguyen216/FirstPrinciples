@@ -7,6 +7,7 @@
 #include "Driver/DriverSystem.h"
 #include "Enemies/SiphonComponents.h"
 #include "Engine/UI/UISystem.h"
+#include "HudSend.h"
 #include "LifeSupport/Cargo.h"
 #include "Match/MatchQueries.h"
 #include "Net/DriverNet.h"
@@ -219,7 +220,7 @@ namespace
 		const DriverState* cab = GetCab(world);
 		append(",\"count\":%d,\"feeding\":%d,\"leaks\":%d,\"o2\":%.3f,\"cab\":%s}", mites, feeding, totals.LeakingTanks,
 			totals.OxygenCapacityKg > 0 ? totals.OxygenKg / totals.OxygenCapacityKg : 0.0f, cab && cab->InCab ? "true" : "false");
-		page->SetJson("bay", json);
+		SendIfChanged(*page, "bay", json);
 	}
 
 	// Closest points between two segments, p1-q1 and p2-q2.
@@ -743,5 +744,5 @@ void RivalTruckSystem::DrawMarkers(World& world)
 			(middle - view.Position).Length());
 		markers += marker;
 	}
-	page->SetJson("rivals", markers + "]");
+	SendIfChanged(*page, "rivals", markers + "]");
 }

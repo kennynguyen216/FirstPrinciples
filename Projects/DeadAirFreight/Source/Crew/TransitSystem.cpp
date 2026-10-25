@@ -222,7 +222,10 @@ void TransitSystem::Update(World& world, float)
 		if (const MaterialComponent* material = world.TryGet<MaterialComponent>(source))
 			world.Add<MaterialComponent>(ghost.Entity, MaterialComponent{ *material });
 		if (const PointLightComponent* light = world.TryGet<PointLightComponent>(source))
-			world.Add<PointLightComponent>(ghost.Entity, PointLightComponent{ *light });
+		{
+			// Only one point light gets a shadow; a copy must not take it from the real one.
+			world.Add<PointLightComponent>(ghost.Entity, PointLightComponent{ *light }).CastShadows = false;
+		}
 	};
 
 	if (world.Has<OnFootComponent>(body))

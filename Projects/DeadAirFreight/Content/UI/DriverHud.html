@@ -144,12 +144,17 @@
 	}
 	function esc(text) { return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
 	function $(id) { return document.getElementById(id); }
-	function lines(id, list) { $(id).innerHTML = (list || []).map(line).join(""); }
-	function stats(id, list) { $(id).querySelector(".stats").innerHTML = (list || []).map(stat).join(""); }
+	// Rewriting the same markup still re-lays out the page, so skip it when nothing changed.
+	function put(el, html) { if (el._html !== html) { el._html = html; el.innerHTML = html; } }
+	function lines(id, list) { put($(id), (list || []).map(line).join("")); }
+	function stats(id, list) { put($(id).querySelector(".stats"), (list || []).map(stat).join("")); }
 	function show(id, on) { $(id).style.display = on ? "block" : "none"; }
 
-	var cell = 0;
+	var cell = 0, lastTicket;
 	function drawTicket(t) {
+		var key = JSON.stringify(t) + window.innerHeight;
+		if (key === lastTicket) return;
+		lastTicket = key;
 		// Put away, it keeps the last card so it slides back into the pocket intact.
 		var box = $("ticket");
 		box.classList.toggle("pocket", !t);
@@ -222,7 +227,7 @@
 		drawTicket(hud.ticket);
 		show("results", !!hud.results);
 		if (hud.results)
-			document.querySelector("#results .lines").innerHTML = hud.results.map(line).join("");
+			put(document.querySelector("#results .lines"), hud.results.map(line).join(""));
 	});
 
 	// The bay from above, hatch (to the cab) at the top and the airlock wall on the left, in a 100 by 200 box.
@@ -245,7 +250,7 @@
 		if (bay.you)
 			svg += '<circle cx="' + bayX(bay.you[0]) + '" cy="' + bayY(bay.you[1]) + '" r="3.4" fill="#fff" stroke="#000" stroke-opacity="0.5"/>';
 		var box = $("bay");
-		box.querySelector("svg").innerHTML = svg;
+		put(box.querySelector("svg"), svg);
 		box.querySelector(".head b").textContent = Math.round(bay.o2 * 100) + "% O2";
 		box.classList.toggle("alarm", bay.feeding > 0);
 		var foot = [];
