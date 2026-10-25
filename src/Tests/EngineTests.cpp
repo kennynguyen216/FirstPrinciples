@@ -468,6 +468,30 @@ FP_TEST(Input_MouseDeltaLastsOneFrameAndResetKeepsCursorMode)
 	world->EndPlay();
 }
 
+FP_TEST(Input_GamepadsReadPastTheDeadZone)
+{
+	Input::Reset();
+	Input::SetGamepadButton(GamepadButton::South, true);
+	FP_EXPECT(Input::IsGamepadButtonDown(GamepadButton::South) && Input::WasGamepadButtonPressed(GamepadButton::South));
+	Input::EndFrame();
+	FP_EXPECT(Input::IsGamepadButtonDown(GamepadButton::South) && !Input::WasGamepadButtonPressed(GamepadButton::South));
+	Input::SetGamepadButton(GamepadButton::South, false);
+	FP_EXPECT(Input::WasGamepadButtonReleased(GamepadButton::South));
+
+	// A resting stick reads zero, a full push reads one with up positive.
+	Input::SetGamepadAxis(GamepadAxis::LeftX, 0.1f);
+	FP_EXPECT(Input::GetGamepadAxis(GamepadAxis::LeftX) == 0 && Input::GetGamepadStick(false).Length() == 0);
+	Input::SetGamepadAxis(GamepadAxis::LeftX, 0);
+	Input::SetGamepadAxis(GamepadAxis::LeftY, -1);
+	const Vec2 stick = Input::GetGamepadStick(false);
+	FP_EXPECT(std::fabs(stick.Y - 1) < 1e-4f && std::fabs(stick.X) < 1e-4f);
+	Input::SetGamepadAxis(GamepadAxis::RightTrigger, 0.5f);
+	FP_EXPECT(Input::GetGamepadAxis(GamepadAxis::RightTrigger) > 0.4f && Input::GetGamepadAxis(GamepadAxis::RightTrigger) < 0.5f);
+
+	Input::Reset();
+	FP_EXPECT(Input::GetGamepadStick(false).Length() == 0 && !Input::IsGamepadButtonDown(GamepadButton::South));
+}
+
 #include "Engine/Json.h"
 
 FP_TEST(Json_ReadsWhatPagesSend)

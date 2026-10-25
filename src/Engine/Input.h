@@ -20,6 +20,39 @@ namespace FP
 		Count,
 	};
 
+	// Named by position so they mean the same on every pad. South is A on Xbox and Cross on
+	// PlayStation. Same order as SDL.
+	enum class GamepadButton : uint8
+	{
+		South,
+		East,
+		West,
+		North,
+		Back,
+		Guide,
+		Start,
+		LeftStick,
+		RightStick,
+		LeftShoulder,
+		RightShoulder,
+		DpadUp,
+		DpadDown,
+		DpadLeft,
+		DpadRight,
+		Count,
+	};
+
+	enum class GamepadAxis : uint8
+	{
+		LeftX,
+		LeftY,
+		RightX,
+		RightY,
+		LeftTrigger,
+		RightTrigger,
+		Count,
+	};
+
 	// How the game wants the mouse while it has focus.
 	enum class CursorMode : uint8
 	{
@@ -59,6 +92,24 @@ namespace FP
 		// -1 to 1 on each axis from WASD and the arrow keys.
 		Vec2 GetMoveAxis();
 
+		// ---- Gamepads ------------------------------------------------------
+		// Every connected pad counts, so whichever one is picked up plays.
+
+		bool IsGamepadConnected();
+		bool IsGamepadButtonDown(GamepadButton button);
+		bool WasGamepadButtonPressed(GamepadButton button);
+		bool WasGamepadButtonReleased(GamepadButton button);
+
+		// Sticks go from -1 to 1 with right and down positive, triggers from 0 to 1. Small
+		// movements near the middle read as zero, since sticks rarely rest exactly centered.
+		float GetGamepadAxis(GamepadAxis axis);
+
+		// A whole stick with right and up positive, at most 1 long.
+		Vec2 GetGamepadStick(bool right);
+
+		// Shakes every pad. Strengths go from 0 to 1, low is the heavy motor.
+		void Rumble(float low, float high, float seconds);
+
 		// ---- Fed by the platform layer -------------------------------------
 
 		void SetKey(Key key, bool down);
@@ -67,12 +118,15 @@ namespace FP
 		void AddMouseDelta(Vec2 delta);
 		void AddScroll(Vec2 amount);
 		void AddTypedText(std::string_view utf8);
+		void SetGamepadButton(GamepadButton button, bool down);
+		void SetGamepadAxis(GamepadAxis axis, float value);
 		void ProcessEvent(const SDL_Event& event);
 
 		// Call once after the frame is updated to clear pressed and released flags.
 		void EndFrame();
 
-		// Releases everything, for example when the window loses focus. Keeps the cursor mode.
+		// Releases everything, for example when the window loses focus. Keeps the cursor mode
+		// and connected pads.
 		void Reset();
 
 		// For ModuleContext so loaded modules read the host's input.

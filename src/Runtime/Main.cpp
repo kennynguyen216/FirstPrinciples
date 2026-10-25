@@ -77,7 +77,7 @@ int main(int argc, char** argv)
 {
 	Log::OpenFile((Paths::GetProjectDir() + "/Saved/Logs/Runtime.log").CStr());
 
-	if (!SDL_Init(SDL_INIT_VIDEO))
+	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
 	{
 		FP_LOG_ERROR("SDL_Init failed: %s", SDL_GetError());
 		return 1;

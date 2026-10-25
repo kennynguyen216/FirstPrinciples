@@ -1057,7 +1057,22 @@ namespace FP::Editor
 	{
 		SDL_Event event;
 		while (SDL_PollEvent(&event))
+		{
 			m_Audio.ProcessEvent(event);
+			// Qt brings the keyboard and mouse. Gamepads come through SDL.
+			switch (event.type)
+			{
+				case SDL_EVENT_GAMEPAD_ADDED:
+				case SDL_EVENT_GAMEPAD_REMOVED:
+				case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+				case SDL_EVENT_GAMEPAD_BUTTON_UP:
+				case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+					Input::ProcessEvent(event);
+					break;
+				default:
+					break;
+			}
+		}
 		m_Audio.Update();
 		m_AudioStatus->setText(m_Audio.IsReady() ? "Audio ready" : "Audio unavailable");
 		m_AudioStatus->setToolTip(ToQString(m_Audio.GetStatusText()));
