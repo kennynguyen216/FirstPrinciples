@@ -141,7 +141,7 @@ namespace FP
 		};
 
 		void CreatePipelines();
-		SDL_GPUGraphicsPipeline* CreateFullscreenPipeline(const char* fragment, uint32 samplers, SDL_GPUTextureFormat format, bool additive = false);
+		SDL_GPUGraphicsPipeline* CreateFullscreenPipeline(const char* fragment, uint32 samplers, SDL_GPUTextureFormat format, bool additive = false, uint32 uniforms = 1);
 		SDL_GPUGraphicsPipeline* CreateMeshPipeline(const char* fragment, uint32 numSamplers, uint32 numUniforms, Surface surface, bool glass, bool wireframe = false, bool instanced = false);
 		SDL_GPUGraphicsPipeline* GetPipeline(const Draw& draw) const;
 		SDL_GPUGraphicsPipeline* GetInstancedPipeline(const Draw& draw) const;
@@ -205,6 +205,9 @@ namespace FP
 		SDL_GPUGraphicsPipeline* m_BloomAddPipeline = nullptr;
 		SDL_GPUGraphicsPipeline* m_SkyboxPipeline = nullptr;
 		SDL_GPUGraphicsPipeline* m_BlackHolePipeline = nullptr; // optional, no lensing without it
+		SDL_GPUGraphicsPipeline* m_BlackHoleCompositePipeline = nullptr;
+		RefPtr<GPUTexture> m_LensLight;
+		RefPtr<GPUTexture> m_LensWarp;
 		EnvironmentMap m_Environment;
 		RefPtr<GPUBuffer> m_EnvironmentBuffer;
 		RefPtr<GPUBuffer> m_EmptyEnvironment;

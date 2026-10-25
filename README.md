@@ -653,10 +653,18 @@ that counts the player walking in.
 
 ### Black holes
 
-A **BlackHole** bends light like the real thing. Every pixel's light ray is traced backwards through
+A **BlackHole** bends light like the real thing. Light rays are traced backwards through
 Schwarzschild spacetime, so you get the black shadow at 2.6 times the horizon radius, the photon ring,
 the far side of the accretion disk lensed up over the top and a thinner image wrapped underneath.
 A skybox is bent all the way around. Without one, procedural stars fill the sky.
+
+The expensive ray tracing uses at most about 230,400 rays per frame (640 x 360 at 16:9),
+independent of the viewport resolution. A full-resolution pass reconstructs the scene using the
+traced distortion, keeping foreground textures sharp. The disk and photon ring are filtered from
+the ray grid, so their finest details soften at large resolutions. Steps stay small near the photon
+sphere and grow farther away. To measure complete renderer frame times with GPU completion waits,
+run `FP_BLACK_HOLE_BENCHMARK=1 Projects/mk_ultra/Binaries/Debug/Tests BlackHole_Render` on macOS
+(replace the project folder for another build). This includes a four-hole case with procedural stars.
 
 - `SchwarzschildRadius` is the event horizon in world units. `SpeedOfLight` is a game-scale c in world
   units per second. Lower it and relativity shows up at slower speeds, and the disk spins faster.

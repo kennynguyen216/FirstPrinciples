@@ -168,7 +168,7 @@ namespace FP
 				if (pipeline) SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
 		for (auto* pipeline : m_InstancedWirePipelines)
 			if (pipeline) SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
-		for (SDL_GPUGraphicsPipeline* pipeline : { m_OcclusionPipeline, m_InstancedOcclusionPipeline, m_InstancedShadowPipeline, m_PresentPipeline, m_SkyboxPipeline, m_BlackHolePipeline, m_PostPipeline, m_FXAAPipeline, m_BloomPipeline, m_BloomAddPipeline, m_UIPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1], m_ParticlePipelines[0], m_ParticlePipelines[1] })
+		for (SDL_GPUGraphicsPipeline* pipeline : { m_OcclusionPipeline, m_InstancedOcclusionPipeline, m_InstancedShadowPipeline, m_PresentPipeline, m_SkyboxPipeline, m_BlackHolePipeline, m_BlackHoleCompositePipeline, m_PostPipeline, m_FXAAPipeline, m_BloomPipeline, m_BloomAddPipeline, m_UIPipeline, m_LinePipeline, m_WirePipelines[0], m_WirePipelines[1], m_WirePipelines[2], m_ShadowPipelines[0], m_ShadowPipelines[1], m_ParticlePipelines[0], m_ParticlePipelines[1] })
 		{
 			if (pipeline)
 				SDL_ReleaseGPUGraphicsPipeline(gpu, pipeline);
@@ -254,11 +254,11 @@ namespace FP
 		return pipeline;
 	}
 
-	SDL_GPUGraphicsPipeline* Renderer::CreateFullscreenPipeline(const char* fragment, uint32 samplers, SDL_GPUTextureFormat format, bool additive)
+	SDL_GPUGraphicsPipeline* Renderer::CreateFullscreenPipeline(const char* fragment, uint32 samplers, SDL_GPUTextureFormat format, bool additive, uint32 uniforms)
 	{
 		SDL_GPUDevice* gpu = m_Device.GetHandle();
 		SDL_GPUShader* vert = m_Device.LoadShader("Present.vert", 0, 0);
-		SDL_GPUShader* frag = m_Device.LoadShader(fragment, samplers, 1);
+		SDL_GPUShader* frag = m_Device.LoadShader(fragment, samplers, uniforms);
 		SDL_GPUGraphicsPipeline* pipeline = nullptr;
 		if (vert && frag)
 		{
@@ -370,17 +370,20 @@ namespace FP
 			SDL_ReleaseGPUShader(gpu, skyFrag);
 
 		SDL_GPUShader* blackHoleFrag = m_Device.LoadShader("BlackHole.frag", 2, 1, 1);
+		m_BlackHoleCompositePipeline = CreateFullscreenPipeline("BlackHoleComposite.frag", 3, SceneFormat, false, 0);
 		if (presentVert && blackHoleFrag)
 		{
-			SDL_GPUColorTargetDescription lensTarget = {};
-			lensTarget.format = SceneFormat;
+			SDL_GPUColorTargetDescription lensTargets[2] = {};
+			lensTargets[0].format = SceneFormat;
+			// Float coordinates avoid subpixel jitter when reconstructing a large Retina viewport.
+			lensTargets[1].format = SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT;
 			SDL_GPUGraphicsPipelineCreateInfo info = {};
 			info.vertex_shader = presentVert;
 			info.fragment_shader = blackHoleFrag;
 			info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
 			info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
-			info.target_info.color_target_descriptions = &lensTarget;
-			info.target_info.num_color_targets = 1;
+			info.target_info.color_target_descriptions = lensTargets;
+			info.target_info.num_color_targets = 2;
 			m_BlackHolePipeline = SDL_CreateGPUGraphicsPipeline(gpu, &info);
 			if (!m_BlackHolePipeline)
 				FP_LOG_WARN("Black hole pipeline failed, so black holes will not bend light: %s", SDL_GetError());
@@ -652,8 +655,20 @@ namespace FP
 
 	void Renderer::DrawBlackHoles(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view, uint32 width, uint32 height)
 	{
-		if (!m_BlackHolePipeline || view.Mode == ViewMode::Wireframe || world.View<BlackHoleComponent>().empty())
+		if (!m_BlackHolePipeline || !m_BlackHoleCompositePipeline || view.Mode == ViewMode::Wireframe || world.View<BlackHoleComponent>().empty())
 			return;
+		// Bound the expensive geodesic work independently of window size. Only the light and ray
+		// displacement use this grid; the finished scene is sampled at the original resolution.
+		constexpr float RayBudget = 640.0f * 360.0f;
+		const float scale = std::min(1.0f, std::sqrt(RayBudget / (static_cast<float>(width) * height)));
+		const uint32 lensWidth = std::max(1u, static_cast<uint32>(width * scale));
+		const uint32 lensHeight = std::max(1u, static_cast<uint32>(height * scale));
+		if (!m_LensLight || !m_LensWarp || m_LensLight->GetWidth() != lensWidth || m_LensLight->GetHeight() != lensHeight)
+		{
+			m_LensLight = m_Device.CreateRenderTarget(SceneFormat, lensWidth, lensHeight, false);
+			m_LensWarp = m_Device.CreateRenderTarget(SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT, lensWidth, lensHeight, false);
+		}
+		if (!m_LensLight || !m_LensWarp) return;
 		BlackHoleUniforms u = {};
 		int32 holes = 0;
 		float stars = 0;
@@ -668,6 +683,7 @@ namespace FP
 			stars = std::max(stars, hole.StarBrightness);
 			++holes;
 		}
+		if (holes == 0) return;
 
 		const bool hasSky = m_EnvironmentBuffer && m_Frame.EnvironmentSize.Z > 0 && m_Frame.EnvironmentParams.Z > 0;
 		u.ViewProjection = view.GetViewProjection();
@@ -678,7 +694,7 @@ namespace FP
 		u.Environment = { m_Frame.EnvironmentParams.X, m_Frame.EnvironmentParams.Y, hasSky ? 1.0f : 0.0f, 0 };
 		u.EnvironmentSize = m_Frame.EnvironmentSize;
 
-		// Rays read the finished scene from a copy and write the lensed image back over it.
+		// Preserve full-resolution scene color for both the depth march and the reconstruction.
 		SDL_GPUBlitInfo blit = {};
 		blit.source.texture = m_SceneColor->GetHandle();
 		blit.source.w = width;
@@ -690,14 +706,17 @@ namespace FP
 		blit.filter = SDL_GPU_FILTER_NEAREST;
 		SDL_BlitGPUTexture(cmd, &blit);
 
-		SDL_GPUColorTargetInfo output = {};
-		output.texture = m_SceneColor->GetHandle();
-		output.load_op = SDL_GPU_LOADOP_DONT_CARE;
-		output.store_op = SDL_GPU_STOREOP_STORE;
-		SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &output, 1, nullptr);
+		SDL_GPUColorTargetInfo outputs[2] = {};
+		outputs[0].texture = m_LensLight->GetHandle();
+		outputs[1].texture = m_LensWarp->GetHandle();
+		for (auto& output : outputs)
+		{
+			output.load_op = SDL_GPU_LOADOP_DONT_CARE;
+			output.store_op = SDL_GPU_STOREOP_STORE;
+		}
+		SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, outputs, 2, nullptr);
 		SDL_BindGPUGraphicsPipeline(pass, m_BlackHolePipeline);
 		SDL_PushGPUFragmentUniformData(cmd, 0, &u, sizeof(u));
-		// ponytail: every pixel traces its ray, even far from any hole. Add a screen bound if it costs too much
 		const SDL_GPUTextureSamplerBinding sources[2] = {
 			{ m_SceneCopy->GetHandle(), m_Device.GetClampSampler() },
 			{ m_Depth->GetHandle(), m_Device.GetClampSampler() },
@@ -705,6 +724,21 @@ namespace FP
 		SDL_BindGPUFragmentSamplers(pass, 0, sources, 2);
 		SDL_GPUBuffer* environment = hasSky ? m_EnvironmentBuffer->GetHandle() : m_EmptyEnvironment->GetHandle();
 		SDL_BindGPUFragmentStorageBuffers(pass, 0, &environment, 1);
+		SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+		SDL_EndGPURenderPass(pass);
+
+		SDL_GPUColorTargetInfo output = {};
+		output.texture = m_SceneColor->GetHandle();
+		output.load_op = SDL_GPU_LOADOP_DONT_CARE;
+		output.store_op = SDL_GPU_STOREOP_STORE;
+		pass = SDL_BeginGPURenderPass(cmd, &output, 1, nullptr);
+		SDL_BindGPUGraphicsPipeline(pass, m_BlackHoleCompositePipeline);
+		const SDL_GPUTextureSamplerBinding composite[3] = {
+			{ m_SceneCopy->GetHandle(), m_Device.GetClampSampler() },
+			{ m_LensLight->GetHandle(), m_Device.GetClampSampler() },
+			{ m_LensWarp->GetHandle(), m_Device.GetClampSampler() },
+		};
+		SDL_BindGPUFragmentSamplers(pass, 0, composite, 3);
 		SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
 		SDL_EndGPURenderPass(pass);
 	}

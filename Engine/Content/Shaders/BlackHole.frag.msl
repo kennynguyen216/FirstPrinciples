@@ -35,6 +35,7 @@ struct BlackHoleData
 struct main0_out
 {
     float4 OutColor [[color(0)]];
+    float4 OutWarp [[color(1)]];
 };
 
 struct main0_in
@@ -241,6 +242,7 @@ float3 Stars(thread const float3& direction)
 fragment main0_out main0(main0_in in [[stage_in]], constant BlackHoleData& Lens [[buffer(0)]], const device EnvironmentData& Environment [[buffer(1)]], texture2d<float> SceneColor [[texture(0)]], texture2d<float> SceneDepth [[texture(1)]], sampler SceneColorSmplr [[sampler(0)]], sampler SceneDepthSmplr [[sampler(1)]])
 {
     main0_out out = {};
+    out.OutWarp = float4(0.0);
     float2 ndc = float2((in.InUV.x * 2.0) - 1.0, 1.0 - (in.InUV.y * 2.0));
     float4 nearPoint = Lens.InverseViewProjection * float4(ndc, 0.0, 1.0);
     float4 farPoint = Lens.InverseViewProjection * float4(ndc, 1.0, 1.0);
@@ -256,6 +258,7 @@ fragment main0_out main0(main0_in in [[stage_in]], constant BlackHoleData& Lens 
     for (int _step = 0; (_step < 320) && (transmittance > 0.00999999977648258209228515625); _step++)
     {
         float closest = 1000000000.0;
+        float stepScale = 0.20000000298023223876953125;
         for (int i = 0; i < holes; i++)
         {
             float r = length(x - Lens.Hole[i].xyz);
@@ -265,8 +268,9 @@ fragment main0_out main0(main0_in in [[stage_in]], constant BlackHoleData& Lens 
                 return out;
             }
             closest = fast::min(closest, r - (0.5 * Lens.Hole[i].w));
+            stepScale = fast::min(stepScale, mix(0.070000000298023223876953125, 0.20000000298023223876953125, smoothstep(2.0, 8.0, r / Lens.Hole[i].w)));
         }
-        float dt = (0.070000000298023223876953125 * closest) / length(v);
+        float dt = (stepScale * closest) / length(v);
         float3 param = x;
         float3 param_1 = v;
         float3 halfV = v + (Gravity(param, param_1, Lens) * (0.5 * dt));
@@ -298,51 +302,52 @@ fragment main0_out main0(main0_in in [[stage_in]], constant BlackHoleData& Lens 
         {
             float3 screen = clip.xyz / float3(clip.w);
             float2 uv = float2((screen.x * 0.5) + 0.5, 0.5 - (screen.y * 0.5));
-            bool _1101 = all(uv >= float2(0.0));
-            bool _1108;
-            if (_1101)
+            bool _1115 = all(uv >= float2(0.0));
+            bool _1122;
+            if (_1115)
             {
-                _1108 = all(uv <= float2(1.0));
+                _1122 = all(uv <= float2(1.0));
             }
             else
             {
-                _1108 = _1101;
+                _1122 = _1115;
             }
-            if (_1108)
+            if (_1122)
             {
                 float stored = SceneDepth.sample(SceneDepthSmplr, uv).x;
                 float4 surface = Lens.InverseViewProjection * float4(screen.xy, stored, 1.0);
                 float surfaceDepth = dot(surface.xyz / float3(surface.w), forward) - startDepth;
-                bool _1146 = (stored < 1.0) && (nextDepth >= surfaceDepth);
-                bool _1157;
-                if (_1146)
+                bool _1160 = (stored < 1.0) && (nextDepth >= surfaceDepth);
+                bool _1171;
+                if (_1160)
                 {
-                    _1157 = depth <= ((surfaceDepth + (0.0199999995529651641845703125 * surfaceDepth)) + 0.00999999977648258209228515625);
+                    _1171 = depth <= ((surfaceDepth + (0.0199999995529651641845703125 * surfaceDepth)) + 0.00999999977648258209228515625);
                 }
                 else
                 {
-                    _1157 = _1146;
+                    _1171 = _1160;
                 }
-                if (_1157)
+                if (_1171)
                 {
-                    out.OutColor = float4(light + (SceneColor.sample(SceneColorSmplr, uv).xyz * transmittance), 1.0);
+                    out.OutColor = float4(light, 1.0);
+                    out.OutWarp = float4((uv - in.InUV) * transmittance, transmittance, 0.0);
                     return out;
                 }
             }
         }
         x = next;
         depth = nextDepth;
-        bool _1178 = depth > farDepth;
-        bool _1186;
-        if (!_1178)
+        bool _1193 = depth > farDepth;
+        bool _1201;
+        if (!_1193)
         {
-            _1186 = depth < (-farDepth);
+            _1201 = depth < (-farDepth);
         }
         else
         {
-            _1186 = _1178;
+            _1201 = _1193;
         }
-        if (_1186)
+        if (_1201)
         {
             break;
         }
@@ -361,45 +366,48 @@ fragment main0_out main0(main0_in in [[stage_in]], constant BlackHoleData& Lens 
     else
     {
         float4 clip_1 = Lens.ViewProjection * float4(direction, 0.0);
-        bool _1233 = Lens.CameraForward.w < 0.5;
-        bool _1239;
-        if (_1233)
+        bool _1248 = Lens.CameraForward.w < 0.5;
+        bool _1254;
+        if (_1248)
         {
-            _1239 = clip_1.w > 0.0;
+            _1254 = clip_1.w > 0.0;
         }
         else
         {
-            _1239 = _1233;
+            _1254 = _1248;
         }
-        if (_1239)
+        if (_1254)
         {
             float2 uv_1 = float2(((clip_1.x / clip_1.w) * 0.5) + 0.5, 0.5 - ((clip_1.y / clip_1.w) * 0.5));
-            bool _1260 = all(uv_1 >= float2(0.0));
-            bool _1266;
-            if (_1260)
+            bool _1275 = all(uv_1 >= float2(0.0));
+            bool _1281;
+            if (_1275)
             {
-                _1266 = all(uv_1 <= float2(1.0));
+                _1281 = all(uv_1 <= float2(1.0));
             }
             else
             {
-                _1266 = _1260;
+                _1281 = _1275;
             }
-            bool _1274;
-            if (_1266)
+            bool _1289;
+            if (_1281)
             {
-                _1274 = SceneDepth.sample(SceneDepthSmplr, uv_1).x >= 1.0;
+                _1289 = SceneDepth.sample(SceneDepthSmplr, uv_1).x >= 1.0;
             }
             else
             {
-                _1274 = _1266;
+                _1289 = _1281;
             }
-            if (_1274)
+            if (_1289)
             {
                 sky = SceneColor.sample(SceneColorSmplr, uv_1).xyz;
             }
         }
-        float3 param_12 = direction;
-        sky += (Stars(param_12) * Lens.Background.w);
+        if (Lens.Background.w > 0.0)
+        {
+            float3 param_12 = direction;
+            sky += (Stars(param_12) * Lens.Background.w);
+        }
     }
     out.OutColor = float4(light + (sky * transmittance), 1.0);
     return out;

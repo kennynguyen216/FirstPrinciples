@@ -1,7 +1,7 @@
 #version 450
 #extension GL_GOOGLE_include_directive : require
 
-// Gravitational lensing by Schwarzschild black holes. Each pixel's light ray is traced backwards
+// Gravitational lensing by Schwarzschild black holes. Light rays are traced backwards on a bounded grid
 // from the camera through curved spacetime with the exact null geodesic equation
 //     u'' + u = 1.5 Rs u^2,   written in Cartesian form as   a = -1.5 Rs h^2 x / r^5,   h = |x cross v|
 // so it bends, wraps around the photon sphere (1.5 Rs) or falls through the horizon (Rs).
@@ -31,7 +31,9 @@ layout(set = 3, binding = 0) uniform BlackHoleData
 	vec4 DiskLight[MAX_HOLES]; // x hottest temperature in kelvin, y brightness, z speed of light
 } Lens;
 layout(location = 0) in vec2 InUV;
+// Trace light and scene coordinates separately so the composite can sample the scene at full resolution.
 layout(location = 0) out vec4 OutColor;
+layout(location = 1) out vec4 OutWarp;
 
 float Hash(vec3 p)
 {
@@ -130,6 +132,7 @@ vec4 DiskEmission(int i, vec3 p, vec3 v)
 
 void main()
 {
+	OutWarp = vec4(0.0);
 	vec2 ndc = vec2(InUV.x * 2.0 - 1.0, 1.0 - InUV.y * 2.0);
 	vec4 nearPoint = Lens.InverseViewProjection * vec4(ndc, 0.0, 1.0);
 	vec4 farPoint = Lens.InverseViewProjection * vec4(ndc, 1.0, 1.0);
@@ -147,6 +150,7 @@ void main()
 	{
 		// Steps shrink near a hole and grow with distance, so far rays stay cheap.
 		float closest = 1e9;
+		float stepScale = 0.2;
 		for (int i = 0; i < holes; ++i)
 		{
 			float r = length(x - Lens.Hole[i].xyz);
@@ -156,8 +160,10 @@ void main()
 				return;
 			}
 			closest = min(closest, r - 0.5 * Lens.Hole[i].w);
+			// Keep fine integration around the photon sphere; empty space needs far fewer steps.
+			stepScale = min(stepScale, mix(0.07, 0.2, smoothstep(2.0, 8.0, r / Lens.Hole[i].w)));
 		}
-		float dt = 0.07 * closest / length(v);
+		float dt = stepScale * closest / length(v);
 
 		// Leapfrog: half kick, drift, half kick.
 		vec3 halfV = v + Gravity(x, v) * (0.5 * dt);
@@ -192,7 +198,9 @@ void main()
 				float surfaceDepth = dot(surface.xyz / surface.w, forward) - startDepth;
 				if (stored < 1.0 && nextDepth >= surfaceDepth && depth <= surfaceDepth + 0.02 * surfaceDepth + 0.01)
 				{
-					OutColor = vec4(light + transmittance * texture(SceneColor, uv).rgb, 1.0);
+					OutColor = vec4(light, 1.0);
+					// Premultiply the displacement so interpolation at the horizon does not pull UVs toward zero.
+					OutWarp = vec4((uv - InUV) * transmittance, transmittance, 0.0);
 					return;
 				}
 			}
@@ -220,7 +228,8 @@ void main()
 			if (all(greaterThanEqual(uv, vec2(0.0))) && all(lessThanEqual(uv, vec2(1.0))) && texture(SceneDepth, uv).r >= 1.0)
 				sky = texture(SceneColor, uv).rgb;
 		}
-		sky += Stars(direction) * Lens.Background.w;
+		if (Lens.Background.w > 0.0)
+			sky += Stars(direction) * Lens.Background.w;
 	}
 	OutColor = vec4(light + transmittance * sky, 1.0);
 }

@@ -1,0 +1,25 @@
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+struct main0_out
+{
+    float4 OutColor [[color(0)]];
+};
+
+struct main0_in
+{
+    float2 InUV [[user(locn0)]];
+};
+
+fragment main0_out main0(main0_in in [[stage_in]], texture2d<float> SceneColor [[texture(0)]], texture2d<float> LensLight [[texture(1)]], texture2d<float> LensWarp [[texture(2)]], sampler SceneColorSmplr [[sampler(0)]], sampler LensLightSmplr [[sampler(1)]], sampler LensWarpSmplr [[sampler(2)]])
+{
+    main0_out out = {};
+    float3 light = LensLight.sample(LensLightSmplr, in.InUV).xyz;
+    float3 warp = LensWarp.sample(LensWarpSmplr, in.InUV).xyz;
+    float2 uv = in.InUV + (warp.xy / float2(fast::max(warp.z, 9.9999997473787516355514526367188e-06)));
+    out.OutColor = float4(light + (SceneColor.sample(SceneColorSmplr, uv).xyz * warp.z), 1.0);
+    return out;
+}
+
