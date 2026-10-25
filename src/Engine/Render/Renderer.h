@@ -31,6 +31,7 @@ namespace FP
 		Vec4 Subsurface{ 0, 0, 0, 0 };
 		Vec4 Params{ 0, 0.5f, 0.5f, 1 };
 		Vec4 Params2{ 1, 0.01f, 1.5f, 0.5f };
+		Vec4 Style{ 0, 0, 0, 0 }; // x cel shaded, yzw reserved
 	};
 
 	constexpr int32 MaxLights = 16;
@@ -132,6 +133,8 @@ namespace FP
 		void UploadLines(SDL_GPUCommandBuffer* cmd, const DebugLines& lines);
 		void PrepareEnvironment(World& world);
 		void DrawSkybox(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, const RenderView& view);
+		// Bends the finished scene around every BlackHoleComponent and draws their accretion disks.
+		void DrawBlackHoles(SDL_GPUCommandBuffer* cmd, World& world, const RenderView& view, uint32 width, uint32 height);
 		void BuildFrameUniforms(World& world, const RenderView& view, uint32 width, uint32 height);
 		void DrawObject(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* pass, World& world, const Draw& draw, const Mat4& viewProjection);
 		void PushBones(SDL_GPUCommandBuffer* cmd, const Array<Mat4>* skin);
@@ -172,6 +175,7 @@ namespace FP
 		SDL_GPUGraphicsPipeline* m_BloomPipeline = nullptr;
 		SDL_GPUGraphicsPipeline* m_BloomAddPipeline = nullptr;
 		SDL_GPUGraphicsPipeline* m_SkyboxPipeline = nullptr;
+		SDL_GPUGraphicsPipeline* m_BlackHolePipeline = nullptr; // optional, no lensing without it
 		EnvironmentMap m_Environment;
 		RefPtr<GPUBuffer> m_EnvironmentBuffer;
 		RefPtr<GPUBuffer> m_EmptyEnvironment;

@@ -1,3 +1,5 @@
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+
 #include <metal_stdlib>
 #include <simd/simd.h>
 
@@ -10,6 +12,7 @@ struct MaterialData
     float4 Subsurface;
     float4 Params;
     float4 Params2;
+    float4 Style;
 };
 
 struct FrameData
@@ -43,6 +46,24 @@ struct main0_in
     float4 InTint [[user(locn4)]];
 };
 
+static inline __attribute__((always_inline))
+bool IsCelShaded(constant MaterialData& Material)
+{
+    return Material.Style.x > 0.5;
+}
+
+static inline __attribute__((always_inline))
+float3 CelBands(thread const float3& color)
+{
+    float brightness = dot(fast::max(color, float3(0.0)), float3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875));
+    if (brightness <= 9.9999997473787516355514526367188e-06)
+    {
+        return float3(0.0);
+    }
+    float band = floor((sqrt(brightness) * 4.0) + 0.5) / 4.0;
+    return color * ((band * band) / brightness);
+}
+
 fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Material [[buffer(0)]], texture2d<float> BaseColorMap [[texture(0)]], sampler BaseColorMapSmplr [[sampler(0)]])
 {
     main0_out out = {};
@@ -50,6 +71,14 @@ fragment main0_out main0(main0_in in [[stage_in]], constant MaterialData& Materi
     if (color.w < Material.Params2.y)
     {
         discard_fragment();
+    }
+    if (IsCelShaded(Material))
+    {
+        float3 param = color.xyz;
+        float3 _104 = CelBands(param);
+        color.x = _104.x;
+        color.y = _104.y;
+        color.z = _104.z;
     }
     out.OutColor = float4(color.xyz + Material.Emissive.xyz, color.w);
     return out;

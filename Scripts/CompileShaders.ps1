@@ -12,7 +12,7 @@ Get-ChildItem -Path $Src -Include *.vert, *.frag, *.comp -File -Recurse | ForEac
     & glslangValidator -V --quiet "-I$Src" -o $spv $_.FullName
     if ($LASTEXITCODE -ne 0) { throw "glslangValidator failed on $($_.Name)" }
     $metalInput = $spv
-    if ($_.Extension -eq ".comp" -or $_.Name -in @("Lit.frag", "Glass.frag", "Skybox.frag")) {
+    if ($_.Extension -eq ".comp" -or $_.Name -in @("Lit.frag", "Glass.frag", "Skybox.frag", "BlackHole.frag")) {
         $metalInput = [System.IO.Path]::GetTempFileName()
         & glslangValidator -V --quiet -DFP_METAL=1 "-I$Src" -o $metalInput $_.FullName
         if ($LASTEXITCODE -ne 0) { throw "Metal GLSL compilation failed on $($_.Name)" }

@@ -1,6 +1,7 @@
 #version 450
 #extension GL_GOOGLE_include_directive : require
 #include "Common.glsl"
+#include "CelShading.glsl"
 
 // Base shader with no lighting. Base color times tint plus emissive.
 
@@ -19,5 +20,7 @@ void main()
 	vec4 color = texture(BaseColorMap, InUV) * Material.BaseColor * InTint;
 	if (color.a < Material.Params2.y)
 		discard;
+	if (IsCelShaded())
+		color.rgb = CelBands(color.rgb);
 	OutColor = vec4(color.rgb + Material.Emissive.rgb, color.a);
 }

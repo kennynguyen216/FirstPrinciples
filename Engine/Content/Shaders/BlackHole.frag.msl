@@ -1,0 +1,406 @@
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+// Implementation of signed integer mod accurate to SPIR-V specification
+template<typename Tx, typename Ty>
+inline Tx spvSMod(Tx x, Ty y)
+{
+    Tx remainder = x - y * (x / y);
+    return select(Tx(remainder + y), remainder, remainder == 0 || (x >= 0) == (y >= 0));
+}
+
+struct EnvironmentData
+{
+    float4 Pixels[1];
+};
+
+struct BlackHoleData
+{
+    float4x4 ViewProjection;
+    float4x4 InverseViewProjection;
+    float4 CameraForward;
+    float4 Background;
+    float4 Params;
+    float4 Environment;
+    float4 EnvironmentSize;
+    float4 Hole[4];
+    float4 Disk[4];
+    float4 DiskLight[4];
+};
+
+struct main0_out
+{
+    float4 OutColor [[color(0)]];
+};
+
+struct main0_in
+{
+    float2 InUV [[user(locn0)]];
+};
+
+static inline __attribute__((always_inline))
+float3 Gravity(thread const float3& x, thread const float3& v, constant BlackHoleData& Lens)
+{
+    float3 a = float3(0.0);
+    for (int i = 0; i < int(Lens.Params.x); i++)
+    {
+        float3 d = x - Lens.Hole[i].xyz;
+        float r2 = dot(d, d);
+        float3 h = cross(d, v);
+        a -= ((d * ((1.5 * Lens.Hole[i].w) * dot(h, h))) / float3((r2 * r2) * sqrt(r2)));
+    }
+    return a;
+}
+
+static inline __attribute__((always_inline))
+float Hash(thread float3& p)
+{
+    p = fract((p * 0.31830990314483642578125) + float3(0.100000001490116119384765625));
+    p *= 17.0;
+    return fract(((p.x * p.y) * p.z) * ((p.x + p.y) + p.z));
+}
+
+static inline __attribute__((always_inline))
+float ValueNoise(thread const float3& p)
+{
+    float3 i = floor(p);
+    float3 f = fract(p);
+    f = (f * f) * (float3(3.0) - (f * 2.0));
+    float3 param = i;
+    float _339 = Hash(param);
+    float3 param_1 = i + float3(1.0, 0.0, 0.0);
+    float _344 = Hash(param_1);
+    float3 param_2 = i + float3(0.0, 1.0, 0.0);
+    float _352 = Hash(param_2);
+    float3 param_3 = i + float3(1.0, 1.0, 0.0);
+    float _357 = Hash(param_3);
+    float3 param_4 = i + float3(0.0, 0.0, 1.0);
+    float _368 = Hash(param_4);
+    float3 param_5 = i + float3(1.0, 0.0, 1.0);
+    float _373 = Hash(param_5);
+    float3 param_6 = i + float3(0.0, 1.0, 1.0);
+    float _381 = Hash(param_6);
+    float3 param_7 = i + float3(1.0);
+    float _386 = Hash(param_7);
+    return mix(mix(mix(_339, _344, f.x), mix(_352, _357, f.x), f.y), mix(mix(_368, _373, f.x), mix(_381, _386, f.x), f.y), f.z);
+}
+
+static inline __attribute__((always_inline))
+float3 Blackbody(thread const float& temperature)
+{
+    float3 x = fast::min(float3(14387.76953125) / (float3(0.61000001430511474609375, 0.550000011920928955078125, 0.4650000035762786865234375) * fast::max(temperature, 1.0)), float3(80.0));
+    return float3(1.0) / (float3(0.0844596326351165771484375, 0.0503284372389316558837890625, 0.0217402614653110504150390625) * (exp(x) - float3(1.0)));
+}
+
+static inline __attribute__((always_inline))
+float4 DiskEmission(thread const int& i, thread const float3& p, thread const float3& v, constant BlackHoleData& Lens)
+{
+    float rs = Lens.Hole[i].w;
+    float3 n = Lens.Disk[i].xyz;
+    float3 d = p - Lens.Hole[i].xyz;
+    float r = length(d);
+    float inner = 3.0 * rs;
+    float outer = Lens.Disk[i].w;
+    if ((r < inner) || (r > outer))
+    {
+        return float4(0.0);
+    }
+    float ratio = inner / r;
+    float temperature = ((Lens.DiskLight[i].x * powr(ratio, 0.75)) * powr(1.0 - sqrt(ratio), 0.25)) / 0.48780000209808349609375;
+    float m = 0.5 * rs;
+    float omega = sqrt(m / ((r * r) * r));
+    float angularMomentum = dot(cross(d, -v), n);
+    float g = sqrt(1.0 - ((1.5 * rs) / r)) / (1.0 - (omega * angularMomentum));
+    float3 _705;
+    if (abs(n.x) < 0.89999997615814208984375)
+    {
+        _705 = cross(n, float3(1.0, 0.0, 0.0));
+    }
+    else
+    {
+        _705 = cross(n, float3(0.0, 1.0, 0.0));
+    }
+    float3 e1 = fast::normalize(_705);
+    float3 e2 = cross(n, e1);
+    float angle = precise::atan2(dot(d, e2), dot(d, e1)) - ((omega * Lens.DiskLight[i].z) * Lens.Params.y);
+    float3 q = float3(cos(angle) * r, sin(angle) * r, r * 0.60000002384185791015625) / float3(rs);
+    float3 param = q * 0.89999997615814208984375;
+    float3 param_1 = (q * 2.2999999523162841796875) + float3(4.099999904632568359375);
+    float3 param_2 = (q * 6.099999904632568359375) + float3(9.69999980926513671875);
+    float gas = ((0.550000011920928955078125 * ValueNoise(param)) + (0.300000011920928955078125 * ValueNoise(param_1))) + (0.1500000059604644775390625 * ValueNoise(param_2));
+    float coverage = fast::clamp((gas * 2.400000095367431640625) - 0.3499999940395355224609375, 0.0, 1.0) * smoothstep(outer, mix(inner, outer, 0.60000002384185791015625), r);
+    float param_3 = g * temperature;
+    float param_4 = Lens.DiskLight[i].x;
+    float3 color = (Blackbody(param_3) / float3(Blackbody(param_4).y)) * Lens.DiskLight[i].y;
+    return float4(color * coverage, coverage);
+}
+
+static inline __attribute__((always_inline))
+float3 EnvironmentDirection(thread const float3& direction, thread const float& rotation)
+{
+    float c = cos(rotation);
+    float s = sin(rotation);
+    return float3((c * direction.x) - (s * direction.z), direction.y, (s * direction.x) + (c * direction.z));
+}
+
+static inline __attribute__((always_inline))
+float3 EnvironmentPixel(thread int2& pixel, thread const int2& size, thread const int& offset, const device EnvironmentData& Environment)
+{
+    pixel.x = spvSMod(spvSMod(pixel.x, size.x) + size.x, size.x);
+    pixel.y = clamp(pixel.y, 0, size.y - 1);
+    return Environment.Pixels[(offset + (pixel.y * size.x)) + pixel.x].xyz;
+}
+
+static inline __attribute__((always_inline))
+float3 EnvironmentLevel(thread const float3& direction, thread const int& level0, thread const float4& dimensions, const device EnvironmentData& Environment)
+{
+    int2 size = int2(dimensions.xy);
+    int offset = 0;
+    for (int i = 0; i < level0; i++)
+    {
+        offset += (size.x * size.y);
+        size = max((size / int2(2)), int2(1));
+    }
+    float2 uv = float2((precise::atan2(direction.z, direction.x) / 6.283185482025146484375) + 0.5, acos(fast::clamp(direction.y, -1.0, 1.0)) / 3.1415927410125732421875);
+    float2 coordinate = (uv * float2(size)) - float2(0.5);
+    int2 pixel = int2(floor(coordinate));
+    float2 f = fract(coordinate);
+    int2 param = pixel;
+    int2 param_1 = size;
+    int param_2 = offset;
+    float3 _210 = EnvironmentPixel(param, param_1, param_2, Environment);
+    int2 param_3 = pixel + int2(1, 0);
+    int2 param_4 = size;
+    int param_5 = offset;
+    float3 _219 = EnvironmentPixel(param_3, param_4, param_5, Environment);
+    int2 param_6 = pixel + int2(0, 1);
+    int2 param_7 = size;
+    int param_8 = offset;
+    float3 _232 = EnvironmentPixel(param_6, param_7, param_8, Environment);
+    int2 param_9 = pixel + int2(1);
+    int2 param_10 = size;
+    int param_11 = offset;
+    float3 _240 = EnvironmentPixel(param_9, param_10, param_11, Environment);
+    return mix(mix(_210, _219, float3(f.x)), mix(_232, _240, float3(f.x)), float3(f.y));
+}
+
+static inline __attribute__((always_inline))
+float3 EnvironmentRadiance(thread const float3& direction, thread const float& roughness, thread const float4& dimensions, const device EnvironmentData& Environment)
+{
+    float level0 = fast::clamp(roughness, 0.0, 1.0) * (dimensions.z - 1.0);
+    int low = int(floor(level0));
+    int high = min((low + 1), (int(dimensions.z) - 1));
+    float3 param = direction;
+    int param_1 = low;
+    float4 param_2 = dimensions;
+    float3 param_3 = direction;
+    int param_4 = high;
+    float4 param_5 = dimensions;
+    return mix(EnvironmentLevel(param, param_1, param_2, Environment), EnvironmentLevel(param_3, param_4, param_5, Environment), float3(fract(level0)));
+}
+
+static inline __attribute__((always_inline))
+float3 Stars(thread const float3& direction)
+{
+    float3 base = floor(direction * 160.0);
+    float3 stars = float3(0.0);
+    for (int i = 0; i < 27; i++)
+    {
+        float3 cell = (base + float3(float(spvSMod(i, 3)), float(spvSMod(i / 3, 3)), float(i / 9))) - float3(1.0);
+        float3 param = cell;
+        float _527 = Hash(param);
+        float h = _527;
+        if (h < 0.99500000476837158203125)
+        {
+            continue;
+        }
+        float3 param_1 = cell + float3(1.2999999523162841796875);
+        float _544 = Hash(param_1);
+        float3 param_2 = cell + float3(2.7000000476837158203125);
+        float _550 = Hash(param_2);
+        float3 param_3 = cell + float3(5.099999904632568359375);
+        float _556 = Hash(param_3);
+        float3 center = (cell + float3(0.5)) + ((float3(_544, _550, _556) - float3(0.5)) * 0.4000000059604644775390625);
+        float _distance = length(fast::normalize(center) - direction) * 160.0;
+        float3 param_4 = cell + float3(9.1000003814697265625);
+        float _577 = Hash(param_4);
+        float3 param_5 = cell + float3(9.1000003814697265625);
+        float _582 = Hash(param_5);
+        float temperature = mix(3000.0, 15000.0, _577 * _582);
+        float param_6 = temperature;
+        float param_7 = temperature;
+        stars += ((((Blackbody(param_6) / float3(Blackbody(param_7).y)) * smoothstep(0.3499999940395355224609375, 0.0, _distance)) * (h - 0.99500000476837158203125)) * 600.0);
+    }
+    return stars;
+}
+
+fragment main0_out main0(main0_in in [[stage_in]], constant BlackHoleData& Lens [[buffer(0)]], const device EnvironmentData& Environment [[buffer(1)]], texture2d<float> SceneColor [[texture(0)]], texture2d<float> SceneDepth [[texture(1)]], sampler SceneColorSmplr [[sampler(0)]], sampler SceneDepthSmplr [[sampler(1)]])
+{
+    main0_out out = {};
+    float2 ndc = float2((in.InUV.x * 2.0) - 1.0, 1.0 - (in.InUV.y * 2.0));
+    float4 nearPoint = Lens.InverseViewProjection * float4(ndc, 0.0, 1.0);
+    float4 farPoint = Lens.InverseViewProjection * float4(ndc, 1.0, 1.0);
+    float3 x = nearPoint.xyz / float3(nearPoint.w);
+    float3 v = fast::normalize((farPoint.xyz / float3(farPoint.w)) - x);
+    float3 forward = Lens.CameraForward.xyz;
+    float startDepth = dot(x, forward);
+    float farDepth = dot(farPoint.xyz / float3(farPoint.w), forward) - startDepth;
+    int holes = int(Lens.Params.x);
+    float3 light = float3(0.0);
+    float transmittance = 1.0;
+    float depth = 0.0;
+    for (int _step = 0; (_step < 320) && (transmittance > 0.00999999977648258209228515625); _step++)
+    {
+        float closest = 1000000000.0;
+        for (int i = 0; i < holes; i++)
+        {
+            float r = length(x - Lens.Hole[i].xyz);
+            if (r < Lens.Hole[i].w)
+            {
+                out.OutColor = float4(light, 1.0);
+                return out;
+            }
+            closest = fast::min(closest, r - (0.5 * Lens.Hole[i].w));
+        }
+        float dt = (0.070000000298023223876953125 * closest) / length(v);
+        float3 param = x;
+        float3 param_1 = v;
+        float3 halfV = v + (Gravity(param, param_1, Lens) * (0.5 * dt));
+        float3 next = x + (halfV * dt);
+        float3 param_2 = next;
+        float3 param_3 = halfV;
+        v = halfV + (Gravity(param_2, param_3, Lens) * (0.5 * dt));
+        for (int i_1 = 0; i_1 < holes; i_1++)
+        {
+            if (Lens.Disk[i_1].w <= 0.0)
+            {
+                continue;
+            }
+            float a = dot(x - Lens.Hole[i_1].xyz, Lens.Disk[i_1].xyz);
+            float b = dot(next - Lens.Hole[i_1].xyz, Lens.Disk[i_1].xyz);
+            if ((a * b) < 0.0)
+            {
+                int param_4 = i_1;
+                float3 param_5 = mix(x, next, float3(a / (a - b)));
+                float3 param_6 = v;
+                float4 disk = DiskEmission(param_4, param_5, param_6, Lens);
+                light += (disk.xyz * transmittance);
+                transmittance *= (1.0 - disk.w);
+            }
+        }
+        float nextDepth = dot(next, forward) - startDepth;
+        float4 clip = Lens.ViewProjection * float4(next, 1.0);
+        if (clip.w > 0.0)
+        {
+            float3 screen = clip.xyz / float3(clip.w);
+            float2 uv = float2((screen.x * 0.5) + 0.5, 0.5 - (screen.y * 0.5));
+            bool _1101 = all(uv >= float2(0.0));
+            bool _1108;
+            if (_1101)
+            {
+                _1108 = all(uv <= float2(1.0));
+            }
+            else
+            {
+                _1108 = _1101;
+            }
+            if (_1108)
+            {
+                float stored = SceneDepth.sample(SceneDepthSmplr, uv).x;
+                float4 surface = Lens.InverseViewProjection * float4(screen.xy, stored, 1.0);
+                float surfaceDepth = dot(surface.xyz / float3(surface.w), forward) - startDepth;
+                bool _1146 = (stored < 1.0) && (nextDepth >= surfaceDepth);
+                bool _1157;
+                if (_1146)
+                {
+                    _1157 = depth <= ((surfaceDepth + (0.0199999995529651641845703125 * surfaceDepth)) + 0.00999999977648258209228515625);
+                }
+                else
+                {
+                    _1157 = _1146;
+                }
+                if (_1157)
+                {
+                    out.OutColor = float4(light + (SceneColor.sample(SceneColorSmplr, uv).xyz * transmittance), 1.0);
+                    return out;
+                }
+            }
+        }
+        x = next;
+        depth = nextDepth;
+        bool _1178 = depth > farDepth;
+        bool _1186;
+        if (!_1178)
+        {
+            _1186 = depth < (-farDepth);
+        }
+        else
+        {
+            _1186 = _1178;
+        }
+        if (_1186)
+        {
+            break;
+        }
+    }
+    float3 direction = fast::normalize(v);
+    float3 sky = Lens.Background.xyz;
+    if (Lens.Environment.z > 0.5)
+    {
+        float3 param_7 = direction;
+        float param_8 = Lens.Environment.y;
+        float3 param_9 = EnvironmentDirection(param_7, param_8);
+        float param_10 = 0.0;
+        float4 param_11 = Lens.EnvironmentSize;
+        sky = EnvironmentRadiance(param_9, param_10, param_11, Environment) * Lens.Environment.x;
+    }
+    else
+    {
+        float4 clip_1 = Lens.ViewProjection * float4(direction, 0.0);
+        bool _1233 = Lens.CameraForward.w < 0.5;
+        bool _1239;
+        if (_1233)
+        {
+            _1239 = clip_1.w > 0.0;
+        }
+        else
+        {
+            _1239 = _1233;
+        }
+        if (_1239)
+        {
+            float2 uv_1 = float2(((clip_1.x / clip_1.w) * 0.5) + 0.5, 0.5 - ((clip_1.y / clip_1.w) * 0.5));
+            bool _1260 = all(uv_1 >= float2(0.0));
+            bool _1266;
+            if (_1260)
+            {
+                _1266 = all(uv_1 <= float2(1.0));
+            }
+            else
+            {
+                _1266 = _1260;
+            }
+            bool _1274;
+            if (_1266)
+            {
+                _1274 = SceneDepth.sample(SceneDepthSmplr, uv_1).x >= 1.0;
+            }
+            else
+            {
+                _1274 = _1266;
+            }
+            if (_1274)
+            {
+                sky = SceneColor.sample(SceneColorSmplr, uv_1).xyz;
+            }
+        }
+        float3 param_12 = direction;
+        sky += (Stars(param_12) * Lens.Background.w);
+    }
+    out.OutColor = float4(light + (sky * transmittance), 1.0);
+    return out;
+}
