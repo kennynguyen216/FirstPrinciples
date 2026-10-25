@@ -318,33 +318,6 @@ project "HeaderTool"
 
 local ReflectionHeader = ProjectDir .. "/Intermediate/Generated/ScriptReflection.gen.h"
 
-local function MacAudioMetadata(name)
-	if not IsMac then return end
-	local plist = ProjectDir .. "/Intermediate/Mac/" .. name .. "-Info.plist"
-	os.mkdir(path.getdirectory(plist))
-	io.writefile(plist, string.format([[<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>CFBundleExecutable</key><string>%s</string>
-<key>CFBundleIdentifier</key><string>org.firstprinciples.%s</string>
-<key>CFBundleName</key><string>FirstPrinciples %s</string>
-<key>CFBundlePackageType</key><string>APPL</string>
-<key>NSHighResolutionCapable</key><true/>
-<key>NSMicrophoneUsageDescription</key><string>Use your microphone for proximity voice chat when you enable voice.</string>
-</dict></plist>
-]], name, name:lower(), name))
-	infoplist(plist)
-	files { plist }
-	if name == "Editor" then
-		local bundle = ProjectDir .. '/Binaries/%{cfg.buildcfg}/Editor.app/Contents'
-		postbuildcommands {
-			'{MKDIR} "' .. bundle .. '/MacOS"',
-			'if [ "%{cfg.buildtarget.abspath}" != "' .. bundle .. '/MacOS/Editor" ]; then cp -f "%{cfg.buildtarget.abspath}" "' .. bundle .. '/MacOS/Editor"; fi',
-			'{COPYFILE} "' .. plist .. '" "' .. bundle .. '/Info.plist"',
-		}
-	end
-end
-
 -- GameScripts: C++ scripts in the project's Source/Scripts, built as a shared library the editor can hot reload.
 project "GameScripts"
 	kind "SharedLib"
@@ -366,7 +339,6 @@ project "Runtime"
 	files { "src/Runtime/**.h", "src/Runtime/**.cpp" }
 	UseEngine(true)
 	dependson { "GameScripts" }
-	MacAudioMetadata("Runtime")
 
 project "Editor"
 	kind "WindowedApp"
@@ -375,7 +347,6 @@ project "Editor"
 	dependson { "GameScripts" }
 	UseQt()
 	AddMocRules("src/Editor")
-	MacAudioMetadata("Editor")
 	filter "system:windows"
 		entrypoint "mainCRTStartup"
 	-- The viewport warps the mouse with CoreGraphics while a game holds it.
