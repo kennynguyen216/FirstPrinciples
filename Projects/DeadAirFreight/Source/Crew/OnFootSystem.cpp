@@ -195,22 +195,16 @@ void OnFootSystem::Update(World& world, float deltaTime)
 	{
 		onFoot.Beam = MakeMarker(world, "Laser Beam");
 		onFoot.Crosshair = MakeMarker(world, "Crosshair");
-		onFoot.LastMouse = Input::GetMousePosition();
 	}
 
 	TransformComponent& body = world.Get<TransformComponent>(walker);
 
-	// Look follows the mouse, the same way the Driver's cab does. Until the engine can lock the
-	// cursor, turning stops at the edge of the view; move the mouse back to keep turning.
-	const Vec2 mouse = Input::GetMousePosition();
-	const Vec2 delta = mouse - onFoot.LastMouse;
-	if (std::abs(delta.X) <= config.MouseJumpLimit && std::abs(delta.Y) <= config.MouseJumpLimit)
-	{
-		body.Rotation.Y = std::fmod(body.Rotation.Y - delta.X * config.LookSensitivity, 360.0f);
-		body.Rotation.X = std::clamp(body.Rotation.X - delta.Y * config.LookSensitivity, -85.0f, 85.0f);
-		body.Rotation.Z = 0;
-	}
-	onFoot.LastMouse = mouse;
+	// Look follows the mouse, the same way the Driver's cab does. The engine locks the cursor while
+	// playing and keeps reporting how far the mouse moved.
+	const Vec2 delta = Input::GetMouseDelta();
+	body.Rotation.Y = std::fmod(body.Rotation.Y - delta.X * config.LookSensitivity, 360.0f);
+	body.Rotation.X = std::clamp(body.Rotation.X - delta.Y * config.LookSensitivity, -85.0f, 85.0f);
+	body.Rotation.Z = 0;
 
 	const bool racing = state->Phase == MatchPhase::Racing;
 	if (racing)

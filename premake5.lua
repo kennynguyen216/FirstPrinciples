@@ -29,6 +29,8 @@ local SpdlogInclude = Root .. "/ThirdParty/spdlog/include"
 local JoltDir = Root .. "/ThirdParty/JoltPhysics"
 -- glTF parser for skeletal meshes and animations. One header, built once by CgltfImpl.cpp.
 local CgltfInclude = Root .. "/ThirdParty/cgltf"
+local OpusDir = Root .. "/ThirdParty/opus"
+local DrLibsDir = Root .. "/ThirdParty/dr_libs"
 -- Game UI in HTML, CSS and JavaScript. A binary SDK fetched by Scripts/GetUltralight, so it is
 -- optional: without it everything builds and UI components draw nothing.
 local UltralightDir = Root .. "/ThirdParty/Ultralight"
@@ -37,7 +39,7 @@ if not HasUltralight then
 	premake.warn("Ultralight is missing, so game UI will not draw. Run Scripts/GetUltralight to get it.")
 end
 local ImGuiDir = Root .. "/ThirdParty/imgui"
-if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) or not os.isdir(SpdlogInclude) or not os.isdir(CgltfInclude) or not os.isfile(ImGuiDir .. "/imgui.h") or not os.isdir(JoltDir .. "/Jolt") then
+if not os.isdir(EnttInclude) or not os.isdir(StbInclude) or not os.isdir(MonocypherDir) or not os.isdir(SpdlogInclude) or not os.isdir(CgltfInclude) or not os.isfile(ImGuiDir .. "/imgui.h") or not os.isdir(JoltDir .. "/Jolt") or not os.isfile(DrLibsDir .. "/dr_mp3.h") then
 	premake.warn("Submodules are missing. Run: git submodule update --init")
 end
 
@@ -91,7 +93,7 @@ local ProjectName = io.readfile(ProjectFile):match('Name%s+"?([%w_]+)"?') or pat
 
 -- Include paths every project that touches engine headers needs.
 local function EngineIncludes()
-	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir, SpdlogInclude, CgltfInclude, ImGuiDir, JoltDir }
+	externalincludedirs { SdlDir .. "/include", EnttInclude, StbInclude, MonocypherDir, SpdlogInclude, CgltfInclude, ImGuiDir, JoltDir, OpusDir .. "/include", DrLibsDir }
 	if HasUltralight then
 		externalincludedirs { UltralightDir .. "/include" }
 		defines { "FP_WITH_ULTRALIGHT=1" }
@@ -207,11 +209,13 @@ workspace (ProjectName)
 
 	filter "configurations:Debug"
 		defines { "FP_DEBUG" }
+		runtime "Debug"
 		symbols "On"
 		optimize "Off"
 
 	filter "configurations:Release"
 		defines { "NDEBUG" }
+		runtime "Release"
 		symbols "On"
 		optimize "Speed"
 
@@ -232,10 +236,31 @@ local function UseEngine(withGame)
 	if withGame then
 		links { "Game" }
 	end
-	links { "Engine", "Jolt", "ImGui" }
+	links { "Engine", "Jolt", "ImGui", "Opus" }
 	UseSDL()
 	UseUltralight()
 end
+
+-- Use upstream's portable floating-point source lists; SIMD back ends are optional.
+project "Opus"
+	kind "StaticLib"
+	language "C"
+	warnings "Off"
+	includedirs { OpusDir, OpusDir .. "/include", OpusDir .. "/celt", OpusDir .. "/silk", OpusDir .. "/silk/float" }
+	defines { "OPUS_BUILD", "USE_ALLOCA", 'PACKAGE_VERSION="1.5.2"' }
+	for _, list in ipairs({ { "opus", "OPUS_SOURCES", "OPUS_SOURCES_FLOAT" }, { "celt", "CELT_SOURCES" }, { "silk", "SILK_SOURCES", "SILK_SOURCES_FLOAT" } }) do
+		local text = "\n" .. assert(io.readfile(OpusDir .. "/" .. list[1] .. "_sources.mk"), "Opus is missing. Run git submodule update --init."):gsub("\\\r?\n", " ")
+		for i = 2, #list do
+			local sources = assert(text:match("\n" .. list[i] .. "%s*=%s*([^\r\n]+)"), "Missing upstream Opus source list: " .. list[i])
+			for source in sources:gmatch("[%w_/]+%.c") do files { OpusDir .. "/" .. source } end
+		end
+	end
+	filter "system:not windows"
+		defines { "HAVE_ALLOCA_H" }
+	filter "configurations:Debug"
+		optimize "Speed"
+		runtimechecks "Off"
+	filter {}
 
 -- Jolt: physics. Every optional Jolt define stays off here and in the engine, since the
 -- library and its users must agree on them. GPU compute back ends are left out.
@@ -245,12 +270,9 @@ project "Jolt"
 	removefiles { JoltDir .. "/Jolt/Compute/CPU/**", JoltDir .. "/Jolt/Compute/DX12/**", JoltDir .. "/Jolt/Compute/MTL/**", JoltDir .. "/Jolt/Compute/VK/**", JoltDir .. "/Jolt/Shaders/**" }
 	includedirs { JoltDir }
 	warnings "Off"
-	-- Physics is slow unoptimised, so even Debug builds optimise it. Keep the Debug C runtime though:
-	-- optimising alone switches MSVC to the Release runtime, which cannot link with Debug code. MSVC's
-	-- runtime checks cannot be combined with optimising, so they are off for Jolt.
+	-- Physics is slow unoptimised, so even Debug builds optimise it.
 	filter "configurations:Debug"
 		optimize "Speed"
-		runtime "Debug"
 		runtimechecks "Off"
 	filter {}
 
@@ -327,9 +349,9 @@ project "Editor"
 	AddMocRules("src/Editor")
 	filter "system:windows"
 		entrypoint "mainCRTStartup"
+	-- The viewport warps the mouse with CoreGraphics while a game holds it.
 	filter "system:macosx"
-		-- Hides the cursor for cursor lock.
-		linkoptions { "-framework CoreGraphics" }
+		links { "CoreGraphics.framework" }
 	filter {}
 
 project "Tests"

@@ -330,7 +330,6 @@ component TankConfig
 component OnFootConfig
   MoveSpeed 6
   LookSensitivity 0.15
-  MouseJumpLimit 150
   EyeHeight 1.6
   BodyRadius 0.5
   LaserRange 60

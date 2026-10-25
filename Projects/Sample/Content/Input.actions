@@ -1,0 +1,36 @@
+# Input actions for this game. Each line binds one input to an action:
+#   Action  Device:Input  [+X, -X, +Y or -Y]  [scale]
+# Devices are Key (SDL key names, _ for spaces), Mouse (Left, Right, Middle or Delta),
+# Button and Axis for gamepads, and Stick (Left or Right) for a whole stick.
+# 2D actions read right and up as positive.
+
+Move      Key:W            +Y
+Move      Key:S            -Y
+Move      Key:A            -X
+Move      Key:D            +X
+Move      Key:Up           +Y
+Move      Key:Down         -Y
+Move      Key:Left         -X
+Move      Key:Right        +X
+Move      Stick:Left
+Move      Button:DpadUp    +Y
+Move      Button:DpadDown  -Y
+Move      Button:DpadLeft  -X
+Move      Button:DpadRight +X
+
+Look      Mouse:Delta
+Look      Stick:Right      800    # full tilt turns like 800 pixels of mouse a second
+
+Jump      Key:Space
+Jump      Button:South
+Run       Key:Left_Shift
+Run       Key:Right_Shift
+Run       Button:LeftStick
+Fire      Mouse:Left
+Fire      Axis:RightTrigger
+Aim       Mouse:Right
+Aim       Axis:LeftTrigger
+Interact  Key:E
+Interact  Button:West
+Pause     Key:Escape
+Pause     Button:Start

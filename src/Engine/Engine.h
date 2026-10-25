@@ -12,6 +12,7 @@
 #include "Engine/Random.h"
 #include "Engine/World.h"
 #include "Engine/Audio/AudioWorld.h"
+#include "Engine/Audio/VoiceChat.h"
 
 namespace FP::Engine
 {

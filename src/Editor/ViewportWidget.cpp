@@ -1,12 +1,9 @@
 #include "Editor/ViewportWidget.h"
 #include "Editor/PlaceEntitiesPanel.h"
 #include "Engine/Input.h"
+#include "Engine/Audio/AudioWorld.h"
 
 #include <SDL3/SDL.h>
-
-#ifdef __APPLE__
-#include <CoreGraphics/CoreGraphics.h>
-#endif
 
 #include <QCursor>
 #include <QDragEnterEvent>
@@ -19,21 +16,14 @@
 
 #include <cmath>
 
+#ifdef __APPLE__
+#include <CoreGraphics/CoreGraphics.h>
+#endif
+
 namespace FP::Editor
 {
 	namespace
 	{
-		// Moves the cursor right away. On macOS Qt posts an event that moves it later, so the next
-		// QCursor::pos() would still see the old spot.
-		void WarpCursor(QPoint global)
-		{
-#ifdef __APPLE__
-			SDL_WarpMouseGlobal(static_cast<float>(global.x()), static_cast<float>(global.y()));
-#else
-			QCursor::setPos(global);
-#endif
-		}
-
 		// Maps the keys games usually need from Qt to SDL scancodes.
 		Key ToScancode(int qtKey)
 		{
@@ -61,6 +51,20 @@ namespace FP::Editor
 				case Qt::Key_Alt: return SDL_SCANCODE_LALT;
 				default: return SDL_SCANCODE_UNKNOWN;
 			}
+		}
+
+		// Moves the pointer without making a mouse event.
+		void WarpCursor(QPoint global)
+		{
+#ifdef __APPLE__
+			// Qt posts a fake event for this, which macOS can block. A plain warp works, and
+			// unhooking the mouse around it skips the short freeze macOS adds after one.
+			CGAssociateMouseAndMouseCursorPosition(false);
+			CGWarpMouseCursorPosition(CGPointMake(global.x(), global.y()));
+			CGAssociateMouseAndMouseCursorPosition(true);
+#else
+			QCursor::setPos(global);
+#endif
 		}
 
 		// Bits in m_FlyKeys for the keys that fly the camera.
@@ -114,54 +118,49 @@ namespace FP::Editor
 		m_Flying = false;
 		m_FlyKeys = 0;
 		m_Gizmo.EndDrag();
-		Input::SetCursorLocked(false);
+		m_CursorFreed = false;
 		Input::Reset();
-		ApplyCursorLock();
 		if (playing)
 			setFocus();
+		UpdateCursor();
 	}
 
-	void ViewportWidget::ApplyCursorLock()
+	void ViewportWidget::UpdateCursor()
 	{
-		const bool lock = m_Playing && hasFocus() && Input::IsCursorLocked();
-		if (lock == m_CursorLocked)
+		const CursorMode mode = Input::GetCursorMode();
+		const bool active = m_Playing && hasFocus() && isActiveWindow() && !m_CursorFreed;
+		const bool hide = active && mode != CursorMode::Visible;
+		const bool lock = active && mode == CursorMode::Locked;
+
+		if (hide != m_CursorHidden)
 		{
-			if (lock)
-				RecenterCursor();
-			return;
+			if (hide)
+				setCursor(Qt::BlankCursor);
+			else
+				unsetCursor();
+			m_CursorHidden = hide;
 		}
-		m_CursorLocked = lock;
+		if (lock != m_CursorLocked)
+		{
+			// Every click goes to the game while locked, even if the pointer slips off the viewport.
+			if (lock)
+				grabMouse();
+			else
+				releaseMouse();
+		}
 		if (lock)
 		{
-			// The grab keeps clicks on the view even if a fast move gets the cursor out between checks.
-			setCursor(Qt::BlankCursor);
-#ifdef __APPLE__
-			// A blank cursor still grows when the mouse is shaken. Hiding it in the system doesn't.
-			CGDisplayHideCursor(kCGDirectMainDisplay);
-#endif
-			grabMouse();
-			WarpCursor(mapToGlobal(rect().center()));
+			const QPoint center = rect().center();
+			const QPoint global = mapToGlobal(center);
+			if (m_CursorLocked)
+			{
+				const QPoint moved = QCursor::pos() - global;
+				Input::AddMouseDelta(Vec2(static_cast<float>(moved.x()), static_cast<float>(moved.y())) * static_cast<float>(devicePixelRatioF()));
+			}
+			WarpCursor(global);
+			Input::SetMousePosition(ToPixels(QPointF(center)));
 		}
-		else
-		{
-			releaseMouse();
-			unsetCursor();
-#ifdef __APPLE__
-			CGDisplayShowCursor(kCGDirectMainDisplay);
-#endif
-		}
-	}
-
-	void ViewportWidget::RecenterCursor()
-	{
-		// Reads where the cursor really is rather than trusting event positions, which can be stale
-		// or merged on macOS.
-		const QPoint center = mapToGlobal(rect().center());
-		const QPoint offset = QCursor::pos() - center;
-		if (offset.isNull())
-			return;
-		Input::AddMouseDelta(ToPixels(QPointF(offset)));
-		WarpCursor(center);
+		m_CursorLocked = lock;
 	}
 
 	void ViewportWidget::RecreateTarget()
@@ -338,6 +337,21 @@ namespace FP::Editor
 
 	void ViewportWidget::AddColliders()
 	{
+		// Full circles at the ends stand in for the rounded caps.
+		const auto addCapsule = [this](Vec3 center, float radius, float half, Color color, Vec3 right, Vec3 up, Vec3 forward) {
+			const Vec3 top = center + up * half;
+			const Vec3 bottom = center - up * half;
+			m_Lines.AddCircle(top, radius, color, 24, right, forward);
+			m_Lines.AddCircle(bottom, radius, color, 24, right, forward);
+			for (const Vec3 side : { right, right * -1.0f, forward, forward * -1.0f })
+				m_Lines.AddLine(top + side * radius, bottom + side * radius, color);
+			for (const Vec3 end : { top, bottom })
+			{
+				m_Lines.AddCircle(end, radius, color, 24, right, up);
+				m_Lines.AddCircle(end, radius, color, 24, forward, up);
+			}
+		};
+
 		for (auto [entity, collider] : m_World->View<ColliderComponent>().each())
 		{
 			// Triggers are amber so they read apart from solid colliders.
@@ -366,18 +380,7 @@ namespace FP::Editor
 			{
 				const float radius = collider.Radius * std::fmax(scale.X, scale.Z);
 				const float half = std::fmax(collider.Height * scale.Y * 0.5f - radius, 0.0f);
-				const Vec3 top = center + up * half;
-				const Vec3 bottom = center - up * half;
-				m_Lines.AddCircle(top, radius, color, 24, right, forward);
-				m_Lines.AddCircle(bottom, radius, color, 24, right, forward);
-				for (const Vec3 side : { right, right * -1.0f, forward, forward * -1.0f })
-					m_Lines.AddLine(top + side * radius, bottom + side * radius, color);
-				// Full circles at the ends stand in for the rounded caps.
-				for (const Vec3 end : { top, bottom })
-				{
-					m_Lines.AddCircle(end, radius, color, 24, right, up);
-					m_Lines.AddCircle(end, radius, color, 24, forward, up);
-				}
+				addCapsule(center, radius, half, color, right, up, forward);
 			}
 			else if (collider.Shape == "Mesh")
 			{
@@ -390,6 +393,15 @@ namespace FP::Editor
 				const Vec3 half{ collider.Size.X * scale.X * 0.5f, collider.Size.Y * scale.Y * 0.5f, collider.Size.Z * scale.Z * 0.5f };
 				m_Lines.AddBox(frame, half * -1.0f, half, color);
 			}
+		}
+
+		// Characters are blue, always upright and never scaled, like physics sees them.
+		for (auto [entity, character] : m_World->View<CharacterControllerComponent>().each())
+		{
+			const Color color{ 0.35f, 0.7f, 1, entity == m_Selected ? 0.95f : 0.35f };
+			const float radius = std::fmax(character.Radius, 0.05f);
+			const float half = std::fmax(character.Height * 0.5f - radius, 0.0f);
+			addCapsule(m_World->GetWorldPosition(entity), radius, half, color, { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 });
 		}
 	}
 
@@ -584,6 +596,17 @@ namespace FP::Editor
 			AddSelection(view);
 		}
 
+		if (m_World->GetAudio().IsDebugEnabled())
+		{
+			for (const auto& source : m_World->GetAudio().GetDebugSources())
+			{
+				for (const auto& ray : source.Rays)
+					m_Lines.AddLine(ray.From, ray.To, ray.Reflection ? Color{0.2f, 0.85f, 1, 1} :
+						(source.Transmission < 0.99f || source.Params.LowPassHz > 0) ? Color{1, 0.5f, 0.15f, 1} : Color{0.25f, 1, 0.4f, 1});
+				for (const auto& hit : source.Hits)
+					m_Lines.AddCircle(hit.Point, std::max(0.02f, view.WorldPerPixel(hit.Point) * 4), {1, 0.8f, 0.2f, 1}, 8, view.CameraRight, view.CameraUp);
+			}
+		}
 		SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(m_Device.GetHandle());
 		m_Renderer->Render(cmd, m_Target->GetHandle(), m_Target->GetWidth(), m_Target->GetHeight(), *m_World, view, &m_Lines);
 		SDL_SubmitGPUCommandBuffer(cmd);
@@ -627,6 +650,13 @@ namespace FP::Editor
 		m_LastMouse = event->position();
 		if (m_Playing)
 		{
+			// The click that takes the mouse back is not a game click.
+			if (m_CursorFreed && Input::GetCursorMode() != CursorMode::Visible)
+			{
+				m_CursorFreed = false;
+				UpdateCursor();
+				return;
+			}
 			if (event->button() == Qt::LeftButton) Input::SetMouseButton(MouseButton::Left, true);
 			if (event->button() == Qt::RightButton) Input::SetMouseButton(MouseButton::Right, true);
 			if (event->button() == Qt::MiddleButton) Input::SetMouseButton(MouseButton::Middle, true);
@@ -718,15 +748,9 @@ namespace FP::Editor
 		const QPointF position = event->position();
 		if (m_Playing)
 		{
-			// Locked, every move sends the cursor straight back to the middle. Each frame does too.
-			if (m_CursorLocked)
-			{
-				RecenterCursor();
-				return;
-			}
-			Input::AddMouseDelta(ToPixels(position - m_LastMouse));
-			Input::SetMousePosition(ToPixels(position));
-			m_LastMouse = position;
+			// UpdateCursor keeps a locked mouse at the center.
+			if (!m_CursorLocked)
+				Input::SetMousePosition(ToPixels(position));
 			return;
 		}
 
@@ -840,11 +864,11 @@ namespace FP::Editor
 	{
 		if (m_Playing)
 		{
-			// Escape gives the cursor back to the editor. Clicking the view takes it again.
-			if (event->key() == Qt::Key_Escape && m_CursorLocked)
+			// Escape frees the mouse so the editor can be used. The game still sees the key.
+			if (event->key() == Qt::Key_Escape)
 			{
-				clearFocus();
-				return;
+				m_CursorFreed = true;
+				UpdateCursor();
 			}
 			if (!event->isAutoRepeat())
 				Input::SetKey(ToScancode(event->key()), true);
@@ -943,7 +967,7 @@ namespace FP::Editor
 	{
 		Input::Reset();
 		m_FlyKeys = 0;
-		ApplyCursorLock();
+		UpdateCursor();
 		QWidget::focusOutEvent(event);
 	}
 }

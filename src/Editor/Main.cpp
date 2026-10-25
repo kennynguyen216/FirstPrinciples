@@ -23,7 +23,9 @@ int main(int argc, char** argv)
 
 	// SDL_GPU needs the video subsystem even though the editor draws offscreen.
 	// Qt goes first so it owns the native application object.
-	if (!SDL_Init(SDL_INIT_VIDEO))
+	// SDL has no window of its own in the editor, so pads must report while Qt has focus.
+	SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
+	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
 	{
 		FP_LOG_ERROR("SDL_Init failed: %s", SDL_GetError());
 		return 1;
@@ -89,6 +91,8 @@ int main(int argc, char** argv)
 			window.Select(window.GetWorld().FindEntityByName(args[selectIndex + 1].toUtf8().constData()));
 		if (args.contains("--play"))
 			window.Play();
+		if (args.contains("--audio-debugger"))
+			window.ShowAudioDebugger();
 		// --new-script Name writes a script from the template, then builds like --build-scripts.
 		const int newScriptIndex = static_cast<int>(args.indexOf("--new-script"));
 		if (newScriptIndex >= 0 && newScriptIndex + 1 < args.size() && !window.NewScript(args[newScriptIndex + 1]))

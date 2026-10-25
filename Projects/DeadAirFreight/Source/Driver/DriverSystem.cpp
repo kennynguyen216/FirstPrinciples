@@ -176,7 +176,7 @@ void DriverSystem::Update(World& world, float deltaTime)
 	if (m_Finished)
 	{
 		truck->Speed = truck->Boost = 0;
-		Input::SetCursorLocked(false);
+		Input::SetCursorMode(CursorMode::Visible);
 	}
 	for (Message& message : m_Messages)
 		message.TimeLeft -= deltaTime;
@@ -192,7 +192,7 @@ void DriverSystem::Simulate(TruckState& truck, LifeSupport& life, Ticket& ticket
 		m_CursorFree = true;
 	else if (Input::WasMousePressed(MouseButton::Left))
 		m_CursorFree = false;
-	Input::SetCursorLocked(!m_CursorFree);
+	Input::SetCursorMode(m_CursorFree ? CursorMode::Visible : CursorMode::Locked);
 	const Vec2 mouseMove = Input::GetMouseDelta();
 
 	const bool awake = !IsBlackedOut(life);

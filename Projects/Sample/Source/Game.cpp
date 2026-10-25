@@ -22,7 +22,12 @@ namespace Game
 			.Field("Smoothing", &FollowPlayerComponent::Smoothing);
 
 		registry.Register<AudioDemoComponent>("AudioDemo")
-			.Field("Clip", &AudioDemoComponent::Clip).AssetPath("Audio (*.wav)");
+			.Field("Clip", &AudioDemoComponent::Clip).AssetPath("Audio (*.wav *.mp3)");
+		registry.Register<AcousticsTestComponent>("AcousticsTest")
+			.Field("AutoClap", &AcousticsTestComponent::AutoClap);
+		registry.Register<MovingAudioComponent>("MovingAudio")
+			.Field("Distance", &MovingAudioComponent::Distance).Range(0.1f, 100)
+			.Field("Speed", &MovingAudioComponent::Speed).Range(0, 150);
 	}
 
 	void AddSystems(World& world)
@@ -31,5 +36,6 @@ namespace Game
 		world.AddSystem<SpinnerSystem>();
 		world.AddSystem<FollowPlayerSystem>();
 		world.AddSystem<AudioDemoSystem>();
+		world.AddSystem<AcousticsTestSystem>();
 	}
 }

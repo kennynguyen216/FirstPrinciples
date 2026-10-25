@@ -5,9 +5,16 @@
 
 #include <entt/entity/entity.hpp>
 #include <limits>
+#include <array>
 
 namespace FP
 {
+	uint64 AllocateAudioContext();
+	inline float AudioDampingCutoff(float damping)
+	{
+		return damping > 0 ? float(20000.0 * std::pow(0.0036, double(damping))) : 0.f;
+	}
+
 	enum class AudioError : uint8
 	{
 		Ok, NotReady, InvalidSource, InvalidSettings, MissingClip,
@@ -21,7 +28,7 @@ namespace FP
 		explicit operator bool() const { return Code == AudioError::Ok; }
 	};
 
-	enum class AudioBus : uint8 { SFX, Music, UI };
+	enum class AudioBus : uint8 { SFX, Music, UI, Voice };
 	enum class VoiceState : uint8 { Invalid, Playing, Paused, Draining };
 
 	struct VoiceHandle
@@ -40,6 +47,19 @@ namespace FP
 		explicit operator bool() const { return static_cast<bool>(Result) && static_cast<bool>(Voice); }
 	};
 
+	struct AudioReflection
+	{
+		float Delay = 0; // seconds after the direct sound
+		float LeftGain = 0, RightGain = 0;
+		float Damping = 0;
+	};
+
+	struct AudioRoomParams
+	{
+		float Wet = 0, Decay = 0.5f, Damping = 0.5f, LateGain = 0;
+		std::array<AudioReflection, 6> Reflections{};
+	};
+
 	struct AudioPlaybackParams
 	{
 		float Volume = 1;
@@ -50,6 +70,8 @@ namespace FP
 		float LeftGain = 1;
 		float RightGain = 1;
 		bool Preview = false;
+		float LowPassHz = 0; // zero bypasses the filter
+		AudioRoomParams Room;
 	};
 
 	struct OneShotParams
@@ -63,5 +85,7 @@ namespace FP
 		Vec3 Position;
 		float MinDistance = 1;
 		float MaxDistance = 25;
+		bool Occlusion = true;
+		float DopplerScale = 1;
 	};
 }

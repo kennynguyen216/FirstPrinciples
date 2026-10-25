@@ -550,6 +550,7 @@ namespace FP::Editor
 		const QString suffix = QFileInfo(path).suffix().toLower();
 		if (suffix == "scene") return "Scene";
 		if (suffix == "material") return "Material";
+		if (suffix == "wav" || suffix == "mp3") return "Audio";
 		if (QStringList{ "png", "jpg", "jpeg", "tga", "bmp" }.contains(suffix)) return "Texture";
 		if (QStringList{ "obj", "gltf", "glb" }.contains(suffix)) return "Mesh";
 		if (QStringList{ "cpp", "h", "hpp" }.contains(suffix)) return "Script";

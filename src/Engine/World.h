@@ -114,6 +114,15 @@ namespace FP
 		void Clear();
 		void ReplaceScene(World& candidate);
 
+		// ---- Cameras -------------------------------------------------------
+
+		// The camera the game sees through: the first with Primary on. NullEntity when none is.
+		Entity GetActiveCamera();
+
+		// Sees through camera from now on by making it the only Primary camera. Returns false and
+		// changes nothing when the entity has no camera.
+		bool SetActiveCamera(Entity camera);
+
 		// ---- Components ----------------------------------------------------
 
 		template <typename T, typename... Args>

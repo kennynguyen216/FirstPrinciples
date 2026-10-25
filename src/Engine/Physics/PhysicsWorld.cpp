@@ -7,10 +7,12 @@
 #include <Jolt/Core/JobSystemThreadPool.h>
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
+#include <Jolt/Physics/Character/CharacterVirtual.h>
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/CollideShape.h>
 #include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
 #include <Jolt/Physics/Collision/RayCast.h>
+#include <Jolt/Physics/Collision/ShapeCast.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
@@ -120,6 +122,41 @@ namespace FP
 			}
 		};
 
+		// A walking capsule and what scripts asked of it this frame.
+		struct CharacterRecord
+		{
+			JPH::Ref<JPH::CharacterVirtual> Character;
+			CharacterControllerComponent Made;     // what the shape was built from
+			CharacterControllerComponent Settings; // read every step, so edits apply at once
+			Vec3 Position;                         // where it last put the entity
+			Vec3 Walk;
+			float JumpSpeed = 0;
+			bool Jumping = false;
+			// Bodies it touched last step, by body id, to send enter and exit events.
+			struct Touch
+			{
+				entt::entity Entity;
+				bool Sensor;
+			};
+			std::unordered_map<uint32, Touch> Touching;
+		};
+
+		bool SameShape(const CharacterControllerComponent& a, const CharacterControllerComponent& b)
+		{
+			return a.Radius == b.Radius && a.Height == b.Height && a.MaxSlope == b.MaxSlope && a.Mass == b.Mass;
+		}
+
+		// Characters collide with everything but their own inner body.
+		class IgnoreBody final : public JPH::BodyFilter
+		{
+		public:
+			explicit IgnoreBody(JPH::BodyID ignore) : m_Ignore(ignore) {}
+			bool ShouldCollide(const JPH::BodyID& id) const override { return id != m_Ignore; }
+
+		private:
+			JPH::BodyID m_Ignore;
+		};
+
 		struct Record
 		{
 			JPH::BodyID Id;
@@ -212,6 +249,10 @@ namespace FP
 		std::unique_ptr<JPH::PhysicsSystem> System;
 		std::unordered_map<uint32, Record> Bodies;
 		std::unordered_map<uint32, entt::entity> BodyToEntity; // by body id
+		std::unordered_map<uint32, CharacterRecord> Characters;
+		// The bodies characters bring along so rays and other bodies find them. Their contacts
+		// are left out, since the characters report their own.
+		std::unordered_map<uint32, bool> InnerBodies;
 		float Accumulator = 0;
 
 		// Contacts arrive on worker threads during a step and are counted per body pair here.
@@ -271,6 +312,8 @@ namespace FP
 			}
 			for (const Raw& contact : raw)
 			{
+				if (InnerBodies.count(contact.A.GetIndexAndSequenceNumber()) || InnerBodies.count(contact.B.GetIndexAndSequenceNumber()))
+					continue;
 				Pair& pair = Pairs[PairKey(contact.A, contact.B)];
 				if (contact.Added)
 				{
@@ -321,9 +364,150 @@ namespace FP
 		JPH::BodyID Find(entt::entity entity) const
 		{
 			const auto found = Bodies.find(Key(entity));
-			return found != Bodies.end() ? found->second.Id : JPH::BodyID();
+			if (found != Bodies.end())
+				return found->second.Id;
+			// A character's inner body, so rays can skip or hit it like any other.
+			const auto character = Characters.find(Key(entity));
+			return character != Characters.end() ? character->second.Character->GetInnerBodyID() : JPH::BodyID();
+		}
+
+		CharacterRecord* FindCharacter(entt::entity entity)
+		{
+			const auto found = Characters.find(Key(entity));
+			return found != Characters.end() ? &found->second : nullptr;
+		}
+
+		void AddCharacter(entt::entity entity, const CharacterControllerComponent& controller, Vec3 position)
+		{
+			const float radius = std::max(controller.Radius, 0.05f);
+			const float halfCylinder = std::max(controller.Height * 0.5f - radius, 0.01f);
+			JPH::Ref<JPH::CharacterVirtualSettings> settings = new JPH::CharacterVirtualSettings();
+			settings->mShape = new JPH::CapsuleShape(halfCylinder, radius);
+			settings->mInnerBodyShape = settings->mShape;
+			settings->mInnerBodyLayer = Layers::Moving;
+			settings->mMaxSlopeAngle = JPH::DegreesToRadians(std::clamp(controller.MaxSlope, 0.0f, 89.0f));
+			settings->mMass = std::max(controller.Mass, 1.0f);
+			// Pushes with about its own weight.
+			settings->mMaxStrength = settings->mMass * 10;
+			// Only the bottom half sphere can stand on things.
+			settings->mSupportingVolume = JPH::Plane(JPH::Vec3::sAxisY(), halfCylinder);
+
+			const uint32 key = Key(entity);
+			CharacterRecord record;
+			record.Character = new JPH::CharacterVirtual(settings, JPH::RVec3(position.X, position.Y, position.Z), JPH::Quat::sIdentity(), key, System.get());
+			record.Made = controller;
+			record.Settings = controller;
+			record.Position = position;
+			const JPH::BodyID inner = record.Character->GetInnerBodyID();
+			if (!inner.IsInvalid())
+			{
+				BodyToEntity[inner.GetIndexAndSequenceNumber()] = entity;
+				InnerBodies[inner.GetIndexAndSequenceNumber()] = true;
+			}
+			Characters[key] = std::move(record);
+		}
+
+		void RemoveCharacter(uint32 key)
+		{
+			const auto found = Characters.find(key);
+			if (found == Characters.end())
+				return;
+			// Anything it was touching hears it leave.
+			for (const auto& [body, touch] : found->second.Touching)
+				Events.Add({ touch.Sensor ? PhysicsEvent::Kind::TriggerExit : PhysicsEvent::Kind::CollisionExit, static_cast<entt::entity>(key), touch.Entity, {}, {} });
+			const JPH::BodyID inner = found->second.Character->GetInnerBodyID();
+			if (!inner.IsInvalid())
+			{
+				BodyToEntity.erase(inner.GetIndexAndSequenceNumber());
+				InnerBodies.erase(inner.GetIndexAndSequenceNumber());
+			}
+			Characters.erase(found);
+		}
+
+		// Walks every character one step, before the bodies step.
+		void StepCharacters(float deltaTime)
+		{
+			for (auto& [key, record] : Characters)
+			{
+				JPH::CharacterVirtual& character = *record.Character;
+				const CharacterControllerComponent& settings = record.Settings;
+				const JPH::Vec3 gravity = System->GetGravity() * settings.GravityScale;
+				character.UpdateGroundVelocity();
+				const JPH::Vec3 current = character.GetLinearVelocity();
+				const JPH::Vec3 ground = character.GetGroundVelocity();
+				const JPH::Vec3 walk(record.Walk.X, 0, record.Walk.Z);
+
+				JPH::Vec3 velocity;
+				// Standing, not already heading up off the ground: walk with the ground under it.
+				if (character.GetGroundState() == JPH::CharacterBase::EGroundState::OnGround && current.GetY() - ground.GetY() < 0.1f)
+				{
+					velocity = ground + walk;
+					if (record.Jumping)
+						velocity += JPH::Vec3(0, record.JumpSpeed, 0);
+				}
+				else
+				{
+					const JPH::Vec3 flat(current.GetX(), 0, current.GetZ());
+					velocity = flat + (walk - flat) * std::clamp(settings.AirControl, 0.0f, 1.0f) + JPH::Vec3(0, current.GetY(), 0);
+				}
+				velocity += gravity * deltaTime;
+				character.SetLinearVelocity(velocity);
+				record.Jumping = false;
+
+				JPH::CharacterVirtual::ExtendedUpdateSettings update;
+				const float step = std::max(settings.StepHeight, 0.0f);
+				update.mWalkStairsStepUp = JPH::Vec3(0, step, 0);
+				update.mStickToFloorStepDown = JPH::Vec3(0, -std::max(step, 0.1f), 0);
+				const IgnoreBody self(character.GetInnerBodyID());
+				character.ExtendedUpdate(deltaTime, gravity, update, System->GetDefaultBroadPhaseLayerFilter(Layers::Moving),
+					System->GetDefaultLayerFilter(Layers::Moving), self, {}, *Temp);
+				CollectCharacterContacts(static_cast<entt::entity>(key), record);
+			}
+		}
+
+		// Turns what a character is touching now into enter and exit events.
+		void CollectCharacterContacts(entt::entity entity, CharacterRecord& record)
+		{
+			std::unordered_map<uint32, CharacterRecord::Touch> now;
+			for (const JPH::CharacterContact& contact : record.Character->GetActiveContacts())
+			{
+				if (!contact.mHadCollision || contact.mBodyB.IsInvalid())
+					continue;
+				const uint32 body = contact.mBodyB.GetIndexAndSequenceNumber();
+				const entt::entity other = EntityOf(contact.mBodyB);
+				if (other == entt::null || now.count(body))
+					continue;
+				now[body] = { other, contact.mIsSensorB };
+				if (!record.Touching.count(body))
+				{
+					const Vec3 point(static_cast<float>(contact.mPosition.GetX()), static_cast<float>(contact.mPosition.GetY()), static_cast<float>(contact.mPosition.GetZ()));
+					Events.Add({ contact.mIsSensorB ? PhysicsEvent::Kind::TriggerEnter : PhysicsEvent::Kind::CollisionEnter, entity, other, point, -FromJolt(contact.mContactNormal) });
+				}
+			}
+			for (const auto& [body, touch] : record.Touching)
+			{
+				if (!now.count(body))
+					Events.Add({ touch.Sensor ? PhysicsEvent::Kind::TriggerExit : PhysicsEvent::Kind::CollisionExit, entity, touch.Entity, {}, {} });
+			}
+			record.Touching = std::move(now);
 		}
 	};
+
+	namespace
+	{
+		// Audio excludes both endpoints; gameplay casts usually exclude just the caster.
+		class SolidFilter final : public JPH::BodyFilter
+		{
+		public:
+			explicit SolidFilter(JPH::BodyID ignore, JPH::BodyID ignoreAlso = JPH::BodyID()) : m_Ignore(ignore), m_IgnoreAlso(ignoreAlso) {}
+			bool ShouldCollide(const JPH::BodyID& id) const override { return id != m_Ignore && id != m_IgnoreAlso; }
+			bool ShouldCollideLocked(const JPH::Body& body) const override { return !body.IsSensor(); }
+
+		private:
+			JPH::BodyID m_Ignore;
+			JPH::BodyID m_IgnoreAlso;
+		};
+	}
 
 	PhysicsWorld::PhysicsWorld() : m_Impl(std::make_unique<Impl>())
 	{
@@ -348,6 +532,11 @@ namespace FP
 			keys.push_back(key);
 		for (uint32 key : keys)
 			m_Impl->Remove(key);
+		keys.clear();
+		for (const auto& [key, record] : m_Impl->Characters)
+			keys.push_back(key);
+		for (uint32 key : keys)
+			m_Impl->RemoveCharacter(key);
 		m_Impl->Pairs.clear();
 		m_Impl->Events.Clear();
 		m_Impl->Incoming.clear();
@@ -364,7 +553,7 @@ namespace FP
 		for (const auto& [key, record] : impl.Bodies)
 		{
 			const entt::entity entity = static_cast<entt::entity>(key);
-			if (!world.IsValid(entity) || !world.Has<ColliderComponent>(entity))
+			if (!world.IsValid(entity) || !world.Has<ColliderComponent>(entity) || world.Has<CharacterControllerComponent>(entity))
 				gone.push_back(key);
 		}
 		for (uint32 key : gone)
@@ -373,6 +562,9 @@ namespace FP
 		bool added = false;
 		for (auto [entity, collider] : world.View<ColliderComponent>().each())
 		{
+			// A character controller is the entity's shape instead.
+			if (world.Has<CharacterControllerComponent>(entity))
+				continue;
 			const RigidBodyComponent* rigidBody = world.TryGet<RigidBodyComponent>(entity);
 			const MeshComponent* mesh = world.TryGet<MeshComponent>(entity);
 			const TransformComponent placed = world.GetWorldTransform(entity);
@@ -435,6 +627,40 @@ namespace FP
 			record.Position = placed.Position;
 			record.Rotation = rotation;
 		}
+		gone.clear();
+		for (const auto& [key, record] : impl.Characters)
+		{
+			const entt::entity entity = static_cast<entt::entity>(key);
+			if (!world.IsValid(entity) || !world.Has<CharacterControllerComponent>(entity))
+				gone.push_back(key);
+		}
+		for (uint32 key : gone)
+			impl.RemoveCharacter(key);
+
+		for (auto [entity, controller] : world.View<CharacterControllerComponent>().each())
+		{
+			const Vec3 position = world.GetWorldPosition(entity);
+			CharacterRecord* record = impl.FindCharacter(entity);
+			if (record && !SameShape(record->Made, controller))
+			{
+				impl.RemoveCharacter(Key(entity));
+				record = nullptr;
+			}
+			if (!record)
+			{
+				impl.AddCharacter(entity, controller, position);
+				added = true;
+				continue;
+			}
+			record->Settings = controller;
+			// Moved by hand, so it teleports.
+			if (!Near(position, record->Position))
+			{
+				record->Character->SetPosition(JPH::RVec3(position.X, position.Y, position.Z));
+				record->Position = position;
+			}
+		}
+
 		if (added)
 			impl.System->OptimizeBroadPhase();
 	}
@@ -446,10 +672,17 @@ namespace FP
 		int32 steps = 0;
 		while (impl.Accumulator >= FixedStep && steps < 4)
 		{
+			impl.StepCharacters(FixedStep);
 			impl.System->Update(FixedStep, 1, impl.Temp.get(), impl.Jobs.get());
 			impl.CollectEvents();
 			impl.Accumulator -= FixedStep;
 			++steps;
+		}
+		// Move only lasts the frame it was called in.
+		if (steps > 0)
+		{
+			for (auto& [key, record] : impl.Characters)
+				record.Walk = {};
 		}
 		// After a long stall the rest is dropped rather than caught up later.
 		if (impl.Accumulator > FixedStep)
@@ -477,6 +710,16 @@ namespace FP
 		}
 	}
 
+	void PhysicsWorld::WriteCharacters(World& world)
+	{
+		for (auto& [key, record] : m_Impl->Characters)
+		{
+			const JPH::RVec3 position = record.Character->GetPosition();
+			record.Position = { static_cast<float>(position.GetX()), static_cast<float>(position.GetY()), static_cast<float>(position.GetZ()) };
+			world.SetWorldPosition(static_cast<entt::entity>(key), record.Position);
+		}
+	}
+
 	void PhysicsWorld::TakeEvents(Array<PhysicsEvent>& out)
 	{
 		for (PhysicsEvent& event : m_Impl->Events)
@@ -485,6 +728,29 @@ namespace FP
 	}
 
 	int32 PhysicsWorld::GetBodyCount() const { return static_cast<int32>(m_Impl->Bodies.size()); }
+	int32 PhysicsWorld::GetCharacterCount() const { return static_cast<int32>(m_Impl->Characters.size()); }
+
+	void PhysicsWorld::MoveCharacter(entt::entity entity, Vec3 velocity)
+	{
+		if (CharacterRecord* record = m_Impl->FindCharacter(entity))
+			record->Walk = { velocity.X, 0, velocity.Z };
+	}
+
+	bool PhysicsWorld::JumpCharacter(entt::entity entity, float speed)
+	{
+		CharacterRecord* record = m_Impl->FindCharacter(entity);
+		if (!record || !IsGrounded(entity))
+			return false;
+		record->Jumping = true;
+		record->JumpSpeed = speed;
+		return true;
+	}
+
+	bool PhysicsWorld::IsGrounded(entt::entity entity) const
+	{
+		const auto found = m_Impl->Characters.find(Key(entity));
+		return found != m_Impl->Characters.end() && found->second.Character->GetGroundState() == JPH::CharacterBase::EGroundState::OnGround;
+	}
 	bool PhysicsWorld::HasBody(entt::entity entity) const { return !m_Impl->Find(entity).IsInvalid(); }
 
 	void PhysicsWorld::AddForce(entt::entity entity, Vec3 force)
@@ -496,6 +762,12 @@ namespace FP
 
 	void PhysicsWorld::AddImpulse(entt::entity entity, Vec3 impulse)
 	{
+		if (CharacterRecord* record = m_Impl->FindCharacter(entity))
+		{
+			JPH::CharacterVirtual& character = *record->Character;
+			character.SetLinearVelocity(character.GetLinearVelocity() + ToJolt(impulse) / character.GetMass());
+			return;
+		}
 		const JPH::BodyID id = m_Impl->Find(entity);
 		if (!id.IsInvalid())
 			m_Impl->System->GetBodyInterface().AddImpulse(id, ToJolt(impulse));
@@ -508,14 +780,73 @@ namespace FP
 			m_Impl->System->GetBodyInterface().AddTorque(id, ToJolt(torque));
 	}
 
+	void PhysicsWorld::AddForceAtPoint(entt::entity entity, Vec3 force, Vec3 point)
+	{
+		const JPH::BodyID id = m_Impl->Find(entity);
+		if (!id.IsInvalid())
+			m_Impl->System->GetBodyInterface().AddForce(id, ToJolt(force), JPH::RVec3(point.X, point.Y, point.Z));
+	}
+
+	void PhysicsWorld::AddImpulseAtPoint(entt::entity entity, Vec3 impulse, Vec3 point)
+	{
+		const JPH::BodyID id = m_Impl->Find(entity);
+		if (!id.IsInvalid())
+			m_Impl->System->GetBodyInterface().AddImpulse(id, ToJolt(impulse), JPH::RVec3(point.X, point.Y, point.Z));
+	}
+
+	void PhysicsWorld::AddExplosion(Vec3 center, float radius, float impulse)
+	{
+		JPH::BodyInterface& bodies = m_Impl->System->GetBodyInterface();
+		for (entt::entity entity : OverlapSphere(center, radius))
+		{
+			if (CharacterRecord* record = m_Impl->FindCharacter(entity))
+			{
+				const Vec3 away = FromJolt(JPH::Vec3(record->Character->GetPosition() - JPH::RVec3(center.X, center.Y, center.Z)));
+				const float distance = away.Length();
+				const float falloff = std::max(0.0f, 1.0f - distance / radius);
+				AddImpulse(entity, (distance > 1e-4f ? away / distance : Vec3(0, 1, 0)) * (impulse * falloff));
+				continue;
+			}
+			const JPH::BodyID id = m_Impl->Find(entity);
+			if (id.IsInvalid() || bodies.GetMotionType(id) != JPH::EMotionType::Dynamic)
+				continue;
+			const JPH::RVec3 middle = bodies.GetCenterOfMassPosition(id);
+			Vec3 away = Vec3(static_cast<float>(middle.GetX()), static_cast<float>(middle.GetY()), static_cast<float>(middle.GetZ())) - center;
+			const float distance = away.Length();
+			// A body right on the center goes straight up.
+			away = distance > 1e-4f ? away / distance : Vec3(0, 1, 0);
+			const float falloff = std::max(0.0f, 1.0f - distance / radius);
+			bodies.AddImpulse(id, ToJolt(away * (impulse * falloff)));
+		}
+	}
+
+	float PhysicsWorld::GetMass(entt::entity entity) const
+	{
+		const JPH::BodyID id = m_Impl->Find(entity);
+		if (id.IsInvalid())
+			return 0;
+		JPH::BodyLockRead lock(m_Impl->System->GetBodyLockInterface(), id);
+		if (!lock.Succeeded() || !lock.GetBody().IsDynamic())
+			return 0;
+		const float inverse = lock.GetBody().GetMotionProperties()->GetInverseMass();
+		return inverse > 0 ? 1.0f / inverse : 0;
+	}
+
 	Vec3 PhysicsWorld::GetVelocity(entt::entity entity) const
 	{
+		if (const auto found = m_Impl->Characters.find(Key(entity)); found != m_Impl->Characters.end())
+			return FromJolt(found->second.Character->GetLinearVelocity());
 		const JPH::BodyID id = m_Impl->Find(entity);
 		return id.IsInvalid() ? Vec3() : FromJolt(m_Impl->System->GetBodyInterface().GetLinearVelocity(id));
 	}
 
 	void PhysicsWorld::SetVelocity(entt::entity entity, Vec3 velocity)
 	{
+		if (CharacterRecord* record = m_Impl->FindCharacter(entity))
+		{
+			record->Character->SetLinearVelocity(ToJolt(velocity));
+			return;
+		}
 		const JPH::BodyID id = m_Impl->Find(entity);
 		if (!id.IsInvalid())
 			m_Impl->System->GetBodyInterface().SetLinearVelocity(id, ToJolt(velocity));
@@ -534,25 +865,15 @@ namespace FP
 			m_Impl->System->GetBodyInterface().SetAngularVelocity(id, ToJolt(velocity));
 	}
 
-	bool PhysicsWorld::Raycast(Vec3 origin, Vec3 direction, float maxDistance, RaycastHit& hit, entt::entity ignore) const
+	bool PhysicsWorld::Raycast(Vec3 origin, Vec3 direction, float maxDistance, RaycastHit& hit,
+		entt::entity ignore, entt::entity ignoreAlso) const
 	{
 		const float length = direction.Length();
 		if (length < 1e-8f || maxDistance <= 0)
 			return false;
 		const Vec3 unit = direction / length;
 
-		// Skips triggers and the body asked to be ignored, like the one casting the ray.
-		class Filter final : public JPH::BodyFilter
-		{
-		public:
-			explicit Filter(JPH::BodyID ignore) : m_Ignore(ignore) {}
-			bool ShouldCollide(const JPH::BodyID& id) const override { return id != m_Ignore; }
-			bool ShouldCollideLocked(const JPH::Body& body) const override { return !body.IsSensor(); }
-
-		private:
-			JPH::BodyID m_Ignore;
-		};
-		const Filter filter(m_Impl->Find(ignore));
+		const SolidFilter filter(m_Impl->Find(ignore), m_Impl->Find(ignoreAlso));
 
 		const JPH::RRayCast ray{ JPH::RVec3(origin.X, origin.Y, origin.Z), ToJolt(unit * maxDistance) };
 		JPH::RayCastResult result;
@@ -564,6 +885,64 @@ namespace FP
 		hit.Point = origin + unit * hit.Distance;
 		JPH::BodyLockRead lock(m_Impl->System->GetBodyLockInterface(), result.mBodyID);
 		hit.Normal = lock.Succeeded() ? FromJolt(lock.GetBody().GetWorldSpaceSurfaceNormal(result.mSubShapeID2, ray.GetPointOnRay(result.mFraction))) : -unit;
+		return true;
+	}
+
+	Array<RaycastHit> PhysicsWorld::RaycastAll(Vec3 origin, Vec3 direction, float maxDistance, entt::entity ignore, entt::entity ignoreAlso) const
+	{
+		Array<RaycastHit> hits;
+		const float length = direction.Length();
+		if (!std::isfinite(length) || length < 1e-8f || !std::isfinite(maxDistance) || maxDistance <= 0
+			|| !std::isfinite(origin.X) || !std::isfinite(origin.Y) || !std::isfinite(origin.Z)) return hits;
+		const Vec3 unit = direction / length;
+		const JPH::RRayCast ray{JPH::RVec3(origin.X, origin.Y, origin.Z), ToJolt(unit * maxDistance)};
+		const SolidFilter filter(m_Impl->Find(ignore), m_Impl->Find(ignoreAlso));
+		JPH::AllHitCollisionCollector<JPH::CastRayCollector> collector;
+		m_Impl->System->GetNarrowPhaseQuery().CastRay(ray, JPH::RayCastSettings{}, collector, {}, {}, filter);
+		collector.Sort();
+		for (const auto& result : collector.mHits)
+		{
+			const Entity entity = m_Impl->EntityOf(result.mBodyID);
+			bool duplicate = false;
+			for (const auto& hit : hits) if (hit.Entity == entity) { duplicate = true; break; }
+			if (entity == NullEntity || duplicate) continue;
+			RaycastHit hit;
+			hit.Entity = entity;
+			hit.Distance = result.mFraction * maxDistance;
+			hit.Point = origin + unit * hit.Distance;
+			JPH::BodyLockRead lock(m_Impl->System->GetBodyLockInterface(), result.mBodyID);
+			hit.Normal = lock.Succeeded() ? FromJolt(lock.GetBody().GetWorldSpaceSurfaceNormal(result.mSubShapeID2, ray.GetPointOnRay(result.mFraction))) : -unit;
+			hits.Add(hit);
+		}
+		return hits;
+	}
+
+	bool PhysicsWorld::SphereCast(Vec3 origin, float radius, Vec3 direction, float maxDistance, RaycastHit& hit, entt::entity ignore) const
+	{
+		const float length = direction.Length();
+		if (radius <= 0)
+			return Raycast(origin, direction, maxDistance, hit, ignore);
+		if (length < 1e-8f || maxDistance <= 0)
+			return false;
+		const Vec3 unit = direction / length;
+
+		const JPH::SphereShape sphere(radius);
+		const JPH::RShapeCast cast(&sphere, JPH::Vec3::sOne(), JPH::RMat44::sTranslation(JPH::RVec3(origin.X, origin.Y, origin.Z)), ToJolt(unit * maxDistance));
+		JPH::ShapeCastSettings settings;
+		// Starting inside something counts as a hit right away.
+		settings.mReturnDeepestPoint = true;
+		JPH::ClosestHitCollisionCollector<JPH::CastShapeCollector> collector;
+		const SolidFilter filter(m_Impl->Find(ignore));
+		m_Impl->System->GetNarrowPhaseQuery().CastShape(cast, settings, JPH::RVec3::sZero(), collector, {}, {}, filter);
+		if (!collector.HadHit())
+			return false;
+
+		const JPH::ShapeCastResult& result = collector.mHit;
+		hit.Entity = m_Impl->EntityOf(result.mBodyID2);
+		hit.Distance = result.mFraction * maxDistance;
+		hit.Point = FromJolt(result.mContactPointOn2);
+		const JPH::Vec3 axis = result.mPenetrationAxis;
+		hit.Normal = axis.LengthSq() > 1e-12f ? -FromJolt(axis.Normalized()) : -unit;
 		return true;
 	}
 

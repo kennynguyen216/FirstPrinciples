@@ -92,7 +92,6 @@ namespace Game
 		registry.Register<OnFootConfigComponent>("OnFootConfig")
 			.Field("MoveSpeed", &OnFootConfigComponent::MoveSpeed)
 			.Field("LookSensitivity", &OnFootConfigComponent::LookSensitivity)
-			.Field("MouseJumpLimit", &OnFootConfigComponent::MouseJumpLimit)
 			.Field("EyeHeight", &OnFootConfigComponent::EyeHeight)
 			.Field("BodyRadius", &OnFootConfigComponent::BodyRadius)
 			.Field("LaserRange", &OnFootConfigComponent::LaserRange)

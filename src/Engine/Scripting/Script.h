@@ -3,6 +3,7 @@
 #include "Engine/Engine.h"
 #include "Engine/Animation/Animator.h"
 #include "Engine/Physics/Physics.h"
+#include "Engine/Material.h"
 #include "Engine/Json.h"
 #include "Engine/UI/UIDocument.h"
 #include "Engine/SceneSerializer.h"
@@ -108,12 +109,48 @@ namespace FP
 		void AddImpulse(Vec3 impulse) const { GetPhysics().AddImpulse(m_Entity, impulse); }
 		Vec3 GetVelocity() const { return GetPhysics().GetVelocity(m_Entity); }
 		void SetVelocity(Vec3 velocity) const { GetPhysics().SetVelocity(m_Entity, velocity); }
+		float GetMass() const { return GetPhysics().GetMass(m_Entity); }
+
+		// Pushes at a world point, so hitting a crate's corner spins it.
+		void AddForceAtPoint(Vec3 force, Vec3 point) const { GetPhysics().AddForceAtPoint(m_Entity, force, point); }
+		void AddImpulseAtPoint(Vec3 impulse, Vec3 point) const { GetPhysics().AddImpulseAtPoint(m_Entity, impulse, point); }
+
+		// Kicks dynamic bodies near center outward, impulse at the middle fading to zero at radius.
+		void AddExplosion(Vec3 center, float radius, float impulse) const { GetPhysics().AddExplosion(center, radius, impulse); }
 
 		// The first body along a ray, never this entity's own.
 		bool Raycast(Vec3 origin, Vec3 direction, float maxDistance, RaycastHit& hit) const
 		{
 			return GetPhysics().Raycast(origin, direction, maxDistance, hit, m_Entity);
 		}
+
+		// Raycast with a ball of radius, never hitting this entity.
+		bool SphereCast(Vec3 origin, float radius, Vec3 direction, float maxDistance, RaycastHit& hit) const
+		{
+			return GetPhysics().SphereCast(origin, radius, direction, maxDistance, hit, m_Entity);
+		}
+
+		// What the middle of the screen points at, for aiming and picking things up. Casts from the
+		// active camera and skips this entity. False when nothing is hit or there is no camera.
+		bool RaycastFromCamera(float maxDistance, RaycastHit& hit) const
+		{
+			const Entity camera = m_World->GetActiveCamera();
+			if (camera == NullEntity)
+				return false;
+			const TransformComponent view = m_World->GetWorldTransform(camera);
+			return GetPhysics().Raycast(view.Position, view.GetForward(), maxDistance, hit, m_Entity);
+		}
+
+		// ---- Characters ------------------------------------------------------------
+
+		// For an entity with a CharacterController. Move walks at velocity in meters per second,
+		// ignoring Y, and needs calling every frame. Jump does nothing off the ground.
+		void Move(Vec3 velocity) const { GetPhysics().MoveCharacter(m_Entity, velocity); }
+		bool Jump(float speed) const { return GetPhysics().JumpCharacter(m_Entity, speed); }
+		bool IsGrounded() const { return GetPhysics().IsGrounded(m_Entity); }
+
+		// Every entity with a body touching the sphere, triggers included.
+		Array<Entity> OverlapSphere(Vec3 center, float radius) const { return GetPhysics().OverlapSphere(center, radius); }
 
 		// The page of a UI component, this entity's by default, for setting values and sending
 		// events to it. Null when the entity has no UI component.
@@ -122,6 +159,26 @@ namespace FP
 		// This entity's animator, for building a state machine and setting its parameters.
 		// Null when the entity has no Animator component.
 		Animator* GetAnimator() const { return m_World->GetAnimator(m_Entity); }
+
+		// ---- Cameras ---------------------------------------------------------
+
+		// The camera the game sees through, or NullEntity.
+		Entity GetActiveCamera() const { return m_World->GetActiveCamera(); }
+
+		// Cuts to another camera, this entity's by default. False when it has no camera.
+		bool SetActiveCamera(Entity camera = NullEntity) const { return m_World->SetActiveCamera(camera == NullEntity ? m_Entity : camera); }
+		bool SetActiveCamera(std::string_view name) const { return m_World->SetActiveCamera(m_World->FindEntityByName(name)); }
+
+		bool IsActiveCamera() const { return m_World->GetActiveCamera() == m_Entity; }
+
+		// ---- Particles -------------------------------------------------------
+
+		// Sends a burst from a particle emitter, this entity's by default.
+		void EmitParticles(int32 count, Entity entity = NullEntity) const
+		{
+			if (ParticleEmitterComponent* emitter = TryGet<ParticleEmitterComponent>(entity == NullEntity ? m_Entity : entity))
+				emitter->PendingBurst += count;
+		}
 
 		// ---- Finding entities and scripts ------------------------------------
 
@@ -340,7 +397,7 @@ namespace FP
 	}
 
 	// Bump when the script interface changes so stale modules are refused instead of crashing.
-	constexpr uint32 ScriptInterfaceVersion = 7;
+	constexpr uint32 ScriptInterfaceVersion = 16;
 
 	// Fingerprint of everything a script module shares with the host by layout. A module built
 	// against different engine headers or a different configuration gives a different value.
@@ -352,7 +409,8 @@ namespace FP
 			ScriptInterfaceVersion, FP_BUILD_DEBUG, sizeof(void*), sizeof(World), sizeof(String), sizeof(Array<int32>),
 			sizeof(TransformComponent), sizeof(ScriptType), sizeof(FieldInfo), sizeof(ScriptFunction), sizeof(ModuleContext), sizeof(Script), sizeof(RaycastHit), sizeof(Collision), sizeof(Json),
 			sizeof(AudioWorld), sizeof(AudioResult), sizeof(AudioPlayResult), sizeof(VoiceHandle), sizeof(OneShotParams),
-			sizeof(AudioSourceComponent), sizeof(AudioListenerComponent),
+			sizeof(AudioSourceComponent), sizeof(AudioListenerComponent), sizeof(VoiceChatComponent), sizeof(AudioPlaybackParams), sizeof(AudioRoomComponent),
+			sizeof(MaterialData),
 			sizeof(AnimState), sizeof(AnimTransition), sizeof(AnimCondition), sizeof(AnimatorComponent), sizeof(SkeletalMeshComponent),
 		};
 		return HashBytes(parts, sizeof(parts));

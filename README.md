@@ -104,8 +104,9 @@ Game code lives in your project's `Source` folder. The editor and the runtime bo
    }
    ```
 
-4. **Input** works the same in the editor and the runtime. Use `FP::Input::IsKeyDown(SDL_SCANCODE_SPACE)`
-   or `FP::Input::GetMoveAxis()`.
+4. **Input** works the same in the editor and the runtime. Ask for actions like
+   `FP::Input::WasActionPressed("Jump")` so keys and gamepads both work, or read keys directly with
+   `FP::Input::IsKeyDown(SDL_SCANCODE_SPACE)`.
 
 5. **Scenes** live in the project's `Content/Scenes`. Build them in the editor and press Play to run your systems.
    Stop restores the scene. `Runtime` plays `Game::StartScene` or a scene passed on the command line.
@@ -115,15 +116,21 @@ field to pick one.
 
 ### Audio
 
-Use **File > Import Audio...** to copy a WAV into the open project's `Content/Audio`, or copy it there yourself.
+Use **File > Import Audio...** to copy a WAV or MP3 into the open project's `Content/Audio`, or copy it there yourself.
 Add an **AudioSource** component to an entity and use its `Clip` picker to select the file.
 Turn on **PlayOnStart** to hear it when the scene starts, and **Loop** for ambience. The inspector
 provides preview, reload and playback controls. Editor **Stop** stops game audio and restores the scene.
 Imports validate a staged copy and never overwrite an existing destination.
 
-Supported clips are uncompressed PCM16 or float32 WAV, mono or stereo, at 8-96 kHz. Clips must be
-at most 60 seconds, 64 MiB on disk and 32 MiB decoded. Decoded clips share a bounded 128 MiB cache.
-Audio uses SDL3; no additional audio library or asset conversion is required. Missing output hardware
+Supported clips are uncompressed PCM16 or float32 WAV at 8-96 kHz, or MP3 (constant or variable bitrate),
+mono or stereo. Imports preserve the format; use a matching `.wav` or `.mp3` destination extension.
+Files can be up to 4 GiB. Clips over 60 seconds or 32 MiB decoded stream automatically from disk;
+short clips share a bounded 128 MiB decoded cache. Each playing file stream uses a one-second PCM
+buffer, filled by a background decoder. The audio callback never reads files or decodes compressed audio.
+Use the **Music** bus for music, **Loop** for repeating ambience, and the usual pause/stop controls.
+The inspector identifies streamed files. Keep these files available during playback; after changing one,
+stop and choose **Reload Clip**. Very slow storage can cause audible gaps, counted in the audio status overruns.
+Audio output uses SDL3 and MP3 decoding uses the bundled `dr_mp3` header; no external converter is required. Missing output hardware
 leaves the editor and game usable, with an audio status message and a retry control.
 
 For positional sound, enable **Spatial** on a mono source and add an **AudioListener** to the player
@@ -151,9 +158,106 @@ Open `Projects/Sample/Content/Scenes/AudioDemo.scene` and press Play. Move the l
 Space for overlapping clicks. Demo WAVs are original generated sounds; regenerate and check them
 with `python Scripts/GenerateAudioFixtures.py`. Run `Projects/Sample/Binaries/Debug/Tests Audio` for audio tests.
 
-The first version uses resident WAVs and simple stereo panning. Compressed/streamed music, HRTF,
-occlusion, Doppler and effects are deferred. Dense mixes can hard-clip, and an immediate Stop can
-click.
+Spatial sources have **Occlusion** enabled by default. A solid physics collider between source
+and listener reduces volume and low-pass filters the sound. Triggers and the source/listener's
+own colliders are skipped. Add `PhysicsSystem` when setting up a world yourself; the editor and
+runtime already do this. Occlusion checks run at most 20 times per second per voice. Each object
+crossed contributes its material's transmission level; two walls multiply their transmission.
+
+Materials expose three acoustic scalars in the inspector, each from 0 to 1:
+
+- **Sound Transmission:** 0 blocks sound through the object; 1 passes it at full volume.
+- **Sound Absorption:** 0 reflects sound strongly; 1 absorbs reflections and reduces room reverb.
+- **Sound Damping:** 0 preserves high frequencies; 1 heavily muffles transmission and reflections.
+
+For example, `SoundTransmission 0.8`, `SoundAbsorption 0.1`, `SoundDamping 0.15` makes a fairly
+transparent, reflective surface. A soft panel might use `0.05`, `0.85`, `0.9`. These are artistic
+controls, independent of the material's visual shader. Edits to the shared material affect all
+objects using it. Old or missing materials retain 25% transmission and a 1,200 Hz cutoff.
+Audio uses the collider object's material (or its nearest parent's), resolving the first material
+slot for a mesh. It does not distinguish individual triangles or calculate wall thickness.
+
+For proximity voice, add **VoiceChat** and **Network** (`OnePerPeer` enabled) to the player and an
+**AudioListener** to its local listening position. Remote player listeners are ignored. Voice
+uses the player's world position, distance settings and the same collider occlusion as audio clips.
+The microphone starts only after explicit opt-in; hold **V** while the game view has focus to
+transmit. Use headsets: speaker echo cancellation is not implemented.
+
+The sample `Scenes/ProximityVoice.scene` has two sounds, a networked player and a wall to walk
+around. On Windows, run a host and a joiner from the repository root (use the host's LAN address
+instead of `127.0.0.1` when playing on another computer):
+
+```powershell
+Projects/Sample/Binaries/Debug/Runtime.exe Scenes/ProximityVoice.scene --host 7777 --voice --password example
+Projects/Sample/Binaries/Debug/Runtime.exe Scenes/ProximityVoice.scene --join 127.0.0.1:7777 --voice --password example
+```
+
+Without `--voice`, the microphone stays off and a player with VoiceChat can still listen.
+The editor's **Audio...** mixer has a separate Voice volume and mute, plus microphone opt-in and
+per-peer mute controls when a network system is active. The editor does not create a network
+session automatically; the runtime flags above are the first multiplayer test path.
+
+Speech is 48 kHz mono Opus in 20 ms packets over the existing encrypted UDP session. Incoming
+speech has a bounded jitter buffer, packet-loss concealment and bounded streaming playback.
+Packets are tied to their peer's player, with size and rate limits. Proximity filtering uses
+peer-replicated positions; a trusted server/relay is needed to enforce who may receive speech.
+The existing session has no relay for peers behind strict NATs.
+
+Open `Scenes/Acoustics3D.scene` in the editor and press Play, or run:
+
+```powershell
+Projects/Sample/Binaries/Debug/Runtime.exe Scenes/Acoustics3D.scene
+```
+
+Use **1–4** to compare a soft room, a bright room, a large hall and open air. **Space** claps,
+**B** plays 16 overlapping claps to exercise the limiter, **T** toggles the automatic clap,
+**R** compares dry sound with room effects, and **WASD + mouse**
+walks and looks. The original clap and signs regenerate with `python Scripts/GenerateAcousticsTest.py`
+(Pillow required). The demo does not open the microphone.
+
+Each area has a fixed gold sphere on a pedestal labeled **CLAP SOURCE**. Manual and automatic
+claps come from the nearest enabled spatial AudioSource object, so walking around it changes
+distance, stereo panning, obstruction and room reflections. Its AudioSource settings control
+the clip, volume and range; the debugger names the emitter object rather than the camera.
+
+Press **5** for a moving cyan emitter in the large hall. It plays an original looping 660 Hz
+tone while sweeping left and right at up to 30 m/s. **P** toggles Doppler for comparison; **1–4**
+stops the tone and returns to the clap areas. Walking changes the listener's contribution too.
+The debugger's **Pitch x** column shows the applied playback pitch.
+
+Spatial sources have **Doppler Scale**: 0 disables the shift, 1 uses world units as meters, and
+values up to 4 exaggerate it. The radial-velocity calculation uses a 343 m/s sound speed,
+following the [OpenAL Doppler model](https://www.openal.org/documentation/OpenAL_Programmers_Guide.pdf).
+Authored pitch multiplies the shift; the Doppler ratio is bounded to 0.5–2 and final pitch to
+0.25–4. Clip playback smooths the shift over 50 ms. Motion comes from world positions and game
+time, including parent movement. Camera switches, long frame gaps and jumps over 20 m or
+300 m/s reset the motion estimate. Voice chat disables Doppler to keep PCM playback aligned
+with incoming speech. Reflections currently share the source's pitch rather than calculating
+a separate shift for each reflected path.
+
+**AudioRoom** defines a box interior in meters, with wet level and maximum decay time.
+Spatial clips and received voices in the same room get up to six first-order reflections,
+validated against solid colliders, plus a synthetic late reverb tail. Put walls at the volume's
+boundaries. The first eligible room in creation order wins overlaps; the effect fades at its
+edges. Each reflection reads absorption and damping from the material it hits. Objects crossed
+on either leg also attenuate the reflection. Area-weighted surface absorption shortens the late
+tail, and surface damping controls its tone. This prototype does not model irregular room shapes
+or sound traveling through doorways. Run `Tests AudioRoom` and `Tests AudioMaterial` for checks.
+
+Open **Window > Audio Debugger** (also available from **Audio...**) during Play for output peak/RMS,
+limiter gain reduction, active voices, applied spatial settings, and material hits. Optional ray
+capture reuses playback queries: green is direct, orange is obstructed, cyan is reflected, and
+yellow marks material hits. Double-click a material hit to inspect its object. Capture keeps at
+most 64 recent sources and 64 hits per source; the table shows up to 256 hits. Closing or hiding
+the panel disables capture. The debugger does not enable the microphone.
+
+The output limiter links all channels, leaves quiet audio unchanged, and reduces loud overlaps
+to a 0.98 peak ceiling with a 100 ms release. Normal Stop and replacement fade out over 5 ms;
+handles become invalid immediately. Voice-chat mute/disconnect, scene cleanup and device shutdown
+discard playback immediately. Stop fades have a separate pool of 65 tails so they do not consume
+active voice slots. These are digital sample peaks, not true-peak loudness mastering.
+
+Compressed music streaming and HRTF remain deferred.
 
 ### C++ scripts
 
@@ -231,10 +335,58 @@ that `FP_SCRIPT` registers. There is nothing to list by hand.
 | Parents | `GetParent()`, `GetChildren()`, `FindChild(name, recursive)`, `SetParent(entity)`, `AddChild(entity)` |
 | World space | `GetWorldPosition()`, `SetWorldPosition(position)`, `GetWorldRotation()` |
 | Timers | `After(seconds, fn)`, `Every(seconds, fn)`, `CancelTimer(id)`, `CancelAllTimers()` |
-| Physics | `AddForce(force)`, `AddImpulse(impulse)`, `GetVelocity()`, `SetVelocity(velocity)`, `Raycast(origin, direction, distance, hit)`, `GetPhysics()` for the rest |
+| Physics | `AddForce(force)`, `AddImpulse(impulse)`, `AddForceAtPoint`, `AddImpulseAtPoint`, `GetVelocity()`, `SetVelocity(velocity)`, `GetMass()`, `GetPhysics()` for the rest |
+| Characters | `Move(velocity)` every frame, `Jump(speed)`, `IsGrounded()` |
+| Particles | `EmitParticles(count)` bursts from this entity's emitter, or another's |
+| Physics queries | `Raycast(origin, direction, distance, hit)`, `SphereCast(origin, radius, direction, distance, hit)`, `RaycastFromCamera(distance, hit)`, `OverlapSphere(center, radius)`, `AddExplosion(center, radius, impulse)` |
+| Cameras | `SetActiveCamera(entity or name)` (this entity by default), `GetActiveCamera()`, `IsActiveCamera()` |
 | Physics events | `OnCollisionEnter(other, collision)`, `OnCollisionExit(other)`, `OnTriggerEnter(other)`, `OnTriggerExit(other)` |
 | Math | `Clamp`, `Lerp`, `InverseLerp`, `MoveTowards`, `Damp`, `Random::Range`, `Random::Chance`, `Random::Direction` |
-| Input and logs | `Input::IsKeyDown(SDL_SCANCODE_SPACE)`, `Input::GetMoveAxis()`, `FP_LOG("...")` |
+| Input actions | `Input::IsActionDown("Fire")`, `Input::WasActionPressed("Jump")`, `Input::GetActionValue("Fire")`, `Input::GetActionAxis("Move")` |
+| Gamepads | `Input::IsGamepadButtonDown(GamepadButton::South)`, `Input::GetGamepadAxis(GamepadAxis::RightTrigger)`, `Input::GetGamepadStick(right)`, `Input::Rumble(low, high, seconds)` |
+| Input and logs | `Input::IsKeyDown(SDL_SCANCODE_SPACE)`, `Input::GetMoveAxis()`, `Input::GetMouseDelta()`, `Input::SetCursorMode(mode)`, `FP_LOG("...")` |
+
+**Mouse and cameras**
+
+While the game plays the mouse is hidden and held in place, so `Input::GetMouseDelta()` drives
+mouse look. Call `Input::SetCursorMode(CursorMode::Visible)` in `OnStart` for menus and HUDs with
+buttons, or `Hidden` to draw your own pointer. In the editor Esc frees the mouse and a click on
+the viewport takes it back.
+
+The game sees through the first camera with `Primary` on. `SetActiveCamera` cuts to another one
+by turning `Primary` off everywhere else.
+
+**Input actions and gamepads**
+
+Games ask for actions like Jump or Move instead of keys, so the keyboard, mouse and any gamepad
+all play. `Content/Input.actions` binds them, one input per line, and new projects get a copy of
+the defaults:
+
+```
+Jump   Key:Space
+Jump   Button:South          # A on Xbox, Cross on PlayStation
+Move   Key:W        +Y       # keys point a 2D action, right and up positive
+Move   Stick:Left
+Look   Mouse:Delta
+Look   Stick:Right  800      # a scale makes a stick turn at a steady speed
+Fire   Axis:RightTrigger
+```
+
+Devices are `Key` (SDL key names with `_` for spaces), `Mouse` (`Left`, `Right`, `Middle`, `Delta`),
+`Button` and `Axis` for gamepads (named by position, like `South`, `LeftShoulder`, `DpadUp` or
+`RightTrigger`) and `Stick` (`Left` or `Right`). The defaults bind Move, Look, Jump, Run, Fire, Aim,
+Interact and Pause. The editor reloads the file each time Play starts.
+
+```cpp
+if (Input::WasActionPressed("Jump"))
+    Jump(6);
+const Vec2 move = Input::GetActionAxis("Move"); // keys and the left stick
+if (Input::IsActionDown("Fire"))
+    Input::Rumble(0.3f, 0.6f, 0.1f);
+```
+
+Every connected pad counts, so whichever one is picked up plays. Sticks have a round dead zone so
+they read zero at rest.
 
 `SpawnScene` copies every entity in a scene file with new ids, so any scene works as a prefab and
 can be spawned many times. Timers stop when the script stops or reloads.
@@ -286,9 +438,69 @@ void OnCollisionEnter(Entity other, const Collision& collision) override { /* co
 void OnTriggerEnter(Entity other) override { ++Score; }
 ```
 
-`GetPhysics()` also has `AddTorque`, angular velocity, `OverlapSphere(center, radius)` and gravity.
+`GetPhysics()` also has `AddTorque`, angular velocity and gravity, and takes any entity, like
+`GetPhysics().AddImpulseAtPoint(hit.Entity, push, hit.Point)` to shove what a ray hit.
 `Content/Scenes/Physics.scene` drops balls down a ramp, through a goal that counts them, and into a
-pyramid of crates. Space kicks every ball.
+pyramid of crates. Space kicks every ball. C switches to a first person camera where the mouse
+looks, WASD flies, left click pushes, F picks things up and right click blows them up.
+
+**Characters**
+
+A **CharacterController** makes a walking capsule for players and enemies, used instead of a
+collider and rigid body. It slides along walls, climbs steps up to `StepHeight`, walks up slopes
+up to `MaxSlope`, rides moving platforms and pushes crates. Rays and triggers find it like any
+body.
+
+**Entity > Create Character** (or Character in Place Entities) adds a pill with a follow camera
+that plays with no code in any project. Its **PlayerInput** component plays it from the Move, Look,
+Run and Jump actions: WASD or the left stick walks, Shift runs, Space or South jumps and the mouse
+or right stick turns it. Remove PlayerInput to drive it from a script:
+
+```cpp
+void OnUpdate(float) override
+{
+    const Vec2 axis = Input::GetActionAxis("Move");
+    Move(Vec3(axis.X, 0, -axis.Y) * 5); // meters per second, call it every frame
+    if (Input::WasActionPressed("Jump"))
+        Jump(6);                        // only works on the ground
+}
+```
+
+`AirControl` sets how much `Move` steers mid jump. `SetVelocity` and `AddImpulse` knock a
+character about, and explosions push it too. `Content/Scenes/Character.scene` has a third person
+player with stairs, a walkable and a too steep ramp, a lift, crates and a zone
+that counts the player walking in.
+
+### Particles
+
+A **ParticleEmitter** sprays small camera facing quads for fire, smoke, sparks, dust and magic.
+**Entity > Create Particle Emitter** (or Particle Emitter in Place Entities) adds one, and emitters
+run in the editor too, so effects can be tuned without playing.
+
+- `Rate` streams particles every second and `Burst` fires a batch when play starts.
+  `MaxParticles` caps how many are alive at once.
+- Each particle lives for `Lifetime` seconds, leaving from a `Point`, `Sphere` or `Box` along
+  `Direction`, within `Spread` degrees of it, at `Speed`. The random settings vary each one.
+- `Gravity` pulls them down (1 is normal, negative rises) and `Drag` slows them.
+- Size and color fade from `StartSize` and `StartColor` to `EndSize` and `EndColor`. An alpha of
+  zero at the end fades them out.
+- With no `Texture` each particle is a soft dot. `Additive` blending glows, `Alpha` covers, which
+  suits smoke.
+- `WorldSpace` leaves particles behind as the emitter moves. Turn it off for trails that move
+  with it.
+- `DestroyWhenDone` removes the entity once it stops emitting and its particles are gone, for one
+  off effects:
+
+```cpp
+const Entity blast = Spawn("Sparks", hit.Point);
+ParticleEmitterComponent& sparks = GetWorld().Add<ParticleEmitterComponent>(blast);
+sparks.Rate = 0;
+sparks.Burst = 80;
+sparks.Spread = 180;
+sparks.DestroyWhenDone = true;
+```
+
+`Content/Scenes/Particles.scene` has a campfire with smoke, a fountain and a ball of sparkles.
 
 ### Game UI
 
@@ -696,6 +908,7 @@ On Windows install the [Vulkan SDK](https://vulkan.lunarg.com) and run `Scripts\
 | [Qt 6](https://qt.io) | Editor UI | Homebrew on macOS, Qt installer + `QT_DIR` on Windows |
 | [EnTT](https://github.com/skypjack/entt) | ECS | Git submodule in `ThirdParty/entt` |
 | [stb_image](https://github.com/nothings/stb) | PNG, JPG and TGA loading | Git submodule in `ThirdParty/stb` |
+| [dr_mp3](https://github.com/mackron/dr_libs) (public domain or MIT-0) | MP3 decoding | Git submodule in `ThirdParty/dr_libs`, pinned to `bad753d5ade4f30e40fcf80a757210b650681f8f` |
 | [Monocypher](https://monocypher.org) | Key exchange and encryption for network packets | Git submodule in `ThirdParty/monocypher` |
 | [spdlog](https://github.com/gabime/spdlog) | Logging to the console, files and the editor | Git submodule in `ThirdParty/spdlog` |
 | [cgltf](https://github.com/jkuhlmann/cgltf) | glTF loading for skeletal meshes and animations | Git submodule in `ThirdParty/cgltf` |

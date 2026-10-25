@@ -7,8 +7,6 @@ struct OnFootConfigComponent
 {
 	float MoveSpeed = 6;
 	float LookSensitivity = 0.15f; // degrees per pixel the mouse moves
-	// Mouse jumps bigger than this many pixels in a frame (the cursor entering the view) are ignored.
-	float MouseJumpLimit = 150;
 	float EyeHeight = 1.6f;
 	float BodyRadius = 0.5f; // keeps walkers, and the camera at their eyes, out of tanks and walls
 	float LaserRange = 60;
@@ -47,5 +45,4 @@ struct OnFootComponent
 	float RepairSoundIn = 0;
 	FP::Entity Beam = FP::NullEntity;
 	FP::Entity Crosshair = FP::NullEntity;
-	FP::Vec2 LastMouse;
 };

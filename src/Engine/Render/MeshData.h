@@ -42,11 +42,12 @@ namespace FP
 
 	namespace Primitives
 	{
-		// All centered on the origin with size 1.
+		// All centered on the origin with size 1, except the capsule.
 		MeshData Cube();
 		MeshData Sphere(int32 segments = 32, int32 rings = 16);
 		MeshData Plane(); // XZ plane facing +Y, for floors
 		MeshData Quad();  // XY plane facing +Z, like a sprite
+		MeshData Capsule(int32 segments = 32, int32 rings = 16); // a pill 2 tall and 1 wide, standing along Y
 
 		// Names accepted by MeshComponent.
 		const Array<const char*>& GetNames();
